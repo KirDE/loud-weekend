@@ -3,7 +3,7 @@ import test from 'node:test';
 import {randomUUID} from 'node:crypto';
 import {PrismaClient} from '@prisma/client';
 import {requireLocalDisposableDatabase} from './support/disposable-db.ts';
-import {publishSpotifyCheckpoint} from '../lib/catalog/playlist-worker.ts';
+import {publishSpotifyCheckpoint} from '../lib/catalog/spotify-playlist-checkpoint.ts';
 import {claimPlaylistRefresh,stagePlaylistPlan,spotifyCreationState,finishPlaylistRefresh,PlaylistLeaseLostError} from '../lib/catalog/playlist-queue.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db=new PrismaClient();

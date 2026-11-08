@@ -177,6 +177,25 @@ class PlanTests(unittest.TestCase):
             return {}
         return state, request
 
+    def test_large_append_chunks_are_positioned_and_read_back_before_next_write(self):
+        plan = self.plan(539)
+        state, original = self.provider([])
+        last_verified = [0]
+        writes = []
+        def request(method, url, **kwargs):
+            if method != 'GET':
+                if method == 'POST':
+                    self.assertEqual(kwargs['json']['position'], len(state['uris']))
+                    self.assertEqual(last_verified[0], len(state['uris']))
+                writes.append(method)
+            result = original(method, url, **kwargs)
+            if method == 'GET' and not result.get('next'):
+                last_verified[0] = len(state['uris'])
+            return result
+        apply_plan(plan, request, lambda: None)
+        self.assertEqual(state['uris'], plan['track_uris'])
+        self.assertEqual(writes, ['PUT'] + ['POST'] * 5)
+
     def test_retry_after_ambiguous_append_is_convergent(self):
         plan = self.plan()
         state, request = self.provider([], True)

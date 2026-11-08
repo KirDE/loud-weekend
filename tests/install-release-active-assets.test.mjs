@@ -38,21 +38,19 @@ async function fixture(t, options = {}) {
     await symlink(oldRelease, root + '/current');
   }
   await writeFile(root + '/shared/production.env', 'PRIOR_ENV=true\n');
-  await writeFile(dir + '/scheduler/mode', 'db-due\n', { mode: 0o644 });
   const prior = new Map();
   for (const asset of assets) {
     const value = `prior ${asset} ${oldSha}\n`;
     prior.set(asset, value);
     await writeFile(dir + '/' + asset, value);
   }
-  await writeFile(dir + '/system/festival-radar-collection-ingestion.timer', 'legacy timer');
   await writeFile(stage + '/DEPLOYED_COMMIT', sha);
   await writeFile(stage + '/.runtime/npm/bin/npm-cli.js', '// unused');
   await writeFile(stage + '/.runtime/node', '#!/bin/bash\nif [[ "$1" == -e ]]; then exec "$NODE_BIN" "$@"; fi\nexit 0\n', { mode: 0o755 });
   for (const name of ['db-due-assets.sh', 'db-due-scheduler-assets.sh', 'start-db-due', 'db-due-scheduler', 'check-db-due-tick-ready'])
     await writeFile(stage + '/scripts/deploy/' + name, mapped(await readFile('scripts/deploy/' + name, 'utf8')), { mode: 0o755 });
-  await writeFile(stage + '/scripts/deploy/playlist-timer-install.sh',
-    'playlist_install_select_mode() { :; }; playlist_install_quiesce_other() { :; }; playlist_install_apply_mode() { :; }\n');
+  await writeFile(stage + '/scripts/deploy/provider-timers.sh',
+    'pause_provider_timers() { :; }; install_provider_timers() { :; }\n');
   await writeFile(stage + '/scripts/deploy/reconfigure-webserver.sh', '#!/bin/bash\nexit 0\n');
   const stubs = {
     install: `#!/bin/bash
@@ -80,7 +78,7 @@ exec /usr/bin/cp "$@"
     curl: `#!/bin/bash
 if [[ "$*" == *health/deployment/* ]]; then
   printf '{"status":"ok","commit":"%s","database":"ok","catalog":"database"}' "$HEALTH_SHA"
-else printf '{"legacyRouteInactive":true,"commit":"%s"}' "$NEW_SHA"; fi
+else exit 1; fi
 `,
     systemctl: `#!/bin/bash
 printf '%s\\n' "$*" >> "$FIXTURE/log"

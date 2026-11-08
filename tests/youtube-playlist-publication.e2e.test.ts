@@ -6,8 +6,9 @@ import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { PrismaClient } from '@prisma/client';
-import { runPlaylistWorker, type ProviderPlaylistResult } from '../lib/catalog/playlist-worker.ts';
-import { claimPlaylistRefresh, PlaylistLeaseLostError } from '../lib/catalog/playlist-queue.ts';
+import {runProviderWorker} from '../lib/catalog/playlist-provider-worker.ts';
+import {publishYoutubeCheckpoint,type YoutubePlaylistResult} from '../lib/catalog/youtube-playlist-checkpoint.ts';
+import { PlaylistLeaseLostError } from '../lib/catalog/playlist-queue.ts';
 import { stageYoutubePlan, youtubeProviderState, saveYoutubeProgress, type YoutubePlan, type YoutubeState } from '../lib/catalog/youtube-playlist-queue.ts';
 
 const url = process.env.PLAYLIST_TEST_DATABASE_URL;
@@ -36,10 +37,10 @@ test('DB/Python publication recovers unknown create and insert across jobs witho
       await db.$executeRaw`UPDATE "CatalogPlaylistRefresh" SET "retryAt" = (clock_timestamp() AT TIME ZONE 'UTC') + interval '1 day' WHERE "festivalSlug" = ${slug} AND status = 'FAILED'`;
       const publication = await db.catalogPublication.create({ data: {
         source: 'INGESTION', sourceId: `youtube:${randomUUID()}`, festivalSlug: slug, editionYear: 2027,
-        actorLabel: 'test', fields: ['lineup'], lineupChanged: true, createdAt: new Date(Date.UTC(2027, 0, 1, 0, 0, offset)),
+        actorLabel: 'test', fields: ['lineup'], lineupChanged: true, evidence:{providers:['youtube_music']}, createdAt: new Date(Date.UTC(2027, 0, 1, 0, 0, offset)),
       } });
       const job = await db.catalogPlaylistRefresh.create({ data: { publicationId: publication.id, festivalSlug: slug, requestedAt: new Date(Date.UTC(1999, 0, 1, 0, 0, offset)) } });
-      const execute = () => runPlaylistWorker(db, async active => {
+      const execute = () => runProviderWorker(db, 'youtube_music', async active => {
         assert.equal(active.id, job.id);
         const plan = { ...basePlan, title: `Synthetic title 2027 ${offset}` };
         await stageYoutubePlan(db, active, plan);
@@ -50,19 +51,19 @@ test('DB/Python publication recovers unknown create and insert across jobs witho
           env: { NODE_ENV: 'test', PATH: process.env.PATH, DATABASE_URL: url, PLAYLIST_PROVIDER: 'youtube_music', PLAYLIST_LEASE: JSON.stringify(active), YOUTUBE_EXPECTED_URL: '', PLAYLIST_GUARD_NODE: process.execPath, YOUTUBE_GUARD_SCRIPT: path.join(process.cwd(), 'scripts/playlist-lease-guard.ts'), PYTHONDONTWRITEBYTECODE: '1' },
           encoding: 'utf8', timeout: 120_000, maxBuffer: 64_000,
         });
-        const youtubeMusic = JSON.parse(child.stdout) as ProviderPlaylistResult;
-        return { url: spotifyUrl, artists: 1, tracks: 2, youtubeMusic };
+        const youtubeMusic = JSON.parse(child.stdout) as YoutubePlaylistResult;
+        await publishYoutubeCheckpoint(db,active,youtubeMusic);
       });
       return { job, execute };
     };
     const first = await attempt(0, 'create');
-    await assert.rejects(first.execute());
+    assert.equal((await first.execute()).status,'FAILED');
     const original = await db.catalogPlaylistRefresh.findUniqueOrThrow({ where: { id: first.job.id } });
     assert.equal((original.youtubeState as unknown as YoutubeState).sent, true);
     assert.equal((original.youtubeState as unknown as YoutubeState).playlistId, null);
-    assert.equal(original.status, 'FAILED');
+    assert.equal(original.status, 'PENDING');
     const second = await attempt(1, 'insert');
-    await assert.rejects(second.execute());
+    assert.equal((await second.execute()).status,'FAILED');
     const ambiguous = await db.catalogPlaylistRefresh.findUniqueOrThrow({ where: { id: second.job.id } });
     assert.ok((ambiguous.youtubeState as unknown as YoutubeState).pendingInsert);
     assert.equal((ambiguous.youtubeState as unknown as YoutubeState).marker, (original.youtubeState as unknown as YoutubeState).marker);
@@ -73,22 +74,24 @@ test('DB/Python publication recovers unknown create and insert across jobs witho
     const bindings = await db.festivalPlaylist.findMany({ where: { editionId } });
     assert.equal(bindings.length, 2);
     assert.equal(bindings.find(item => item.provider === 'youtube_music')?.url, youtubeUrl);
-    assert.ok(bindings.every(item => item.syncedAt && item.trackCount === 2));
+    assert.ok(bindings.find(item=>item.provider==='youtube_music')?.syncedAt);
+    assert.equal(bindings.find(item=>item.provider==='youtube_music')?.trackCount,2);
+    assert.equal(bindings.find(item=>item.provider==='spotify')?.syncedAt,null);
     const remote = JSON.parse(await readFile(path.join(directory, 'remote.json'), 'utf8'));
     assert.equal(remote.calls.filter((call: string[]) => call[0] === 'POST' && call[1] === 'playlists').length, 1);
     assert.equal(remote.calls.filter((call: string[]) => call[0] === 'POST' && call[1] === 'playlistItems').length, 2);
     assert.deepEqual(remote.items.map((item: { video: string }) => item.video), basePlan.videoIds);
 
     // Reclaimed/stale handles cannot checkpoint or mutate provider intent.
-    const fourth = await db.catalogPublication.create({ data: { source: 'INGESTION', sourceId: `youtube:${randomUUID()}`, festivalSlug: slug, editionYear: 2027, actorLabel: 'test', fields: ['lineup'], lineupChanged: true, createdAt: new Date('2027-01-02') } });
+    const fourth = await db.catalogPublication.create({ data: { source: 'INGESTION', sourceId: `youtube:${randomUUID()}`, festivalSlug: slug, editionYear: 2027, actorLabel: 'test', fields: ['lineup'], lineupChanged: true, evidence:{providers:['youtube_music']}, createdAt: new Date('2027-01-02') } });
     await db.catalogPlaylistRefresh.create({ data: { publicationId: fourth.id, festivalSlug: slug, requestedAt: new Date('1999-01-02') } });
-    const claim = (await claimPlaylistRefresh(db, { owner: randomUUID(), ttlMs: 120_000 })).claim;
-    assert.ok(claim);
+    await assert.rejects(runProviderWorker(db,'youtube_music',async claim=>{
     assert.equal(claim.publicationId, fourth.id);
     await stageYoutubePlan(db, claim, { ...basePlan, expectedUrl: youtubeUrl });
     await db.$executeRaw`UPDATE "CatalogPlaylistRefresh" SET "leaseExpiresAt" = (clock_timestamp() AT TIME ZONE 'UTC') - interval '1 second' WHERE id = ${claim.id}`;
-    await assert.rejects(youtubeProviderState(db, claim, youtubeUrl, 'insert', { playlistId: 'PLsynthetic001', expectedIds: ['00000000001'] }), PlaylistLeaseLostError);
+    await assert.rejects(youtubeProviderState(db, claim, youtubeUrl, 'insert', { playlistId: 'PLsynthetic001', expectedIds: ['00000000001'] , beforeIds: (['00000000001']).slice(0,-1), position: (['00000000001']).length-1}), PlaylistLeaseLostError);
     await assert.rejects(saveYoutubeProgress(db, claim, youtubeUrl, { verifiedTracks: 2, totalTracks: 2, quotaUsed: 1, complete: true }), PlaylistLeaseLostError);
+    }),/Provider lease lost/);
   } finally {
     await db.catalogPlaylistRefresh.updateMany({ where: { festivalSlug: slug }, data: { status: 'SUCCEEDED', leaseOwner: null, leaseExpiresAt: null } });
     await db.festival.deleteMany({ where: { slug } });

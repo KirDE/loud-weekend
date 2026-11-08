@@ -11,5 +11,5 @@ try {
   // A DB/restore manifest comparison cannot attest that remaining files were preserved.
   console.log(JSON.stringify({ kind: 'db-only-inventory', commit, inventory, manifestVerified: verified, fileParityVerified: false }));
   if (manifestPath && !verified) process.exitCode = 1;
-} catch { console.error('cutover_inventory_audit_failed'); process.exitCode = 1; }
+} catch { console.error('catalog_inventory_audit_failed'); process.exitCode = 1; }
 finally { await db.$disconnect(); }

@@ -30,23 +30,15 @@ export function boundedEnrichmentEvidence(value: unknown) {
   return createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
 }
 
-export function migrateEnrichmentState(raw: unknown): Record<string, unknown> {
+export function readEnrichmentState(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('invalid_persisted_evidence');
   const payload = structuredClone(raw) as Record<string, unknown>;
-  if (payload.legacyImport) {
-    const legacy = payload.legacyImport as { hash?: unknown; evidence?: unknown };
-    const hash = boundedEnrichmentEvidence(legacy.evidence);
-    if (legacy.hash !== hash) throw new Error('legacy_import_integrity_mismatch');
-  }
-  if (payload.schemaVersion !== undefined && !payload.result) {
-    const evidence = Object.fromEntries(['schemaVersion', 'source', 'generatedAt', 'profiles', 'manualReview'].map((key) => [key, payload[key]]));
-    const hash = boundedEnrichmentEvidence(evidence);
-    if (payload.legacyImport && (payload.legacyImport as { hash?: unknown }).hash !== hash) throw new Error('legacy_import_integrity_mismatch');
-    payload.legacyImport ??= { hash, evidence };
-    payload.result = structuredClone(evidence);
-    for (const key of Object.keys(evidence)) delete payload[key];
-    // A flat import is incomplete until bounded provider evidence is obtained.
-    delete payload.nextRunAt;
+  if (payload.schemaVersion !== undefined) throw new Error('invalid_persisted_evidence');
+  boundedEnrichmentEvidence({result: payload.result, cache: payload.cache, importedEvidence: payload.importedEvidence});
+  if (payload.importedEvidence) {
+    const importedProof = payload.importedEvidence as { hash?: unknown; evidence?: unknown };
+    const hash = boundedEnrichmentEvidence(importedProof.evidence);
+    if (importedProof.hash !== hash) throw new Error('imported_evidence_integrity_mismatch');
   }
   return payload;
 }

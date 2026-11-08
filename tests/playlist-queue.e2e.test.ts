@@ -165,7 +165,7 @@ test("simultaneous festival claims serialize siblings but permit other festivals
   assert.equal(await finishPlaylistRefresh(first, other!, "SUCCEEDED"), true);
 });
 
-test("expired sibling cannot be claimed beside a RUNNING festival row; legacy rows block", async () => {
+test("expired sibling cannot be claimed beside a RUNNING festival row; existing rows block", async () => {
   const slug = `queue-expiry-${randomUUID()}`;
   async function queue() {
     const pub = await first.catalogPublication.create({ data: {
@@ -178,12 +178,12 @@ test("expired sibling cannot be claimed beside a RUNNING festival row; legacy ro
   }
   const firstId = await queue();
   const secondId = await queue();
-  const legacy = await first.catalogPlaylistRefresh.update({ where: { id: firstId }, data: {
+  const existing = await first.catalogPlaylistRefresh.update({ where: { id: firstId }, data: {
     status: "RUNNING", leaseOwner: null, leaseExpiresAt: null, startedAt: base,
   } });
   assert.equal(await claimPlaylistRefresh(second, input(ownerB)), null);
-  // A cutover is needed: never auto-reclaim an unleased legacy RUNNING row.
-  await first.catalogPlaylistRefresh.update({ where: { id: legacy.id }, data: { status: "FAILED", retryAt: null } });
+  // A activation is needed: never auto-reclaim an unleased existing RUNNING row.
+  await first.catalogPlaylistRefresh.update({ where: { id: existing.id }, data: { status: "FAILED", retryAt: null } });
   const claimed = await claimPlaylistRefresh(first, input(ownerA));
   assert.equal(claimed?.id, secondId);
   assert.equal(await claimPlaylistRefresh(second, input(ownerB)), null);
@@ -422,35 +422,35 @@ test("DB fence serializes same-festival commit vs claimant and competing complet
   } finally { release(); await holding; }
 });
 
-test("DB fence refuses unleased legacy RUNNING and any RUNNING sibling", async () => {
+test("DB fence refuses unleased existing RUNNING and any RUNNING sibling", async () => {
   const { claim, editionId, slug } = await fencedFixture();
-  const legacyPublication = await first.catalogPublication.create({ data: {
-    source: "ADMIN", sourceId: `playlist-fence-legacy:${randomUUID()}`, festivalSlug: slug,
+  const existingPublication = await first.catalogPublication.create({ data: {
+    source: "ADMIN", sourceId: `playlist-fence-existing:${randomUUID()}`, festivalSlug: slug,
     editionYear: 2027, actorLabel: "test", fields: ["lineup"], lineupChanged: true,
   } });
-  const legacy = await enqueuePlaylistRefresh(first, legacyPublication.id);
-  await first.catalogPlaylistRefresh.update({ where: { id: legacy.id }, data: { status: "RUNNING", attempts: 1 } });
+  const existing = await enqueuePlaylistRefresh(first, existingPublication.id);
+  await first.catalogPlaylistRefresh.update({ where: { id: existing.id }, data: { status: "RUNNING", attempts: 1 } });
   await assert.rejects(assertPlaylistRefreshLease(first, claim), PlaylistLeaseLostError);
   await assert.rejects(renewPlaylistRefreshLease(first, claim, 60_000), PlaylistLeaseLostError);
   assert.equal(await finishPlaylistRefresh(first, claim, "SUCCEEDED"), false);
-  await assert.rejects(commitPlaylistRefresh(first, claim, playlistWrite(editionId, "https://example.test/legacy")), PlaylistLeaseLostError);
+  await assert.rejects(commitPlaylistRefresh(first, claim, playlistWrite(editionId, "https://example.test/existing")), PlaylistLeaseLostError);
   await first.catalogPlaylistRefresh.update({ where: { id: claim.id }, data: { status: "SUCCEEDED" } });
-  const forged = { ...claim, id: legacy.id, publicationId: legacy.publicationId };
+  const forged = { ...claim, id: existing.id, publicationId: existing.publicationId };
   await assert.rejects(assertPlaylistRefreshLease(first, forged), PlaylistLeaseLostError);
   await assert.rejects(renewPlaylistRefreshLease(first, forged, 60_000), PlaylistLeaseLostError);
   assert.equal((await claimPage(second, input(ownerB))).claim, null);
-  // Partially populated legacy rows with an expired timestamp but no owner
+  // Partially populated existing rows with an expired timestamp but no owner
   // must not be implicitly resurrected either.
-  await first.catalogPlaylistRefresh.update({ where: { id: legacy.id }, data: { leaseExpiresAt: new Date(0) } });
+  await first.catalogPlaylistRefresh.update({ where: { id: existing.id }, data: { leaseExpiresAt: new Date(0) } });
   assert.equal((await claimPage(second, input(ownerB))).claim, null);
   assert.equal(await finishPlaylistRefresh(first, forged, "SUCCEEDED"), false);
   assert.equal(await first.festivalPlaylist.count({ where: { editionId } }), 0);
   // An owner without an expiry, or an expiry without startedAt, is incomplete.
   await first.$executeRaw`UPDATE "CatalogPlaylistRefresh" SET "leaseOwner" = ${ownerA}, "leaseExpiresAt" = NULL,
-    "startedAt" = (clock_timestamp() AT TIME ZONE 'UTC') - interval '3 hours' WHERE id = ${legacy.id}`;
+    "startedAt" = (clock_timestamp() AT TIME ZONE 'UTC') - interval '3 hours' WHERE id = ${existing.id}`;
   assert.equal((await claimPage(second, input(ownerB))).claim, null);
   await first.$executeRaw`UPDATE "CatalogPlaylistRefresh" SET "leaseExpiresAt" = (clock_timestamp() AT TIME ZONE 'UTC') - interval '1 second',
-    "startedAt" = NULL WHERE id = ${legacy.id}`;
+    "startedAt" = NULL WHERE id = ${existing.id}`;
   assert.equal((await claimPage(second, input(ownerB))).claim, null);
   await first.catalogPlaylistRefresh.updateMany({ where: { festivalSlug: slug }, data: { status: "SUCCEEDED" } });
 });

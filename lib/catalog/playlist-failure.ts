@@ -1,5 +1,5 @@
 export type PlaylistStage = 'setup' | 'spotify_discovery' | 'spotify_apply' | 'spotify_checkpoint' | 'youtube_discovery' | 'youtube_apply' | 'commit';
-const reasons = ['spotify_readback_mismatch', 'spotify_plan_superseded', 'playlist_rpc_failed', 'youtube_quota_bound_reached', 'youtube_reconciliation_required', 'youtube_insert_readback_failed', 'youtube_metadata_readback_failed', 'youtube_delete_readback_failed', 'unclassified'];
+const reasons = ['spotify_readback_mismatch', 'spotify_plan_superseded', 'playlist_rpc_failed', 'youtube_quota_bound_reached', 'youtube_reconciliation_required', 'youtube_provider_quota_exceeded', 'youtube_provider_rejected_403_quotaExceeded', 'youtube_insert_readback_failed', 'youtube_metadata_readback_failed', 'youtube_delete_readback_failed', 'unclassified'];
 const diagnostic = new RegExp(`^playlist_worker_failed stage=(setup|spotify_discovery|spotify_apply|spotify_checkpoint|youtube_discovery|youtube_apply|commit) reason=(${reasons.join('|')})$`);
 
 /** Closed vocabulary: provider messages, URLs, bodies and secrets stay private. */

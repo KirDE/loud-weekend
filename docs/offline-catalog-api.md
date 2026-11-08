@@ -1,14 +1,14 @@
 # DB offline catalogue prerequisite (#210 phase 5)
 
 `GET /api/offline/catalog` is public and always reads current 2027 editions
-from the database. It preserves the legacy `schemaVersion: 1` envelope and
+from the database. It preserves the existing `schemaVersion: 1` envelope and
 festival brief (`slug`, `name`, dates, timetable), with all current festivals
 rather than the static sample. Missing dates are `null`; absent timetables are
 empty arrays. Timetable entries expose only date, stage, start, artist, timeZone
 (UTC fallback) and scheduled/cancelled status. No source URLs, observation times,
 internal IDs, profiles, playlists or account data are exposed.
 
-`dataVersion` identifies the legacy format, not freshness. `generatedAt` is
+`dataVersion` identifies the existing format, not freshness. `generatedAt` is
 `null`: this live deterministic representation has no build timestamp.
 `timetableStatus` is `published` if any included festival has timetable entries,
 otherwise `not-published`; this does not claim every timetable is complete.

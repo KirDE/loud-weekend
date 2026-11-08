@@ -266,8 +266,6 @@ class TrackFilterTest(unittest.TestCase):
                     patch.object(playlists, 'search_artist_mbid', return_value=None), \
                     patch.object(playlists, 'get_followers', return_value=1), \
                     patch.object(playlists, 'spotify_top_tracks', return_value=({'id': 'artist-id'}, tracks)) as top_tracks, \
-                    patch.object(playlists, 'update_playlist_details'), \
-                    patch.object(playlists, 'playlist_replace_all'), \
                     patch('builtins.print'):
                 playlists.build_playlist(festival, 'user-id')
 
@@ -298,13 +296,9 @@ class TrackFilterTest(unittest.TestCase):
                     patch.object(playlists, 'search_artist_mbid', return_value=None), \
                     patch.object(playlists, 'get_followers', return_value=1), \
                     patch.object(playlists, 'spotify_top_tracks', return_value=({'id': 'artist-id'}, tracks)), \
-                    patch.object(playlists, 'update_playlist_details') as update_details, \
-                    patch.object(playlists, 'playlist_replace_all') as replace_all, \
                     patch('builtins.print'):
                 playlists.build_playlist(festival, 'user-id')
 
-        update_details.assert_not_called()
-        replace_all.assert_not_called()
 
     def test_selected_artists_require_report_only_mode(self):
         festival = playlists.Festival(
@@ -361,8 +355,6 @@ class TrackFilterTest(unittest.TestCase):
                     patch.object(playlists, 'search_artist_mbid', return_value=None), \
                     patch.object(playlists, 'get_followers', return_value=1), \
                     patch.object(playlists, 'spotify_top_tracks', return_value=({'id': 'artist-id'}, [replacement])), \
-                    patch.object(playlists, 'update_playlist_details') as update_details, \
-                    patch.object(playlists, 'playlist_replace_all') as replace_all, \
                     patch('builtins.print'):
                 playlists.build_playlist(festival, 'user-id')
 
@@ -372,8 +364,6 @@ class TrackFilterTest(unittest.TestCase):
         self.assertEqual(merged['artists_count'], 2)
         self.assertEqual(merged['report'][0]['tracks'], ['Example Artist - Replacement Song'])
         self.assertEqual(merged['report'][1]['tracks'], ['kept'])
-        update_details.assert_not_called()
-        replace_all.assert_not_called()
 
     def test_retry_after_wait_is_capped(self):
         response = playlists.requests.Response()
