@@ -127,6 +127,7 @@ test('unknown creation is held per provider without poisoning other festivals or
  const before=await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id}});
  await runProviderWorker(db,'youtube_music',async claim=>{assert.equal(claim.id,id);throw Object.assign(new Error('unknown'),{code:3,stderr:'youtube_reconciliation_required\nyoutube_create_unknown_no_resend\n'})});
  const held=await db.operationalState.findUniqueOrThrow({where:{key:`playlist-provider:v1:youtube_music:${id}`}});
+ assert.equal((held.payload as any).diagnostic,'playlist_worker_failed stage=setup reason=youtube_create_unknown_no_resend');
  assert.equal((held.payload as any).status,'BLOCKED');assert.equal((held.payload as any).retryAt,null);
  assert.equal((await runProviderWorker(db,'youtube_music',async claim=>assert.equal(claim.id,other))).status,'SUCCEEDED');
  assert.equal((await runProviderWorker(db,'spotify',async claim=>assert.equal(claim.id,id))).status,'SUCCEEDED');

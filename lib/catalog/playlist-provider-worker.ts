@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { assertPlaylistRefreshLease, renewPlaylistRefreshLease, type PlaylistLease } from './playlist-queue.ts';
-import { playlistFailure, type PlaylistStage } from './playlist-failure.ts';
+import { youtubeHoldReasons, playlistFailure, type PlaylistStage } from './playlist-failure.ts';
 import {requestedProviders,type PlaylistProvider} from './playlist-provider-scope.ts';
 export {requestedProviders,type PlaylistProvider} from './playlist-provider-scope.ts';
 type ParentSchedule = { status: string; retryAt: string | null; startedAt: string | null; completedAt: string | null; lastError: string | null };
@@ -104,11 +104,8 @@ export async function runProviderWorker(db:PrismaClient,provider:PlaylistProvide
   }
   // Only explicit identity/write ambiguity needs a permanent hold. Generic
   // reconciliation errors also cover transient read-only pagination anomalies.
-  const holdReasons=['youtube_create_unknown_no_resend','youtube_insert_unknown_no_resend',
-   'youtube_metadata_unknown_no_resend','youtube_existing_identity_ambiguous',
-   'youtube_owner_ambiguous','youtube_invalid_created_id','youtube_creation_metadata_failed'];
   const blocked=provider==='youtube_music'&&(error as {code?:unknown})?.code===3
-   &&lines.includes('youtube_reconciliation_required')&&lines.some(line=>holdReasons.includes(line));
+   &&lines.includes('youtube_reconciliation_required')&&lines.some(line=>youtubeHoldReasons.includes(line));
   if(blocked)retryAt=null;
   const done:ProviderState={version:1,provider,jobId:claim.id,status:blocked?'BLOCKED':error?'FAILED':'SUCCEEDED',attempts:state.attempts,retryAt,...(error?{diagnostic:playlistFailure(stage(),error)}:{completedAt:now.toISOString()})};
   await tx.operationalState.update({where:{key},data:{payload:done as unknown as Prisma.InputJsonValue}});
