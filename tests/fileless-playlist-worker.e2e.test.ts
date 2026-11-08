@@ -27,7 +27,7 @@ test('actual worker pipes durable plans to Python and commits fenced read-back w
     festivalId = festival.id;
     await db.lineupEntry.create({ data: { editionId: festival.editions[0].id, artistId: artist.id, billing: 'HEADLINER', position: 0 } });
     const publication = await db.catalogPublication.create({ data: { source: 'ADMIN', sourceId: slug, festivalSlug: slug, editionYear: 2027, actorLabel: 'test', fields: ['lineup'], lineupChanged: true } });
-    const desiredPlan = { slug, edition_year: 2027, playlist_url: spotifyUrl, playlist_id: 'a'.repeat(22), playlist_name: 'Synthetic', festival: 'Synthetic', track_uris: ['spotify:track:' + 'b'.repeat(22)], track_count: 1, artists_count: 1 };
+    const desiredPlan = { slug, edition_year: 2027, playlist_url: spotifyUrl, playlist_id: 'a'.repeat(22), playlist_name: 'Synthetic', festival: 'Synthetic', track_uris: ['spotify:track:' + 'b'.repeat(22)], track_count: 1, artists_count: 1, report: [{artist: 'Example Artist'}] };
     const youtubePlan = { slug, editionYear: 2027, expectedUrl: youtubeUrl, title: 'Synthetic 2027', description: 'Synthetic description', videoIds: ['00000000001'], artists: 1, sourceTracks: 1 };
     const job = await db.catalogPlaylistRefresh.create({ data: { publicationId: publication.id, festivalSlug: slug, requestedAt: new Date('1900-01-01'), desiredPlan, youtubePlan } });
     const launcher = path.join(directory, 'python');
@@ -47,6 +47,13 @@ test('actual worker pipes durable plans to Python and commits fenced read-back w
     assert.ok(bindings.every(item => item.syncedAt && item.trackCount === 1));
     assert.equal(bindings.find(item => item.provider === 'spotify')!.url, spotifyUrl);
     assert.equal(bindings.find(item => item.provider === 'youtube_music')!.url, youtubeUrl);
+    const youtubePublication=await db.catalogPublication.create({data:{source:'ADMIN',sourceId:slug+'-youtube-only',festivalSlug:slug,editionYear:2027,actorLabel:'test',fields:['lineup'],lineupChanged:true,evidence:{providers:['youtube_music']}}});
+    const youtubeJob=await db.catalogPlaylistRefresh.create({data:{publicationId:youtubePublication.id,festivalSlug:slug,youtubePlan}});
+    const youtubeOnly=await promisify(execFile)(process.execPath,['--experimental-strip-types','scripts/playlist-provider-worker.ts','youtube_music'],{cwd:process.cwd(),env:{...process.env,APP_ROOT:directory,NODE_ENV:'test',PLAYLIST_LOCK_HELD:'true',PLAYLIST_PYTHON:launcher,PLAYLIST_WORK_DIRECTORY:directory,YOUTUBE_MUSIC_CREDENTIALS_FILE:'must-not-read',YOUTUBE_MUSIC_OAUTH_FILE:'must-not-read'},timeout:120_000});
+    assert.equal(JSON.parse(youtubeOnly.stdout).status,'SUCCEEDED');
+    assert.equal((await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id:youtubeJob.id}})).desiredPlan,null);
+    const {assertSpotifyPlanCurrent}=await import('../lib/catalog/playlist-queue.ts');
+    await assertSpotifyPlanCurrent(db,{festivalSlug:slug,publicationId:publication.id});
     assert.deepEqual((await readdir(directory)).sort(), ['python','shared']);
   } finally {
     await db.catalogPlaylistRefresh.updateMany({ where: { festivalSlug: slug }, data: { status: 'SUCCEEDED', leaseOwner: null, leaseExpiresAt: null } });

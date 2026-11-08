@@ -9,7 +9,7 @@ import { publishSpotifyCheckpoint } from '../lib/catalog/playlist-worker.ts';
 import { stageYoutubePlan, validateYoutubePlan, YOUTUBE_URL, type YoutubeState, type YoutubeProgress } from '../lib/catalog/youtube-playlist-queue.ts';
 import { executePlaylistJson } from '../lib/catalog/python-playlist-rpc.ts';
 import { spotifyRepertoiresForArtists } from '../lib/catalog/spotify-repertoire.ts';
-import { runProviderWorker, type PlaylistProvider } from '../lib/catalog/playlist-provider-worker.ts';
+import { runProviderWorker, requestedProviders, type PlaylistProvider } from '../lib/catalog/playlist-provider-worker.ts';
 import { playlistFailure, type PlaylistStage } from '../lib/catalog/playlist-failure.ts';
 const provider=process.argv[2] as PlaylistProvider;
 let release:(()=>Promise<void>)|undefined,stage:PlaylistStage='setup';
@@ -42,13 +42,15 @@ try {
   }else{
    // Discovery uses the frozen song report, never a Spotify API call or write.
    if(!plan){
+    if(requestedProviders(publication.evidence).includes('spotify'))throw Error('Own Spotify song report not staged yet');
     const sibling=await db.catalogPlaylistRefresh.findFirst({where:{festivalSlug:festival.slug,desiredPlan:{not:Prisma.DbNull},publication:{editionYear:publication.editionYear}},orderBy:{requestedAt:'desc'}});
     plan=sibling?.desiredPlan as Record<string,any>|null;
     if(!plan)throw Error('Spotify song report not staged yet');
     const norm=(n:string)=>n.toLowerCase().replace(/[^a-z0-9]/g,'');
     const names=new Set((plan.report??[]).map((r:{artist:string})=>norm(r.artist)));
     if([...festival.headliners,...festival.lineup].some(n=>!names.has(norm(n))&&!/ tribute/i.test(n)))throw Error('Song report does not cover current lineup');
-    plan=await stagePlaylistPlan(db,claim,plan) as Record<string,any>;
+    // A YouTube-only publication must not stage a Spotify plan: that would
+    // falsely supersede the existing Spotify generation across providers.
    }
    const binding=await db.festivalPlaylist.findFirst({where:{provider:'youtube_music',edition:{festival:{slug:festival.slug},year:publication.editionYear,recordState:'CURRENT'}}});
    const url=binding?.url??'';
