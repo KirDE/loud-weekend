@@ -38,7 +38,6 @@ async function fixture(t, options = {}) {
     await symlink(oldRelease, root + '/current');
   }
   await writeFile(root + '/shared/production.env', 'PRIOR_ENV=true\n');
-  await writeFile(dir + '/scheduler/mode', 'db-due\n', { mode: 0o644 });
   const prior = new Map();
   for (const asset of assets) {
     const value = `prior ${asset} ${oldSha}\n`;
