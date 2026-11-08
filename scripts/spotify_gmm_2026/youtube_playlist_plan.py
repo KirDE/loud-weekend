@@ -239,7 +239,9 @@ def publish_plan(plan, request, guard, state, progress, *, quota_limit=5000, wai
                 if matches:
                     playlist_id = matches[0].get('id')
                     if not isinstance(playlist_id, str) or not PLAYLIST_ID.fullmatch(playlist_id):
-                        raise ReconciliationRequired('youtube_invalid_created_id')
+                        # No adoption or create intent exists yet; retry a
+                        # corrected discovery response without a permanent hold.
+                        raise ReconciliationRequired('youtube_invalid_owned_discovery_id')
                     current_state = state('adopt', {'playlistId': playlist_id, 'title': plan['title'], 'description': plan['description']})
             if not playlist_id and current_state['sent']:
                 matches = [item['id'] for item in pages('playlists', {'part': 'snippet,status', 'mine': 'true', 'maxResults': 50}, exact_total=False)

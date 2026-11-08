@@ -5,11 +5,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { assertPlaylistRefreshLease, renewPlaylistRefreshLease, type PlaylistLease } from './playlist-queue.ts';
-import { playlistFailure, type PlaylistStage } from './playlist-failure.ts';
+import { youtubeHoldReasons, playlistFailure, type PlaylistStage } from './playlist-failure.ts';
 import {requestedProviders,type PlaylistProvider} from './playlist-provider-scope.ts';
 export {requestedProviders,type PlaylistProvider} from './playlist-provider-scope.ts';
 type ParentSchedule = { status: string; retryAt: string | null; startedAt: string | null; completedAt: string | null; lastError: string | null };
-type ProviderState = { version: 1; provider: PlaylistProvider; jobId: string; status: 'PENDING'|'RUNNING'|'FAILED'|'SUCCEEDED'; attempts: number; retryAt: string | null; diagnostic?: string; parent?: ParentSchedule; leaseOwner?: string; completedAt?: string };
+type ProviderState = { version: 1; provider: PlaylistProvider; jobId: string; status: 'PENDING'|'RUNNING'|'FAILED'|'BLOCKED'|'SUCCEEDED'; attempts: number; retryAt: string | null; diagnostic?: string; parent?: ParentSchedule; leaseOwner?: string; completedAt?: string };
 const stateKey = (provider: PlaylistProvider, id: string) => `playlist-provider:v1:${provider}:${id}`;
 export function providerRetryDelay(attempt: number, error: unknown) {
   const failure=error as {code?:unknown;stderr?:unknown};
@@ -42,7 +42,9 @@ async function claimProvider(db:PrismaClient, provider:PlaylistProvider) {
     OR (jsonb_typeof(p.evidence->'providers')='array' AND (p.evidence->'providers') ? ${provider})
    )
    ORDER BY j."festivalSlug",p."editionYear",p."createdAt" DESC,j.id DESC
-  ) latest WHERE latest.status<>'SUCCEEDED' ORDER BY latest."requestedAt" LIMIT 128`;
+  ) latest WHERE latest.status<>'SUCCEEDED' AND NOT EXISTS (SELECT 1 FROM "OperationalState" held
+   WHERE held.key='playlist-provider:v1:' || ${provider} || ':' || latest.id AND held.payload->>'status'='BLOCKED')
+   ORDER BY latest."requestedAt" LIMIT 128`;
  for(const candidate of candidates){
   const result=await db.$transaction(async tx=>{
    await tx.$executeRaw`SELECT pg_advisory_xact_lock(210,hashtext(${candidate.festivalSlug}))`;
@@ -67,7 +69,7 @@ async function claimProvider(db:PrismaClient, provider:PlaylistProvider) {
    if(job.status==='FAILED'&&!job.retryAt)return null;
    if(await tx.catalogPlaylistRefresh.count({where:{festivalSlug:job.festivalSlug,id:{not:job.id},status:'RUNNING'}}))return null;
    if(!state)state={version:1,provider,jobId:job.id,status:'PENDING',attempts:0,retryAt:provider==='youtube_music'?job.retryAt?.toISOString()??null:null};
-   if(state.status==='SUCCEEDED'||(state.retryAt&&new Date(state.retryAt)>now))return null;
+   if(state.status==='BLOCKED'||state.status==='SUCCEEDED'||(state.retryAt&&new Date(state.retryAt)>now))return null;
    const owner=randomUUID(),before=schedule(job);
    const running:ProviderState={...state,status:'RUNNING',attempts:state.attempts+1,parent:before,leaseOwner:owner};
    await tx.operationalState.upsert({where:{key},create:{key,payload:running as unknown as Prisma.InputJsonValue},update:{payload:running as unknown as Prisma.InputJsonValue}});
@@ -100,7 +102,12 @@ export async function runProviderWorker(db:PrismaClient,provider:PlaylistProvide
    const payload={provider,reason:'quotaExceeded',status:403,reportedAt:now.toISOString(),resetAt:retryAt,jobId:claim.id};
    await tx.operationalState.upsert({where:{key:'playlist-provider-quota:youtube_music:v1'},create:{key:'playlist-provider-quota:youtube_music:v1',payload},update:{payload}});
   }
-  const done:ProviderState={version:1,provider,jobId:claim.id,status:error?'FAILED':'SUCCEEDED',attempts:state.attempts,retryAt,...(error?{diagnostic:playlistFailure(stage(),error)}:{completedAt:now.toISOString()})};
+  // Only explicit identity/write ambiguity needs a permanent hold. Generic
+  // reconciliation errors also cover transient read-only pagination anomalies.
+  const blocked=provider==='youtube_music'&&(error as {code?:unknown})?.code===3
+   &&lines.includes('youtube_reconciliation_required')&&lines.some(line=>youtubeHoldReasons.includes(line));
+  if(blocked)retryAt=null;
+  const done:ProviderState={version:1,provider,jobId:claim.id,status:blocked?'BLOCKED':error?'FAILED':'SUCCEEDED',attempts:state.attempts,retryAt,...(error?{diagnostic:playlistFailure(stage(),error)}:{completedAt:now.toISOString()})};
   await tx.operationalState.update({where:{key},data:{payload:done as unknown as Prisma.InputJsonValue}});
   let complete=true;
   for(const wanted of providers){const row=await tx.operationalState.findUnique({where:{key:stateKey(wanted,claim.id)}});if((row?.payload as unknown as ProviderState)?.status!=='SUCCEEDED')complete=false}

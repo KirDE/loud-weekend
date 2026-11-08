@@ -49,3 +49,12 @@ tests, retained-intent JSONB validation, delayed/unknown-write Python regression
 installer tests, typecheck and build. Verify installed file hashes and both timer
 routes, original catalogue/archive identities, provider state separation and actual
 owned ordered playlist content separately from job labels.
+
+## Reconciliation holds
+
+A provider result that requires ownership/creation reconciliation is `BLOCKED`,
+not a transient retry. The immutable plan and reserved write intent remain intact.
+Only that provider/generation is excluded from scheduling; other festivals and
+the other provider remain eligible. Explicit reconciliation must resolve the
+underlying identity before releasing the hold. Bounded insert/metadata/delete
+readback delays retain their normal retry schedule.
