@@ -28,6 +28,10 @@ class QuotaBoundReached(RuntimeError):
     pass
 
 
+class ProviderQuotaExceeded(RuntimeError):
+    pass
+
+
 class ProviderWriteRejected(RuntimeError):
     """An explicit structured 4xx response, not a timeout or unknown outcome."""
     def __init__(self, status, reason):
@@ -36,6 +40,8 @@ class ProviderWriteRejected(RuntimeError):
 
 
 def failure_diagnostic(error):
+    if isinstance(error, ProviderQuotaExceeded):
+        return 'youtube_provider_quota_exceeded'
     if isinstance(error, ProviderWriteRejected):
         status, reason = error.evidence['status'], error.evidence['reason']
         if status in (400, 401, 403, 404, 409, 429) and isinstance(reason, str) and re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{0,79}', reason):
@@ -220,7 +226,7 @@ def publish_plan(plan, request, guard, state, progress, *, quota_limit=5000, wai
             creation_metadata = current_state.get('creationMetadata') or {'title': plan['title'], 'description': description}
             if not playlist_id and not current_state['sent']:
                 # A missing DB binding does not mean the provider playlist is
-                # missing. Recover an exact owned legacy identity before create.
+                # missing. Recover an exact owned existing identity before create.
                 owned = pages('playlists', {'part': 'snippet,status', 'mine': 'true', 'maxResults': 50}, exact_total=False)
                 owned = [item for item in owned if item.get('id') not in archived_ids]
                 matches = [item for item in owned if item.get('snippet', {}).get('channelId') == owner
@@ -233,7 +239,9 @@ def publish_plan(plan, request, guard, state, progress, *, quota_limit=5000, wai
                 if matches:
                     playlist_id = matches[0].get('id')
                     if not isinstance(playlist_id, str) or not PLAYLIST_ID.fullmatch(playlist_id):
-                        raise ReconciliationRequired('youtube_invalid_created_id')
+                        # No adoption or create intent exists yet; retry a
+                        # corrected discovery response without a permanent hold.
+                        raise ReconciliationRequired('youtube_invalid_owned_discovery_id')
                     current_state = state('adopt', {'playlistId': playlist_id, 'title': plan['title'], 'description': plan['description']})
             if not playlist_id and current_state['sent']:
                 matches = [item['id'] for item in pages('playlists', {'part': 'snippet,status', 'mine': 'true', 'maxResults': 50}, exact_total=False)
@@ -296,19 +304,46 @@ def publish_plan(plan, request, guard, state, progress, *, quota_limit=5000, wai
         while verified < min(len(current), len(desired)) and current[verified] == desired[verified]:
             verified += 1
         checkpoint()
-        for item in reversed(items[verified:]):
-            call('DELETE', 'playlistItems', params={'id': item['id']})
-        _, current = read_until(lambda: content(playlist_id), lambda value: value[1] == desired[:verified] and len(value[1]) == len(set(value[1])), 'youtube_delete_readback_failed')
-        if current != desired[:verified] or len(current) != len(set(current)):
-            raise ReconciliationRequired('youtube_delete_readback_failed')
-        for position in range(verified, len(desired)):
+        # Retain the longest ordered subsequence already present. Previously a
+        # single new headliner caused the entire old suffix to be deleted and
+        # reinserted (50 quota units for EACH delete and EACH insert).
+        # Unique desired IDs turn LCS into LIS over desired positions.
+        from bisect import bisect_left
+        ranks = {video: index for index, video in enumerate(desired)}
+        tails, tail_indices, previous = [], [], {}
+        for index, video in enumerate(current):
+            if video not in ranks:
+                continue
+            rank = ranks[video]
+            place = bisect_left(tails, rank)
+            previous[index] = tail_indices[place - 1] if place else None
+            if place == len(tails):
+                tails.append(rank)
+                tail_indices.append(index)
+            else:
+                tails[place], tail_indices[place] = rank, index
+        retained, cursor = set(), tail_indices[-1] if tail_indices else None
+        while cursor is not None:
+            retained.add(cursor)
+            cursor = previous[cursor]
+        kept = [video for index, video in enumerate(current) if index in retained]
+        for index in reversed(range(len(items))):
+            if index not in retained:
+                call('DELETE', 'playlistItems', params={'id': items[index]['id']})
+        if len(retained) != len(items):
+            _, current = read_until(lambda: content(playlist_id), lambda value: value[1] == kept and len(value[1]) == len(set(value[1])), 'youtube_delete_readback_failed')
+        else:
+            current = kept
+        for position, video in enumerate(desired):
+            if position < len(current) and current[position] == video:
+                verified = position + 1
+                continue
             budget.charge('POST')
-            intent = {'playlistId': playlist_id, 'expectedIds': desired[:position + 1]}
+            expected = current[:position] + [video] + current[position:]
+            intent = {'playlistId': playlist_id, 'expectedIds': expected, 'beforeIds': current[:], 'position': position}
             state('insert', intent)
-            mutate('POST', 'playlistItems', 'insert', intent, params={'part': 'snippet'}, json={'snippet': {'playlistId': playlist_id, 'position': position, 'resourceId': {'kind': 'youtube#video', 'videoId': desired[position]}}})
+            mutate('POST', 'playlistItems', 'insert', intent, params={'part': 'snippet'}, json={'snippet': {'playlistId': playlist_id, 'position': position, 'resourceId': {'kind': 'youtube#video', 'videoId': video}}})
             _, current = read_until(lambda: content(playlist_id), lambda value: value[1] == intent['expectedIds'] and len(value[1]) == len(set(value[1])), 'youtube_insert_readback_failed')
-            if current != intent['expectedIds'] or len(current) != len(set(current)):
-                raise ReconciliationRequired('youtube_insert_readback_failed')
             state('confirm', intent)
             verified = position + 1
             checkpoint()
@@ -330,7 +365,7 @@ def run_plan(mode, value):
         result = discover_plan(value)
     elif mode == 'apply':
         from youtube_music_transfer import youtube_data_api_headers
-        # Explicit worker environment only; no legacy default credential paths.
+        # Explicit worker environment only; no existing default credential paths.
         credentials = Path(os.environ['YOUTUBE_MUSIC_CREDENTIALS_FILE'])
         oauth = Path(os.environ['YOUTUBE_MUSIC_OAUTH_FILE'])
         def state(action, payload=None):
@@ -344,6 +379,12 @@ def run_plan(mode, value):
             guard()  # Refresh may have waited; fence again immediately pre-call.
             response = requests.request(method, url, headers=headers, timeout=30, **kwargs)
             if response.status_code >= 400:
+                if response.status_code == 403 and method not in ('POST', 'PUT'):
+                    try:
+                        if response.json()['error']['errors'][0]['reason'] == 'quotaExceeded':
+                            raise ProviderQuotaExceeded('youtube_provider_quota_exceeded')
+                    except (KeyError, IndexError, TypeError, ValueError):
+                        pass
                 if method in ('POST', 'PUT') and response.status_code in (400, 401, 403, 404, 409, 429):
                     try:
                         error = response.json()['error']

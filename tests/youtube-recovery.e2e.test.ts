@@ -10,7 +10,7 @@ requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db = new PrismaClient();
 test.after(async () => { await db.$disconnect(); });
 
-test('real PostgreSQL legacy adoption, exact rejected-write recovery and expired-lease fencing', async () => {
+test('real PostgreSQL existing adoption, exact rejected-write recovery and expired-lease fencing', async () => {
   const slug = 'youtube-recovery-' + randomUUID();
   const festival = await db.festival.create({ data: { slug, name: 'Synthetic', country: 'Test', countryCode: 'DE', genres: [], officialUrl: 'https://example.test/', editions: { create: { year: 2027, status: 'PARTIAL', ticketStatus: 'UNKNOWN', recordState: 'CURRENT', completeness: 'PARTIAL', sourceUpdatedAt: new Date() } } } });
   const publication = await db.catalogPublication.create({ data: { source: 'ADMIN', sourceId: slug, festivalSlug: slug, editionYear: 2027, actorLabel: 'test', fields: ['lineup'], lineupChanged: true } });
@@ -31,7 +31,7 @@ test('real PostgreSQL legacy adoption, exact rejected-write recovery and expired
     assert.equal(adopted.adopted, true);
     assert.equal(adopted.playlistId, 'PLsynthetic001');
     assert.deepEqual((await db.catalogPlaylistRefresh.findUniqueOrThrow({ where: { id: job.id } })).youtubeState, adopted);
-    const insert = { playlistId: adopted.playlistId, expectedIds: plan.videoIds };
+    const insert = { playlistId: adopted.playlistId, expectedIds: plan.videoIds , beforeIds: (plan.videoIds).slice(0,-1), position: (plan.videoIds).length-1};
     await youtubeProviderState(db, claim, '', 'insert', insert);
     await assert.rejects(youtubeProviderState(db, claim, '', 'insert-rejected', { intent: insert, rejection: { status: 503, reason: 'backendError' } }), /Invalid YouTube rejection/);
     assert.deepEqual((await youtubeProviderState(db, claim, '', 'read')).pendingInsert, insert);

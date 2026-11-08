@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   test-and-build:
-    # Python 3.9 production-artifact validation is unavailable on Ubuntu 26.04.
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -68,18 +67,20 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:admin:e2e
       - run: npm run typecheck
-      - run: npm run test:final-cutover-db
+      - run: npm run test:persistence-db
       - run: npm run test:data
       - run: npm run test:notifications:e2e
       - run: python3 -m pip install -r requirements.txt
-      - run: node --import tsx --test tests/fileless-playlist-worker.e2e.test.ts
-      - run: npm run test:final-cutover
+      - run: PLAYLIST_TEST_DATABASE_URL="$DATABASE_URL" node --import tsx --test --test-concurrency=1 tests/fileless-playlist-worker.e2e.test.ts tests/playlist-provider-worker.e2e.test.ts tests/playlist-creation.e2e.test.ts tests/youtube-playlist-publication.e2e.test.ts tests/spotify-playlist-checkpoint.e2e.test.ts
+      - run: npm run test:runtime
       - run: python3 -m unittest discover -s tests
       - run: npm run build
       # Exercise the actual archive: builder is Python 3.11, production is 3.9.
       - run: bash scripts/deploy/package-release.sh "$GITHUB_SHA" "$RUNNER_TEMP/python39-release.tar.gz"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.9"
-      - run: bash scripts/deploy/check-python39-release.sh "$RUNNER_TEMP/python39-release.tar.gz"
+      - name: Validate archive in the production Python version
+        run: |
+          docker run --rm \
+            -v "$RUNNER_TEMP/python39-release.tar.gz:/release.tar.gz:ro" \
+            -v "$GITHUB_WORKSPACE/scripts/deploy/check-python39-release.sh:/check.sh:ro" \
+            python:3.9.25-slim bash /check.sh /release.tar.gz
       - run: npm run test:routes

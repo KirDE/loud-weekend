@@ -58,7 +58,16 @@ def ensure_playlist(plan, request, guard, creation_state):
     if not re.fullmatch(r'[A-Za-z0-9]{22}', playlist_id):
         raise ValueError('Invalid created playlist ID')
     guard()
-    metadata = request('GET', f'https://api.spotify.com/v1/playlists/{playlist_id}')
+    for attempt in range(3):
+        guard()
+        try:
+            metadata = request('GET', f'https://api.spotify.com/v1/playlists/{playlist_id}')
+            break
+        except requests.HTTPError as error:
+            if error.response is None or error.response.status_code != 404 or attempt == 2:
+                raise
+            time.sleep(attempt + 1)  # Reads only; never repeat acknowledged create.
+
     if metadata.get('id') != playlist_id or metadata.get('owner', {}).get('id') != owner or metadata.get('description') != description:
         raise ValueError('Creation read-back mismatch')
     creation_state('bind', playlist_id)
@@ -94,17 +103,23 @@ def apply_plan(plan, request, guard, sleep=time.sleep):
     # A crash after success needs no further effects when desired content is present.
     if read_back() == uris:
         return
+    def verify(expected):
+        # Fence each acknowledged chunk before the next append. Explicit append
+        # positions avoid provider-dependent default insertion ordering.
+        for attempt in range(3):
+            if read_back() == expected:
+                return
+            if attempt < 2:
+                guard()
+                sleep(attempt + 1)
+        raise SpotifyReadbackMismatch('Playlist read-back mismatch')
     for offset in range(0, len(uris), 100):
         guard()
-        request('PUT' if offset == 0 else 'POST', endpoint, json={'uris': uris[offset:offset + 100]})
-    # Successful writes may be visible late. Retry reads only, never PUT/POST.
-    for attempt in range(3):
-        if read_back() == uris:
-            return
-        if attempt < 2:
-            guard()
-            sleep(attempt + 1)
-    raise SpotifyReadbackMismatch('Playlist read-back mismatch')
+        body = {'uris': uris[offset:offset + 100]}
+        if offset:
+            body['position'] = offset
+        request('PUT' if offset == 0 else 'POST', endpoint, json=body)
+        verify(uris[:offset + 100])
 
 
 def run_plan(plan):

@@ -55,7 +55,7 @@ if __name__ == '__main__':
         if isinstance(error, SpotifyReadbackMismatch):
             sys.stderr.write('spotify_readback_mismatch\n')
             sys.exit(1)
-        from youtube_playlist_plan import QuotaBoundReached, ReconciliationRequired, ProviderWriteRejected, failure_diagnostic
+        from youtube_playlist_plan import QuotaBoundReached, ReconciliationRequired, ProviderWriteRejected, ProviderQuotaExceeded, failure_diagnostic
         if isinstance(error, QuotaBoundReached):
             sys.stderr.write('youtube_quota_bound_reached\n')
             sys.exit(2)
@@ -63,7 +63,7 @@ if __name__ == '__main__':
             detail = failure_diagnostic(error)
             sys.stderr.write('youtube_reconciliation_required\n' + (detail + '\n' if detail != 'youtube_plan_failed' else ''))
             sys.exit(3)
-        if isinstance(error, ProviderWriteRejected):
+        if isinstance(error, (ProviderWriteRejected, ProviderQuotaExceeded)):
             sys.stderr.write(failure_diagnostic(error) + '\n')
             sys.exit(1)
         sys.stderr.write('playlist_rpc_failed\n')

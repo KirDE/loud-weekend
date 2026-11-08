@@ -47,7 +47,7 @@ case "$mode" in
       echo 'DB due ingestion failed' >&2
       exit 1
     fi
-    "$release/.runtime/node" scripts/report-db-due-pilot.mjs "$output/summary.json" || { echo 'DB due pilot audit failed' >&2; exit 1; } ;;
+    "$release/.runtime/node" scripts/report-db-due-run.mjs "$output/summary.json" || { echo 'DB due run audit failed' >&2; exit 1; } ;;
   drain)
     "$release/.runtime/node" scripts/drain-ingestion-notifications.mjs --db-due >/dev/null 2>&1 || { echo 'DB due outbox drain failed' >&2; exit 1; } ;;
 esac

@@ -368,7 +368,7 @@ test("publication survives notification failure and independent drain recovers o
       nextRunAt: new Date(Date.now() - 1000), strategies: ["json_ld_event"], parserKey: "json_ld_event",
     } });
     // The start and end dates change to the same value: two changes, one
-    // notification dedupe key. Legacy sequential upsert keeps the first.
+    // notification dedupe key. existing sequential upsert keeps the first.
     const duplicateFixture = path.join(dir, "duplicate-event-key.html");
     await writeFile(duplicateFixture, fixture.replace('"startDate":"2027-07-07"', '"startDate":"2027-07-07","endDate":"2027-07-07"'));
     const published = run(["--fixture=" + duplicateFixture], undefined, {

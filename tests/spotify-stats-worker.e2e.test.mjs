@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PrismaClient } from '@prisma/client';
-import { validateDisposableDatabase } from '../scripts/prepare-cutover-test-db.mjs';
+import { validateDisposableDatabase } from '../scripts/prepare-activation-test-db.mjs';
 import { claimOperationalState } from '../lib/catalog/operational-state.ts';
 import { spotifyResolution, publishSpotifyIdentity } from '../lib/catalog/spotify-identity-publication.ts';
 import { runSpotifyStats } from '../scripts/refresh-spotify-stats.mjs';

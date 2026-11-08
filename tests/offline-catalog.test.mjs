@@ -17,7 +17,7 @@ function edition(slug = "sample") {
   };
 }
 
-test("safe legacy projection, stable bytes and strong ETag; row order and metadata do not affect revision", async () => {
+test("safe existing projection, stable bytes and strong ETag; row order and metadata do not affect revision", async () => {
   const rows = [edition("z"), edition("a")];
   rows[0].timetable.push({ ...rows[0].timetable[0], artistName: "Other", status: "CANCELLED" });
   const read = () => Promise.resolve(projectOfflineCatalog(rows));

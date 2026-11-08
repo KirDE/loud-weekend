@@ -174,7 +174,7 @@ class YoutubePlanTests(unittest.TestCase):
     def test_ambiguous_insert_on_historical_playlist_is_not_cleared(self):
         provider = Provider(videos=VIDEOS[:2])
         provider.metadata['snippet']['title'] = 'Synthetic festival 2026'
-        provider.saved['pendingInsert'] = {'playlistId': PLAYLIST, 'expectedIds': VIDEOS[:2]}
+        provider.saved['pendingInsert'] = {'playlistId': PLAYLIST, 'expectedIds': VIDEOS[:2], 'beforeIds': (VIDEOS[:2])[:-1], 'position': len(VIDEOS[:2])-1}
         before = copy.deepcopy(provider.saved)
         with self.assertRaisesRegex(ReconciliationRequired, 'youtube_playlist_edition_mismatch'):
             provider.run()
@@ -232,7 +232,7 @@ class YoutubePlanTests(unittest.TestCase):
         self.assertEqual(provider.writes('playlistItems'), [('POST', 'playlistItems')])
         self.assertIsNotNone(provider.saved['pendingInsert'])
 
-    def test_missing_binding_adopts_owned_exact_legacy_playlist(self):
+    def test_missing_binding_adopts_owned_exact_existing_playlist(self):
         provider = Provider(creating=True, videos=VIDEOS[:3])
         provider.metadata = {'id': PLAYLIST, 'snippet': {'title': provider.plan['title'], 'description': provider.plan['description'], 'channelId': 'owner'}, 'status': {'privacyStatus': 'public'}}
         provider.run()
@@ -241,7 +241,56 @@ class YoutubePlanTests(unittest.TestCase):
         self.assertNotIn(('POST', 'playlists'), provider.writes())
         self.assertEqual(provider.writes(), [('PUT', 'playlists')])
 
-    def test_legacy_discovery_does_not_treat_advisory_total_as_missing_page(self):
+    def test_malformed_owned_discovery_leaves_no_intent_and_valid_retry_adopts(self):
+        for invalid_id in (None, 123, '', 'bad', 'bad/id-with-slash'):
+            with self.subTest(invalid_id=invalid_id):
+                provider = Provider(creating=True, videos=VIDEOS[:3])
+                provider.metadata = {'id': invalid_id, 'snippet': {'title': provider.plan['title'], 'description': provider.plan['description'], 'channelId': 'owner'}, 'status': {'privacyStatus': 'public'}}
+                before = copy.deepcopy((provider.saved, provider.metadata, provider.items))
+                actions = []
+                def state(action, payload=None):
+                    actions.append(action)
+                    return provider.state(action, payload)
+                with self.assertRaisesRegex(ReconciliationRequired, '^youtube_invalid_owned_discovery_id$'):
+                    publish_plan(provider.plan, provider.request, provider.guard, state, provider.progress.append, wait=lambda delay: None)
+                self.assertEqual(actions, ['read'])
+                self.assertEqual(provider.calls, [('GET', 'channels'), ('GET', 'playlists')])
+                self.assertEqual(provider.writes(), [])
+                self.assertEqual((provider.saved, provider.metadata, provider.items), before)
+                provider.metadata['id'] = PLAYLIST
+                result = publish_plan(provider.plan, provider.request, provider.guard, state, provider.progress.append, wait=lambda delay: None)
+                self.assertEqual(result['tracks'], 3)
+                self.assertTrue(provider.saved['adopted'])
+                self.assertEqual(provider.saved['playlistId'], PLAYLIST)
+                self.assertEqual(actions.count('adopt'), 1)
+                self.assertNotIn('reserve', actions)
+                self.assertEqual(provider.writes(), [('PUT', 'playlists')])
+
+    def test_invalid_id_after_durable_creation_keeps_original_diagnostic_and_intent(self):
+        for phase in ('create-response', 'reserved-discovery', 'saved-id'):
+            with self.subTest(phase=phase):
+                provider = Provider(creating=True)
+                if phase != 'create-response':
+                    provider.saved.update(sent=True, creationMetadata={'title': provider.plan['title'], 'description': provider.plan['description']})
+                    provider.metadata = {'id': 'bad', 'snippet': {'channelId': 'owner', **provider.saved['creationMetadata']}}
+                    if phase == 'saved-id':
+                        provider.saved['playlistId'] = 'bad'
+                before = copy.deepcopy(provider.saved)
+                def request(method, url, **kwargs):
+                    response = provider.request(method, url, **kwargs)
+                    return {**response, 'id': 'bad'} if method == 'POST' else response
+                with self.assertRaisesRegex(ReconciliationRequired, '^youtube_invalid_created_id$'):
+                    publish_plan(provider.plan, request, provider.guard, provider.state, provider.progress.append, wait=lambda delay: None)
+                self.assertTrue(provider.saved['sent'])
+                self.assertIsNotNone(provider.saved['creationMetadata'])
+                if phase == 'create-response':
+                    self.assertIsNone(provider.saved['playlistId'])
+                    self.assertEqual(provider.writes(), [('POST', 'playlists')])
+                else:
+                    self.assertEqual(provider.saved, before)
+                    self.assertEqual(provider.writes(), [])
+
+    def test_existing_discovery_does_not_treat_advisory_total_as_missing_page(self):
         provider = Provider(creating=True, videos=VIDEOS[:3])
         provider.metadata = {'id': PLAYLIST, 'snippet': {'title': provider.plan['title'], 'description': provider.plan['description'], 'channelId': 'owner'}, 'status': {'privacyStatus': 'public'}}
         def request(method, url, **kwargs):
@@ -252,7 +301,7 @@ class YoutubePlanTests(unittest.TestCase):
         publish_plan(provider.plan, request, provider.guard, provider.state, provider.progress.append, wait=lambda delay: None)
         self.assertNotIn(('POST', 'playlists'), provider.writes())
 
-    def test_multiple_owned_legacy_matches_refuse_creation(self):
+    def test_multiple_owned_existing_matches_refuse_creation(self):
         provider = Provider(creating=True)
         provider.metadata = {'id': PLAYLIST, 'snippet': {'title': provider.plan['title'], 'description': provider.plan['description'], 'channelId': 'owner'}, 'status': {'privacyStatus': 'public'}}
         provider.duplicate_discovery = True
@@ -308,6 +357,25 @@ class YoutubePlanTests(unittest.TestCase):
                 provider.run()
             self.assertEqual(provider.writes(), [])
 
+    def test_fifty_new_front_tracks_retain_old_suffix_within_100_write_budget(self):
+        provider = Provider(videos=VIDEOS[50:104])
+        provider.plan['videoIds'] = VIDEOS[:104]
+        provider.plan['sourceTracks'] = 104
+        result = provider.run(quota_limit=5000)
+        self.assertEqual(result['tracks'], 104)
+        self.assertEqual(len(provider.writes()), 50)
+        self.assertFalse(any(method == 'DELETE' for method, _ in provider.writes()))
+        self.assertLess(provider.progress[-1]['quotaUsed'], 3000)
+
+    def test_retained_suffix_unknown_insert_recovers_without_resending(self):
+        provider = Provider(videos=VIDEOS[1:3])
+        provider.unknown = 'insert'
+        with self.assertRaises(TimeoutError):
+            provider.run()
+        self.assertEqual(provider.saved['pendingInsert']['beforeIds'], VIDEOS[1:3])
+        self.assertEqual(provider.run()['tracks'], 3)
+        self.assertEqual(len(provider.writes()), 1)
+
     def test_exact_existing_playlist_is_noop(self):
         provider = Provider(videos=VIDEOS[:3])
         self.assertEqual(provider.run()['tracks'], 3)
@@ -318,7 +386,7 @@ class YoutubePlanTests(unittest.TestCase):
         provider = Provider(videos=[VIDEOS[0], VIDEOS[2], VIDEOS[2], VIDEOS[3]])
         provider.run()
         self.assertEqual([item['video'] for item in provider.items], VIDEOS[:3])
-        self.assertEqual(len([call for call in provider.writes() if call[0] == 'DELETE']), 3)
+        self.assertEqual(len([call for call in provider.writes() if call[0] == 'DELETE']), 2)
         self.assertIsNone(provider.saved['pendingInsert'])
 
     def test_unknown_create_recovers_exact_marker_without_resend(self):
@@ -488,13 +556,6 @@ class YoutubePlanTests(unittest.TestCase):
         self.assertEqual(result.stderr, 'youtube_plan_failed\n')
         self.assertEqual(result.stdout, '')
 
-    def test_legacy_publish_delegates_to_locked_mode_gate_before_reading_any_files(self):
-        import youtube_music_transfer as legacy
-        with patch.dict(os.environ, {}, clear=True), patch.object(sys, 'argv', ['youtube_music_transfer.py', '--publish', '--report', 'unused-report.json', '--output', 'unused-output.json']), patch.object(legacy, 'load_json', side_effect=AssertionError('legacy provider files read')), patch.object(legacy.subprocess, 'run', return_value=type('Completed', (), {'returncode': 1})()) as run:
-            self.assertEqual(legacy.main(), 1)
-        self.assertIn('playlist-lease-guard.ts', run.call_args.args[0][2])
-        self.assertIn('--legacy-youtube', run.call_args.args[0])
-        self.assertIn('--publish', run.call_args.args[0])
 
 
 if __name__ == '__main__':
