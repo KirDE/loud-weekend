@@ -27,3 +27,12 @@ fetches, verifies exact release/database health, and restores pinned scheduler
 assets on failed activation. Current provider timers start only after release
 health succeeds. Test current locking, persistence, publication and rollback
 invariants; do not restore one-time migration checks as recurring release gates.
+
+## Python workers
+
+The production Debian interpreter is `/usr/bin/python3.13`; distribution security
+patches remain managed by apt rather than replacing the system interpreter.
+Release packaging resolves wheels explicitly for Python 3.13. CI checks the
+actual archive under Python 3.13, and activation validates the new package tree
+with the installed production interpreter before migrations or switching the
+application release. A mismatched interpreter or dependency graph refuses release.

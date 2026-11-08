@@ -1,6 +1,5 @@
-# Release target: the production playlist runner is Python 3.9.
-# Pin the complete runtime graph so a newer upstream release cannot silently
-# introduce Python >=3.10 syntax or metadata into the packaged .python tree.
+# Runtime target: CPython 3.13, matching the production worker interpreter.
+# Pin the complete runtime graph and resolve wheels for this Python minor.
 ytmusicapi==1.10.0
 requests==2.32.3
 urllib3==2.5.0

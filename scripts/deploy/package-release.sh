@@ -22,9 +22,9 @@ cp scripts/db-due-tick.mjs scripts/report-db-due-health.mjs scripts/report-db-du
 cp scripts/bootstrap-parser-repairs.mjs scripts/import-agent-client.mjs scripts/refresh-spotify-stats.mjs scripts/audit-catalog.ts scripts/import-timetable.mjs scripts/enrich-artists.mjs scripts/playlist-provider-worker.ts scripts/playlist-lease-guard.ts scripts/resolve-artist-identities.mjs scripts/check-festival-sources.mjs scripts/export-playlist-catalog.mjs "$stage/app/scripts/"
 cp -a scripts/spotify_gmm_2026/. "$stage/app/scripts/spotify_gmm_2026/"
 cp requirements.txt "$stage/app/"
-# The CI builder may run a newer interpreter than the production Python 3.9.
-# Resolve wheels for the runtime, not for the builder; fail closed on sdists.
-python3 -m pip install --disable-pip-version-check --no-input --only-binary=:all: --python-version 3.9 --target "$stage/app/.python" -r requirements.txt
+# Resolve wheels for the production minor, not the builder; fail closed on sdists.
+python3 -m pip install --disable-pip-version-check --no-input --only-binary=:all: --python-version 3.13 --target "$stage/app/.python" -r requirements.txt
+cp scripts/deploy/check-python-release.sh "$stage/app/scripts/deploy/"
 cp scripts/deploy/reconfigure-webserver.sh "$stage/app/scripts/deploy/"
 cp scripts/deploy/provider-timers.sh "$stage/app/scripts/deploy/"
 cp scripts/analytics/prune-production.sh "$stage/app/scripts/analytics/"
@@ -67,3 +67,5 @@ grep -Fxq 'app/scripts/audit-catalog.ts' "$archive_contents"
 grep -Fxq 'app/scripts/playlist-provider-worker.ts' "$archive_contents"
 grep -Fxq 'app/lib/catalog/playlist-provider-worker.ts' "$archive_contents"
 grep -Fxq 'app/scripts/deploy/provider-timers.sh' "$archive_contents"
+
+grep -Fxq 'app/scripts/deploy/check-python-release.sh' "$archive_contents"

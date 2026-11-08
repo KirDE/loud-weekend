@@ -129,6 +129,7 @@ db_due_assets_armed=true
 cd "$release"
 test -x "$release/.runtime/node"
 test -f "$release/.runtime/npm/bin/npm-cli.js"
+PLAYLIST_PYTHON=/usr/bin/python3.13 bash "$release/scripts/deploy/check-python-release.sh" "$release"
 "$release/.runtime/node" "$release/.runtime/npm/bin/npm-cli.js" \
   ci --omit=dev --ignore-scripts --no-audit --no-fund
 set -a
@@ -254,7 +255,7 @@ WorkingDirectory=$app_root/current
 EnvironmentFile=$shared/production.env
 Environment=NODE_ENV=production
 Environment=APP_ROOT=$app_root
-Environment=PLAYLIST_PYTHON=python3
+Environment=PLAYLIST_PYTHON=/usr/bin/python3.13
 Environment=PYTHONPATH=$app_root/current/.python
 ExecStart=$app_root/current/scripts/deploy/run-collection-job.sh %i
 NoNewPrivileges=true

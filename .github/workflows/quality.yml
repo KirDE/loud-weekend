@@ -34,7 +34,7 @@ jobs:
           cache: npm
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
       - run: npm ci
       - run: npm run prisma:generate
       - run: npx prisma migrate deploy
@@ -75,12 +75,12 @@ jobs:
       - run: npm run test:runtime
       - run: python3 -m unittest discover -s tests
       - run: npm run build
-      # Exercise the actual archive: builder is Python 3.11, production is 3.9.
-      - run: bash scripts/deploy/package-release.sh "$GITHUB_SHA" "$RUNNER_TEMP/python39-release.tar.gz"
+      # Exercise the actual archive: builder and production both target Python 3.13.
+      - run: bash scripts/deploy/package-release.sh "$GITHUB_SHA" "$RUNNER_TEMP/python313-release.tar.gz"
       - name: Validate archive in the production Python version
         run: |
           docker run --rm \
-            -v "$RUNNER_TEMP/python39-release.tar.gz:/release.tar.gz:ro" \
-            -v "$GITHUB_WORKSPACE/scripts/deploy/check-python39-release.sh:/check.sh:ro" \
-            python:3.9.25-slim bash /check.sh /release.tar.gz
+            -v "$RUNNER_TEMP/python313-release.tar.gz:/release.tar.gz:ro" \
+            -v "$GITHUB_WORKSPACE/scripts/deploy/check-python-release.sh:/check.sh:ro" \
+            python:3.13.18-slim bash /check.sh /release.tar.gz
       - run: npm run test:routes
