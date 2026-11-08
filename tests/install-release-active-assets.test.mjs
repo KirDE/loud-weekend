@@ -52,7 +52,7 @@ async function fixture(t, options = {}) {
   for (const name of ['db-due-assets.sh', 'db-due-scheduler-assets.sh', 'start-db-due', 'db-due-scheduler', 'check-db-due-tick-ready'])
     await writeFile(stage + '/scripts/deploy/' + name, mapped(await readFile('scripts/deploy/' + name, 'utf8')), { mode: 0o755 });
   await writeFile(stage + '/scripts/deploy/playlist-timer-install.sh',
-    'playlist_install_select_mode() { :; }; playlist_install_quiesce_other() { :; }; playlist_install_apply_mode() { :; }\n');
+    'playlist_install_select_mode() { :; }; playlist_install_quiesce_other() { :; }; playlist_install_apply_mode() { :; }; playlist_install_apply_provider_mode() { :; }\n');
   await writeFile(stage + '/scripts/deploy/reconfigure-webserver.sh', '#!/bin/bash\nexit 0\n');
   const stubs = {
     install: `#!/bin/bash

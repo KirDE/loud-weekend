@@ -308,6 +308,25 @@ class YoutubePlanTests(unittest.TestCase):
                 provider.run()
             self.assertEqual(provider.writes(), [])
 
+    def test_fifty_new_front_tracks_retain_old_suffix_within_100_write_budget(self):
+        provider = Provider(videos=VIDEOS[50:104])
+        provider.plan['videoIds'] = VIDEOS[:104]
+        provider.plan['sourceTracks'] = 104
+        result = provider.run(quota_limit=5000)
+        self.assertEqual(result['tracks'], 104)
+        self.assertEqual(len(provider.writes()), 50)
+        self.assertFalse(any(method == 'DELETE' for method, _ in provider.writes()))
+        self.assertLess(provider.progress[-1]['quotaUsed'], 3000)
+
+    def test_retained_suffix_unknown_insert_recovers_without_resending(self):
+        provider = Provider(videos=VIDEOS[1:3])
+        provider.unknown = 'insert'
+        with self.assertRaises(TimeoutError):
+            provider.run()
+        self.assertEqual(provider.saved['pendingInsert']['beforeIds'], VIDEOS[1:3])
+        self.assertEqual(provider.run()['tracks'], 3)
+        self.assertEqual(len(provider.writes()), 1)
+
     def test_exact_existing_playlist_is_noop(self):
         provider = Provider(videos=VIDEOS[:3])
         self.assertEqual(provider.run()['tracks'], 3)
@@ -318,7 +337,7 @@ class YoutubePlanTests(unittest.TestCase):
         provider = Provider(videos=[VIDEOS[0], VIDEOS[2], VIDEOS[2], VIDEOS[3]])
         provider.run()
         self.assertEqual([item['video'] for item in provider.items], VIDEOS[:3])
-        self.assertEqual(len([call for call in provider.writes() if call[0] == 'DELETE']), 3)
+        self.assertEqual(len([call for call in provider.writes() if call[0] == 'DELETE']), 2)
         self.assertIsNone(provider.saved['pendingInsert'])
 
     def test_unknown_create_recovers_exact_marker_without_resend(self):

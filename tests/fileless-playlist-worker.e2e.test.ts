@@ -32,8 +32,10 @@ test('actual worker pipes durable plans to Python and commits fenced read-back w
     const job = await db.catalogPlaylistRefresh.create({ data: { publicationId: publication.id, festivalSlug: slug, requestedAt: new Date('1900-01-01'), desiredPlan, youtubePlan } });
     const launcher = path.join(directory, 'python');
     await writeFile(launcher, await readFile('tests/fixtures/fileless-provider.py'), { mode: 0o700 });
-    const result = await promisify(execFile)(process.execPath, ['--experimental-strip-types', 'scripts/playlist-worker.ts'], { cwd: process.cwd(), env: { ...process.env, NODE_ENV: 'test', PLAYLIST_LOCK_HELD: 'true', PLAYLIST_PYTHON: launcher, PLAYLIST_WORK_DIRECTORY: directory, YOUTUBE_MUSIC_CREDENTIALS_FILE: 'must-not-read', YOUTUBE_MUSIC_OAUTH_FILE: 'must-not-read' }, timeout: 120_000, maxBuffer: 64_000 });
-    assert.equal(JSON.parse(result.stdout).status, 'SUCCEEDED');
+    for (const provider of ['spotify', 'youtube_music']) {
+      const result = await promisify(execFile)(process.execPath, ['--experimental-strip-types', 'scripts/playlist-provider-worker.ts', provider], { cwd: process.cwd(), env: { ...process.env, APP_ROOT: directory, NODE_ENV: 'test', PLAYLIST_LOCK_HELD: 'true', PLAYLIST_PYTHON: launcher, PLAYLIST_WORK_DIRECTORY: directory, YOUTUBE_MUSIC_CREDENTIALS_FILE: 'must-not-read', YOUTUBE_MUSIC_OAUTH_FILE: 'must-not-read' }, timeout: 120_000, maxBuffer: 64_000 });
+      assert.equal(JSON.parse(result.stdout).status, 'SUCCEEDED');
+    }
     const after = await db.catalogPlaylistRefresh.findUniqueOrThrow({ where: { id: job.id } });
     assert.equal(after.status, 'SUCCEEDED');
     assert.equal(after.leaseOwner, null);
@@ -45,7 +47,7 @@ test('actual worker pipes durable plans to Python and commits fenced read-back w
     assert.ok(bindings.every(item => item.syncedAt && item.trackCount === 1));
     assert.equal(bindings.find(item => item.provider === 'spotify')!.url, spotifyUrl);
     assert.equal(bindings.find(item => item.provider === 'youtube_music')!.url, youtubeUrl);
-    assert.deepEqual(await readdir(directory), ['python']);
+    assert.deepEqual((await readdir(directory)).sort(), ['python','shared']);
   } finally {
     await db.catalogPlaylistRefresh.updateMany({ where: { festivalSlug: slug }, data: { status: 'SUCCEEDED', leaseOwner: null, leaseExpiresAt: null } });
     if (festivalId) await db.festival.delete({ where: { id: festivalId } });

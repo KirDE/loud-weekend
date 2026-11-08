@@ -10,6 +10,7 @@ const receipt = { version: 1, mode: 'database', reconciled: true, legacyDrained:
   commit: 'a'.repeat(40), queueHash: 'b'.repeat(64) };
 const legacy = 'festival-radar-collection-playlists.timer';
 const database = 'festival-radar-collection-playlists-db.timer';
+const youtube = 'festival-radar-collection-playlists-youtube.timer';
 const due = 'festival-radar-db-due.timer';
 
 test('installer proof reader distinguishes absent rows from corrupt receipts and reads only OperationalState', async () => {
@@ -158,6 +159,7 @@ test('completed durable cutover repairs dual timers, survives later SHA, and lea
   assert.equal(h.result.status, 0, h.result.stderr);
   assert.equal(await h.state(legacy), 'disabled inactive');
   assert.equal(await h.state(database), 'enabled active');
+  assert.equal(await h.state(youtube), 'enabled active');
   assert.equal(await h.state(due), 'disabled inactive');
   assert.ok(h.log.indexOf('disable --now ' + legacy) < h.log.indexOf('enable --now ' + database));
   assert.ok(h.log.indexOf('migrate deploy') < h.log.indexOf('read-playlist-install-mode.ts'));
@@ -170,6 +172,7 @@ test('completed durable cutover repairs dual timers, survives later SHA, and lea
   assert.equal(second.status, 0, second.stderr);
   assert.equal(await h.state(legacy), 'disabled inactive');
   assert.equal(await h.state(database), 'enabled active');
+  assert.equal(await h.state(youtube), 'enabled active');
   assert.equal(await h.state(due), 'disabled inactive');
 });
 
@@ -228,7 +231,7 @@ test('missing unit reported active cannot bypass inhibition on DB cutover', asyn
 });
 
 test('timer operation failures inhibit both paths and never re-enable legacy', async t => {
-  for (const fail of ['disable --now ' + legacy, 'enable --now ' + database]) {
+  for (const fail of ['disable --now ' + legacy, 'enable --now ' + database, 'enable --now ' + youtube]) {
     const h = await fixture(t, { fail });
     assert.equal(h.result.status, 6, h.result.stderr);
     assert.equal(await h.state(database), 'disabled inactive');

@@ -6,6 +6,7 @@ playlist_timers_inhibit() {
   # services here: a provider write may already be in flight under refresh.lock.
   systemctl disable --now "$service-collection-playlists.timer" || failed=true
   systemctl disable --now "$service-collection-playlists-db.timer" || failed=true
+  systemctl disable --now "$service-collection-playlists-youtube.timer" || failed=true
   if [[ "$failed" == true ]]; then
     echo 'playlist timer inhibition incomplete; systemctl recovery required' >&2
   fi
@@ -88,7 +89,16 @@ playlist_install_apply_mode() {
   if ! systemctl disable --now "$service-collection-$rejected.timer" ||
      ! systemctl enable --now "$service-collection-$selected.timer"; then
     playlist_timers_inhibit
-    echo 'playlist timer installation failed; inhibition attempted for both timers' >&2
+    echo 'playlist timer installation failed; inhibition attempted for all timers' >&2
     return 6
   fi
+}
+
+# Apply the independently scheduled YouTube worker only in validated DB mode.
+playlist_install_apply_provider_mode() {
+ if [[ "$playlist_install_mode" == database ]]; then
+  systemctl enable --now "$service-collection-playlists-youtube.timer" || { playlist_timers_inhibit; return 6; }
+ else
+  systemctl disable --now "$service-collection-playlists-youtube.timer" || { playlist_timers_inhibit; return 6; }
+ fi
 }

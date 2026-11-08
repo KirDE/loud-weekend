@@ -5,7 +5,7 @@ export const YOUTUBE_URL = /^https:\/\/(?:music|www)\.youtube\.com\/playlist\?li
 const playlistIdPattern = /^[A-Za-z0-9_-]{10,100}$/;
 const videoIdPattern = /^[A-Za-z0-9_-]{11}$/;
 export type YoutubePlan = { slug: string; editionYear: number; expectedUrl: string; title: string; description: string; videoIds: string[]; artists: number; sourceTracks: number };
-export type YoutubeInsert = { playlistId: string; expectedIds: string[] };
+export type YoutubeInsert = { playlistId: string; expectedIds: string[]; beforeIds?: string[]; position?: number };
 export type YoutubeMetadata = { playlistId: string; title: string; description: string };
 export type YoutubeState = { marker: string; sent: boolean; playlistId: string | null; creationMetadata: { title: string; description: string } | null; pendingInsert: YoutubeInsert | null; pendingMetadata: YoutubeMetadata | null; adopted?: boolean; lastRejectedWrite?: { operation: string; status: number; reason: string }; archivedPlaylistIds?: string[] };
 export type YoutubeProgress = { verifiedTracks: number; totalTracks: number; quotaUsed: number; complete: boolean };
@@ -140,10 +140,21 @@ export async function youtubeProviderState(
         || new Set(insert.expectedIds).size !== insert.expectedIds.length) throw new Error('Invalid YouTube insert intent');
       if (action === 'insert') {
         if (state.pendingInsert || state.pendingMetadata) throw new Error('YouTube insert unresolved; reconcile');
-        if (JSON.stringify(insert.expectedIds) !== JSON.stringify(plan.videoIds.slice(0, insert.expectedIds.length))) throw new Error('YouTube insert does not match durable plan');
+        if (insert.beforeIds !== undefined || insert.position !== undefined) {
+          const position=insert.position, before=insert.beforeIds;
+          if (!Array.isArray(before)||!Number.isSafeInteger(position)||position! < 0||position! > before.length
+            ||insert.expectedIds.length!==before.length+1
+            ||JSON.stringify(before)!==JSON.stringify(insert.expectedIds.filter((_,i)=>i!==position))
+            ||JSON.stringify(insert.expectedIds.slice(0,position!+1))!==JSON.stringify(plan.videoIds.slice(0,position!+1))) throw new Error('Invalid retained YouTube insertion');
+          let cursor=0;
+          for(const id of plan.videoIds)if(id===insert.expectedIds[cursor])cursor++;
+          if(cursor!==insert.expectedIds.length)throw new Error('YouTube retained order does not match durable plan');
+        } else if (JSON.stringify(insert.expectedIds) !== JSON.stringify(plan.videoIds.slice(0, insert.expectedIds.length))) throw new Error('YouTube insert does not match durable plan');
         state.pendingInsert = insert;
       } else {
-        if (!state.pendingInsert || state.pendingInsert.playlistId !== insert.playlistId || JSON.stringify(state.pendingInsert.expectedIds) !== JSON.stringify(insert.expectedIds)) throw new Error('YouTube insert confirmation mismatch');
+        if (!state.pendingInsert || state.pendingInsert.playlistId !== insert.playlistId || (JSON.stringify(state.pendingInsert.expectedIds) !== JSON.stringify(insert.expectedIds)
+          || JSON.stringify(state.pendingInsert.beforeIds ?? null) !== JSON.stringify(insert.beforeIds ?? null)
+          || state.pendingInsert.position !== insert.position)) throw new Error('YouTube insert confirmation mismatch');
         state.pendingInsert = null;
       }
     }

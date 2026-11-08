@@ -26,7 +26,9 @@ case "$job" in
     "$current/.runtime/node" scripts/check-festival-sources.mjs > "$output/latest.json.tmp"
     mv -f "$output/latest.json.tmp" "$output/latest.json" ;;
   playlists-db)
-    "$current/.runtime/node" --experimental-strip-types scripts/playlist-dispatch.ts "$scope" --require-database ;;
+    "$current/.runtime/node" --experimental-strip-types scripts/playlist-provider-worker.ts spotify ;;
+  playlists-youtube)
+    "$current/.runtime/node" --experimental-strip-types scripts/playlist-provider-worker.ts youtube_music ;;
   playlists)
     "$current/.runtime/node" --experimental-strip-types scripts/playlist-dispatch.ts "$scope" ;;
   *) echo "unsupported collection job: $job" >&2; exit 2 ;;

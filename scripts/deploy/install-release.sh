@@ -303,6 +303,7 @@ install_collection_timer ingestion '*-*-* 03:23:00 UTC'
 install_collection_timer playlists 'Tue,Fri *-*-* 04:17:00 UTC'
 # A new installation stays dormant; validated durable cutover preserves DB mode.
 install_collection_timer playlists-db '*-*-* *:00/10:00 UTC'
+install_collection_timer playlists-youtube '*-*-* *:03/10:00 UTC'
 install_collection_timer source-monitor '*-*-01,04,07,10,13,16,19,22,25,28 04:17:00 UTC'
 
 cat > "/etc/systemd/system/$service-notifications.service" <<UNIT
@@ -487,6 +488,7 @@ fi
 # Rearm only after successful release health; a rollback or a paused DB-due
 # timer never gets here with an armed snapshot. Keep both shared locks held.
 playlist_install_apply_mode
+playlist_install_apply_provider_mode
 if [[ "$db_due_timer_was_armed" == true ]]; then
   # Recheck durable mode, exact release and HTTP closure immediately before
   # rearming. Refuse uncertain systemd states rather than risking two fetchers.

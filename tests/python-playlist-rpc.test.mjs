@@ -30,7 +30,7 @@ test('IPC bounds input/output and respects cancellation/timeout', async () => {
 });
 
 test('database playlist worker has no file-backed plan/report exchange', async () => {
-  const worker = await readFile('scripts/playlist-worker.ts', 'utf8');
+  const worker = await readFile('scripts/playlist-provider-worker.ts', 'utf8');
   assert.doesNotMatch(worker, /node:fs|mkdtemp|writeFile|readFile|reportPath|planPath|WORK_DIRECTORY/);
   for (const operation of ['discover-spotify', 'apply-spotify', 'discover-youtube', 'apply-youtube']) assert.ok(worker.includes(operation));
   assert.match(worker, /stagePlaylistPlan/); assert.match(worker, /stageYoutubePlan/);

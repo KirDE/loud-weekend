@@ -3,10 +3,10 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 /** Shared with the historical collection runner. Held through DB acknowledgement. */
-export async function acquirePlaylistProcessLock() {
+async function acquireLock(name: string, shared = false) {
   const directory = path.join(process.env.APP_ROOT ?? '/opt/festival-radar', 'shared/collection-jobs/playlists');
   await mkdir(directory, { recursive: true, mode: 0o750 });
-  const holder = spawn('flock', ['--exclusive', '--nonblock', path.join(directory, 'refresh.lock'),
+  const holder = spawn('flock', [shared ? '--shared' : '--exclusive', '--nonblock', path.join(directory, name),
     'sh', '-c', 'printf "LOCKED\\n"; cat >/dev/null'], { stdio: ['pipe', 'pipe', 'ignore'] });
   holder.stdin.on('error', () => { /* An exited lock holder cannot accept stdin. */ });
   const exited = new Promise<void>(resolve => holder.once('close', () => resolve()));
@@ -25,4 +25,13 @@ export async function acquirePlaylistProcessLock() {
     });
   } catch (error) { holder.stdin.end(); throw error; }
   return async () => { holder.stdin.end(); await exited; };
+}
+
+export async function acquirePlaylistProcessLock() { return acquireLock('refresh.lock'); }
+/** Shared compatibility gate blocks legacy writers, but different providers run
+ * concurrently. A per-provider exclusive lock prevents duplicate timer workers. */
+export async function acquireProviderProcessLock(provider: 'spotify'|'youtube_music', globalHeld = false) {
+ const global=globalHeld ? async()=>{} : await acquireLock('refresh.lock',true);
+ try {const local=await acquireLock(`refresh-${provider}.lock`);return async()=>{await local();await global()};}
+ catch(error){await global();throw error}
 }
