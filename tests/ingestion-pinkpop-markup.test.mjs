@@ -55,7 +55,7 @@ test("Pinkpop rejects external links and unrelated news links even with artist s
   assert.deepEqual(result.lineup, ["Actual"]);
 });
 
-test("Pinkpop preserves legacy date-only pages without inventing an empty lineup", async () => {
+test("Pinkpop preserves existing date-only pages without inventing an empty lineup", async () => {
   const old = await readFile(new URL("./fixtures/official-markup/pinkpop.html", import.meta.url), "utf8");
   const result = parse(old);
   assert.equal(result.startDate, "2027-06-18"); assert.equal(result.city, "Landgraaf");

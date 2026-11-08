@@ -226,7 +226,7 @@ def publish_plan(plan, request, guard, state, progress, *, quota_limit=5000, wai
             creation_metadata = current_state.get('creationMetadata') or {'title': plan['title'], 'description': description}
             if not playlist_id and not current_state['sent']:
                 # A missing DB binding does not mean the provider playlist is
-                # missing. Recover an exact owned legacy identity before create.
+                # missing. Recover an exact owned existing identity before create.
                 owned = pages('playlists', {'part': 'snippet,status', 'mine': 'true', 'maxResults': 50}, exact_total=False)
                 owned = [item for item in owned if item.get('id') not in archived_ids]
                 matches = [item for item in owned if item.get('snippet', {}).get('channelId') == owner
@@ -363,7 +363,7 @@ def run_plan(mode, value):
         result = discover_plan(value)
     elif mode == 'apply':
         from youtube_music_transfer import youtube_data_api_headers
-        # Explicit worker environment only; no legacy default credential paths.
+        # Explicit worker environment only; no existing default credential paths.
         credentials = Path(os.environ['YOUTUBE_MUSIC_CREDENTIALS_FILE'])
         oauth = Path(os.environ['YOUTUBE_MUSIC_OAUTH_FILE'])
         def state(action, payload=None):

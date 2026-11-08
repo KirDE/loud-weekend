@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { publishArtistEnrichment as publishPersistedEnrichment, exactArtistName, validateEnrichmentProfile } from "../lib/catalog/artist-enrichment-publication.ts";
-import { boundedEnrichmentEvidence, migrateEnrichmentState } from "../lib/catalog/artist-enrichment-state.ts";
+import { boundedEnrichmentEvidence, readEnrichmentState } from "../lib/catalog/artist-enrichment-state.ts";
 import { refreshSpotifyArtistStats, spotifyArtistFetcher } from "../lib/catalog/artist-spotify-stats.ts";
 const userAgent = process.env.MUSICBRAINZ_USER_AGENT || "FestivalRadar/1.0 (https://github.com/KirDE/loud-weekend)";
 const sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
@@ -40,20 +40,20 @@ function relationLinks(relations = []) {
 
 // Dependency injection exercises the real checkpoint/restart path without a network or DB.
 export async function runEnrichment({ db, store, readArtists, refreshSpotify = async () => {}, fetchSearch = (name) => request(`https://musicbrainz.org/ws/2/artist/?query=${encodeURIComponent(`artist:${name}`)}&fmt=json&limit=10`), publish: publishArtistEnrichment = publishPersistedEnrichment, pause = sleep, now = () => new Date() }) {
-  // Retry durable publication before the daily gate, including flat imports.
+  // Retry durable publication before the daily gate, from the current checkpoint.
   // The publisher reloads the locked payload; store.payload is only a claim snapshot.
   await publishArtistEnrichment(db, store);
-  const state = migrateEnrichmentState(store.payload);
+  const state = readEnrichmentState(store.payload);
   const artists = await readArtists();
   if (artists.length > 1000) throw new Error("Enrichment catalog exceeds bound");
   const fingerprint = JSON.stringify(artists.map(({ slug, name }) => [slug, name]));
   const pendingEvidence = Object.keys(state.result?.profiles ?? {}).some((slug) => !state.cache?.[slug]);
-  // Legacy receipts never establish that provider work completed.
-  if (store.payload?.nextRunAt && state.nextRunAt && Date.parse(state.nextRunAt) > now().getTime() && !pendingEvidence && (!state.legacyImport || state.work?.complete) && (!state.work || (state.work.complete && state.work.fingerprint === fingerprint))) return;
+  // Imported receipts never establish that provider work completed.
+  if (store.payload?.nextRunAt && state.nextRunAt && Date.parse(state.nextRunAt) > now().getTime() && !pendingEvidence && (!state.importedEvidence || state.work?.complete) && (!state.work || (state.work.complete && state.work.fingerprint === fingerprint))) return;
   const resuming = state.work && !state.work.complete && state.work.fingerprint === fingerprint;
   const cache = resuming || !state.work ? { ...(state.cache ?? {}) } : {};
-  const profiles = { ...(state.result?.profiles ?? {}), ...(state.profiles ?? {}) };
-  const manualReview = [...(resuming || !state.work ? state.result?.manualReview ?? state.manualReview ?? [] : [])];
+  const profiles = { ...(state.result?.profiles ?? {}) };
+  const manualReview = [...(resuming || !state.work ? state.result?.manualReview ?? [] : [])];
   const completed = new Set(resuming ? state.work.completed.filter((slug) => cache[slug]) : []);
   // A resumed run can cross a date boundary. New proof uses this invocation's
   // date; completed profiles keep the actual date of their earlier check.
@@ -65,7 +65,7 @@ export async function runEnrichment({ db, store, readArtists, refreshSpotify = a
     const result = { schemaVersion: 1, generatedAt, source: "musicbrainz", profiles, manualReview };
     const work = { fingerprint, completed: [...completed], complete };
     const nextRunAt = complete ? new Date(now().getTime() + 86_400_000).toISOString() : null;
-    boundedEnrichmentEvidence({ result, cache, legacyImport: state.legacyImport ?? null });
+    boundedEnrichmentEvidence({ result, cache, importedEvidence: state.importedEvidence ?? null });
     await store.save({ ...state, cache, result, work, nextRunAt });
   };
   await checkpoint();

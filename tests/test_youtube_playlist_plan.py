@@ -174,7 +174,7 @@ class YoutubePlanTests(unittest.TestCase):
     def test_ambiguous_insert_on_historical_playlist_is_not_cleared(self):
         provider = Provider(videos=VIDEOS[:2])
         provider.metadata['snippet']['title'] = 'Synthetic festival 2026'
-        provider.saved['pendingInsert'] = {'playlistId': PLAYLIST, 'expectedIds': VIDEOS[:2]}
+        provider.saved['pendingInsert'] = {'playlistId': PLAYLIST, 'expectedIds': VIDEOS[:2], 'beforeIds': (VIDEOS[:2])[:-1], 'position': len(VIDEOS[:2])-1}
         before = copy.deepcopy(provider.saved)
         with self.assertRaisesRegex(ReconciliationRequired, 'youtube_playlist_edition_mismatch'):
             provider.run()
@@ -232,7 +232,7 @@ class YoutubePlanTests(unittest.TestCase):
         self.assertEqual(provider.writes('playlistItems'), [('POST', 'playlistItems')])
         self.assertIsNotNone(provider.saved['pendingInsert'])
 
-    def test_missing_binding_adopts_owned_exact_legacy_playlist(self):
+    def test_missing_binding_adopts_owned_exact_existing_playlist(self):
         provider = Provider(creating=True, videos=VIDEOS[:3])
         provider.metadata = {'id': PLAYLIST, 'snippet': {'title': provider.plan['title'], 'description': provider.plan['description'], 'channelId': 'owner'}, 'status': {'privacyStatus': 'public'}}
         provider.run()
@@ -241,7 +241,7 @@ class YoutubePlanTests(unittest.TestCase):
         self.assertNotIn(('POST', 'playlists'), provider.writes())
         self.assertEqual(provider.writes(), [('PUT', 'playlists')])
 
-    def test_legacy_discovery_does_not_treat_advisory_total_as_missing_page(self):
+    def test_existing_discovery_does_not_treat_advisory_total_as_missing_page(self):
         provider = Provider(creating=True, videos=VIDEOS[:3])
         provider.metadata = {'id': PLAYLIST, 'snippet': {'title': provider.plan['title'], 'description': provider.plan['description'], 'channelId': 'owner'}, 'status': {'privacyStatus': 'public'}}
         def request(method, url, **kwargs):
@@ -252,7 +252,7 @@ class YoutubePlanTests(unittest.TestCase):
         publish_plan(provider.plan, request, provider.guard, provider.state, provider.progress.append, wait=lambda delay: None)
         self.assertNotIn(('POST', 'playlists'), provider.writes())
 
-    def test_multiple_owned_legacy_matches_refuse_creation(self):
+    def test_multiple_owned_existing_matches_refuse_creation(self):
         provider = Provider(creating=True)
         provider.metadata = {'id': PLAYLIST, 'snippet': {'title': provider.plan['title'], 'description': provider.plan['description'], 'channelId': 'owner'}, 'status': {'privacyStatus': 'public'}}
         provider.duplicate_discovery = True
@@ -507,13 +507,6 @@ class YoutubePlanTests(unittest.TestCase):
         self.assertEqual(result.stderr, 'youtube_plan_failed\n')
         self.assertEqual(result.stdout, '')
 
-    def test_legacy_publish_delegates_to_locked_mode_gate_before_reading_any_files(self):
-        import youtube_music_transfer as legacy
-        with patch.dict(os.environ, {}, clear=True), patch.object(sys, 'argv', ['youtube_music_transfer.py', '--publish', '--report', 'unused-report.json', '--output', 'unused-output.json']), patch.object(legacy, 'load_json', side_effect=AssertionError('legacy provider files read')), patch.object(legacy.subprocess, 'run', return_value=type('Completed', (), {'returncode': 1})()) as run:
-            self.assertEqual(legacy.main(), 1)
-        self.assertIn('playlist-lease-guard.ts', run.call_args.args[0][2])
-        self.assertIn('--legacy-youtube', run.call_args.args[0])
-        self.assertIn('--publish', run.call_args.args[0])
 
 
 if __name__ == '__main__':

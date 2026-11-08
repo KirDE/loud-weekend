@@ -1,12 +1,12 @@
 import path from 'node:path';
 import {Prisma} from '@prisma/client';
+import { publishYoutubeCheckpoint } from '../lib/catalog/youtube-playlist-checkpoint.ts';
 import { db } from '../lib/db.ts';
-import { readPlaylistMode } from '../lib/catalog/playlist-cutover.ts';
 import { acquireProviderProcessLock } from '../lib/catalog/playlist-process-lock.ts';
 import { readCatalog } from '../lib/catalog/repository.ts';
-import { stagePlaylistPlan, assertSpotifyPlanCurrent, withPlaylistRefreshLease } from '../lib/catalog/playlist-queue.ts';
-import { publishSpotifyCheckpoint } from '../lib/catalog/playlist-worker.ts';
-import { stageYoutubePlan, validateYoutubePlan, YOUTUBE_URL, type YoutubeState, type YoutubeProgress } from '../lib/catalog/youtube-playlist-queue.ts';
+import { stagePlaylistPlan, assertSpotifyPlanCurrent } from '../lib/catalog/playlist-queue.ts';
+import { publishSpotifyCheckpoint } from '../lib/catalog/spotify-playlist-checkpoint.ts';
+import { stageYoutubePlan, validateYoutubePlan, YOUTUBE_URL } from '../lib/catalog/youtube-playlist-queue.ts';
 import { executePlaylistJson } from '../lib/catalog/python-playlist-rpc.ts';
 import { spotifyRepertoiresForArtists } from '../lib/catalog/spotify-repertoire.ts';
 import { runProviderWorker, requestedProviders, type PlaylistProvider } from '../lib/catalog/playlist-provider-worker.ts';
@@ -16,8 +16,7 @@ let release:(()=>Promise<void>)|undefined,stage:PlaylistStage='setup';
 const root=process.cwd();
 try {
  if(!['spotify','youtube_music'].includes(provider))throw Error('Explicit playlist provider required');
- release=await acquireProviderProcessLock(provider,process.env.PLAYLIST_LOCK_HELD==='true');
- if(await readPlaylistMode(db)!=='database')throw Error('Validated DB playlist activation required');
+ release=await acquireProviderProcessLock(provider);
  const result=await runProviderWorker(db,provider,async(claim,guard,signal)=>{
   const publication=await db.catalogPublication.findUniqueOrThrow({where:{id:claim.publicationId}});
   const snapshot=await readCatalog({database:db});
@@ -58,21 +57,10 @@ try {
    let youtubePlan:unknown=(await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id:claim.id}})).youtubePlan;
    if(!youtubePlan){stage='youtube_discovery';youtubePlan=await execute('discover-youtube',{slug:festival.slug,editionYear:publication.editionYear,expectedUrl:url,sourceReport:plan});youtubePlan=await stageYoutubePlan(db,claim,youtubePlan)}
    validateYoutubePlan(youtubePlan);
-   const activeYoutubePlan=youtubePlan;
    if(youtubePlan.slug!==festival.slug||youtubePlan.editionYear!==publication.editionYear||youtubePlan.expectedUrl!==url)throw Error('Durable YouTube binding mismatch');
    stage='youtube_apply';const result=await execute('apply-youtube',youtubePlan,{YOUTUBE_EXPECTED_URL:url}) as {url:string;expectedUrl:string;artists:number;tracks:number};
    stage='commit';
-   await withPlaylistRefreshLease(db,claim,async tx=>{
-    const row=await tx.catalogPlaylistRefresh.findUniqueOrThrow({where:{id:claim.id}});
-    const progress=row.youtubeProgress as YoutubeProgress|null,state=row.youtubeState as YoutubeState|null;
-    if(result.expectedUrl!==url||!YOUTUBE_URL.test(result.url)||result.tracks!==activeYoutubePlan.videoIds.length||result.artists!==activeYoutubePlan.artists||!progress?.complete||progress.verifiedTracks!==result.tracks||state?.pendingInsert||state?.pendingMetadata)throw Error('Incomplete YouTube publication');
-    if(url!==result.url&&(!['','NEW'].includes(url)||!state?.sent||result.url!==`https://music.youtube.com/playlist?list=${state.playlistId}`))throw Error('Unverified YouTube creation');
-    const edition=await tx.festivalEdition.findFirstOrThrow({where:{festival:{slug:festival.slug},year:publication.editionYear,recordState:'CURRENT'}});
-    const current=await tx.festivalPlaylist.findUnique({where:{editionId_provider:{editionId:edition.id,provider:'youtube_music'}}});
-    if((current?.url??'')!==url)throw Error('YouTube binding changed');
-    const data={url:result.url,artistCount:result.artists,trackCount:result.tracks,syncedAt:new Date()};
-    if(current){const updated=await tx.festivalPlaylist.updateMany({where:{id:current.id,url},data});if(updated.count!==1)throw Error('YouTube binding changed')}else await tx.festivalPlaylist.create({data:{editionId:edition.id,provider:'youtube_music',...data}});
-   });
+   await publishYoutubeCheckpoint(db,claim,result);
   }
  },()=>stage);
  console.log(JSON.stringify(result));

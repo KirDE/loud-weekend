@@ -14,11 +14,9 @@ test.after(async () => { await db.$disconnect(); });
 test('actual worker pipes durable plans to Python and commits fenced read-back without any plan files', async () => {
   const slug = 'fileless-' + randomUUID();
   const directory = await mkdtemp('/tmp/fileless-worker-test-');
-  const previous = await db.operationalState.findUnique({ where: { key: 'playlist-cutover' } });
   let festivalId: string | undefined;
   let artistId: string | undefined;
   try {
-    await db.operationalState.upsert({ where: { key: 'playlist-cutover' }, create: { key: 'playlist-cutover', payload: { version: 1, mode: 'database', reconciled: true, legacyDrained: true, commit: 'a'.repeat(40), queueHash: 'b'.repeat(64) } }, update: { payload: { version: 1, mode: 'database', reconciled: true, legacyDrained: true, commit: 'a'.repeat(40), queueHash: 'b'.repeat(64) } } });
     const artist = await db.artist.create({ data: { slug, name: 'Example Artist', aliases: [], genres: [], identityState: 'UNRESOLVED', topTracks: [], recentSetlists: [], freshness: {} } });
     artistId = artist.id;
     const spotifyUrl = 'https://open.spotify.com/playlist/' + 'a'.repeat(22);
@@ -59,8 +57,6 @@ test('actual worker pipes durable plans to Python and commits fenced read-back w
     await db.catalogPlaylistRefresh.updateMany({ where: { festivalSlug: slug }, data: { status: 'SUCCEEDED', leaseOwner: null, leaseExpiresAt: null } });
     if (festivalId) await db.festival.delete({ where: { id: festivalId } });
     if (artistId) await db.artist.delete({ where: { id: artistId } });
-    if (previous) await db.operationalState.update({ where: { key: 'playlist-cutover' }, data: { payload: previous.payload === null ? Prisma.JsonNull : previous.payload } });
-    else await db.operationalState.deleteMany({ where: { key: 'playlist-cutover' } });
     await rm(directory, { recursive: true, force: true });
   }
 });

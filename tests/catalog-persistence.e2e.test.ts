@@ -7,7 +7,7 @@ const url = process.env.DATABASE_URL;
 if (!url || !/(?:test|integration)/i.test(new URL(url).pathname)) throw new Error('Disposable test/integration DATABASE_URL required');
 const db = new PrismaClient();
 const other = new PrismaClient();
-const slug = 'synthetic-cutover-test';
+const slug = 'synthetic-persistence-test';
 test.before(async () => {
   const models = Prisma.dmmf.datamodel.models;
   assert.ok(models.some(model => model.name === 'OperationalState'), 'Generate Prisma client before E2E');
@@ -18,7 +18,7 @@ test.before(async () => {
 
 test.after(async () => {
   await db.festival.deleteMany({ where: { slug } });
-  await db.$executeRaw`DELETE FROM "OperationalState" WHERE key = 'synthetic-cutover-test'`;
+  await db.$executeRaw`DELETE FROM "OperationalState" WHERE key = 'synthetic-persistence-test'`;
   await db.$disconnect(); await other.$disconnect();
 });
 test('operational checkpoint survives release and only one owner writes', async () => {

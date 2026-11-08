@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { PrismaClient } from '@prisma/client';
 import { claimPlaylistRefresh, finishPlaylistRefresh, spotifyCreationState, stagePlaylistPlan, PlaylistLeaseLostError } from '../lib/catalog/playlist-queue.ts';
-import { runPlaylistWorker } from '../lib/catalog/playlist-worker.ts';
+import { runProviderWorker } from '../lib/catalog/playlist-provider-worker.ts';
+import { publishSpotifyCheckpoint } from '../lib/catalog/spotify-playlist-checkpoint.ts';
 
 // Explicit opt-in only; never fall through to an application's DATABASE_URL.
 const url = process.env.PLAYLIST_TEST_DATABASE_URL;
@@ -26,7 +27,7 @@ test('creation intent survives reclaim and newer publications; worker publishes 
     const publish = async (offset: number) => {
       const publication = await db.catalogPublication.create({ data: {
         source: 'INGESTION', sourceId: `creation:${randomUUID()}`, festivalSlug: slug, editionYear: 2027,
-        actorLabel: 'test', fields: ['lineup'], lineupChanged: true, createdAt: new Date(Date.UTC(2027, 0, 1, 0, 0, offset)),
+        actorLabel: 'test', fields: ['lineup'], lineupChanged: true, evidence: {providers:['spotify']}, createdAt: new Date(Date.UTC(2027, 0, 1, 0, 0, offset)),
       } });
       await db.catalogPlaylistRefresh.create({ data: { publicationId: publication.id, festivalSlug: slug, requestedAt: new Date(Date.UTC(2000, 0, 1, 0, 0, offset)) } });
       return publication;
@@ -52,7 +53,7 @@ test('creation intent survives reclaim and newer publications; worker publishes 
     await finishPlaylistRefresh(db, reclaimed, 'FAILED');
 
     const newer = await publish(1);
-    const result = await runPlaylistWorker(db, async (active, guard) => {
+    const result = await runProviderWorker(db, 'spotify', async (active, guard) => {
       assert.equal(active.publicationId, newer.id);
       await guard();
       const recovered = await spotifyCreationState(db, active, 'read', '');
@@ -60,7 +61,8 @@ test('creation intent survives reclaim and newer publications; worker publishes 
       assert.equal(recovered.playlistId, 'a'.repeat(22));
       await assert.rejects(spotifyCreationState(db, active, 'reserve', ''), /already sent/);
       await spotifyCreationState(db, active, 'bind', '', recovered.playlistId!);
-      return { url: 'https://open.spotify.com/playlist/' + recovered.playlistId, expectedUrl: '', artists: 1, tracks: 1 };
+      await stagePlaylistPlan(db,active,{...plan,artists_count:1,track_count:1});
+      await publishSpotifyCheckpoint(db,active,{ url: 'https://open.spotify.com/playlist/' + recovered.playlistId, expectedUrl: '', artists: 1, tracks: 1 });
     });
     assert.equal(result.status, 'SUCCEEDED');
     const binding = await db.festivalPlaylist.findUniqueOrThrow({ where: { editionId_provider: { editionId: festival.editions[0].id, provider: 'spotify' } } });

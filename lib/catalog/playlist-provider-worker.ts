@@ -6,16 +6,11 @@ import { randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { assertPlaylistRefreshLease, renewPlaylistRefreshLease, type PlaylistLease } from './playlist-queue.ts';
 import { playlistFailure, type PlaylistStage } from './playlist-failure.ts';
-export type PlaylistProvider = 'spotify' | 'youtube_music';
+import {requestedProviders,type PlaylistProvider} from './playlist-provider-scope.ts';
+export {requestedProviders,type PlaylistProvider} from './playlist-provider-scope.ts';
 type ParentSchedule = { status: string; retryAt: string | null; startedAt: string | null; completedAt: string | null; lastError: string | null };
 type ProviderState = { version: 1; provider: PlaylistProvider; jobId: string; status: 'PENDING'|'RUNNING'|'FAILED'|'SUCCEEDED'; attempts: number; retryAt: string | null; diagnostic?: string; parent?: ParentSchedule; leaseOwner?: string; completedAt?: string };
 const stateKey = (provider: PlaylistProvider, id: string) => `playlist-provider:v1:${provider}:${id}`;
-export function requestedProviders(evidence: Prisma.JsonValue | null): PlaylistProvider[] {
-  const values = evidence && typeof evidence === 'object' && !Array.isArray(evidence) ? evidence.providers : undefined;
-  if (values === undefined) return ['spotify','youtube_music'];
-  if (!Array.isArray(values) || !values.length || values.some(p=>p!=='spotify'&&p!=='youtube_music')) throw Error('Invalid publication provider scope');
-  return [...new Set(values)] as PlaylistProvider[];
-}
 export function providerRetryDelay(attempt: number, error: unknown) {
   const failure=error as {code?:unknown;stderr?:unknown};
   const lines=typeof failure?.stderr==='string'?failure.stderr.split('\n'):[];
@@ -29,7 +24,7 @@ function restore(before:ParentSchedule) {
  return {...before,status:before.status as 'PENDING'|'FAILED'|'SUCCEEDED',retryAt:before.retryAt?new Date(before.retryAt):null,startedAt:before.startedAt?new Date(before.startedAt):null,completedAt:before.completedAt?new Date(before.completedAt):null,leaseOwner:null,leaseExpiresAt:null};
 }
 async function claimProvider(db:PrismaClient, provider:PlaylistProvider) {
- // Select newest publication BEFORE checking eligibility. Old generations must
+ // Select newest requested-provider publication BEFORE checking eligibility. Old generations must
  // never overwrite a newer one just because its other provider is blocked.
  if(provider==='youtube_music'){
   const block=await db.operationalState.findUnique({where:{key:'playlist-provider-quota:youtube_music:v1'}});
@@ -42,7 +37,10 @@ async function claimProvider(db:PrismaClient, provider:PlaylistProvider) {
    FROM "CatalogPlaylistRefresh" j JOIN "CatalogPublication" p ON p.id=j."publicationId"
    JOIN "Festival" f ON f.slug=j."festivalSlug"
    JOIN "FestivalEdition" e ON e."festivalId"=f.id AND e.year=p."editionYear" AND e."recordState"='CURRENT'
-   WHERE p."lineupChanged"=true
+   WHERE p."lineupChanged"=true AND (
+    p.evidence IS NULL OR NOT (p.evidence ? 'providers')
+    OR (jsonb_typeof(p.evidence->'providers')='array' AND (p.evidence->'providers') ? ${provider})
+   )
    ORDER BY j."festivalSlug",p."editionYear",p."createdAt" DESC,j.id DESC
   ) latest WHERE latest.status<>'SUCCEEDED' ORDER BY latest."requestedAt" LIMIT 128`;
  for(const candidate of candidates){
@@ -64,7 +62,7 @@ async function claimProvider(db:PrismaClient, provider:PlaylistProvider) {
     Object.assign(job,restore(state.parent!));
    }
    if(job.status==='SUCCEEDED'||job.leaseOwner)return null;
-   // A legacy FAILED/null retry is a hold, NOT permission to resume a cancelled
+   // A existing FAILED/null retry is a hold, NOT permission to resume a cancelled
    // or ambiguous task. Never infer cancellation from text or clear that hold.
    if(job.status==='FAILED'&&!job.retryAt)return null;
    if(await tx.catalogPlaylistRefresh.count({where:{festivalSlug:job.festivalSlug,id:{not:job.id},status:'RUNNING'}}))return null;

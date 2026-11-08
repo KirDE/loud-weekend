@@ -2,7 +2,7 @@
 
 `playlists-db` now invokes Spotify only. `playlists-youtube` invokes YouTube only.
 Each has its own systemd service invocation and ten-minute timer. Their process
-locks are independent and share the legacy compatibility lock in read mode.
+locks are independent.
 They can process different festivals concurrently; the existing festival/parent
 lease deliberately serializes two providers editing the same generation.
 
@@ -13,7 +13,7 @@ attempts, retry times, diagnostics and completion. A durable parent before-image
 allows recovery of an expired bridge lease. A provider failure cannot claim the
 other provider succeeded. The parent completes only when every explicitly
 requested provider has completed. Explicit provider-only publications are honored.
-Legacy failed rows without a retry time remain held; cancellation is never inferred
+existing failed rows without a retry time remain held; cancellation is never inferred
 from status text. Initial YouTube retries retain their existing native schedule.
 Spotify does not inherit a YouTube delay. Newest edition publications are selected
 before eligibility, so older generations cannot win by being older in the queue.
@@ -34,7 +34,7 @@ YouTube reconciliation retains a longest ordered subsequence of desired videos,
 then removes only incompatible items and inserts only missing items at explicit
 positions. Existing complete lists are no-ops. Full ordered readback, uniqueness,
 owned edition identity and durable per-insert intent confirmation remain required.
-Legacy prefix-only intents retain their original interpretation. The regression
+existing prefix-only intents retain their original interpretation. The regression
 scenario adds 50 front-loaded videos to an existing 54-video suffix with exactly
 50 modifications, zero deletions and fewer than 3,000 local units.
 
@@ -44,7 +44,7 @@ acknowledged or ambiguous creation requests are never resent.
 
 ## Release acceptance
 
-Run PostgreSQL provider-worker and actual fileless CLI tests, provider/legacy lock
+Run PostgreSQL provider-worker and actual fileless CLI tests, provider lock
 tests, retained-intent JSONB validation, delayed/unknown-write Python regressions,
 installer tests, typecheck and build. Verify installed file hashes and both timer
 routes, original catalogue/archive identities, provider state separation and actual

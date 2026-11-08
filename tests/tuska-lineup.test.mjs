@@ -108,9 +108,9 @@ test("Tuska current sold-out declaration overrides stale buy links", async () =>
   assert.deepEqual(candidate.warnings, []);
 });
 
-test("Tuska preserves legacy date-only pages and does not follow explicit source overrides", async () => {
-  const legacy = "<title>Tuska Festival - 02.–04.7.2027</title>";
-  const candidate = extractFestivalCandidate(legacy, source("fi"), observedAt);
+test("Tuska preserves existing date-only pages and does not follow explicit source overrides", async () => {
+  const existing = "<title>Tuska Festival - 02.–04.7.2027</title>";
+  const candidate = extractFestivalCandidate(existing, source("fi"), observedAt);
   assert.equal(candidate.startDate, "2027-07-02");
   assert.equal(candidate.lineup, undefined);
   assert.deepEqual(candidate.warnings, []);

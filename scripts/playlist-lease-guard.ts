@@ -1,11 +1,6 @@
 import { db } from '../lib/db.ts';
 import { renewPlaylistRefreshLease, spotifyCreationState, assertSpotifyPlanCurrent } from '../lib/catalog/playlist-queue.ts';
 import { youtubeProviderState, saveYoutubeProgress } from '../lib/catalog/youtube-playlist-queue.ts';
-import { readPlaylistMode } from '../lib/catalog/playlist-cutover.ts';
-import { acquirePlaylistProcessLock } from '../lib/catalog/playlist-process-lock.ts';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
 
 async function guardSpotify() {
   const claim = JSON.parse(process.env.PLAYLIST_LEASE ?? 'null');
@@ -25,11 +20,6 @@ async function guardSpotify() {
     const binding = await db.festivalPlaylist.findFirst({ where: { provider: 'spotify', url: expectedUrl, edition: { year: publication.editionYear, recordState: 'CURRENT', festival: { slug: claim.festivalSlug } } } });
     if (!binding) throw new Error('Playlist binding changed');
   }
-  const newer = await db.catalogPlaylistRefresh.count({ where: {
-    festivalSlug: claim.festivalSlug, status: "SUCCEEDED",
-    publication: { createdAt: { gt: publication.createdAt } },
-  } });
-  if (newer) throw new Error("A newer playlist publication already completed; stale plan requires reconciliation");
   const [stamp] = await db.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AT TIME ZONE 'UTC' AS now`;
   if (renewed.leaseExpiresAt.getTime() - stamp.now.getTime() < 60_000) throw new Error('Insufficient request lifetime');
   if (process.argv[2]) console.log(JSON.stringify(state));
@@ -61,25 +51,9 @@ async function guardYoutube() {
   }
 }
 
-async function runLegacyYoutube() {
-  let release: (() => Promise<void>) | undefined;
-  try {
-    if (process.env.PLAYLIST_LOCK_HELD !== 'true') release = await acquirePlaylistProcessLock();
-    if (await readPlaylistMode(db) === 'database') throw new Error('Use DB playlist dispatch');
-    await promisify(execFile)(process.env.PLAYLIST_PYTHON ?? 'python3', [fileURLToPath(new URL('spotify_gmm_2026/youtube_music_transfer.py', import.meta.url)), ...process.argv.slice(3)], {
-      env: { ...process.env, PLAYLIST_LOCK_HELD: 'true', YOUTUBE_LEGACY_LOCK_HELD: 'true' }, timeout: 600_000, maxBuffer: 1024 * 1024,
-    });
-    console.log(JSON.stringify({ status: 'SUCCEEDED' }));
-  } finally { await release?.(); }
-}
-
-// Reuse the packaged entrypoint; no deployment/timer asset changes are needed.
 try {
-  if (process.argv[2] === '--legacy-youtube') await runLegacyYoutube();
-  else if (process.env.PLAYLIST_PROVIDER === 'youtube_music') await guardYoutube();
-  else await guardSpotify();
-} catch {
-  if (process.argv[2] === '--legacy-youtube') console.error('legacy_youtube_publication_refused_or_failed');
-  process.exitCode = 1;
-}
+  if (process.env.PLAYLIST_PROVIDER === 'youtube_music') await guardYoutube();
+  else if (process.env.PLAYLIST_PROVIDER === 'spotify') await guardSpotify();
+  else throw new Error('Explicit playlist provider required');
+} catch { process.exitCode = 1; }
 finally { await db.$disconnect(); }

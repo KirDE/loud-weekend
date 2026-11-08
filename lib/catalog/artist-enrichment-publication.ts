@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { boundedEnrichmentEvidence, migrateEnrichmentState } from "./artist-enrichment-state.ts";
+import { boundedEnrichmentEvidence, readEnrichmentState } from "./artist-enrichment-state.ts";
 
 type Proof = { field: string; source: string; url: string; checkedAt: string };
 type Profile = { identities: { musicbrainz: string; setlistFm?: string }; origin?: string; genres: string[];
@@ -125,19 +125,19 @@ export async function publishArtistEnrichment(client: PrismaClient, lease: { key
       SELECT payload FROM "OperationalState" WHERE key = ${lease.key} AND "leaseOwner" = ${lease.owner}
       AND "leaseExpiresAt" > (clock_timestamp() AT TIME ZONE 'UTC') FOR UPDATE`;
     if (held.length !== 1) throw new Error("Operational state lease lost");
-    const payload = migrateEnrichmentState(held[0].payload) as Prisma.JsonObject;
+    const payload = readEnrichmentState(held[0].payload) as Prisma.JsonObject;
     if (!payload.result) return null;
     if (Buffer.byteLength(JSON.stringify({ result: payload.result, cache: payload.cache })) > 10_000_000) throw new Error("Enrichment state exceeds publication byte bound");
     const result = parseResult(payload.result);
     if (Object.keys(result.profiles).length + result.manualReview.length > 1000) throw new Error("Enrichment result exceeds publication bound");
     // Changing or removing evidence must invalidate a previous receipt too.
-    const resultHash = boundedEnrichmentEvidence({ result: payload.result, cache: payload.cache ?? {}, legacyImport: payload.legacyImport ?? null });
+    const resultHash = boundedEnrichmentEvidence({ result: payload.result, cache: payload.cache ?? {}, importedEvidence: payload.importedEvidence ?? null });
     const prior = payload.publication as Prisma.JsonObject | undefined;
     if (prior?.resultHash === resultHash && prior?.policyVersion === 2) return { ...prior, changed: 0, repeated: true };
     const reviews: EnrichmentReview[] = result.manualReview.map(({ slug, reason }) => ({ slug, reason }));
-    const legacy = payload.legacyImport as Prisma.JsonObject | undefined;
-    if (legacy) {
-      const imported = parseResult(legacy.evidence);
+    const importedProof = payload.importedEvidence as Prisma.JsonObject | undefined;
+    if (importedProof) {
+      const imported = parseResult(importedProof.evidence);
       for (const slug of Object.keys(imported.profiles)) {
         if (!Object.hasOwn(result.profiles, slug)) reviews.push({ slug, reason: "imported_profile_not_in_result" });
       }
@@ -201,7 +201,7 @@ export async function publishArtistEnrichment(client: PrismaClient, lease: { key
     // artist rows, so these candidates must not masquerade as approvable changes.
     await tx.adminAuditEntry.create({ data: {
       actorLabel: "automatic-artist-enrichment", action: "ARTIST_ENRICHMENT_PUBLICATION", resourceKind: "ARTIST",
-      evidence: { result: payload.result, ...(legacy ? { legacyImport: legacy } : {}), reviewSearches: Object.fromEntries([...new Set(reviews.map((r) => r.slug))].map((slug) => [slug, (payload.cache as Prisma.JsonObject | undefined)?.[slug] ?? null])) } as Prisma.InputJsonValue,
+      evidence: { result: payload.result, ...(importedProof ? { importedEvidence: importedProof } : {}), reviewSearches: Object.fromEntries([...new Set(reviews.map((r) => r.slug))].map((slug) => [slug, (payload.cache as Prisma.JsonObject | undefined)?.[slug] ?? null])) } as Prisma.InputJsonValue,
       metadata: publication,
     } });
     const count = await tx.$executeRaw`UPDATE "OperationalState" SET payload = ${JSON.stringify({ ...payload, publication })}::jsonb,

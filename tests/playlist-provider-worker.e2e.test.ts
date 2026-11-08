@@ -15,8 +15,8 @@ async function fixture(run:(value:{id:string;slug:string})=>Promise<void>,provid
  try{await run({id:j.id,slug})}finally{await db.catalogPlaylistRefresh.updateMany({where:{festivalSlug:slug},data:{status:'SUCCEEDED',leaseOwner:null,leaseExpiresAt:null}});await db.festival.delete({where:{id:f.id}})}
 }
 test.after(async()=>db.$disconnect());
-test('Spotify completes despite YouTube legacy backoff, preserving its plan, intent and schedule',()=>fixture(async({id})=>{
- const retryAt=new Date(Date.now()+86400000),youtubeState={pendingInsert:{playlistId:'PLsynthetic001',expectedIds:['00000000001']}};
+test('Spotify completes despite YouTube existing backoff, preserving its plan, intent and schedule',()=>fixture(async({id})=>{
+ const retryAt=new Date(Date.now()+86400000),youtubeState={pendingInsert:{playlistId:'PLsynthetic001',expectedIds:['00000000001'], beforeIds: (['00000000001']).slice(0,-1), position: (['00000000001']).length-1}};
  await db.catalogPlaylistRefresh.update({where:{id},data:{status:'FAILED',retryAt,youtubeState}});
  let spotify=0,youtube=0;
  const result=await runProviderWorker(db,'spotify',async(claim,guard)=>{spotify++;assert.equal(claim.id,id);await guard()});
@@ -41,7 +41,7 @@ test('YouTube-only publication never invokes Spotify executor',()=>fixture(async
  assert.equal((await runProviderWorker(db,'spotify',async()=>{throw Error('wrong provider')})).status,'IDLE');
  assert.equal((await runProviderWorker(db,'youtube_music',async()=>{})).status,'SUCCEEDED');
 },['youtube_music']));
-test('null-retry legacy hold remains held for both providers',()=>fixture(async({id})=>{
+test('null-retry existing hold remains held for both providers',()=>fixture(async({id})=>{
  await db.catalogPlaylistRefresh.update({where:{id},data:{status:'FAILED',retryAt:null}});
  for(const provider of ['spotify','youtube_music'] as const)assert.equal((await runProviderWorker(db,provider,async()=>{throw Error('held job resumed')})).status,'IDLE');
 }));
@@ -54,7 +54,7 @@ test('active same-festival lease blocks the other provider; different festivals 
  assert.equal(two.status,'SUCCEEDED');release();assert.equal((await one).status,'SUCCEEDED');
 })));
 test('expired own bridge lease is recovered from durable before-image, with pending intent intact',()=>fixture(async({id,slug})=>{
- const owner=randomUUID(),originalRetry=new Date(Date.now()+86400000),pending={pendingInsert:{playlistId:'PLsynthetic001',expectedIds:['00000000001']}};
+ const owner=randomUUID(),originalRetry=new Date(Date.now()+86400000),pending={pendingInsert:{playlistId:'PLsynthetic001',expectedIds:['00000000001'], beforeIds: (['00000000001']).slice(0,-1), position: (['00000000001']).length-1}};
  await db.catalogPlaylistRefresh.update({where:{id},data:{status:'RUNNING',attempts:1,leaseOwner:owner,startedAt:new Date(),leaseExpiresAt:new Date(Date.now()-1000),retryAt:originalRetry,youtubeState:pending}});
  const key=`playlist-provider:v1:spotify:${id}`;
  await db.operationalState.create({data:{key,payload:{version:1,provider:'spotify',jobId:id,status:'RUNNING',attempts:1,retryAt:null,leaseOwner:owner,parent:{status:'FAILED',retryAt:originalRetry.toISOString(),startedAt:null,completedAt:null,lastError:null}}}});
@@ -92,3 +92,32 @@ test('retained-suffix intent roundtrips PostgreSQL JSONB, with strict order and 
   await assert.rejects(youtubeProviderState(db,claim,'','insert',{...intent,expectedIds:[ids[0],ids[2],ids[1]],beforeIds:[ids[2],ids[1]]}),/retained order/);
  })).status,'SUCCEEDED');
 },['youtube_music']));
+test('completed YouTube-only generation neither hides nor supersedes unfinished Spotify',()=>fixture(async({id,slug})=>{
+ const old=await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id}});
+ const next=await db.catalogPublication.create({data:{source:'ADMIN',sourceId:slug+'-youtube',festivalSlug:slug,editionYear:2027,actorLabel:'test',fields:['lineup'],lineupChanged:true,evidence:{providers:['youtube_music']},createdAt:new Date(Date.now()+1000)}});
+ await db.catalogPlaylistRefresh.create({data:{publicationId:next.id,festivalSlug:slug}});
+ const {stageYoutubePlan}=await import('../lib/catalog/youtube-playlist-queue.ts');
+ assert.equal((await runProviderWorker(db,'youtube_music',async claim=>{
+  assert.equal(claim.publicationId,next.id);await stageYoutubePlan(db,claim,{slug,editionYear:2027,expectedUrl:'',title:'Synthetic 2027',description:'Synthetic',videoIds:['00000000001'],artists:1,sourceTracks:1});
+ })).status,'SUCCEEDED');
+ const edition=await db.festivalEdition.findFirstOrThrow({where:{festival:{slug},year:2027}}),url='https://open.spotify.com/playlist/'+'a'.repeat(22);
+ await db.festivalPlaylist.create({data:{editionId:edition.id,provider:'spotify',url}});
+ const {stagePlaylistPlan,assertSpotifyPlanCurrent}=await import('../lib/catalog/playlist-queue.ts');
+ const {publishSpotifyCheckpoint}=await import('../lib/catalog/spotify-playlist-checkpoint.ts');
+ assert.equal((await runProviderWorker(db,'spotify',async claim=>{
+  assert.equal(claim.publicationId,old.publicationId);await stagePlaylistPlan(db,claim,{edition_year:2027,playlist_url:url,playlist_id:'a'.repeat(22),track_uris:['spotify:track:'+'b'.repeat(22)],track_count:1,artists_count:1});
+  await assertSpotifyPlanCurrent(db,claim);await publishSpotifyCheckpoint(db,claim,{url,expectedUrl:url,artists:1,tracks:1});
+ })).status,'SUCCEEDED');
+}));
+test('completed Spotify-only generation neither hides nor supersedes unfinished YouTube',()=>fixture(async({id,slug})=>{
+ const old=await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id}});
+ const next=await db.catalogPublication.create({data:{source:'ADMIN',sourceId:slug+'-spotify',festivalSlug:slug,editionYear:2027,actorLabel:'test',fields:['lineup'],lineupChanged:true,evidence:{providers:['spotify']},createdAt:new Date(Date.now()+1000)}});
+ await db.catalogPlaylistRefresh.create({data:{publicationId:next.id,festivalSlug:slug}});
+ const {stagePlaylistPlan}=await import('../lib/catalog/playlist-queue.ts');
+ assert.equal((await runProviderWorker(db,'spotify',async claim=>{assert.equal(claim.publicationId,next.id);await stagePlaylistPlan(db,claim,{edition_year:2027,playlist_url:'',playlist_id:'',track_uris:['spotify:track:'+'b'.repeat(22)],track_count:1,artists_count:1})})).status,'SUCCEEDED');
+ const {stageYoutubePlan,youtubeProviderState}=await import('../lib/catalog/youtube-playlist-queue.ts');
+ assert.equal((await runProviderWorker(db,'youtube_music',async claim=>{
+  assert.equal(claim.publicationId,old.publicationId);await stageYoutubePlan(db,claim,{slug,editionYear:2027,expectedUrl:'',title:'Synthetic 2027',description:'Synthetic',videoIds:['00000000001'],artists:1,sourceTracks:1});
+  const state=await youtubeProviderState(db,claim,'','read');assert.equal(state.sent,false);
+ })).status,'SUCCEEDED');
+}));
