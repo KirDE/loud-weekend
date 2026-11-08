@@ -51,6 +51,7 @@ async function fixture(t, options = {}) {
     await writeFile(stage + '/scripts/deploy/' + name, mapped(await readFile('scripts/deploy/' + name, 'utf8')), { mode: 0o755 });
   await writeFile(stage + '/scripts/deploy/provider-timers.sh',
     'pause_provider_timers() { :; }; install_provider_timers() { :; }\n');
+  await writeFile(stage + '/scripts/deploy/check-python-release.sh', '#!/bin/bash\nexit 0\n');
   await writeFile(stage + '/scripts/deploy/reconfigure-webserver.sh', '#!/bin/bash\nexit 0\n');
   const stubs = {
     install: `#!/bin/bash
