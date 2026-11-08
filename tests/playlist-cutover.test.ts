@@ -42,11 +42,17 @@ test('release preserves old cadence and supported consumers share the same proce
   assert.match(legacy, /cd "\$work"/);
   assert.match(legacy, /FESTIVAL_CATALOG="\$work\/tmp\/festival-playlist-catalog\.json"/);
   assert.match(legacy, /umask 077/);
-  for (const file of ['app/api/playlists/run/route.ts', 'scripts/playlist-dispatch.ts', 'scripts/playlist-worker.ts', 'scripts/playlist-cutover.ts']) {
+  for (const file of ['app/api/playlists/run/route.ts', 'scripts/playlist-dispatch.ts', 'scripts/playlist-cutover.ts']) {
     const source = await readFile(file, 'utf8');
     assert.match(source, /acquirePlaylistProcessLock/);
     assert.doesNotMatch(source, /PLAYLIST_DB_WORKER_ENABLED/);
   }
+  const provider = await readFile('scripts/playlist-provider-worker.ts', 'utf8');
+  assert.match(provider, /acquireProviderProcessLock/);
+  assert.doesNotMatch(provider, /PLAYLIST_DB_WORKER_ENABLED/);
+  const lock = await readFile('lib/catalog/playlist-process-lock.ts', 'utf8');
+  assert.match(lock, /acquireLock\('refresh.lock',true\)/);
+  assert.match(lock, /refresh-\$\{provider\}\.lock/);
 });
 test('review commands are real, packaged, and CI DB tests generate/apply schema first', async () => {
   const pkg = JSON.parse(await readFile('package.json', 'utf8'));
