@@ -102,11 +102,13 @@ export async function runProviderWorker(db:PrismaClient,provider:PlaylistProvide
    const payload={provider,reason:'quotaExceeded',status:403,reportedAt:now.toISOString(),resetAt:retryAt,jobId:claim.id};
    await tx.operationalState.upsert({where:{key:'playlist-provider-quota:youtube_music:v1'},create:{key:'playlist-provider-quota:youtube_music:v1',payload},update:{payload}});
   }
-  // Ambiguous ownership/creation requires reconciliation, not timed replay.
-  // Bounded readback failures can become visible later and remain retryable.
+  // Only explicit identity/write ambiguity needs a permanent hold. Generic
+  // reconciliation errors also cover transient read-only pagination anomalies.
+  const holdReasons=['youtube_create_unknown_no_resend','youtube_insert_unknown_no_resend',
+   'youtube_metadata_unknown_no_resend','youtube_existing_identity_ambiguous',
+   'youtube_owner_ambiguous','youtube_invalid_created_id','youtube_creation_metadata_failed'];
   const blocked=provider==='youtube_music'&&(error as {code?:unknown})?.code===3
-   &&lines.includes('youtube_reconciliation_required')
-   &&!lines.some(line=>['youtube_insert_readback_failed','youtube_metadata_readback_failed','youtube_delete_readback_failed'].includes(line));
+   &&lines.includes('youtube_reconciliation_required')&&lines.some(line=>holdReasons.includes(line));
   if(blocked)retryAt=null;
   const done:ProviderState={version:1,provider,jobId:claim.id,status:blocked?'BLOCKED':error?'FAILED':'SUCCEEDED',attempts:state.attempts,retryAt,...(error?{diagnostic:playlistFailure(stage(),error)}:{completedAt:now.toISOString()})};
   await tx.operationalState.update({where:{key},data:{payload:done as unknown as Prisma.InputJsonValue}});

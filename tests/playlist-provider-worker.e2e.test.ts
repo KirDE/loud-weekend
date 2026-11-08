@@ -125,7 +125,7 @@ test('completed Spotify-only generation neither hides nor supersedes unfinished 
 test('unknown creation is held per provider without poisoning other festivals or changing the intent',()=>fixture(async({id})=>fixture(async({id:other})=>{
  await db.catalogPlaylistRefresh.update({where:{id},data:{requestedAt:new Date('1800-01-01'),youtubeState:{sent:true,playlistId:null,marker:'reserved-creation'}}});
  const before=await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id}});
- await runProviderWorker(db,'youtube_music',async claim=>{assert.equal(claim.id,id);throw Object.assign(new Error('unknown'),{code:3,stderr:'youtube_reconciliation_required\n'})});
+ await runProviderWorker(db,'youtube_music',async claim=>{assert.equal(claim.id,id);throw Object.assign(new Error('unknown'),{code:3,stderr:'youtube_reconciliation_required\nyoutube_create_unknown_no_resend\n'})});
  const held=await db.operationalState.findUniqueOrThrow({where:{key:`playlist-provider:v1:youtube_music:${id}`}});
  assert.equal((held.payload as any).status,'BLOCKED');assert.equal((held.payload as any).retryAt,null);
  assert.equal((await runProviderWorker(db,'youtube_music',async claim=>assert.equal(claim.id,other))).status,'SUCCEEDED');
@@ -137,3 +137,11 @@ test('bounded insert readback remains retryable rather than held',()=>fixture(as
  const row=await db.operationalState.findUniqueOrThrow({where:{key:`playlist-provider:v1:youtube_music:${id}`}});
  assert.equal((row.payload as any).status,'FAILED');assert.ok((row.payload as any).retryAt);
 }));
+
+for(const reason of ['youtube_invalid_readback','youtube_incomplete_readback','youtube_unbounded_readback','youtube_invalid_ordered_readback','youtube_ownership_readback_failed','youtube_final_readback_failed']){
+ test(`read-only anomaly ${reason} remains retryable`,()=>fixture(async({id})=>{
+  await runProviderWorker(db,'youtube_music',async()=>{throw Object.assign(new Error('readback'),{code:3,stderr:`youtube_reconciliation_required\n${reason}\n`})});
+  const row=await db.operationalState.findUniqueOrThrow({where:{key:`playlist-provider:v1:youtube_music:${id}`}});
+  assert.equal((row.payload as any).status,'FAILED');assert.ok((row.payload as any).retryAt);
+ }));
+}
