@@ -86,33 +86,8 @@ flock -n 8 || { echo 'source fetch already running' >&2; exit 5; }
 scheduler_state=/var/lib/festival-radar-scheduler
 if [[ ! -e "$scheduler_state" && ! -L "$scheduler_state" ]]; then
   install -d -o root -g root -m 0755 "$scheduler_state"
-  printf 'legacy\n' > "$scheduler_state/mode"
-  chmod 0644 "$scheduler_state/mode"
 fi
 [[ -d "$scheduler_state" && ! -L "$scheduler_state" && "$(stat -c %u:%a "$scheduler_state")" == 0:755 ]] || exit 4
-scheduler_mode=off
-if [[ -e "$scheduler_state/mode" || -L "$scheduler_state/mode" ]]; then
-  [[ -f "$scheduler_state/mode" && ! -L "$scheduler_state/mode" &&
-     "$(stat -c %u:%a "$scheduler_state/mode")" == 0:644 ]] || { echo "scheduler mode unsafe; deployment refused" >&2; exit 6; }
-  scheduler_mode="$(cat "$scheduler_state/mode")"
-  [[ "$scheduler_mode" == legacy || "$scheduler_mode" == db-due ]] || { echo "scheduler mode ambiguous; deployment refused" >&2; exit 6; }
-fi
-# Preserve an explicitly paused legacy timer across subsequent deployments.
-# A Persistent calendar timer can catch up on activation; do not automatically
-# rearm a disabled timer merely because the mode file still says legacy.
-legacy_timer_was_armed=true
-if [[ -f /etc/systemd/system/festival-radar-collection-ingestion.timer ]]; then
-  legacy_enabled="$(systemctl is-enabled festival-radar-collection-ingestion.timer 2>/dev/null || true)"
-  legacy_active="$(systemctl is-active festival-radar-collection-ingestion.timer 2>/dev/null || true)"
-  if [[ "$legacy_enabled" == enabled && "$legacy_active" == active ]]; then
-    legacy_timer_was_armed=true
-  elif [[ "$legacy_enabled" == disabled && "$legacy_active" == inactive ]]; then
-    legacy_timer_was_armed=false
-  else
-    echo "legacy timer state ambiguous; deployment refused" >&2
-    exit 6
-  fi
-fi
 # Snapshot the prior opt-in under the activation and source-fetch locks. Only
 # a previously armed DB-mode timer may be restored after exact-SHA health. A
 # disabled timer is an operator pause, not a request to re-enable it.
@@ -122,19 +97,12 @@ if [[ -e "$db_due_timer" || -L "$db_due_timer" ]]; then
   [[ -f "$db_due_timer" && ! -L "$db_due_timer" ]] || { echo "DB-due timer unit unsafe; deployment refused" >&2; exit 6; }
   due_enabled="$(systemctl is-enabled festival-radar-db-due.timer 2>/dev/null || true)"
   due_active="$(systemctl is-active festival-radar-db-due.timer 2>/dev/null || true)"
-  if [[ "$due_enabled" == enabled && "$due_active" == active && "$scheduler_mode" == db-due ]]; then
+  if [[ "$due_enabled" == enabled && "$due_active" == active ]]; then
     db_due_timer_was_armed=true
   elif [[ "$due_enabled" != disabled || "$due_active" != inactive ]]; then
     echo "DB-due timer state ambiguous; deployment refused" >&2
     exit 6
   fi
-elif [[ "$scheduler_mode" == db-due ]]; then
-  echo "DB-due mode without installed timer; deployment refused" >&2
-  exit 6
-fi
-if [[ "$scheduler_mode" == db-due ]]; then
-  [[ "$legacy_timer_was_armed" == false ]] || { echo "legacy timer still armed in DB mode; deployment refused" >&2; exit 6; }
-  [[ "$(systemctl is-active festival-radar-collection@ingestion.service 2>/dev/null || true)" == inactive ]] || { echo "legacy ingestion not inactive; deployment refused" >&2; exit 6; }
 fi
 if [[ -f "$db_due_timer" ]]; then
   systemctl disable --now festival-radar-db-due.timer
@@ -168,12 +136,26 @@ set -a
 source "$staged_env"
 set +a
 export DEPLOYED_COMMIT="$commit" PORT="$port" HOSTNAME=127.0.0.1
+source "$release/scripts/deploy/provider-timers.sh"
+pause_provider_timers
+# Drain provider operations before applying database changes. Independent locks
+# serialize each active worker through acknowledgement without killing a request.
+provider_lock_dir="$shared/collection-jobs/playlists"
+install -d -o www-data -g www-data -m 0750 "$provider_lock_dir"
+for provider in spotify youtube_music; do
+  provider_lock="$provider_lock_dir/refresh-$provider.lock"
+  if [[ ! -e "$provider_lock" && ! -L "$provider_lock" ]]; then
+    install -o www-data -g www-data -m 0640 /dev/null "$provider_lock"
+  fi
+  [[ -f "$provider_lock" && ! -L "$provider_lock" && "$(stat -c %U:%a "$provider_lock")" == www-data:640 ]] || { echo 'provider lock unsafe' >&2; exit 4; }
+done
+exec 7<"$provider_lock_dir/refresh-spotify.lock"
+flock -w 600 7 || { echo 'Spotify operation still active' >&2; exit 5; }
+exec 6<"$provider_lock_dir/refresh-youtube_music.lock"
+flock -w 600 6 || { echo 'YouTube operation still active' >&2; exit 5; }
 "$release/.runtime/node" node_modules/prisma/build/index.js generate
 "$release/.runtime/node" node_modules/prisma/build/index.js migrate deploy
 
-source "$release/scripts/deploy/playlist-timer-install.sh"
-playlist_install_select_mode
-playlist_install_quiesce_other
 
 cat > "/etc/systemd/system/$service.service" <<UNIT
 [Unit]
@@ -274,7 +256,6 @@ Environment=NODE_ENV=production
 Environment=APP_ROOT=$app_root
 Environment=PLAYLIST_PYTHON=python3
 Environment=PYTHONPATH=$app_root/current/.python
-Environment=COLLECTION_APP_URL=http://127.0.0.1:$port
 ExecStart=$app_root/current/scripts/deploy/run-collection-job.sh %i
 NoNewPrivileges=true
 PrivateTmp=true
@@ -299,10 +280,9 @@ UNIT
 }
 install_collection_timer artist-identities '*-*-* *:17:00 UTC'
 install_collection_timer spotify-stats '*-*-* *:37:00 UTC'
-install_collection_timer ingestion '*-*-* 03:23:00 UTC'
-install_collection_timer playlists 'Tue,Fri *-*-* 04:17:00 UTC'
-# A new installation stays dormant; validated durable cutover preserves DB mode.
+# Independent provider workers use only the durable database queue.
 install_collection_timer playlists-db '*-*-* *:00/10:00 UTC'
+install_collection_timer playlists-youtube '*-*-* *:03/10:00 UTC'
 install_collection_timer source-monitor '*-*-01,04,07,10,13,16,19,22,25,28 04:17:00 UTC'
 
 cat > "/etc/systemd/system/$service-notifications.service" <<UNIT
@@ -434,15 +414,7 @@ systemctl enable "$service"
 for collection_job in artist-identities source-monitor spotify-stats; do
   systemctl enable --now "$service-collection-$collection_job.timer"
 done
-if [[ "$scheduler_mode" == legacy && "$legacy_timer_was_armed" == true ]]; then
-  systemctl enable --now "$service-collection-ingestion.timer"
-elif [[ "$scheduler_mode" == legacy ]]; then
-  # Preserve the failed oneshot for the separate reviewed recovery operation.
-  systemctl disable --now "$service-collection-ingestion.timer"
-else
-  systemctl disable --now "$service-collection-ingestion.timer"
-  systemctl stop "$service-collection@ingestion.service"
-fi
+
 systemctl restart "$service"
 systemctl enable --now "$service-notifications.timer"
 systemctl enable --now "$service-analytics-retention.timer"
@@ -486,18 +458,13 @@ fi
 
 # Rearm only after successful release health; a rollback or a paused DB-due
 # timer never gets here with an armed snapshot. Keep both shared locks held.
-playlist_install_apply_mode
+flock -u 7
+flock -u 6
+install_provider_timers
 if [[ "$db_due_timer_was_armed" == true ]]; then
-  # Recheck durable mode, exact release and HTTP closure immediately before
-  # rearming. Refuse uncertain systemd states rather than risking two fetchers.
-  [[ -f "$scheduler_state/mode" && ! -L "$scheduler_state/mode" &&
-     "$(stat -c %u:%a "$scheduler_state/mode")" == 0:644 &&
-     "$(cat "$scheduler_state/mode")" == db-due &&
-     "$(readlink -f "$app_root/current")" == "$release" &&
+  # Recheck the active release and current scheduler state before rearming.
+  [[ "$(readlink -f "$app_root/current")" == "$release" &&
      "$(cat "$release/DEPLOYED_COMMIT")" == "$commit" &&
-     "$(systemctl is-enabled "$service-collection-ingestion.timer" 2>/dev/null || true)" == disabled &&
-     "$(systemctl is-active "$service-collection-ingestion.timer" 2>/dev/null || true)" == inactive &&
-     "$(systemctl is-active "$service-collection@ingestion.service" 2>/dev/null || true)" == inactive &&
      "$(systemctl is-enabled "$service-db-due.timer" 2>/dev/null || true)" == disabled &&
      "$(systemctl is-active "$service-db-due.timer" 2>/dev/null || true)" == inactive &&
      "$(systemctl is-active "$service-db-due-scheduler.service" 2>/dev/null || true)" == inactive &&
@@ -507,8 +474,6 @@ if [[ "$db_due_timer_was_armed" == true ]]; then
     echo "DB-due exact-SHA health failed; deployment refused" >&2
     exit 6
   fi
-  due_probe="$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:$port/api/ingestion/run/")" || { echo "DB-due closure probe unavailable; deployment refused" >&2; exit 6; }
-  [[ "$due_probe" == "{\"legacyRouteInactive\":true,\"commit\":\"$commit\"}" ]] || { echo "DB-due exact-SHA closure probe failed; deployment refused" >&2; exit 6; }
   # If systemctl partially arms the timer, inhibit it before returning failure.
   if ! systemctl enable --now "$service-db-due.timer" ||
      [[ "$(systemctl is-enabled "$service-db-due.timer" 2>/dev/null || true)" != enabled ]] ||

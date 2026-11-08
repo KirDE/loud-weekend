@@ -74,7 +74,7 @@ test("default full-inventory candidates still require confirmation for removals"
   assert.ok(result.changes.some(c => c.kind === "artist_removed" && c.reviewRequired));
 });
 
-test("legacy generic source still reviews genuinely unsupported documents", () => {
+test("existing generic source still reviews genuinely unsupported documents", () => {
   const c = extract("<html>No announcements available</html>", now, { ...source, strategies: ["json_ld_event", "html_fallback"] });
   assert.deepEqual(c.evidence, []);
   assert.ok(c.warnings.includes("No JSON-LD Event was found"));

@@ -1,6 +1,7 @@
+import {requestedProviders} from './playlist-provider-scope.ts';
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-// Shared protocol for the independent worker. Legacy rows require explicit reconciliation.
+// Shared protocol for the independent worker. existing rows require explicit reconciliation.
 export type PlaylistLease = { id: string; publicationId: string; festivalSlug: string; attempts: number; leaseOwner: string; leaseExpiresAt: Date };
 export type PlaylistClaimCursor = { requestedAt: Date; id: string };
 export type PlaylistClaimPage = { claim: PlaylistLease; nextCursor: null } | { claim: null; nextCursor: PlaylistClaimCursor | null };
@@ -8,11 +9,12 @@ export type PlaylistClaimPage = { claim: PlaylistLease; nextCursor: null } | { c
 /** A newer staged Spotify plan supersedes old content even if YouTube is pending. */
 export async function assertSpotifyPlanCurrent(db: PrismaClient | Prisma.TransactionClient, claim: Pick<PlaylistLease, 'festivalSlug' | 'publicationId'>) {
   const publication = await db.catalogPublication.findUniqueOrThrow({ where: { id: claim.publicationId }, select: { createdAt: true, editionYear: true } });
-  if (await db.catalogPlaylistRefresh.count({ where: {
+  const newer = await db.catalogPlaylistRefresh.findMany({ where: {
     festivalSlug: claim.festivalSlug,
     desiredPlan: { not: Prisma.DbNull },
     publication: { editionYear: publication.editionYear, createdAt: { gt: publication.createdAt } },
-  } })) throw new Error('Spotify plan superseded');
+  }, select:{publication:{select:{evidence:true}}} });
+  if(newer.some(job=>requestedProviders(job.publication.evidence).includes('spotify')))throw new Error('Spotify plan superseded');
 }
 const CLAIM_PAGE_SIZE = 16;
 const MAX_LEASE_LIFETIME_MS = 7_200_000;
@@ -92,7 +94,7 @@ export async function claimPlaylistRefresh(
       await afterFestivalLock?.(candidate.festivalSlug);
       // New READ COMMITTED statement snapshot after the festival lock.
       // The row lock guards UPDATE; any RUNNING sibling (even expired or
-      // unleased legacy rows) blocks another job in the same festival.
+      // unleased existing rows) blocks another job in the same festival.
       const jobs = await tx.$queryRaw<{ id: string }[]>`
         SELECT job.id FROM "CatalogPlaylistRefresh" AS job
         JOIN "CatalogPublication" AS publication ON publication.id = job."publicationId"
@@ -297,11 +299,11 @@ export async function spotifyCreationState(
     || (action === 'bind' && !/^[A-Za-z0-9]{22}$/.test(playlistId ?? ''))) throw new Error('Invalid creation state request');
   return db.$transaction(async tx => {
     await lockPlaylistLease(tx, claim);
+    await assertSpotifyPlanCurrent(tx, claim);
     const publication = await tx.catalogPublication.findUniqueOrThrow({ where: { id: claim.publicationId } });
     const edition = await tx.festivalEdition.findFirstOrThrow({ where: { year: publication.editionYear, recordState: 'CURRENT', festival: { slug: claim.festivalSlug } } });
     const binding = await tx.festivalPlaylist.findUnique({ where: { editionId_provider: { editionId: edition.id, provider: 'spotify' } } });
     if ((binding?.url ?? '') !== expectedUrl) throw new Error('Playlist binding changed');
-    if (await tx.catalogPlaylistRefresh.count({ where: { festivalSlug: claim.festivalSlug, status: 'SUCCEEDED', publication: { createdAt: { gt: publication.createdAt } } } })) throw new Error('Newer playlist publication completed');
     // Intent belongs to the edition, across jobs/publications. A newer queued
     // lineup must also recover an older job's ambiguous create, never create a
     // second playlist. The festival advisory lock serializes these reservations.

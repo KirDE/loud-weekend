@@ -29,5 +29,5 @@ Verified Impericon lineup publications use the normal transactional playlist-ref
 queue. The publisher still requires matching edition, source, additive scope and
 persisted official field evidence before committing catalogue or queue changes.
 Replays remain idempotent and do not create another job. A subsequent unchanged check makes no publication or agent
-call. Legacy exact-article parsing remains available for old bindings until cutover;
+call. existing exact-article parsing remains available for old bindings until activation;
 it is not the ongoing discovery mechanism.

@@ -1,40 +1,29 @@
 # Runtime ownership
 
-GitHub Actions only validates/builds source changes and deploys releases.
-Only `.github/workflows/quality.yml` and `deploy.yml` are allowed. Runtime and
-one-off diagnostic Actions have been removed, not retained as manual dispatches.
-Older cutover documents are historical evidence; their GitHub dispatch commands
-must not be used or restored.
+PostgreSQL owns festival editions, lineups, source configuration, artist profiles,
+logos, playlist bindings, immutable plans, write intents and operational checkpoints.
+The application and the workers do not read catalogue snapshots from Git or shared
+JSON output directories. The offline API is a live database export, not a fallback.
 
-The production application server owns source due scheduling/imports, source
-monitoring, artist identities and Spotify statistics, the database playlist
-queue, notifications and analytics retention. Existing systemd services and
-application leases/locks remain unchanged by the Actions retirement. Ingestion
-publication queues playlist work; a GitHub dispatch is not needed. Import repair
-requests use the existing direct event transport, not a GitHub or model poller.
+## Current workers
 
-## Files versus database state
+- Source ingestion: `festival-radar-db-due.timer`, serialized root scheduler and
+  bounded `db-due-tick.mjs`; source and publication leases fence each operation.
+- Spotify: `festival-radar-collection-playlists-db.timer` invokes only the Spotify
+  provider worker.
+- YouTube: `festival-radar-collection-playlists-youtube.timer` invokes only the
+  YouTube provider worker.
+- Artist identity, enrichment and Spotify statistics use their durable database
+  state and bounded publishers.
 
-PostgreSQL is authoritative for catalogues, configured sources, ingestion state,
-provider bindings, playlist plans and publication/retry state. Production does
-not write a catalogue overlay into repository data files or commit provider
-results to GitHub.
+Provider locks prevent duplicate processes for the same provider; the parent
+festival lease serializes provider writes to the same festival. Unknown writes
+remain reserved until exact owned readback or correlated rejection resolves them.
+Cancelled or held jobs are not resumed by deployment. Catalogue and archive
+identities are not inferred from mutable playlist titles.
 
-Files still have explicit operational purposes:
-
-- `shared/collection-jobs/*/latest.json` and scheduler status JSON are local
-  diagnostics, not an alternative catalogue or playlist queue.
-- The database playlist worker exchanges bounded JSON through stdin/stdout with
-  Python, not report/catalogue/plan files. Discovery caches and Spotify access-token
-  caching are in memory for these subprocesses. Durable plans and ambiguous
-  provider-write reservations stay in PostgreSQL across retries; the existing
-  lease-fenced local DB handler remains the only checkpoint/publication path.
-- Ingestion runners can write diagnostic artifacts; the DB-due pilot uses a
-  private temporary directory with an exit cleanup trap.
-- Locks, the current-release symlink, protected credentials and event-delivery
-  receipts are runtime infrastructure, not catalogue compatibility exports.
-- Old collection output files may remain as historical artifacts; their presence
-  does not mean an inactive legacy timer is still writing them.
-
-Removing runtime Actions does not remove these files, reset queue state, run a
-provider refresh, change existing playlist URLs or alter server schedules.
+Deployment preserves a paused ingestion timer, serializes release changes with
+fetches, verifies exact release/database health, and restores pinned scheduler
+assets on failed activation. Current provider timers start only after release
+health succeeds. Test current locking, persistence, publication and rollback
+invariants; do not restore one-time migration checks as recurring release gates.

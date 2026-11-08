@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { publishArtistEnrichment, validateEnrichmentProfile } from '../lib/catalog/artist-enrichment-publication.ts';
-import { migrateEnrichmentState } from '../lib/catalog/artist-enrichment-state.ts';
+import { readEnrichmentState } from '../lib/catalog/artist-enrichment-state.ts';
 import { runEnrichment } from '../scripts/enrich-artists.mjs';
 
 test('symlinked release entrypoint runs instead of silently exiting', () => {
@@ -162,29 +162,6 @@ test('worker retries before schedule gate and publishes only after persisting co
   assert.doesNotMatch(source, /writeFile|rename/);
 });
 
-test('flat import is retained exactly, audited without search and stable on restart', async () => {
-  const db = database();
-  const flat = structuredClone(db.state.payload.result);
-  flat.manualReview.push({ slug: 'review-only', name: 'Other', reason: 'multiple_exact_matches', candidateIds: [id, otherId] });
-  db.state.payload = flat;
-  const before = structuredClone(db.state.artists);
-  const publication = await publishArtistEnrichment(db, lease);
-  assert.equal(publication.changed, 0);
-  assert.ok(publication.reviews.some((r) => r.slug === 'synthetic' && r.reason === 'missing_provider_search'));
-  assert.ok(publication.reviews.some((r) => r.slug === 'review-only' && r.reason === 'multiple_exact_matches'));
-  assert.deepEqual(db.state.payload.legacyImport.evidence, flat);
-  assert.deepEqual(db.state.audits[0].evidence.legacyImport.evidence, flat);
-  assert.deepEqual(db.state.artists, before);
-  const snapshot = structuredClone(db.state);
-  assert.equal((await publishArtistEnrichment(db, lease)).changed, 0);
-  assert.deepEqual(db.state, snapshot);
-  // Simulate JSONB key ordering across database/process boundaries.
-  const reorder = (v) => Array.isArray(v) ? v.map(reorder) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).reverse().map(([k, item]) => [k, reorder(item)])) : v;
-  assert.doesNotThrow(() => migrateEnrichmentState(reorder(db.state.payload)));
-  db.state.payload.legacyImport.evidence.profiles.synthetic.origin = 'Changed';
-  await assert.rejects(publishArtistEnrichment(db, lease), /integrity_mismatch/);
-});
-
 test('receipt is invalidated by changed, absent, truncated or ambiguous search evidence', async () => {
   for (const mutate of [
     (p) => { delete p.cache; },
@@ -212,32 +189,6 @@ function workerOptions(db, fetchSearch, saveHook) {
     } }, readArtists: async () => db.state.artists.map(({ slug, name }) => ({ slug, name })),
     fetchSearch, pause: async () => {}, now: () => new Date('2026-10-06T00:00:00.000Z') };
 }
-
-test('failed fetch preserves flat import and reviews, checkpoints failure, bypasses gate and retries', async () => {
-  const db = database();
-  const flat = structuredClone(db.state.payload.result);
-  flat.manualReview.push({ slug: 'review-only', name: 'Other', reason: 'no_exact_match' });
-  db.state.payload = flat;
-  const failed = await runEnrichment(workerOptions(db, async () => { throw new Error('fetch https://user:password@example.test failed'); }));
-  assert.equal(failed.complete, false);
-  assert.equal(db.state.payload.nextRunAt, null);
-  assert.deepEqual(db.state.payload.result.profiles, flat.profiles);
-  assert.deepEqual(db.state.payload.legacyImport.evidence, flat);
-  assert.ok(db.state.payload.result.manualReview.some((r) => r.reason === 'source_unavailable'));
-  assert.doesNotMatch(JSON.stringify(db.state), /password|user:/);
-  assert.equal(db.state.artists[0].identities.length, 0);
-  // A stale scheduler value cannot delay incomplete work.
-  db.state.payload.nextRunAt = '2099-01-01T00:00:00.000Z';
-  let requests = 0;
-  const retried = await runEnrichment(workerOptions(db, async () => { requests++; return fixture().search; }));
-  assert.equal(retried.complete, true);
-  assert.equal(requests, 1);
-  assert.equal(db.state.artists[0].identities.length, 1);
-  assert.deepEqual(db.state.payload.legacyImport.evidence, flat);
-  const snapshot = structuredClone(db.state);
-  await runEnrichment(workerOptions(db, async () => { throw new Error('must not fetch on idempotent restart'); }));
-  assert.deepEqual(db.state, snapshot);
-});
 
 test('reentry after search checkpoint consumes durable evidence without refetch', async () => {
   const db = database(); db.state.payload = {};
@@ -286,7 +237,7 @@ test('restart after final checkpoint publishes before daily gate without another
   assert.deepEqual(db.state, snapshot);
 });
 
-test('a legacy result without cache bypasses its daily gate and obtains provider evidence', async () => {
+test('a checkpoint result without cache bypasses its daily gate and obtains provider evidence', async () => {
   const db = database(); delete db.state.payload.cache;
   let requests = 0;
   await runEnrichment(workerOptions(db, async () => { requests++; return fixture().search; }));
@@ -295,13 +246,13 @@ test('a legacy result without cache bypasses its daily gate and obtains provider
   assert.ok(db.state.audits[0].metadata.reviews.some((r) => r.reason === 'missing_provider_search'));
 });
 
-test('unsafe and oversized legacy evidence fails closed without writes', async () => {
+test('unsafe and oversized checkpoint evidence fails closed without writes', async () => {
   for (const mutate of [
     (flat) => { flat.manualReview = [{ slug: 'other', name: 'Other', reason: 'fetch https://user:password@example.test failed' }]; },
     (flat) => { flat.profiles.synthetic.links[0].url = 'https://user:password@example.test'; },
     (flat) => { flat.manualReview = Array(1001).fill({ slug: 'other', name: 'Other', reason: 'no_exact_match' }); },
   ]) {
-    const db = database(); db.state.payload = structuredClone(db.state.payload.result); mutate(db.state.payload);
+    const db = database(); mutate(db.state.payload.result);
     const snapshot = structuredClone(db.state);
     await assert.rejects(publishArtistEnrichment(db, lease), /Unsafe|bound/);
     assert.deepEqual(db.state, snapshot);

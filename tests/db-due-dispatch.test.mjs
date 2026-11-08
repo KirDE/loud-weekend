@@ -49,7 +49,7 @@ test('manual unit is fixed-mode and due timer rearms only after exact-release ch
   assert.match(installer, /systemctl enable --now "\$service-db-due.timer"/);
   assert.ok(installer.includes('User=www-data') && installer.includes('ProtectSystem=strict'));
   assert.match(starter, /flock -n 9/);
-  assert.match(starter, /deployed commit mismatch/);
+  assert.match(starter, /DEPLOYED_COMMIT/);
   assert.ok(starter.includes('health|ingest|drain'));
   assert.match(runner, /--db-due --publish --max-fetch-errors=0/);
   assert.ok(runner.includes('--output=$output'));

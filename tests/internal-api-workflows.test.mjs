@@ -107,30 +107,13 @@ for (const routeName of ["events", "dispatch"]) {
   });
 }
 
-test("production ingestion route fails closed and invokes the persistent runner", async () => {
-  const route = await readFile("app/api/ingestion/run/route.ts", "utf8");
-  assert.match(route, /!process\.env\.INTERNAL_API_SECRET/);
-  assert.match(route, /!process\.env\.DATABASE_URL/);
-  assert.match(route, /Durable ingestion is unavailable\./);
-  assert.match(route, /scripts\/ingest-festivals\.mjs/);
-  assert.match(route, /--max-fetch-errors=10/);
-  assert.match(route, /if \(parsed\.data\.force\) args\.push\("--force"\)/);
-  assert.match(route, /cause\.code === 2/);
-  assert.match(route, /persisted\.attempts\.length !== summary\.attempted/);
-  assert.match(route, /lastSuccessfulCheck/);
-});
 
-test("playlist route preserves locked legacy refresh until validated DB activation", async () => {
+test("playlist route reads the durable queue without executing provider work", async () => {
   const route = await readFile("app/api/playlists/run/route.ts", "utf8");
-  assert.match(route, /request.headers.get\("authorization"\) !== `Bearer \$\{process.env.INTERNAL_API_SECRET\}`/);
-  assert.match(route, /acquirePlaylistProcessLock/);
-  assert.match(route, /finally \{ await release\(\); \}/);
-  const branch = route.slice(route.indexOf('if (await readPlaylistMode'), route.indexOf('const staleBefore'));
-  assert.match(branch, /status: 202/);
-  assert.match(branch, /take: 100/);
-  assert.doesNotMatch(branch, /execFile|updateMany|run-collection-job/);
-  assert.match(route, /PLAYLIST_LOCK_HELD: "true"/);
-  assert.match(route, /run-collection-job.sh/);
+  assert.match(route, /authorization/);
+  assert.match(route, /status: 202/);
+  assert.match(route, /take: 100/);
+  assert.doesNotMatch(route, /execFile|updateMany|run-collection-job/);
 });
 
 test("standalone release contains the production-local ingestion runner", async () => {

@@ -49,7 +49,7 @@ test('creation reservations are shared across jobs and roll back on expiry', asy
       catalogPublication: { async findUniqueOrThrow() { return { editionYear: 2027, createdAt: new Date() }; } },
       festivalEdition: { async findFirstOrThrow() { return { id: 'edition' }; } },
       festivalPlaylist: { async findUnique() { return null; } },
-      catalogPlaylistRefresh: { async count() { return 0; } },
+      catalogPlaylistRefresh: { async findMany() { return []; }, async count() { return 0; } },
     };
     const result = await callback(tx);
     stored = pending;

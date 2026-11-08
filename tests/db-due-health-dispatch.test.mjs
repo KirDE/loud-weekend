@@ -21,7 +21,7 @@ test('deployment preserves protected exact-SHA health and server timer installat
   assert.match(installer, /install -o root -g root -m 0755 "\$release\/scripts\/deploy\/start-db-due" "\$db_due_wrapper"/);
   assert.match(installer, /StandardOutput=append:\/run\/festival-radar-db-due\/%i\.audit/);
   assert.match(installer, /if \[\[ "\$db_due_timer_was_armed" == true \]\]/);
-  assert.match(installer, /DB-due exact-SHA closure probe failed/);
+  assert.match(installer, /DB-due exact-SHA health failed/);
 });
 
 test('deploy-user sudo entrypoint permits only fixed health and passes SHA unchanged', async () => {

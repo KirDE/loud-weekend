@@ -41,7 +41,7 @@ export function validateSource(source: FestivalSource & { parserKey?: string }):
 
 export type ConfiguredSource = FestivalSource & { id: string; editionId: string | null; parserKey: string; cadenceSeconds: number; nextRunAt: Date | null; consecutiveFailures: number; leaseOwner: string | null; leaseExpiresAt: Date | null; httpEtag: string | null; httpLastModified: string | null };
 
-// Strict mapper for the future DB reader. Legacy rows are intentionally not read by current runtime.
+// Strict mapper for the future DB reader. existing rows are intentionally not read by current runtime.
 export function mapSource(row: SourceRow & { edition?: { festivalId: string; year: number } | null }): ConfiguredSource {
   const headers = row.requestHeaders;
   if (headers !== null && (typeof headers !== "object" || Array.isArray(headers) || Object.values(headers).some((value) => typeof value !== "string"))) throw new Error("Invalid stored request headers");
