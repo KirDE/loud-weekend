@@ -14,6 +14,16 @@ test('dispatcher preserves provider stage and exact allowlisted diagnostic, not 
   assert.equal(playlistFailure('setup',null),'playlist_worker_failed stage=setup reason=unclassified');
 });
 
+test('malformed pre-write owned discovery preserves its retryable diagnostic', () => {
+  const reason = 'youtube_invalid_owned_discovery_id';
+  assert.equal(youtubeHoldReasons.includes(reason), false);
+  for (const lines of [[reason, 'youtube_reconciliation_required'], ['youtube_reconciliation_required', reason]]) {
+    const line = playlistFailure('youtube_apply', {stderr: lines.join('\n')});
+    assert.equal(line, `playlist_worker_failed stage=youtube_apply reason=${reason}`);
+    assert.equal(dispatchedPlaylistFailure({stderr: line}), line);
+  }
+});
+
 for (const reason of youtubeHoldReasons) {
   test(`specific hold diagnostic ${reason} survives generic marker and dispatch sanitization`, () => {
     for (const lines of [[reason, 'youtube_reconciliation_required'], ['youtube_reconciliation_required', reason]]) {

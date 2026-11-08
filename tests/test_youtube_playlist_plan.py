@@ -241,6 +241,55 @@ class YoutubePlanTests(unittest.TestCase):
         self.assertNotIn(('POST', 'playlists'), provider.writes())
         self.assertEqual(provider.writes(), [('PUT', 'playlists')])
 
+    def test_malformed_owned_discovery_leaves_no_intent_and_valid_retry_adopts(self):
+        for invalid_id in (None, 123, '', 'bad', 'bad/id-with-slash'):
+            with self.subTest(invalid_id=invalid_id):
+                provider = Provider(creating=True, videos=VIDEOS[:3])
+                provider.metadata = {'id': invalid_id, 'snippet': {'title': provider.plan['title'], 'description': provider.plan['description'], 'channelId': 'owner'}, 'status': {'privacyStatus': 'public'}}
+                before = copy.deepcopy((provider.saved, provider.metadata, provider.items))
+                actions = []
+                def state(action, payload=None):
+                    actions.append(action)
+                    return provider.state(action, payload)
+                with self.assertRaisesRegex(ReconciliationRequired, '^youtube_invalid_owned_discovery_id$'):
+                    publish_plan(provider.plan, provider.request, provider.guard, state, provider.progress.append, wait=lambda delay: None)
+                self.assertEqual(actions, ['read'])
+                self.assertEqual(provider.calls, [('GET', 'channels'), ('GET', 'playlists')])
+                self.assertEqual(provider.writes(), [])
+                self.assertEqual((provider.saved, provider.metadata, provider.items), before)
+                provider.metadata['id'] = PLAYLIST
+                result = publish_plan(provider.plan, provider.request, provider.guard, state, provider.progress.append, wait=lambda delay: None)
+                self.assertEqual(result['tracks'], 3)
+                self.assertTrue(provider.saved['adopted'])
+                self.assertEqual(provider.saved['playlistId'], PLAYLIST)
+                self.assertEqual(actions.count('adopt'), 1)
+                self.assertNotIn('reserve', actions)
+                self.assertEqual(provider.writes(), [('PUT', 'playlists')])
+
+    def test_invalid_id_after_durable_creation_keeps_original_diagnostic_and_intent(self):
+        for phase in ('create-response', 'reserved-discovery', 'saved-id'):
+            with self.subTest(phase=phase):
+                provider = Provider(creating=True)
+                if phase != 'create-response':
+                    provider.saved.update(sent=True, creationMetadata={'title': provider.plan['title'], 'description': provider.plan['description']})
+                    provider.metadata = {'id': 'bad', 'snippet': {'channelId': 'owner', **provider.saved['creationMetadata']}}
+                    if phase == 'saved-id':
+                        provider.saved['playlistId'] = 'bad'
+                before = copy.deepcopy(provider.saved)
+                def request(method, url, **kwargs):
+                    response = provider.request(method, url, **kwargs)
+                    return {**response, 'id': 'bad'} if method == 'POST' else response
+                with self.assertRaisesRegex(ReconciliationRequired, '^youtube_invalid_created_id$'):
+                    publish_plan(provider.plan, request, provider.guard, provider.state, provider.progress.append, wait=lambda delay: None)
+                self.assertTrue(provider.saved['sent'])
+                self.assertIsNotNone(provider.saved['creationMetadata'])
+                if phase == 'create-response':
+                    self.assertIsNone(provider.saved['playlistId'])
+                    self.assertEqual(provider.writes(), [('POST', 'playlists')])
+                else:
+                    self.assertEqual(provider.saved, before)
+                    self.assertEqual(provider.writes(), [])
+
     def test_existing_discovery_does_not_treat_advisory_total_as_missing_page(self):
         provider = Provider(creating=True, videos=VIDEOS[:3])
         provider.metadata = {'id': PLAYLIST, 'snippet': {'title': provider.plan['title'], 'description': provider.plan['description'], 'channelId': 'owner'}, 'status': {'privacyStatus': 'public'}}

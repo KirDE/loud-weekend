@@ -139,6 +139,35 @@ test('bounded insert readback remains retryable rather than held',()=>fixture(as
  assert.equal((row.payload as any).status,'FAILED');assert.ok((row.payload as any).retryAt);
 }));
 
+test('malformed owned discovery backs off then retries; invalid created ID stays held with durable intent',()=>fixture(async({id})=>{
+ const key=`playlist-provider:v1:youtube_music:${id}`;
+ const diagnostic=(reason:string)=>Object.assign(new Error('synthetic invalid ID'),{code:3,stderr:`youtube_reconciliation_required\n${reason}\n`});
+ const before=await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id}});
+ const failed=await runProviderWorker(db,'youtube_music',async()=>{throw diagnostic('youtube_invalid_owned_discovery_id')},()=> 'youtube_apply');
+ assert.equal(failed.status,'FAILED');
+ let row=await db.operationalState.findUniqueOrThrow({where:{key}});
+ const retry=row.payload as any;
+ assert.equal(retry.status,'FAILED');assert.ok(new Date(retry.retryAt)>new Date());
+ assert.equal(retry.diagnostic,'playlist_worker_failed stage=youtube_apply reason=youtube_invalid_owned_discovery_id');
+ assert.deepEqual((await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id}})).youtubeState,before.youtubeState);
+ assert.equal((await runProviderWorker(db,'youtube_music',async()=>{throw Error('backoff ignored')})).status,'IDLE');
+ await db.operationalState.update({where:{key},data:{payload:{...retry,retryAt:new Date(Date.now()-1000).toISOString()}}});
+ const intent={sent:true,playlistId:null,marker:'synthetic-reserved',creationMetadata:{title:'Synthetic 2027',description:'Synthetic'}};
+ let attempts=0;
+ await runProviderWorker(db,'youtube_music',async claim=>{
+  attempts++;assert.equal(claim.id,id);
+  await db.catalogPlaylistRefresh.update({where:{id},data:{youtubeState:intent}});
+  throw diagnostic('youtube_invalid_created_id');
+ },()=> 'youtube_apply');
+ assert.equal(attempts,1);
+ row=await db.operationalState.findUniqueOrThrow({where:{key}});
+ assert.equal((row.payload as any).attempts,2);
+ assert.equal((row.payload as any).status,'BLOCKED');assert.equal((row.payload as any).retryAt,null);
+ assert.equal((row.payload as any).diagnostic,'playlist_worker_failed stage=youtube_apply reason=youtube_invalid_created_id');
+ assert.deepEqual((await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id}})).youtubeState,intent);
+ assert.equal((await runProviderWorker(db,'youtube_music',async()=>{throw Error('held creation resumed')})).status,'IDLE');
+},['youtube_music']));
+
 for(const reason of ['youtube_invalid_readback','youtube_incomplete_readback','youtube_unbounded_readback','youtube_invalid_ordered_readback','youtube_ownership_readback_failed','youtube_final_readback_failed']){
  test(`read-only anomaly ${reason} remains retryable`,()=>fixture(async({id})=>{
   await runProviderWorker(db,'youtube_music',async()=>{throw Object.assign(new Error('readback'),{code:3,stderr:`youtube_reconciliation_required\n${reason}\n`})});
