@@ -121,3 +121,19 @@ test('completed Spotify-only generation neither hides nor supersedes unfinished 
   const state=await youtubeProviderState(db,claim,'','read');assert.equal(state.sent,false);
  })).status,'SUCCEEDED');
 }));
+
+test('unknown creation is held per provider without poisoning other festivals or changing the intent',()=>fixture(async({id})=>fixture(async({id:other})=>{
+ await db.catalogPlaylistRefresh.update({where:{id},data:{requestedAt:new Date('1800-01-01'),youtubeState:{sent:true,playlistId:null,marker:'reserved-creation'}}});
+ const before=await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id}});
+ await runProviderWorker(db,'youtube_music',async claim=>{assert.equal(claim.id,id);throw Object.assign(new Error('unknown'),{code:3,stderr:'youtube_reconciliation_required\n'})});
+ const held=await db.operationalState.findUniqueOrThrow({where:{key:`playlist-provider:v1:youtube_music:${id}`}});
+ assert.equal((held.payload as any).status,'BLOCKED');assert.equal((held.payload as any).retryAt,null);
+ assert.equal((await runProviderWorker(db,'youtube_music',async claim=>assert.equal(claim.id,other))).status,'SUCCEEDED');
+ assert.equal((await runProviderWorker(db,'spotify',async claim=>assert.equal(claim.id,id))).status,'SUCCEEDED');
+ assert.deepEqual((await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id}})).youtubeState,before.youtubeState);
+})));
+test('bounded insert readback remains retryable rather than held',()=>fixture(async({id})=>{
+ await runProviderWorker(db,'youtube_music',async()=>{throw Object.assign(new Error('readback'),{code:3,stderr:'youtube_reconciliation_required\nyoutube_insert_readback_failed\n'})});
+ const row=await db.operationalState.findUniqueOrThrow({where:{key:`playlist-provider:v1:youtube_music:${id}`}});
+ assert.equal((row.payload as any).status,'FAILED');assert.ok((row.payload as any).retryAt);
+}));
