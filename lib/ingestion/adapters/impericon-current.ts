@@ -52,6 +52,7 @@ function name(value: string) {
 // lists. Do not interpret unrelated shop/navigation lists or the recap total.
 function countedWave(article: string, year: number) {
   const names = new Map<string, string>();
+  const handledLists: { start: number; end: number }[] = [];
   for (const p of article.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
     const count = text(p[1]).match(/\bwelcome the following (\d{1,3}) acts to Impericon Festival (20\d{2})\s*:\s*$/i);
     if (!count) {
@@ -80,11 +81,13 @@ function countedWave(article: string, year: number) {
         if (!name(n) || /cancel|withdraw|no longer|not performing|not playing|former|last year's/i.test(n) || names.has(n.toLowerCase())) throw new Error('Invalid Impericon wave artist');
         names.set(n.toLowerCase(), n); total++;
       }
+      const start = article.length - rest.length;
+      handledLists.push({ start, end: start + day[0].length });
       rest = rest.slice(day[0].length);
     }
     if (total !== expected || /^\s*<(?:ul|ol|li|h[23])\b/i.test(rest)) throw new Error('Incomplete Impericon counted wave');
   }
-  return [...names.values()];
+  return { names: [...names.values()], handledLists };
 }
 function parseArticle(doc: ImpericonDocument, year: number) {
   if (!closed(doc.html)) throw new Error('Incomplete Impericon announcement');
@@ -99,9 +102,13 @@ function parseArticle(doc: ImpericonDocument, year: number) {
   // Pure ticket/travel posts are not lineup announcements. A new unrecognised
   // announcement must not silently become a successful unchanged import.
   if (/tickets?|price tier|camping|travel|faq/i.test(title) && !/headliner|line.?up|bands?|acts?/i.test(title)) return { headliners: [], lineup: [], excerpt: '' };
-  const headliners = new Set<string>(), lineup = new Set<string>(countedWave(article, year));
+  const wave = countedWave(article, year);
+  const headliners = new Set<string>(), lineup = new Set<string>(wave.names);
   let found = lineup.size > 0;
   for (const p of article.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
+    // These paragraphs already passed the counted-list identity and name checks.
+    // Keep the generic announcement guard active everywhere outside those lists.
+    if (wave.handledLists.some(range => p.index! >= range.start && p.index! + p[0].length <= range.end)) continue;
     const prose = text(p[1]);
     if (/cancel|withdraw|no longer|not performing|former headliner|last year's/i.test(prose)) throw new Error('Impericon cancellation/billing change requires review');
     const links = [...p[1].matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)].filter(a => {

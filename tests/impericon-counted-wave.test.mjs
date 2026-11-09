@@ -23,3 +23,10 @@ test('incomplete, wrong-edition, cancelled, non-day and non-artist lists fail cl
   const c=extract(bad);assert.equal(c.lineup,undefined);assert.match(c.warnings.join(),/no trustworthy/);
  }
 });
+
+test('official collection links inside counted-list paragraphs are handled once',()=>{
+ const linked=html.replace('<span>Sun Eater</span>','<a href="https://www.impericon.com/collections/sun-eater"><strong>Sun Eater</strong></a>');
+ const c=extract(linked);assert.deepEqual(c.warnings,[]);assert.deepEqual(c.lineup,expected);
+ const unknown=extract(linked.replace('</ul>','</ul><p><a href="/collections/unannounced">Unannounced Act</a></p>'));
+ assert.equal(unknown.lineup,undefined);assert.match(unknown.warnings.join(),/no trustworthy/);
+});
