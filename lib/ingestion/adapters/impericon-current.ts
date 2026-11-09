@@ -48,6 +48,44 @@ function articleContent(html: string) {
 function name(value: string) {
   return value.length >= 2 && value.length <= 100 && !/[<>:;!?]|\b(?:20\d{2}|tickets?|festival|headliners?|line.?up|announc|merch|hoodie|t-shirt)\b/i.test(value) ? value : undefined;
 }
+// Counted waves use explicit edition-bound prose followed by consecutive day
+// lists. Do not interpret unrelated shop/navigation lists or the recap total.
+function countedWave(article: string, year: number) {
+  const names = new Map<string, string>();
+  for (const p of article.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
+    const count = text(p[1]).match(/\bwelcome the following (\d{1,3}) acts to Impericon Festival (20\d{2})\s*:\s*$/i);
+    if (!count) {
+      if (/\bwelcome the following\b/i.test(text(p[1]))) throw new Error('Unrecognised Impericon counted wave');
+      continue;
+    }
+    const expected = Number(count[1]);
+    if (Number(count[2]) !== year || !expected || expected > 200 || names.size) throw new Error('Invalid Impericon wave count');
+    let rest = article.slice(p.index! + p[0].length), total = 0;
+    const days = new Set<string>();
+    while (true) {
+      const day = rest.match(/^\s*<h([23])\b[^>]*>([\s\S]*?)<\/h\1>\s*<ul\b[^>]*>([\s\S]*?)<\/ul>/i);
+      if (!day) break;
+      const label = text(day[2]).toLowerCase().replace(/:$/, '');
+      if (!/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/.test(label) || days.has(label)) throw new Error('Invalid Impericon wave day');
+      days.add(label);
+      const items = [...day[3].matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)];
+      if (!items.length || day[3].replace(/<li\b[^>]*>[\s\S]*?<\/li>/gi, '').trim()) throw new Error('Invalid Impericon wave list');
+      for (const item of items) {
+        if (/<\/?(?!p\b|span\b|b\b|strong\b|a\b)[a-z][^>]*>/i.test(item[1])) throw new Error('Unexpected Impericon artist markup');
+        for (const a of item[1].matchAll(/<a\b([^>]*)>/gi)) {
+          const u = new URL(attr(a[1], 'href') ?? '', IMPERICON_HOME);
+          if (u.origin !== 'https://www.impericon.com' || !/^\/collections\/[a-z0-9-]+$/.test(u.pathname) || u.search || u.hash) throw new Error('Invalid Impericon artist link');
+        }
+        const n = text(item[1]);
+        if (!name(n) || /cancel|withdraw|no longer|not performing|not playing|former|last year's/i.test(n) || names.has(n.toLowerCase())) throw new Error('Invalid Impericon wave artist');
+        names.set(n.toLowerCase(), n); total++;
+      }
+      rest = rest.slice(day[0].length);
+    }
+    if (total !== expected || /^\s*<(?:ul|ol|li|h[23])\b/i.test(rest)) throw new Error('Incomplete Impericon counted wave');
+  }
+  return [...names.values()];
+}
 function parseArticle(doc: ImpericonDocument, year: number) {
   if (!closed(doc.html)) throw new Error('Incomplete Impericon announcement');
   const html = clean(doc.html);
@@ -61,15 +99,24 @@ function parseArticle(doc: ImpericonDocument, year: number) {
   // Pure ticket/travel posts are not lineup announcements. A new unrecognised
   // announcement must not silently become a successful unchanged import.
   if (/tickets?|price tier|camping|travel|faq/i.test(title) && !/headliner|line.?up|bands?|acts?/i.test(title)) return { headliners: [], lineup: [], excerpt: '' };
-  const headliners = new Set<string>(), lineup = new Set<string>();
-  let found = false;
+  const headliners = new Set<string>(), lineup = new Set<string>(countedWave(article, year));
+  let found = lineup.size > 0;
   for (const p of article.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
     const prose = text(p[1]);
     if (/cancel|withdraw|no longer|not performing|former headliner|last year's/i.test(prose)) throw new Error('Impericon cancellation/billing change requires review');
     const links = [...p[1].matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)].filter(a => {
       try { const u = new URL(attr(a[1], 'href') ?? '', IMPERICON_HOME); return u.origin === 'https://www.impericon.com' && /^\/collections\/[a-z0-9-]+$/.test(u.pathname) && !u.search && !u.hash; } catch { return false; }
     });
-    if (/\bheadliners?\b/i.test(prose) && /announc|alongside|line.?up|stage|festival/i.test(prose)) {
+    if (/^This brings our lineup, headlined by\b/i.test(prose)) {
+      const recap = p[1].match(/headlined by\b([\s\S]*?),\s*(?:<[^>]*>\s*)*to \d+ bands\b/i);
+      const billed = [...(recap?.[1] ?? '').matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)];
+      if (!billed.length || billed.length !== links.length) throw new Error('Invalid Impericon headliner recap');
+      for (const a of billed) {
+        if (!links.some(link => link[0] === a[0])) throw new Error('Invalid Impericon headliner identity');
+        const n = name(text(a[2])); if (!n) throw new Error('Invalid Impericon headliner caption'); headliners.add(n);
+      }
+      found = true;
+    } else if (/\bheadliners?\b/i.test(prose) && /announc|alongside|line.?up|stage|festival/i.test(prose)) {
       if (!links.length) throw new Error('Impericon headliner has no official artist identity link');
       for (const a of links) { const n = name(text(a[2])); if (!n) throw new Error('Invalid Impericon headliner caption'); headliners.add(n); }
       found = true;
