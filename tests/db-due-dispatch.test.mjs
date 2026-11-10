@@ -73,7 +73,7 @@ test('failed cleanup restores DB due only when armed; success never restores', a
         'db_due_restore_assets() { printf "restore\n"; }; systemctl() { printf "%s\n" "$*"; }; ' +
         'prior_release_is_active() { [[ "$PRIOR_ACTIVE" == true ]]; }; scheduler_assets_armed=false; scheduler_backup=""; ' +
         'db_due_assets_armed="$ARMED"; db_due_unit=unit; db_due_wrapper=wrapper; db_due_backup=""; ' +
-        'archive="$TEMP/archive"; env_source="$TEMP/env"; ' +
+        'runtime_preflight=""; archive="$TEMP/archive"; env_source="$TEMP/env"; ' +
         (failed ? 'false || cleanup_install' : 'cleanup_install');
       const result = spawnSync('bash', ['-c', script], { encoding: 'utf8',
         env: { ...process.env, TEMP: temporary, ARMED: armed ? 'true' : 'false',
