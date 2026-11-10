@@ -47,7 +47,7 @@
     "pretest:persistence-db": "node scripts/prepare-test-db.mjs"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.3",
+    "@prisma/client": "^7.10.1",
     "@simplewebauthn/browser": "^14.0.0",
     "@simplewebauthn/server": "^14.0.3",
     "@types/node": "^22.10.0",
