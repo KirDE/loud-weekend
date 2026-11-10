@@ -47,3 +47,9 @@ and npm; web, importer and playlist workers use that release-local runtime,
 not the host-wide Node installation. Runtime packaging rejects a builder whose
 Node version differs from `.node-version`. Roll back using the previous release
 with its own bundled runtime; do not replace the system Node binary.
+
+Node 26 Linux prerequisites: install the distribution's `libatomic1` package
+(alongside the supported glibc/libstdc++ runtime) before deployment. The installer
+executes the archive's actual Node binary before changing releases, timers, or
+assets, and fails closed with the loader error and a provisioning hint if any
+shared library is missing. It does not install host packages automatically.

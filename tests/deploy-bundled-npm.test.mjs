@@ -83,3 +83,32 @@ test("runtime packaging rejects a mismatched builder before creating the artifac
     await rm(temporary, { recursive: true, force: true });
   }
 });
+
+
+test("installer preflights the archive runtime before any production mutation", async () => {
+  const installer = await readFile("scripts/deploy/install-release.sh", "utf8");
+  const start = installer.indexOf('runtime_preflight="$(mktemp -d)"');
+  const end = installer.indexOf('install -d -m 0755 "$app_root/releases"');
+  assert.ok(start > 0 && end > start);
+  assert.ok(end < installer.indexOf('systemctl disable --now festival-radar-db-due.timer'));
+  const preflight = installer.slice(start, end);
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "node-loader-"));
+  try {
+    const { chmod } = await import("node:fs/promises");
+    const runtime = path.join(temporary, "app/.runtime");
+    await mkdir(runtime, { recursive: true });
+    const binary = path.join(runtime, "node");
+    await writeFile(binary, "#!/bin/sh\necho 'libatomic.so.1: cannot open shared object file' >&2\nexit 127\n");
+    await chmod(binary, 0o755);
+    const archive = path.join(temporary, "release.tar.gz");
+    execFileSync("tar", ["-czf", archive, "-C", temporary, "app"]);
+    assert.throws(() => execFileSync("bash", ["-euc", preflight], {
+      env: { ...process.env, archive, TMPDIR: temporary }, stdio: "pipe",
+    }), /libatomic1/);
+    await writeFile(binary, "#!/bin/sh\necho v26.13.0\n");
+    execFileSync("tar", ["-czf", archive, "-C", temporary, "app"]);
+    execFileSync("bash", ["-euc", preflight], { env: { ...process.env, archive, TMPDIR: temporary } });
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
