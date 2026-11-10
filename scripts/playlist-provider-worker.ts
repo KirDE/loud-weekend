@@ -6,7 +6,7 @@ import { acquireProviderProcessLock } from '../lib/catalog/playlist-process-lock
 import { readCatalog } from '../lib/catalog/repository.ts';
 import { stagePlaylistPlan, assertSpotifyPlanCurrent } from '../lib/catalog/playlist-queue.ts';
 import { publishSpotifyCheckpoint } from '../lib/catalog/spotify-playlist-checkpoint.ts';
-import { stageYoutubePlan, validateYoutubePlan, YOUTUBE_URL } from '../lib/catalog/youtube-playlist-queue.ts';
+import { stageYoutubePlan, validateYoutubePlan, youtubeProviderState, YOUTUBE_URL } from '../lib/catalog/youtube-playlist-queue.ts';
 import { executePlaylistJson } from '../lib/catalog/python-playlist-rpc.ts';
 import { spotifyRepertoiresForArtists } from '../lib/catalog/spotify-repertoire.ts';
 import { runProviderWorker, requestedProviders, type PlaylistProvider } from '../lib/catalog/playlist-provider-worker.ts';
@@ -57,8 +57,9 @@ try {
    let youtubePlan:unknown=(await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id:claim.id}})).youtubePlan;
    if(!youtubePlan){stage='youtube_discovery';youtubePlan=await execute('discover-youtube',{slug:festival.slug,editionYear:publication.editionYear,expectedUrl:url,sourceReport:plan});youtubePlan=await stageYoutubePlan(db,claim,youtubePlan)}
    validateYoutubePlan(youtubePlan);
-   if(youtubePlan.slug!==festival.slug||youtubePlan.editionYear!==publication.editionYear||youtubePlan.expectedUrl!==url)throw Error('Durable YouTube binding mismatch');
-   stage='youtube_apply';const result=await execute('apply-youtube',youtubePlan,{YOUTUBE_EXPECTED_URL:url}) as {url:string;expectedUrl:string;artists:number;tracks:number};
+   if(youtubePlan.slug!==festival.slug||youtubePlan.editionYear!==publication.editionYear)throw Error('Durable YouTube binding mismatch');
+   await youtubeProviderState(db,claim,youtubePlan.expectedUrl,'read');
+   stage='youtube_apply';const result=await execute('apply-youtube',youtubePlan,{YOUTUBE_EXPECTED_URL:youtubePlan.expectedUrl}) as {url:string;expectedUrl:string;artists:number;tracks:number};
    stage='commit';
    await publishYoutubeCheckpoint(db,claim,result);
   }

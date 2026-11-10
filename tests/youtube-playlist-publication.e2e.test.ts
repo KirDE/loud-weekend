@@ -53,6 +53,16 @@ test('DB/Python publication recovers unknown create and insert across jobs witho
         });
         const youtubeMusic = JSON.parse(child.stdout) as YoutubePlaylistResult;
         await publishYoutubeCheckpoint(db,active,youtubeMusic);
+        // Retry after the binding was published but before provider completion.
+        // The immutable empty-URL plan must reuse its acknowledged identity.
+        const frozen = (await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id:active.id}})).youtubePlan;
+        assert.deepEqual((await youtubeProviderState(db, active, '', 'read')).playlistId, 'PLsynthetic001');
+        const retried = await promisify(execFile)('python3', [path.join(process.cwd(), 'tests/fixtures/youtube-db-provider.py'), planPath, path.join(directory, 'remote.json')], {
+          env: { NODE_ENV: 'test', PATH: process.env.PATH, DATABASE_URL: url, PLAYLIST_PROVIDER: 'youtube_music', PLAYLIST_LEASE: JSON.stringify(active), YOUTUBE_EXPECTED_URL: '', PLAYLIST_GUARD_NODE: process.execPath, YOUTUBE_GUARD_SCRIPT: path.join(process.cwd(), 'scripts/playlist-lease-guard.ts'), PYTHONDONTWRITEBYTECODE: '1' },
+          encoding: 'utf8', timeout: 120_000, maxBuffer: 64_000,
+        });
+        await publishYoutubeCheckpoint(db, active, JSON.parse(retried.stdout));
+        assert.deepEqual((await db.catalogPlaylistRefresh.findUniqueOrThrow({where:{id:active.id}})).youtubePlan, frozen);
       });
       return { job, execute };
     };

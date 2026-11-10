@@ -17,9 +17,12 @@ export async function publishYoutubeCheckpoint(db:PrismaClient,claim:PlaylistLea
   if(expected!==result.url&&(!['','NEW'].includes(expected)||!state?.sent||result.url!==`https://music.youtube.com/playlist?list=${state.playlistId}`))throw Error('Unverified YouTube creation');
   const edition=await tx.festivalEdition.findFirstOrThrow({where:{festival:{slug:claim.festivalSlug},year:publication.editionYear,recordState:'CURRENT'}});
   const current=await tx.festivalPlaylist.findUnique({where:{editionId_provider:{editionId:edition.id,provider:'youtube_music'}}});
-  if((current?.url??'')!==expected)throw Error('YouTube binding changed');
+  const bindingUrl=current?.url??'';
+  // assertYoutubeScope already proved any create-to-bound transition from
+  // the same edition's durable creation identity, under this lease.
+  if(bindingUrl!==expected&&bindingUrl!==result.url)throw Error('YouTube binding changed');
   const data={url:result.url,artistCount:result.artists,trackCount:result.tracks,syncedAt:new Date()};
-  if(current){const updated=await tx.festivalPlaylist.updateMany({where:{id:current.id,url:expected},data});if(updated.count!==1)throw Error('YouTube binding changed')}
+  if(current){const updated=await tx.festivalPlaylist.updateMany({where:{id:current.id,url:bindingUrl},data});if(updated.count!==1)throw Error('YouTube binding changed')}
   else await tx.festivalPlaylist.create({data:{editionId:edition.id,provider:'youtube_music',...data}});
  });
 }
