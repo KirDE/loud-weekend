@@ -200,3 +200,33 @@ test('partial progress is durable; invalid completion and newer publications fai
   state.newer();
   await assert.rejects(youtubeProviderState(state.db, lease, '', 'read'), /YouTube plan superseded/);
 });
+
+
+test('frozen create plan resumes its proven published identity, preserving pending writes and plan', async () => {
+  const state = fixture();
+  await stageYoutubePlan(state.db, lease, plan);
+  await youtubeProviderState(state.db, lease, '', 'adopt', { playlistId, title: plan.title, description: plan.description });
+  state.binding(url);
+  const pending = { playlistId, beforeIds: [], expectedIds: [plan.videoIds[0]], position: 0 };
+  await youtubeProviderState(state.db, lease, '', 'insert', pending);
+  assert.deepEqual((await youtubeProviderState(state.db, lease, '', 'read')).pendingInsert, pending);
+  assert.deepEqual(state.plans().get('job'), plan);
+  state.archives({ youtube_music: [playlistId] });
+  await assert.rejects(youtubeProviderState(state.db, lease, '', 'read'), /Archived YouTube/);
+  state.archives(null);
+  state.newer();
+  await assert.rejects(youtubeProviderState(state.db, lease, '', 'read'), /YouTube plan superseded/);
+  state.binding('https://music.youtube.com/playlist?list=PLdifferent001');
+  await assert.rejects(youtubeProviderState(state.db, lease, '', 'read'), /YouTube binding changed/);
+});
+
+test('binding without acknowledged same-edition creation identity never authorizes replay', async () => {
+  const state = fixture();
+  await stageYoutubePlan(state.db, lease, plan);
+  state.binding(url);
+  await assert.rejects(youtubeProviderState(state.db, lease, '', 'read'), /YouTube binding changed/);
+  state.binding('');
+  await youtubeProviderState(state.db, lease, '', 'reserve', { title: plan.title, description: `${plan.description}\n[festival-radar:youtube:job]` });
+  state.binding(url);
+  await assert.rejects(youtubeProviderState(state.db, lease, '', 'read'), /YouTube binding changed/);
+});

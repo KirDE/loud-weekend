@@ -23,12 +23,39 @@ export function validateYoutubePlan(value: unknown): asserts value is YoutubePla
     || !Number.isSafeInteger(plan.sourceTracks) || plan.sourceTracks < plan.videoIds.length) throw new Error('Invalid YouTube plan');
 }
 
+// The earliest same-edition record owns creation identity and outstanding intents.
+async function editionYoutubeState(tx: Prisma.TransactionClient, claim: PlaylistLease, editionYear: number) {
+  const [row] = await tx.$queryRaw<{ id: string; youtubeState: YoutubeState }[]>`
+      SELECT job.id, job."youtubeState" FROM "CatalogPlaylistRefresh" AS job
+      JOIN "CatalogPublication" AS publication ON publication.id = job."publicationId"
+      WHERE job."festivalSlug" = ${claim.festivalSlug} AND publication."editionYear" = ${editionYear}
+        AND publication."festivalSlug" = ${claim.festivalSlug} AND publication."lineupChanged" = true
+        AND job."youtubeState" IS NOT NULL
+      ORDER BY job."requestedAt", job.id LIMIT 1 FOR UPDATE OF job
+    `;
+  return row;
+}
+
 export async function assertYoutubeScope(tx: Prisma.TransactionClient, claim: PlaylistLease, expectedUrl: string) {
   if (!['', 'NEW'].includes(expectedUrl) && !YOUTUBE_URL.test(expectedUrl)) throw new Error('Invalid YouTube binding');
   const publication = await tx.catalogPublication.findUniqueOrThrow({ where: { id: claim.publicationId } });
   const edition = await tx.festivalEdition.findFirstOrThrow({ where: { year: publication.editionYear, recordState: 'CURRENT', festival: { slug: claim.festivalSlug } }, select: { id: true } });
   const binding = await tx.festivalPlaylist.findUnique({ where: { editionId_provider: { editionId: edition.id, provider: 'youtube_music' } } });
-  if ((binding?.url ?? '') !== expectedUrl) throw new Error('YouTube binding changed');
+  if ((binding?.url ?? '') !== expectedUrl) {
+    // An immutable create plan can outlive publication of its own identity.
+    // A public binding alone must never authorize adoption or another create.
+    const state = (await editionYoutubeState(tx, claim, publication.editionYear))?.youtubeState;
+    const boundId = YOUTUBE_URL.exec(binding?.url ?? '')?.[1];
+    if (!['', 'NEW'].includes(expectedUrl) || !boundId || !state?.sent || state.playlistId !== boundId
+      || (state.pendingInsert && state.pendingInsert.playlistId !== boundId)
+      || (state.pendingMetadata && state.pendingMetadata.playlistId !== boundId)) throw new Error('YouTube binding changed');
+    const registry = await tx.operationalState.findUnique({ where: { key: 'playlist-provider-archives-v1' } });
+    if (registry) {
+      const archives = (registry.payload as { youtube_music?: unknown } | null)?.youtube_music;
+      if (!Array.isArray(archives) || archives.some(id => typeof id !== 'string' || !playlistIdPattern.test(id))) throw new Error('Invalid playlist archive registry');
+      if (archives.includes(boundId)) throw new Error('Archived YouTube playlist is immutable');
+    }
+  }
   const newer=await tx.catalogPlaylistRefresh.findMany({where:{festivalSlug:claim.festivalSlug,youtubePlan:{not:Prisma.DbNull},publication:{editionYear:publication.editionYear,createdAt:{gt:publication.createdAt}}},select:{publication:{select:{evidence:true}}}});
   if(newer.some(job=>requestedProviders(job.publication.evidence).includes('youtube_music')))throw new Error('YouTube plan superseded');
   return publication;
@@ -59,14 +86,7 @@ export async function youtubeProviderState(
     validateYoutubePlan(job.youtubePlan);
     const plan = job.youtubePlan;
     if (plan.slug !== claim.festivalSlug || plan.editionYear !== publication.editionYear || plan.expectedUrl !== expectedUrl) throw new Error('YouTube plan binding mismatch');
-    const [row] = await tx.$queryRaw<{ id: string; youtubeState: YoutubeState }[]>`
-      SELECT job.id, job."youtubeState" FROM "CatalogPlaylistRefresh" AS job
-      JOIN "CatalogPublication" AS publication ON publication.id = job."publicationId"
-      WHERE job."festivalSlug" = ${claim.festivalSlug} AND publication."editionYear" = ${publication.editionYear}
-        AND publication."festivalSlug" = ${claim.festivalSlug} AND publication."lineupChanged" = true
-        AND job."youtubeState" IS NOT NULL
-      ORDER BY job."requestedAt", job.id LIMIT 1 FOR UPDATE OF job
-    `;
+    const row = await editionYoutubeState(tx, claim, publication.editionYear);
     const state = row?.youtubeState ?? { marker: `festival-radar:youtube:${claim.id}`, sent: false, playlistId: null, creationMetadata: null, pendingInsert: null, pendingMetadata: null };
     const boundId = YOUTUBE_URL.exec(expectedUrl)?.[1] ?? state.playlistId;
     // Provider titles may already have been renamed. An explicit archive by
