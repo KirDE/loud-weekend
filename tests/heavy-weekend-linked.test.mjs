@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';import test from 'node:test';import {readFileSync} from 'node:fs';
+import {extractFestivalCandidate} from '../lib/ingestion/extract.ts';import {evaluateCandidate} from '../lib/ingestion/policy.ts';import {fetchSource} from '../lib/ingestion/fetch.ts';import {heavyMissingArtistUrls} from '../lib/ingestion/adapters/heavy-weekend.ts';
+const capture=JSON.parse(readFileSync(new URL('./fixtures/official-markup/heavy-weekend-linked-2027.json',import.meta.url),'utf8')),saved=JSON.parse(readFileSync(new URL('./fixtures/official-markup/heavy-weekend-reviewed.json',import.meta.url),'utf8'));
+const source={festivalSlug:'heavy-weekend',url:'https://www.heavyweekend.live/',editionYear:2027,strategies:['official_markup'],enabled:true,refreshPolicy:'weekly'};
+const parse=(d=capture,s=source)=>extractFestivalCandidate(typeof d==='string'?d:JSON.stringify(d),s,'2026-11-10T19:27:00Z');
+test('actual empty logo labels use linked title+h1 and retain additive provider review',()=>{
+ assert.deepEqual(parse(capture.home).evidence,[]);const c=parse();assert.deepEqual(c.lineup,['HELLOWEEN','AMON AMARTH','FALLING IN REVERSE','FIT FOR A KING','MARILYN MANSON','SLASH']);assert.deepEqual(c.warnings,[]);assert.equal(c.startDate,'2027-06-04');assert.equal(c.endDate,'2027-06-06');assert.equal(c.headliners,undefined);assert.equal(c.ticketStatus,undefined);assert.equal(c.artistListMode,'additive');
+ const p=evaluateCandidate(saved,c);assert.equal(p.publishable,false);assert.deepEqual(p.reviewReasons,['Agent review required before lineup-triggered provider activity']);assert.ok(!p.changes.some(x=>x.kind.endsWith('_removed')));const replay=evaluateCandidate({...saved,lineup:[...saved.lineup,...c.lineup]},c);assert.deepEqual(replay.changes,[]);assert.deepEqual(replay.reviewReasons,[]);
+});
+test('later official acts and edition are dynamic, no names/hash allowlist',()=>{
+ const d=structuredClone(capture);d.home+='<a href="/line-up/later"><img src="https://cdn.prod.website-files.com/new.png" alt=""></a>';d.documents.push({url:source.url+'line-up/later',html:'<title>Later Act au Heavy Week-End 2027</title><h1>Later Act</h1>'});assert.ok(parse(d).lineup.includes('Later Act'));assert.equal(parse(JSON.stringify(d).replaceAll('2027','2028'),{...source,editionYear:2028}).startDate,'2028-06-04');
+});
+test('missing, old, mismatched, ambiguous, hidden or unlinked details fail closed',()=>{
+ for(const mutate of [d=>d.documents.shift(),d=>d.documents[0].html=d.documents[0].html.replaceAll('2027','2026'),d=>d.documents[0].html=d.documents[0].html.replace('>HELLOWEEN</h1>','>Other</h1>'),d=>d.documents[0].html+='<h1>Second</h1>',d=>d.documents[0].html=d.documents[0].html.replace('<h1 ','<h1 hidden '),d=>d.home=d.home.replaceAll('2027','2026'),d=>d.documents.push(d.documents[0]),d=>d.documents[0].url='https://evil.invalid/line-up/helloween',d=>d.home=d.home.replace('/line-up/helloween','https://evil.invalid/line-up/helloween'),d=>d.home=d.home.replace('/line-up/helloween','/line-up/helloween?old=1'),d=>d.documents.push({url:source.url+'line-up/unlinked',html:'<h1>Fake</h1>'})]){const d=structuredClone(capture);mutate(d);assert.deepEqual(parse(d).evidence,[]);}
+ assert.throws(()=>heavyMissingArtistUrls(Array.from({length:21},(_,i)=>`<a href="/line-up/act-${i}"><img alt=""></a>`).join('')),/limit/);
+});
+test('transport bounds official details and propagates HTTP failures and redirects',async()=>{
+ for(const failure of [false,true]){const calls=[];const result=await fetchSource(source,{maxAttempts:1,fetchImpl:async(url,opts)=>{calls.push(url);if(url===source.url)return new Response(capture.home);assert.equal(opts.redirect,'error');const doc=capture.documents.find(d=>d.url===url);assert.ok(doc);return new Response(doc.html,{status:failure?403:200});}});assert.equal(result.response.status,failure?403:200);if(!failure){assert.equal(calls.length,7);assert.deepEqual(parse(await result.response.text()).lineup,parse().lineup);}else assert.equal(calls.length,2);}
+ await assert.rejects(fetchSource(source,{maxAttempts:1,fetchImpl:async url=>{const r=new Response(url===source.url?capture.home:capture.documents[0].html);Object.defineProperty(r,'url',{value:url===source.url?url:'https://evil.invalid/'});return r;}}),/trusted identity/);
+});
+
+test('explicit artist casing and punctuation are never title-cased',()=>{
+ for(const name of ['AC/DC','P.O.D.','BABYMETAL','Trhä']){const d=structuredClone(capture);d.documents[0].html=`<title>${name} au Heavy Week-End 2027</title><h1>${name}</h1>`;assert.ok(parse(d).lineup.includes(name));}
+});

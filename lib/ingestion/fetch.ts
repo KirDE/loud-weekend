@@ -1,3 +1,4 @@
+import { isHeavyHomepage, heavyMissingArtistUrls, HEAVY_DOCUMENTS } from "./adapters/heavy-weekend.ts";
 import {isRoskildeSource,fetchRoskildeDocuments} from "./adapters/roskilde.ts";
 import { isImpericonCurrentSource, discoverImpericonAnnouncements, sameImpericonArticle, impericonArticleUrl, IMPERICON_DOCUMENTS } from "./adapters/impericon-current.ts";
 import { isRoadburnSource, roadburnUrl, roadburnLinked, discoverRoadburnAnnouncements, roadburnDocuments, type RoadburnDocument } from "./adapters/roadburn.ts";
@@ -69,6 +70,19 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
   if (isRoskildeSource(source) && !options.fetchImpl) return fetchRoskildeDocuments(source.editionYear);
 
   let initial = await fetchWithRetry(source.fetchUrl ?? source.url);
+  if (initial.response.ok && isHeavyHomepage(source)) {
+    if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url)) throw new Error("Heavy Week-End homepage changed its configured identity");
+    const home = await initial.response.text(), urls = heavyMissingArtistUrls(home);
+    let attempts = initial.attempts;
+    const documents = [];
+    for (const url of urls) {
+      const detail = await fetchWithRetry(url, "error"); attempts += detail.attempts;
+      if (!detail.response.ok) return {response: detail.response, attempts};
+      if (detail.response.url && detail.response.url !== url) throw new Error("Heavy Week-End artist detail changed its trusted identity");
+      documents.push({url, html: await detail.response.text()});
+    }
+    return {response: new Response(JSON.stringify({kind: HEAVY_DOCUMENTS, home, documents}), {headers: {"content-type": "application/json"}}), attempts};
+  }
   if (["vainstream", "rock-the-lakes"].includes(source.festivalSlug) && source.strategies.includes("official_markup")) {
     if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url))
       throw new Error("Official artist listing changed its configured identity");
