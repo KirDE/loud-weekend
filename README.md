@@ -96,7 +96,7 @@ imports their owned/followed playlists into the collections sync document.
 
 Production runs as a Next.js standalone server behind Apache, managed by
 systemd, with PostgreSQL-backed account APIs. The deploy workflow packages the
-exact `main` commit together with the supported Node.js 22 runtime, runs
+exact `main` commit together with the supported Node.js 26 runtime, runs
 `prisma migrate deploy`, atomically switches the `/opt/festival-radar/current`
 symlink, and restores the previous release if the
 database-aware health check fails. The public deployed revision is available

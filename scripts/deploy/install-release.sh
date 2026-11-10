@@ -8,6 +8,7 @@ db_due_backup=""
 db_due_assets_armed=false
 scheduler_assets_armed=false
 scheduler_backup=""
+runtime_preflight=""
 prior_release_is_active() {
   [[ -n "$previous" && "$previous_commit" =~ ^[0-9a-f]{40}$ &&
      "$previous" == "$app_root/releases/$previous_commit" &&
@@ -51,6 +52,7 @@ cleanup_install() {
     if [[ -n "$scheduler_backup" ]]; then rm -rf -- "$scheduler_backup" || status=1; fi
     if [[ -n "$db_due_backup" ]]; then rm -rf -- "$db_due_backup" || status=1; fi
   fi
+  if [[ -n "$runtime_preflight" ]]; then rm -rf -- "$runtime_preflight" || status=1; fi
   rm -f "$archive" "$env_source" || status=1
   return "$status"
 }
@@ -72,6 +74,17 @@ had_previous_env=false
 [[ "$app_root" == /opt/festival-radar ]] || { echo "unsupported APP_ROOT" >&2; exit 2; }
 test -s "$archive"
 test -s "$env_source"
+# Test the actual archive executable before changing releases, timers or assets.
+# Official Node >=25 requires libatomic.so.1 (in addition to glibc/libstdc++).
+# Fail closed with the loader diagnostic; provisioning is an operator action.
+runtime_preflight="$(mktemp -d)"
+tar -xzf "$archive" -C "$runtime_preflight" app/.runtime/node
+if ! "$runtime_preflight/app/.runtime/node" --version; then
+  echo 'Bundled Node cannot run: install required host libraries (including libatomic1) before retrying deployment.' >&2
+  exit 1
+fi
+rm -rf -- "$runtime_preflight"
+runtime_preflight=""
 install -d -m 0755 "$app_root/releases" "$shared"
 install -d -o www-data -g www-data -m 0750 "$shared/ingestion"
 if [[ ! -e "$shared/ingestion/source-fetch.lock" && ! -L "$shared/ingestion/source-fetch.lock" ]]; then
