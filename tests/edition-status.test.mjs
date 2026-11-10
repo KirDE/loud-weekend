@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import ts from "typescript";
+import { transform } from "esbuild";
 import { editionStatusLabel } from "../lib/edition-status.ts";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
 import { LanguageProvider } from "../components/LanguageProvider.tsx";
@@ -22,24 +22,24 @@ function makeEdition(overrides = {}) {
 // Execute the real route and its JSX with only the catalogue and Next boundary
 // stubbed. Unexpected imports fail closed, so this cannot reach a database.
 const source = await readFile(new URL("../app/festivals/[slug]/[year]/page.tsx", import.meta.url), "utf8");
-const { outputText } = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+const { code: outputText } = await transform(source, {
+  loader: "tsx", format: "cjs", jsx: "automatic", target: "es2022",
 });
 const require = createRequire(import.meta.url);
 function loadPage(editions, artists = []) {
-  const exports = {};
+  const module = { exports: {} };
   const dependencies = {
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": { notFound() { throw new Error("NEXT_NOT_FOUND"); } },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
   };
-  new Function("require", "exports", outputText)((id) => {
+  new Function("require", "module", "exports", outputText)((id) => {
     assert.ok(Object.hasOwn(dependencies, id), `Unexpected route dependency: ${id}`);
     return dependencies[id];
-  }, exports);
-  assert.equal(exports.dynamic, "force-dynamic");
-  return exports.default;
+  }, module, module.exports);
+  assert.equal(module.exports.dynamic, "force-dynamic");
+  return module.exports.default;
 }
 
 async function renderEdition(item, editions = [item], language = "en", artists = []) {
