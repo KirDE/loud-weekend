@@ -127,9 +127,7 @@ fail closed. Generic parsers and small synthetic fixtures remain in the test sui
 
 For a migrated **local disposable test/integration database**, `npm run test:seed`
 resets the test catalogue to synthetic browser-test content. This helper is not packaged in releases
-and must never be used for production. `DB_ONLY_RELEASE=true` retains the existing
-preservation/restore receipt gate and archive checks. See
-[`docs/final-db-only-cutover-210.md`](docs/final-db-only-cutover-210.md).
+and must never be used for production. Production packaging always uses the database-owned runtime; see [runtime ownership](docs/runtime-ownership.md).
 
 Festival ingestion runs daily and selects sources according to their adaptive
 daily, three-day, weekly, or archived cadence. Run one fixture-backed source

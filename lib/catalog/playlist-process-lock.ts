@@ -2,11 +2,11 @@ import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
-/** Shared with the historical collection runner. Held through DB acknowledgement. */
-export async function acquirePlaylistProcessLock() {
+/** Held through durable provider acknowledgement. */
+async function acquireLock(name: string) {
   const directory = path.join(process.env.APP_ROOT ?? '/opt/festival-radar', 'shared/collection-jobs/playlists');
   await mkdir(directory, { recursive: true, mode: 0o750 });
-  const holder = spawn('flock', ['--exclusive', '--nonblock', path.join(directory, 'refresh.lock'),
+  const holder = spawn('flock', ['--exclusive', '--nonblock', path.join(directory, name),
     'sh', '-c', 'printf "LOCKED\\n"; cat >/dev/null'], { stdio: ['pipe', 'pipe', 'ignore'] });
   holder.stdin.on('error', () => { /* An exited lock holder cannot accept stdin. */ });
   const exited = new Promise<void>(resolve => holder.once('close', () => resolve()));
@@ -25,4 +25,8 @@ export async function acquirePlaylistProcessLock() {
     });
   } catch (error) { holder.stdin.end(); throw error; }
   return async () => { holder.stdin.end(); await exited; };
+}
+
+export async function acquireProviderProcessLock(provider: 'spotify'|'youtube_music') {
+ return acquireLock(`refresh-${provider}.lock`);
 }

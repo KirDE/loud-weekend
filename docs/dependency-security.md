@@ -17,7 +17,6 @@ legacy action bundles, rather than application imports, emitted the CI
 `DEP0040` punycode warning.
 
 Dependabot covers npm, GitHub Actions and the pinned Python requirements.
-Python artifact updates must still satisfy the release's Python3.9 import and
-wheel-metadata checks; do not bypass Requires-Python to clear an alert. Requests
-2.33/urllib3 2.8 require Python>=3.10 and are not part of the npm remediation.
-Track their migration separately rather than silently breaking playlist jobs.
+Python artifact updates must satisfy the native Python3.13 import and wheel-metadata
+checks. Requests2.33/urllib3 2.8 are already deployed with that runtime; do not
+restore the obsolete Python3.9 packaging gate or bypass Requires-Python checks.

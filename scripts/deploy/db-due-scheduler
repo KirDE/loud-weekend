@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Root-owned serialization wrapper, NOT a privilege boundary against www-data.
+# Root-owned serialization for the current database scheduler.
 [[ "$(id -u)" == 0 && $# == 2 ]] || exit 2
 commit="$1"; action="$2"
 [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || exit 2
-case "$action" in legacy|db-due|tick|health|diagnose-legacy-artifact|reset-legacy-failed|pause-legacy-timer) ;; *) exit 2 ;; esac
-# Diagnostic/recovery callers receive only fixed markers, including on local read errors.
-if [[ "$action" == health || "$action" == diagnose-legacy-artifact || "$action" == reset-legacy-failed || "$action" == pause-legacy-timer ]]; then exec 2>/dev/null; fi
+case "$action" in tick|health) ;; *) exit 2 ;; esac
+[[ "$action" != health ]] || exec 2>/dev/null
 root=/opt/festival-radar
 state=/var/lib/festival-radar-scheduler
 release="$root/releases/$commit"
@@ -14,18 +13,8 @@ exec 9>/run/festival-radar-activation.lock
 flock -n 9 || exit 5
 [[ "$(readlink -f "$root/current")" == "$release" && "$(cat "$release/DEPLOYED_COMMIT")" == "$commit" ]] || exit 4
 [[ -d "$state" && ! -L "$state" && "$(stat -c %u:%a "$state")" == 0:755 ]] || exit 4
-mode_file="$state/mode"
-read_mode() {
-  [[ -f "$mode_file" && ! -L "$mode_file" && "$(stat -c %u:%a "$mode_file")" == 0:644 ]] || return 1
-  mode="$(cat "$mode_file")"
-  [[ "$mode" == legacy || "$mode" == db-due ]]
-}
-legacy_timer=festival-radar-collection-ingestion.timer
-legacy_service=festival-radar-collection@ingestion.service
 due_timer=festival-radar-db-due.timer
 due_service=festival-radar-db-due@tick.service
-# Query only fixed systemd properties. Unknown, duplicate, malformed or failed
-# queries are error sentinels, never evidence that a fetching path is inactive.
 unit_status() {
   local unit="$1" kind="$2" record line load='' active='' enabled=''
   local load_seen=0 active_seen=0 enabled_seen=0
@@ -50,70 +39,8 @@ unit_status() {
     case "$enabled" in enabled|disabled) unit_enabled="$enabled" ;; esac
   fi
 }
-if [[ "$action" == diagnose-legacy-artifact ]]; then
-  # Exact deployed code and activation lock were checked above. No unit action.
-  record="$(timeout --signal=TERM --kill-after=2s 5s systemctl show --all --property=LoadState,ActiveState,Result,ExecMainCode,ExecMainStatus,ExecMainStartTimestamp "$legacy_service" 2>/dev/null | tr '\000' '\001' | head -c 641)" || record=
-  result="$(printf '%s' "$record" | timeout --signal=TERM --kill-after=2s 8s /usr/sbin/runuser -u www-data -- "$release/.runtime/node" "$release/scripts/deploy/diagnose-legacy-ingestion.mjs" 2>/dev/null | head -c 257)" || result=
-  if [[ "$result" =~ ^DB_DUE_LEGACY_ARTIFACT\ status=(unknown|current-temp|current-success-artifact|current-other-artifact|retained-success-no-current-artifact|no-artifact|inconclusive)$ ]]; then
-    printf '%s\n' "$result"
-  else
-    printf 'DB_DUE_LEGACY_ARTIFACT status=unknown\n'
-  fi
-  exit 0
-fi
 if [[ "$action" == health ]]; then
-  # One property snapshot for the legacy oneshot; never relay property text.
-  legacy_failure_status() {
-    local record line load='' active='' result='' code='' status=''
-    local load_seen=0 active_seen=0 result_seen=0 code_seen=0 status_seen=0
-    legacy_service_active=error; legacy_service_result=error; legacy_service_exit_status=error
-    if ! record="$(systemctl show --all --property=LoadState,ActiveState,Result,ExecMainCode,ExecMainStatus "$legacy_service" 2>/dev/null | tr '\000' '\001')"; then return 0; fi
-    [[ ${#record} -le 512 && "$record" != *$'\001'* ]] || return 0
-    while IFS= read -r line; do
-      case "$line" in
-        LoadState=*) (( load_seen == 0 )) || return 0; load_seen=1; load="${line#LoadState=}" ;;
-        ActiveState=*) (( active_seen == 0 )) || return 0; active_seen=1; active="${line#ActiveState=}" ;;
-        Result=*) (( result_seen == 0 )) || return 0; result_seen=1; result="${line#Result=}" ;;
-        ExecMainCode=*) (( code_seen == 0 )) || return 0; code_seen=1; code="${line#ExecMainCode=}" ;;
-        ExecMainStatus=*) (( status_seen == 0 )) || return 0; status_seen=1; status="${line#ExecMainStatus=}" ;;
-        *) return 0 ;;
-      esac
-    done <<< "$record"
-    (( load_seen == 1 && active_seen == 1 )) || return 0
-    # Missing units may omit all service properties, or expose the complete
-    # canonical default trio. Partial or nondefault properties are not missing.
-    if [[ "$load" == not-found && "$active" == inactive ]]; then
-      if (( result_seen + code_seen + status_seen != 0 )); then
-        (( result_seen == 1 && code_seen == 1 && status_seen == 1 )) || return 0
-        [[ "$result" == success && "$code" == 0 && "$status" == 0 ]] || return 0
-      fi
-      legacy_service_active=missing; legacy_service_result=unknown; legacy_service_exit_status=unknown
-      return 0
-    fi
-    [[ "$load" == loaded ]] || return 0
-    (( result_seen == 1 && code_seen == 1 && status_seen == 1 )) || return 0
-    [[ -n "$result" && "$code" =~ ^[0-6]$ && "$status" =~ ^(0|[1-9][0-9]{0,2})$ ]] || return 0
-    (( status <= 255 )) || return 0
-    case "$active" in
-      inactive|active|failed) legacy_service_active="$active" ;;
-      activating|deactivating|reloading|refreshing|maintenance)
-        legacy_service_active=unknown; legacy_service_result=unknown; legacy_service_exit_status=unknown; return 0 ;;
-      *) return 0 ;;
-    esac
-    legacy_service_result=unknown; legacy_service_exit_status=unknown
-    case "$result" in
-      success|resources|protocol|timeout|exit-code|signal|core-dump|watchdog|start-limit-hit|oom-kill|exec-condition)
-        legacy_service_result="$result" ;;
-      *) return 0 ;;
-    esac
-    # waitid(2) CLD_EXITED=1: status is an exit code, not a signal number.
-    # Zero means no known exit; CLD_KILLED/DUMPED and other codes stay unknown.
-    if [[ "$code" == 1 ]]; then legacy_service_exit_status="$status"; fi
-  }
-  mode_legacy=0; mode_due=0; mode_missing=0; tick_missing=1; tick_stale=1; fetch_error=0; drain_error=0
-  if read_mode; then
-    if [[ "$mode" == legacy ]]; then mode_legacy=1; else mode_due=1; fi
-  else mode_missing=1; fi
+  tick_missing=1; tick_stale=1; fetch_error=0; drain_error=0
   if [[ -f "$state/last-tick" && ! -L "$state/last-tick" && "$(stat -c %u:%a "$state/last-tick")" == 0:644 ]]; then
     record="$(head -c 256 "$state/last-tick")"
     if [[ "$record" =~ ^([0-9]{1,12})\ ([01])\ ([01])$ ]]; then
@@ -124,132 +51,16 @@ if [[ "$action" == health ]]; then
       if (( now >= 10#$stamp && now - 10#$stamp <= 2400 )); then tick_stale=0; fi
     fi
   fi
-  unit_status "$legacy_timer" timer; legacy_enabled="$unit_enabled"; legacy_active="$unit_active"
   unit_status "$due_timer" timer; due_enabled="$unit_enabled"; due_active="$unit_active"
-  legacy_failure_status
   unit_status "$due_service" service; due_service_active="$unit_active"
-  case "$legacy_service_exit_status" in unknown|error) legacy_service_exit_status='"'"$legacy_service_exit_status"'"' ;; esac
-  printf 'DB_DUE_SCHEDULER_HEALTH {"modeLegacy":%d,"modeDbDue":%d,"modeMissing":%d,"tickMissing":%d,"tickStale":%d,"fetchError":%d,"drainError":%d,"legacyTimerEnabled":"%s","legacyTimerActive":"%s","dueTimerEnabled":"%s","dueTimerActive":"%s","legacyServiceActive":"%s","dueServiceActive":"%s","legacyServiceResult":"%s","legacyServiceExitStatus":%s}\n' "$mode_legacy" "$mode_due" "$mode_missing" "$tick_missing" "$tick_stale" "$fetch_error" "$drain_error" "$legacy_enabled" "$legacy_active" "$due_enabled" "$due_active" "$legacy_service_active" "$due_service_active" "$legacy_service_result" "$legacy_service_exit_status"
+  printf 'DB_DUE_SCHEDULER_HEALTH {"tickMissing":%d,"tickStale":%d,"fetchError":%d,"drainError":%d,"dueTimerEnabled":"%s","dueTimerActive":"%s","dueServiceActive":"%s"}\n' "$tick_missing" "$tick_stale" "$fetch_error" "$drain_error" "$due_enabled" "$due_active" "$due_service_active"
   exit 0
 fi
 lock="$root/shared/ingestion/source-fetch.lock"
 [[ -f "$lock" && ! -L "$lock" && "$(stat -c %U:%a "$lock")" == www-data:640 ]] || exit 4
 exec 8<"$lock"
 flock -n 8 || exit 5
-# Separate pause and reset operations share strict snapshots and both locks.
-# Neither operation starts a service, changes mode, or rearms a timer.
-if [[ "$action" == reset-legacy-failed || "$action" == pause-legacy-timer ]]; then
-  recovery_marker() { printf 'DB_DUE_LEGACY_RECOVERY status=%s\n' "$1"; }
-  pause_marker() { printf 'DB_DUE_LEGACY_PAUSE status=%s\n' "$1"; }
-  recovery_unit() {
-    local unit="$1" kind="$2" phase="$3" record line key value
-    local properties=LoadState,ActiveState,SubState,Job,NeedDaemonReload
-    local -A expected=([LoadState]=loaded [ActiveState]=inactive [SubState]=dead [Job]='' [NeedDaemonReload]=no)
-    local -A seen=()
-    if [[ "$kind" == timer ]]; then
-      if [[ "$action" == pause-legacy-timer && "$unit" == "$legacy_timer" && "$phase" == before ]]; then
-        expected[ActiveState]=active; expected[SubState]=waiting
-      fi
-      properties+=,UnitFileState,Unit,Persistent,UpheldBy
-      expected[UnitFileState]=disabled; expected[UpheldBy]=''
-      if [[ "$action" == pause-legacy-timer && "$unit" == "$legacy_timer" && "$phase" == before ]]; then
-        expected[UnitFileState]=enabled
-      fi
-      if [[ "$unit" == "$legacy_timer" ]]; then expected[Unit]="$legacy_service"; expected[Persistent]=yes
-      else expected[Unit]=festival-radar-db-due-scheduler.service; expected[Persistent]=no; fi
-    else
-      properties+=,Type,Restart,KillMode,RemainAfterExit,MainPID,ControlPID,ControlGroup,OnSuccess,OnFailure,UpheldBy,TriggeredBy,Triggers
-      expected[Type]=oneshot; expected[Restart]=no; expected[KillMode]=control-group; expected[RemainAfterExit]=no; expected[MainPID]=0; expected[ControlPID]=0
-      expected[ControlGroup]=''; expected[OnSuccess]=''; expected[OnFailure]=''; expected[UpheldBy]=''; expected[Triggers]=''
-      expected[TriggeredBy]=''
-      if [[ "$unit" == festival-radar-db-due-scheduler.service ]]; then expected[TriggeredBy]="$due_timer"; fi
-      if [[ "$unit" == "$legacy_service" ]]; then
-        properties+=,Result,ExecMainCode,ExecMainStatus
-        if [[ "$action" == pause-legacy-timer ]]; then
-          properties+=,ExecMainStartTimestampMonotonic,ExecMainExitTimestampMonotonic
-          expected[ExecMainStartTimestampMonotonic]=''; expected[ExecMainExitTimestampMonotonic]=''
-        fi
-        expected[TriggeredBy]="$legacy_timer"
-        # Narrow opt-in for the observed retained exit, not a diagnosis of cause.
-        expected[Result]=success; expected[ExecMainCode]=1; expected[ExecMainStatus]=1
-        if [[ "$phase" == before || "$action" == pause-legacy-timer ]]; then expected[ActiveState]=failed; expected[SubState]=failed; expected[Result]=exit-code; fi
-        # reset-failed may retain the main-process exit fields or clear them.
-        # Post-verification checks state/result and accepts either canonical pair.
-      fi
-    fi
-    if ! record="$(systemctl show --all --property="$properties" "$unit" 2>/dev/null | tr '\000' '\001')"; then return 1; fi
-    [[ ${#record} -le 1024 && "$record" != *$'\001'* ]] || return 1
-    while IFS= read -r line; do
-      [[ "$line" == *=* ]] || return 1
-      key="${line%%=*}"; value="${line#*=}"
-      # Validate the key before indexing associative arrays.
-      case "$key" in LoadState|ActiveState|SubState|Job|NeedDaemonReload|UnitFileState|Unit|Persistent|UpheldBy|Type|Restart|KillMode|RemainAfterExit|MainPID|ControlPID|ControlGroup|OnSuccess|OnFailure|TriggeredBy|Triggers|Result|ExecMainCode|ExecMainStatus|ExecMainStartTimestampMonotonic|ExecMainExitTimestampMonotonic) ;; *) return 1 ;; esac
-      [[ -v expected[$key] && ! -v seen[$key] ]] || return 1
-      seen[$key]="$value"
-    done <<< "$record"
-    (( ${#seen[@]} == ${#expected[@]} )) || return 1
-    if [[ "$unit" == "$legacy_service" && "$action" == pause-legacy-timer ]]; then
-      for key in ExecMainStartTimestampMonotonic ExecMainExitTimestampMonotonic; do
-        [[ "${seen[$key]}" =~ ^[1-9][0-9]{0,19}$ ]] || return 1
-        if [[ "$phase" == before ]]; then
-          pause_fingerprint[$key]="${seen[$key]}"
-        else
-          [[ "${seen[$key]}" == "${pause_fingerprint[$key]}" ]] || return 1
-        fi
-        expected[$key]="${seen[$key]}"
-      done
-    fi
-    if [[ "$unit" == "$legacy_service" && "$action" == reset-legacy-failed && "$phase" == after ]]; then
-      if [[ "${seen[ExecMainCode]}" == 0 && "${seen[ExecMainStatus]}" == 0 ]]; then
-        expected[ExecMainCode]=0; expected[ExecMainStatus]=0
-      fi
-    fi
-    for key in "${!expected[@]}"; do [[ "${seen[$key]}" == "${expected[$key]}" ]] || return 1; done
-  }
-  recovery_snapshot() {
-    read_mode && [[ "$mode" == legacy ]] || return 1
-    recovery_unit "$legacy_timer" timer "$1" &&
-      recovery_unit "$due_timer" timer "$1" &&
-      recovery_unit "$legacy_service" service "$1" &&
-      recovery_unit "$due_service" service "$1" &&
-      recovery_unit festival-radar-db-due-scheduler.service service "$1" &&
-      recovery_unit festival-radar-db-due@ingest.service service "$1"
-  }
-  if [[ "$action" == pause-legacy-timer ]]; then
-    declare -A pause_fingerprint=()
-    # stop precedes disable: no enable/start, no unit reset and no mode write.
-    # A failed or partial operation cannot be retried without fresh inspection.
-    if ! recovery_snapshot before; then pause_marker refused; exit 6; fi
-    if ! systemctl stop "$legacy_timer" >/dev/null 2>&1; then pause_marker stop-error; exit 6; fi
-    if ! systemctl disable "$legacy_timer" >/dev/null 2>&1; then pause_marker disable-error; exit 6; fi
-    if ! recovery_snapshot after; then pause_marker postcheck-error; exit 6; fi
-    pause_marker paused
-    exit 0
-  fi
-  if ! recovery_snapshot before; then recovery_marker refused; exit 6; fi
-  if ! systemctl reset-failed "$legacy_service" >/dev/null 2>&1; then recovery_marker reset-error; exit 6; fi
-  if ! recovery_snapshot after; then recovery_marker postcheck-error; exit 6; fi
-  recovery_marker reset
-  exit 0
-fi
-inactive() { [[ "$(systemctl show --property=ActiveState --value "$1" 2>/dev/null)" == inactive ]]; }
-write_mode() {
-  local temp
-  temp="$(mktemp "$state/.mode.XXXXXXXX")"
-  printf '%s\n' "$1" > "$temp"
-  chmod 0644 "$temp"
-  mv -fT "$temp" "$mode_file"
-}
-fail_closed() {
-  # Remove the gate first, even if stopping systemd subsequently fails.
-  rm -f -- "$mode_file"
-  systemctl disable --now "$legacy_timer" "$due_timer" >/dev/null 2>&1 || true
-  systemctl stop "$legacy_service" "$due_service" >/dev/null 2>&1 || true
-  echo 'scheduler transition failed; both paths inhibited' >&2
-}
 if [[ "$action" == tick ]]; then
-  read_mode && [[ "$mode" == db-due ]] || exit 73
-  inactive "$legacy_timer" && inactive "$legacy_service" || exit 6
   audit_dir=/run/festival-radar-db-due
   if [[ ! -e "$audit_dir" && ! -L "$audit_dir" ]]; then install -d -o root -g root -m 0700 "$audit_dir"; fi
   [[ ! -L "$audit_dir" && "$(stat -c %u:%a "$audit_dir")" == 0:700 ]] || exit 6
@@ -275,29 +86,3 @@ if [[ "$action" == tick ]]; then
   (( status == 0 && fetch_error == 0 && drain_error == 0 ))
   exit
 fi
-# Locks span every gate, mode write and timer activation. Failure never rolls
-# back automatically to a fetching path; explicit reviewed recovery is required.
-trap 'fail_closed' ERR
-systemctl disable --now "$legacy_timer" "$due_timer" >/dev/null 2>&1
-systemctl stop "$legacy_service" "$due_service" >/dev/null 2>&1
-inactive "$legacy_timer"
-inactive "$legacy_service"
-inactive "$due_timer"
-inactive "$due_service"
-write_mode "$action"
-if [[ "$action" == db-due ]]; then
-  # Public, count-free closure probe also checks the running application's SHA.
-  response="$(curl --silent --show-error --max-time 10 http://127.0.0.1:3100/api/ingestion/run/)"
-  [[ "$response" == "{\"legacyRouteInactive\":true,\"commit\":\"$commit\"}" ]]
-  systemctl enable --now "$due_timer" >/dev/null 2>&1
-  [[ "$(systemctl is-enabled "$due_timer")" == enabled ]]
-  [[ "$(systemctl show --property=ActiveState --value "$due_timer")" == active ]]
-else
-  response="$(curl --silent --show-error --max-time 10 http://127.0.0.1:3100/api/ingestion/run/)"
-  [[ "$response" == "{\"legacyRouteInactive\":false,\"commit\":\"$commit\"}" ]]
-  systemctl enable --now "$legacy_timer" >/dev/null 2>&1
-  [[ "$(systemctl is-enabled "$legacy_timer")" == enabled ]]
-  [[ "$(systemctl show --property=ActiveState --value "$legacy_timer")" == active ]]
-fi
-trap - ERR
-echo 'scheduler transition completed'

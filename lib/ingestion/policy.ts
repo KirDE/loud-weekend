@@ -1,3 +1,4 @@
+import {ROSKILDE_HOME,ROSKILDE_REVIEW} from "./adapters/roskilde.ts";
 import { ROADBURN_ARTIST_REVIEW } from "./adapters/roadburn.ts";
 import { ALPEN_ARTIST_REVIEW } from './adapters/alpen-flair.ts';
 import { isCopenhellCurrentSource, COPENHELL_REVIEW } from "./adapters/copenhell-current.ts";
@@ -52,7 +53,9 @@ export function evaluateCandidate(current: Festival, candidate: FestivalCandidat
     current.editionYear === candidate.observedEditionYears[0] && candidate.observedEditionYears.length === 1 &&
     isCopenhellCurrentSource({ festivalSlug: candidate.festivalSlug, url: candidate.sourceUrl, editionYear: current.editionYear, strategies: ["official_markup"], enabled: true, refreshPolicy: "weekly" }) &&
     !changes.some(change => ["lineup", "headliners"].includes(change.field));
+  const unchangedRoskilde = current.slug === "roskilde" && candidate.festivalSlug === current.slug && candidate.sourceUrl === ROSKILDE_HOME && candidate.observedEditionYears.length === 1 && candidate.observedEditionYears[0] === current.editionYear && candidate.artistListMode === "additive" && !changes.some(c => ["lineup","headliners"].includes(c.field));
   const reviewReasons = new Set(warnings.filter(warning =>
+    !(unchangedRoskilde && warning === ROSKILDE_REVIEW) &&
     !(unchangedMystic && warning === MYSTIC_ARTIST_REVIEW) &&
     !(unchangedRoadburn && warning === ROADBURN_ARTIST_REVIEW) &&
     !(candidate.festivalSlug === "alpen-flair" && !changes.some(change => ["lineup", "headliners"].includes(change.field)) && warning === ALPEN_ARTIST_REVIEW) &&
@@ -60,7 +63,7 @@ export function evaluateCandidate(current: Festival, candidate: FestivalCandidat
     !(unchangedLeyendas && warning === LEYENDAS_ARTIST_REVIEW) &&
     !(unchangedNovaLineup && warning === "Agent review required before lineup-triggered provider activity")));
   // Dynamo/Tons of Rock/Heavy Week-End retain their separate provider policy.
-  if (["dynamo-metal-fest", "tons-of-rock", "heavy-weekend"].includes(current.slug) && changes.some(change => change.kind === "artist_added" || change.kind === "headliner_added"))
+  if (["dynamo-metal-fest", "tons-of-rock", "heavy-weekend", "barcelona-rock-fest"].includes(current.slug) && changes.some(change => change.kind === "artist_added" || change.kind === "headliner_added"))
     reviewReasons.add("Agent review required before lineup-triggered provider activity");
   // Verified official RFP announcements may use normal publication/playlist
   // processing. A successful parse alone is not enough: keep provenance,
@@ -84,7 +87,7 @@ export function evaluateCandidate(current: Festival, candidate: FestivalCandidat
     reviewReasons.add("Impericon billing promotion requires reviewed reclassification");
   if(candidate.festivalSlug==='graspop' && changes.some(change=>['lineup','headliners'].includes(change.field))) {
     if(!isGraspopAnnouncement(candidate,current.editionYear ?? Number(current.startDate?.slice(0,4))))reviewReasons.add('Graspop additions require verified current official announcement evidence');
-    if(candidate.headliners?.some(name=>current.lineup.some(old=>old.toLowerCase()===name.toLowerCase())))reviewReasons.add('Graspop billing promotion requires reviewed reclassification');
+    if(candidate.headliners?.some(name=>current.lineup.some(old=>old.toLowerCase()===name.toLowerCase())) || candidate.lineup?.some(name=>[...current.headliners,...(candidate.headliners ?? [])].some(old=>old.toLowerCase()===name.toLowerCase())))reviewReasons.add('Graspop billing changes require reviewed reclassification');
   }
   if (candidate.festivalSlug !== current.slug) reviewReasons.add("Candidate slug does not match the current festival");
   if (candidate.festivalSlug === "idays" && changes.some(change => ["lineup", "headliners"].includes(change.field))) {

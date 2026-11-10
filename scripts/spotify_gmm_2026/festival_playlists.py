@@ -151,6 +151,8 @@ def artist_matches_selected(name: str, query_name: str, selected_keys: set[str])
 
 
 def _spotify_request(method, url, *, params=None, payload=None, retries=6):
+    if method != 'GET':
+        raise RuntimeError('Playlist discovery is read-only')
     for attempt in range(retries + 1):
         headers = auth_headers()
         if payload is not None:
@@ -183,20 +185,6 @@ def _spotify_request(method, url, *, params=None, payload=None, retries=6):
 def spotify_get(url, params=None):
     response = _spotify_request('GET', url, params=params)
     return response.json()
-
-
-def spotify_post(url, payload):
-    response = _spotify_request('POST', url, payload=payload)
-    return response.json() if response.text else {}
-
-
-def spotify_put(url, payload):
-    response = _spotify_request('PUT', url, payload=payload)
-    return response.json() if response.text else {}
-
-
-def update_playlist_details(playlist_id, name, description):
-    spotify_put(f'https://api.spotify.com/v1/playlists/{playlist_id}', {'name': name, 'description': description, 'public': True})
 
 
 def clean_name(text: str) -> str:
@@ -658,16 +646,6 @@ def get_followers(artist_name, artist_id: str | None = None):
     return followers
 
 
-def playlist_replace_all(playlist_id, uris):
-    spotify_put(f'https://api.spotify.com/v1/playlists/{playlist_id}/tracks', {'uris': uris[:100]})
-    for idx in range(100, len(uris), 100):
-        spotify_post(f'https://api.spotify.com/v1/playlists/{playlist_id}/tracks', {'uris': uris[idx:idx + 100]})
-
-
-def create_playlist(user_id, name, description):
-    return spotify_post(f'https://api.spotify.com/v1/users/{user_id}/playlists', {'name': name, 'description': description, 'public': True})
-
-
 def explain_track_choice(track: dict, source: str, artist: str, trigger: str) -> dict:
     return {
         'name': track['name'],
@@ -829,16 +807,9 @@ def build_playlist(festival: Festival, user_id: str, *, persist_report=True):
         })
         print(f'[{festival.key}] {artist}: {len(final_tracks)} tracks')
 
-    if REPORT_ONLY:
-        playlist_id = festival.existing_playlist_id or f'{festival.key}-report-only'
-        playlist_url = f'https://open.spotify.com/playlist/{playlist_id}' if festival.existing_playlist_id else ''
-    elif festival.existing_playlist_id:
-        playlist_id = festival.existing_playlist_id
-        update_playlist_details(playlist_id, festival.playlist_name, festival.description)
-        playlist_replace_all(playlist_id, playlist_uris)
-        playlist_url = f'https://open.spotify.com/playlist/{playlist_id}'
-    else:
-        raise RuntimeError('A persisted DB playlist ID is required; automatic creation is disabled')
+    # Discovery never writes to a provider; apply is owned by the fenced worker.
+    playlist_id = festival.existing_playlist_id or f'{festival.key}-report-only'
+    playlist_url = f'https://open.spotify.com/playlist/{playlist_id}' if festival.existing_playlist_id else ''
 
     output = {
         'slug': festival.key,
@@ -932,32 +903,3 @@ def parse_canonical_festivals(catalog):
             existing_playlist_id=(entry.get('playlistUrl') or '').rstrip('/').split('/')[-1] or None,
         ))
     return season, festivals, skipped
-
-
-def write_catalog_summary(season: int, festivals: list[Festival], skipped: list[dict]):
-    summary = {
-        'generated_at': datetime.utcnow().isoformat(timespec='seconds') + 'Z',
-        'season': season,
-        'catalog_count': len(festivals) + len(skipped),
-        'eligible': [festival.key for festival in festivals],
-        'skipped': skipped,
-    }
-    (REPORT_DIR / '_catalog_summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding='utf-8')
-
-
-def main():
-    if not CACHE_ONLY_SETLIST:
-        require_setlist_api_key()
-    season, festivals, skipped = load_canonical_festivals()
-    selected = os.environ.get('FESTIVALS')
-    if selected:
-        allowed = {item.strip() for item in selected.split(',') if item.strip()}
-        festivals = [festival for festival in festivals if festival.key in allowed]
-    write_catalog_summary(season, festivals, skipped)
-    user_id = '' if REPORT_ONLY else spotify_get('https://api.spotify.com/v1/me')['id']
-    for festival in festivals:
-        build_playlist(festival, user_id)
-
-
-if __name__ == '__main__':
-    main()
