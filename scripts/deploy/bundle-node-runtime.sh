@@ -2,6 +2,12 @@
 set -euo pipefail
 
 runtime="${1:?usage: bundle-node-runtime.sh RUNTIME_DIRECTORY}"
+expected_node="$(cat "$(dirname "$0")/../../.node-version")"
+actual_node="$(node --version)"
+if [[ "$actual_node" != "v$expected_node" ]]; then
+  echo "Node runtime mismatch: expected v$expected_node, got $actual_node" >&2
+  exit 1
+fi
 mkdir -p "$runtime"
 
 cp "$(command -v node)" "$runtime/node"

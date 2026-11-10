@@ -37,3 +37,13 @@ successful completion is missing, failed, or older than twenty minutes. A failed
 unit is retried on the next timer interval; after correcting the underlying
 secret, provider, or application failure, run `systemctl start
 festival-radar-notifications.service` and verify the health endpoint returns 200.
+
+## Node.js runtime
+
+Development, Quality CI and production builds use Node.js 26.13.0, pinned in
+`.node-version`. The supported package engine is Node.js >=26.13.0 <27 and
+`@types/node` tracks major 26. The release bundles the builder’s Node binary
+and npm; web, importer and playlist workers use that release-local runtime,
+not the host-wide Node installation. Runtime packaging rejects a builder whose
+Node version differs from `.node-version`. Roll back using the previous release
+with its own bundled runtime; do not replace the system Node binary.

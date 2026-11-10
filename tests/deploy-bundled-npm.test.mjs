@@ -39,6 +39,10 @@ test("release bundles a working npm that needs no system npm on PATH", async () 
     const packager = await readFile("scripts/deploy/package-release.sh", "utf8");
     assert.match(packager, /bundle-node-runtime\.sh" "\$stage\/app\/\.runtime"/);
     execFileSync("bash", [path.resolve("scripts/deploy/bundle-node-runtime.sh"), runtime], { env: process.env });
+    assert.equal(
+      execFileSync(path.join(runtime, "node"), ["--version"], { encoding: "utf8" }).trim(),
+      "v" + (await readFile(".node-version", "utf8")).trim(),
+    );
     const bundledVersion = execFileSync(
       path.join(runtime, "node"),
       [path.join(runtime, "npm", "bin", "npm-cli.js"), "--version"],
@@ -57,6 +61,24 @@ test("release bundles a working npm that needs no system npm on PATH", async () 
       ],
       { cwd: application, env: { PATH: "/nonexistent" } },
     );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("runtime packaging rejects a mismatched builder before creating the artifact", async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "runtime-mismatch-"));
+  try {
+    const { chmod, access } = await import("node:fs/promises");
+    const fakeNode = path.join(temporary, "node");
+    await writeFile(fakeNode, "#!/bin/sh\nprintf 'v22.23.4\\n'\n");
+    await chmod(fakeNode, 0o755);
+    const runtime = path.join(temporary, "artifact");
+    assert.throws(() => execFileSync("bash", ["scripts/deploy/bundle-node-runtime.sh", runtime], {
+      env: { ...process.env, PATH: temporary + path.delimiter + process.env.PATH },
+      stdio: "pipe",
+    }), /Node runtime mismatch/);
+    await assert.rejects(access(runtime), { code: "ENOENT" });
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
