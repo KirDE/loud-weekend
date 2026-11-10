@@ -48,7 +48,7 @@ function detailName(html: string, year: number): string | undefined {
   const headings = [...document.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)].map(m => text(m[1]));
   if (!match || Number(match[2]) !== year || headings.length !== 1 || headings[0].toLowerCase() !== match[1].toLowerCase()) return undefined;
   // Use explicit title/heading text, never URL slugs or logo filenames.
-  return headings[0] === headings[0].toUpperCase() ? headings[0].toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, space, letter) => space + letter.toUpperCase()) : headings[0];
+  return headings[0];
 }
 
 // Read only explicit linked artist labels. Logo pixels, poster composition,
