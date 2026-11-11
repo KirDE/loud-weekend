@@ -118,3 +118,11 @@ test('quoted attribute values cannot impersonate a pinned logo src', () => {
  quiet(svgFixture.replaceAll(`src="${pinned}"`, `data-src="/unused.svg" src="${pinned}"`));
  quiet(svgFixture.replaceAll(`src="${pinned}"`, `src=${pinned} `));
 });
+
+test('only known header elements are accepted; image inputs and unknown widgets trigger review', () => {
+ for (const base of [svgFixture, fixture]) {
+  for (const markup of ['<input type="image" src="/lineup-2027.jpg">', '<input TYPE=image SRC=/lineup-2028.webp>', '<button><input type="image" src="/poster.jpg"></button>', '<festival-poster src="/announcement.jpg"></festival-poster>', '<template><img src="/poster.jpg"></template>', '<svg><animate attributeName="d" values="M0 0H300V200H0Z"/></svg>']) {
+   review(base.replace('</header>', `${markup}</header>`));
+  }
+ }
+});

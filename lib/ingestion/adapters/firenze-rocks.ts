@@ -32,9 +32,10 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   }
   const headers = [...html.matchAll(/<header\b[^>]*>([\s\S]*?)<\/header>/gi)];
   if (headers.length !== 1 || text(headers[0][1]) !== "Switch language. Current language is Italiano IT") return drift;
-  // A picture source can override an unchanged img with edition artwork.
-  // Unknown responsive header evidence is not a verified holding page.
-  if (/<(?:source|video|audio|iframe|object|embed|canvas|image|foreignObject|use|style|link)\b/i.test(headers[0][0]) ||
+  // Accept only the observed shell elements, not an expanding media denylist.
+  // New controls (including image inputs), responsive sources, SVG animation,
+  // custom widgets and all other unknown elements must return to review.
+  if (/<\/?(?!(?:header|div|nav|a|img|label|svg|path|span)(?=[\s/>]))[a-z][^>]*>/i.test(headers[0][0]) ||
       /\bstyle\s*=\s*(?:"[^"]*(?:url\s*\(|background|content\s*:)|'[^']*(?:url\s*\(|background|content\s*:)|[^\s"'<>]*(?:url\s*\(|background|content\s*:))/i.test(headers[0][0])) return drift;
   const vectors = [...headers[0][1].matchAll(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi)];
   if (vectors.length !== 1 || attribute(vectors[0][0], "viewBox") !== "0 0 24 24" ||
