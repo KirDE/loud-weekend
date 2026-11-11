@@ -49,7 +49,7 @@ test('successful no-announcement checks reset health and remain unchanged, not r
 });
 
 const svgFixture=await readFile(new URL('./fixtures/official-markup/firenze-rocks-holding-svg.html',import.meta.url),'utf8');
-test('actual November generic SVG logo holding shell is quiet and provider-inert',()=>{quiet(svgFixture);quiet(svgFixture.replace('/u4lp0w3n/','/laterasset/'),{...source,editionYear:2028});});
+test('actual November generic SVG logo holding shell is quiet and provider-inert',()=>{quiet(svgFixture);quiet(svgFixture,{...source,editionYear:2028});});
 test('generic brand-logo exception rejects foreign/credentialed/query/edition/poster logo variants',()=>{
  for(const bad of ['https://evil.invalid/networksites/a/logo.svg','https://user@networksites.livenationinternational.com/networksites/a/logo.svg','https://networksites.livenationinternational.com/networksites/a/logo.svg?year=2027','https://networksites.livenationinternational.com/networksites/a/poster.svg','https://networksites.livenationinternational.com/networksites/a/logo-2027.svg']){
   review(svgFixture.replaceAll('https://networksites.livenationinternational.com/networksites/u4lp0w3n/logo.svg',bad));
@@ -59,4 +59,10 @@ test('generic SVG route cannot hide a responsive announcement image',()=>review(
 test('real SVG shell still escalates new facts, media, ticket and metadata announcements',()=>{
  for(const h of [svgFixture.replace('</main>','<h3>2027 LINEUP ANNOUNCED</h3></main>'),svgFixture.replace('</main>','<img src="/poster.jpg"></main>'),svgFixture.replace('</main>','<a href="/tickets">Tickets</a></main>'),svgFixture.replace('video-sito-mob.mp4','announcement.mp4'),svgFixture.replace('name="description" content="Home | Firenze Rocks"','name="description" content="2027 lineup announced"')])review(h);
  const c=quiet(svgFixture);const r=evaluateCandidate({...current,status:'confirmed',lineup:['Previously Verified'],ticketsUrl:'https://example.invalid/saved'},c);assert.deepEqual(r.changes,[]);assert.deepEqual(r.reviewReasons,[]);
+});
+
+test('unknown SVG asset cannot silently hide a header-only edition announcement',()=>{
+ for(const id of ['laterasset','announcement2027']) review(svgFixture.replaceAll('/u4lp0w3n/',`/${id}/`));
+ // A single changed responsive header logo must also trigger review.
+ review(svgFixture.replace('/u4lp0w3n/','/newedition/'));
 });
