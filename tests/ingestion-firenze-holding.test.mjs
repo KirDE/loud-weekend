@@ -141,3 +141,20 @@ test('only known presentation-only header CSS is accepted, not image-bearing fun
   }
  }
 });
+
+test('social links cannot conceal extra media or widgets beside their icon', () => {
+ for (const base of [svgFixture, fixture]) {
+  for (const markup of ['<video src="/lineup-2027.mp4"></video>', '<input type="image" src="/lineup-2027.jpg">', '<svg><path d="M0 0H300V200H0Z"></path></svg>', '<div><img src="/poster.jpg"></div>', '<iframe src="/tickets"></iframe>']) {
+   review(base.replace(/(<a\b[^>]*href="https:\/\/www.facebook.com[^>]*>)/i, `$1${markup}`));
+  }
+ }
+});
+test('header controls must retain their count, home destinations and known accessible names', () => {
+ for (const base of [svgFixture, fixture]) {
+  for (const markup of ['<a href="/tickets" aria-label="Firenze Rocks 2027 tickets on sale"></a>', '<a href="/tickets" title="Tickets"></a>', '<a href="/tickets"></a>']) review(base.replace('</header>',`${markup}</header>`));
+  review(base.replace('href="/"','href="/tickets"'));
+  review(base.replace('href="/"','href="/" aria-label="Tickets on sale"'));
+  review(base.replace('aria-label="Switch language. Current language is Italiano"','aria-label="Tickets on sale"'));
+  review(base.replace('data-testid="lang-selector"','href="/tickets" data-testid="lang-selector"'));
+ }
+});

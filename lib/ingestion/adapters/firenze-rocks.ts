@@ -46,6 +46,22 @@ export function firenzeRocks(html: string, source: FestivalSource) {
     const declarations = attribute(tag[0], "style").split(";").map(value => value.trim()).filter(Boolean);
     if (!declarations.every(value => /^(?:color\s*:\s*transparent|--Paper-shadow\s*:\s*var\(\s*--mui-shadows-\d+\s*\)|--Paper-overlay\s*:\s*var\(\s*--mui-overlays-\d+\s*\))$/i.test(value))) return drift;
   }
+  // The only controls are two home-logo links and the language selector.
+  // Empty ticket anchors still carry official evidence through href/ARIA.
+  const controls = [...headers[0][1].matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)];
+  if (controls.length !== 3 || !controls.every((control, i) => {
+    const opening = control[0].match(/^<a\b[^>]*>/i)?.[0] ?? "";
+    if (i < 2) return attribute(opening, "href") === "/" &&
+      /^<a\b[^>]*>\s*<img\b[^>]*>\s*<\/a>$/i.test(control[0]);
+    return !attribute(opening, "href") && attribute(opening, "data-testid") === "lang-selector" &&
+      attribute(opening, "aria-label") === "Switch language. Current language is Italiano";
+  })) return drift;
+  for (const tag of headers[0][0].matchAll(/<[a-z][^>]*>/gi)) {
+    const expectedLabel = /^<nav\b/i.test(tag[0]) ? "Primario" :
+      /^<a\b/i.test(tag[0]) && attribute(tag[0], "data-testid") === "lang-selector" ? "Switch language. Current language is Italiano" : "";
+    if (attribute(tag[0], "aria-label") !== expectedLabel ||
+        ["title", "aria-labelledby", "aria-describedby", "aria-description"].some(name => attribute(tag[0], name))) return drift;
+  }
   const vectors = [...headers[0][1].matchAll(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi)];
   if (vectors.length !== 1 || attribute(vectors[0][0], "viewBox") !== "0 0 24 24" ||
       !/^<svg\b[^>]*>\s*<path\b[^>]*>(?:\s*<\/path>)?\s*<\/svg>$/i.test(vectors[0][0]) ||
@@ -80,6 +96,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
     try { link = new URL(attribute(a[0], "href")); } catch { return false; }
     const images = [...a[0].matchAll(/<img\b[^>]*>/gi)];
     return link.origin + link.pathname === expectedSocials[i] && !link.username && !link.password &&
+      /^<a\b[^>]*>\s*<img\b[^>]*>\s*<\/a>$/i.test(a[0]) &&
       images.length === 1 && ["width", "height"].every(key => Number(attribute(images[0][0], key)) > 0 && Number(attribute(images[0][0], key)) <= 70) &&
       /^(?:|Facebook|Instagram|X)$/i.test(attribute(images[0][0], "alt")) &&
       /^https:\/\/networksites\.livenationinternational\.com\/networksites\/[^/]+\/image\.png(?:\?|$)/i.test(attribute(images[0][0], "src")) && !text(a[0]);
