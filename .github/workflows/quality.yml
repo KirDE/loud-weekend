@@ -68,13 +68,26 @@ jobs:
       - run: npm run test:admin:integration
       - run: npx prisma migrate reset --force
       - run: npm run test:seed
-      # The hosted runner's Azure mirror can fail DNS even when upstream is
-      # reachable. Use the signed Ubuntu archive directly for browser packages.
-      - name: Use upstream Ubuntu archive for browser dependencies
+      # Probe before changing sources: hosted runner DNS can lose both Azure
+      # and archive.ubuntu.com. APT still verifies Ubuntu's original signing key.
+      - name: Select a reachable signed Ubuntu mirror for browser dependencies
         run: |
-          sudo sed -i \
-            -e 's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu|g' \
-            -e 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+          ubuntu_mirror=''
+          for candidate in \
+            https://archive.ubuntu.com/ubuntu \
+            https://azure.archive.ubuntu.com/ubuntu \
+            https://mirrors.edge.kernel.org/ubuntu \
+            https://mirror.hetzner.com/ubuntu/packages; do
+            if curl --fail --silent --show-error --location --max-time 15 \
+              "$candidate/dists/noble/InRelease" -o "$RUNNER_TEMP/ubuntu-InRelease" \
+              && grep -q '^-----BEGIN PGP SIGNED MESSAGE-----' "$RUNNER_TEMP/ubuntu-InRelease"; then
+              ubuntu_mirror="$candidate"
+              break
+            fi
+          done
+          test -n "$ubuntu_mirror" || { echo 'No Ubuntu mirror is reachable'; exit 1; }
+          echo "Selected Ubuntu mirror: $ubuntu_mirror"
+          sudo sed -i -E "s|^URIs:.*|URIs: $ubuntu_mirror|" \
             /etc/apt/sources.list.d/ubuntu.sources
       - run: npx playwright install --with-deps chromium
       - run: npm run test:admin:e2e
