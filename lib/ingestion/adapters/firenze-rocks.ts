@@ -27,6 +27,10 @@ export function firenzeRocks(html: string, source: FestivalSource) {
       /["']@type["']\s*:\s*["'](?:MusicEvent|Festival|Event)["']/i.test(html)) return drift;
   for (const meta of html.matchAll(/<meta\b[^>]*>/gi)) {
     const kind = attribute(meta[0], "name") || attribute(meta[0], "property");
+    // The visually verified share card is generic branding too. Unknown image
+    // metadata can be an image-only edition announcement even on this shell.
+    if (/^(?:og:image|twitter:image)(?::(?:url|src|secure_url))?$/i.test(kind) &&
+        attribute(meta[0], "content") !== "https://networksites.livenationinternational.com/networksites/vrudcnfc/firenze-rocks-share-image.jpg") return drift;
     if (["description", "og:description", "og:title", "twitter:description", "twitter:title"].includes(kind) &&
         attribute(meta[0], "content") !== "Home | Firenze Rocks") return drift;
   }
@@ -35,8 +39,13 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   // Accept only the observed shell elements, not an expanding media denylist.
   // New controls (including image inputs), responsive sources, SVG animation,
   // custom widgets and all other unknown elements must return to review.
-  if (/<\/?(?!(?:header|div|nav|a|img|label|svg|path|span)(?=[\s/>]))[a-z][^>]*>/i.test(headers[0][0]) ||
-      /\bstyle\s*=\s*(?:"[^"]*(?:url\s*\(|background|content\s*:)|'[^']*(?:url\s*\(|background|content\s*:)|[^\s"'<>]*(?:url\s*\(|background|content\s*:))/i.test(headers[0][0])) return drift;
+  if (/<\/?(?!(?:header|div|nav|a|img|label|svg|path|span)(?=[\s/>]))[a-z][^>]*>/i.test(headers[0][0])) return drift;
+  // Only the observed presentation-only declarations are known safe. Reject
+  // unknown CSS rather than enumerating image functions (image-set, paint, ...).
+  for (const tag of headers[0][0].matchAll(/<[a-z][^>]*>/gi)) {
+    const declarations = attribute(tag[0], "style").split(";").map(value => value.trim()).filter(Boolean);
+    if (!declarations.every(value => /^(?:color\s*:\s*transparent|--Paper-shadow\s*:\s*var\(\s*--mui-shadows-\d+\s*\)|--Paper-overlay\s*:\s*var\(\s*--mui-overlays-\d+\s*\))$/i.test(value))) return drift;
+  }
   const vectors = [...headers[0][1].matchAll(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi)];
   if (vectors.length !== 1 || attribute(vectors[0][0], "viewBox") !== "0 0 24 24" ||
       !/^<svg\b[^>]*>\s*<path\b[^>]*>(?:\s*<\/path>)?\s*<\/svg>$/i.test(vectors[0][0]) ||

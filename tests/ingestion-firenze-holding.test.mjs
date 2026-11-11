@@ -126,3 +126,18 @@ test('only known header elements are accepted; image inputs and unknown widgets 
   }
  }
 });
+
+test('changed or additional social-preview artwork returns to review', () => {
+ const pinned='https://networksites.livenationinternational.com/networksites/vrudcnfc/firenze-rocks-share-image.jpg';
+ review(svgFixture.replaceAll(pinned,'https://www.firenzerocks.it/lineup-2027.jpg'));
+ for (const key of ['og:image', 'og:image:url', 'og:image:secure_url', 'twitter:image', 'twitter:image:src']) {
+  review(`<meta property="${key}" content="/poster-2028.jpg">${svgFixture}`);
+ }
+});
+test('only known presentation-only header CSS is accepted, not image-bearing functions/properties', () => {
+ for (const base of [svgFixture, fixture]) {
+  for (const style of ["border:100px solid transparent;border-image:image-set('/lineup-2027.jpg' 1x) 100 fill", "list-style-image:image-set('/poster.jpg' 1x)", "mask-image:image-set('/poster.jpg' 1x)", "border-image:-webkit-image-set('/poster.jpg' 1x) 100 fill", 'filter:var(--unknown-artwork)', '--custom-image:image-set("/poster.jpg" 1x)']) {
+   review(base.replace('<header', `<header style='${style.replaceAll("'",'"')}'`));
+  }
+ }
+});
