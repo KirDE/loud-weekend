@@ -93,3 +93,11 @@ for (const [name, base] of [['SVG', svgFixture], ['legacy PNG', fixture]]) {
   }
  });
 }
+
+test('only the verified language globe vector is quiet, not added or changed SVG artwork', () => {
+ for (const base of [svgFixture, fixture]) {
+  review(base.replace('</header>', '<svg><path d="M0 0H300V200H0Z"></path></svg></header>'));
+  review(base.replace('M11.99 2C6.47', 'M99 2C6.47'));
+  review(base.replace('<path ', '<rect width="100" height="100"/><path '));
+ }
+});
