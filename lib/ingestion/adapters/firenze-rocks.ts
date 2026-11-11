@@ -24,7 +24,8 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   if (headers.length !== 1 || text(headers[0][1]) !== "Switch language. Current language is Italiano IT") return drift;
   // A picture source can override an unchanged img with edition artwork.
   // Unknown responsive header evidence is not a verified holding page.
-  if (/<source\b/i.test(headers[0][1])) return drift;
+  if (/<(?:source|video|audio|iframe|object|embed|canvas|image|foreignObject|use|style|link)\b/i.test(headers[0][0]) ||
+      /\bstyle\s*=\s*(?:"[^"]*(?:url\s*\(|background|content\s*:)|'[^']*(?:url\s*\(|background|content\s*:)|[^\s"'<>]*(?:url\s*\(|background|content\s*:))/i.test(headers[0][0])) return drift;
   const logos = [...headers[0][1].matchAll(/<img\b[^>]*>/gi)];
   if (logos.length !== 2 || !logos.every(logo => {
     const years = [...logo[0].matchAll(/firenze-rocks-(20\d{2})_primary_black\.png/gi)];

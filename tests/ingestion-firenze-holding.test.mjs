@@ -77,3 +77,19 @@ for(const [name,base] of [['SVG',svgFixture],['legacy PNG',fixture]]) {
 }
 
 test('unquoted SVG img srcset is not ignored',()=>review(svgFixture.replace(/<img\b/i,'<img srcset=/announcement-2027.svg')));
+
+for (const [name, base] of [['SVG', svgFixture], ['legacy PNG', fixture]]) {
+ test(`header CSS artwork cannot hide an announcement (${name})`, () => {
+  for (const style of ['background-image:url(/lineup-2027.jpg)', 'content:url(/lineup-2027.svg)']) {
+   review(base.replace('<header', `<header style="${style}"`));
+   review(base.replace(/<img\b/i, `<img style="${style}"`));
+   review(base.replace(/<header\b[^>]*>/i, tag => `${tag}<div style='${style}'></div>`));
+   review(base.replace(/<header\b[^>]*>/i, tag => `${tag}<div style=${style}></div>`));
+  }
+ });
+ test(`direct header media cannot hide an announcement (${name})`, () => {
+  for (const media of ['<video src="/lineup-2027.mp4"></video>', '<iframe src="/announcement"></iframe>', '<svg><image href="/lineup-2027.svg"/></svg>', '<object data="/lineup-2027.svg"></object>', '<embed src="/lineup-2027.svg">', '<canvas></canvas>', '<style>header{background-image:url(/lineup-2027.jpg)}</style>']) {
+   review(base.replace('</header>', `${media}</header>`));
+  }
+ });
+}
