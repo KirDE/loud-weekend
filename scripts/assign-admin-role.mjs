@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 
 const [emailArg, roleArg, confirmation] = process.argv.slice(2);
 const email = emailArg?.trim().toLowerCase();
@@ -7,7 +7,7 @@ if (!email || !["USER", "EDITOR", "ADMIN"].includes(role) || confirmation !== "-
   console.error("Usage: npm run admin:assign-role -- user@example.com USER|EDITOR|ADMIN --confirm");
   process.exit(2);
 }
-const db = new PrismaClient();
+const db = createPrismaClient();
 try {
   const user = await db.user.update({ where: { email }, data: { role }, select: { id: true, email: true, role: true } });
   console.log(`Role updated for ${user.email}: ${user.role}`);

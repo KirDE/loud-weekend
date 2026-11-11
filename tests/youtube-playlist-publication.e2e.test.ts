@@ -1,3 +1,4 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -5,7 +6,6 @@ import { promisify } from 'node:util';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
-import { PrismaClient } from '@prisma/client';
 import {runProviderWorker} from '../lib/catalog/playlist-provider-worker.ts';
 import {publishYoutubeCheckpoint,type YoutubePlaylistResult} from '../lib/catalog/youtube-playlist-checkpoint.ts';
 import { PlaylistLeaseLostError } from '../lib/catalog/playlist-queue.ts';
@@ -19,7 +19,7 @@ if (url) {
 }
 
 test('DB/Python publication recovers unknown create and insert across jobs without duplicates', { skip: !url }, async () => {
-  const db = new PrismaClient({ datasourceUrl: url });
+  const db = createPrismaClient({ url });
   const directory = await mkdtemp('/tmp/youtube-db-publication-test-');
   const slug = `youtube-test-${randomUUID()}`;
   const spotifyUrl = 'https://open.spotify.com/playlist/' + randomUUID().replace(/-/g, '').slice(0, 22);

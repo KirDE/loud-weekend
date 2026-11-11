@@ -1,13 +1,13 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
-import {PrismaClient} from '@prisma/client';
 import {requireLocalDisposableDatabase} from './support/disposable-db.ts';
 import {spotifyRepertoiresForArtists} from '../lib/catalog/spotify-repertoire.ts';
 
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
-const db = new PrismaClient();
+const db = createPrismaClient();
 test.after(() => db.$disconnect());
 test('configuration preview/apply, DB worker transport and idempotency do not alter identities, plans or providers', async () => {
   const slug = 'test-repertoire-' + randomUUID();

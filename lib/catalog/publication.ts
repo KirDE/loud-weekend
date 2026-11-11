@@ -200,8 +200,8 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
         WHERE id = ${input.sourceLease.id} AND "festivalSlug" = ${input.result.festivalSlug}
           AND url = ${input.result.sourceUrl} AND "leaseOwner" = ${input.sourceLease.owner}
           AND enabled = true AND "configurationBackfilledAt" IS NOT NULL
-          -- Prisma Date is timestamptz; the source revision is a UTC-naive timestamp.
-          AND "updatedAt" = (${input.sourceLease.updatedAt}::timestamptz AT TIME ZONE 'UTC')
+          -- Bind ISO UTC text explicitly; pg adapter Dates are timezone-naive.
+          AND "updatedAt" = (${input.sourceLease.updatedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC')
           AND "leaseExpiresAt" > (clock_timestamp() AT TIME ZONE 'UTC')
         FOR UPDATE
       `;

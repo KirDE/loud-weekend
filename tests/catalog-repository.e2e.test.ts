@@ -1,6 +1,7 @@
+import type { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 import { seedCatalog } from "./support/seed-catalog.ts";
@@ -12,7 +13,7 @@ if (!databaseUrl || !/(?:test|integration)/i.test(new URL(databaseUrl).pathname)
   throw new Error("A test or integration DATABASE_URL is required");
 }
 
-const db = new PrismaClient();
+const db = createPrismaClient();
 async function clearCatalog() {
   await db.festivalSource.deleteMany();
   await db.festival.deleteMany();

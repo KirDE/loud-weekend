@@ -1,12 +1,12 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { PrismaClient } from '@prisma/client';
 import { dueWorkerHealth } from '../lib/ingestion/due-health.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url || !/(?:test|integration)/i.test(new URL(url).pathname)) throw new Error('Disposable test/integration DATABASE_URL required');
-const db = new PrismaClient();
+const db = createPrismaClient();
 const slug = 'health-' + randomUUID().slice(0, 8);
 test('disposable PostgreSQL reports due, active, expired, error and unknown parser counts without leaking keys', async () => {
   const now = new Date();

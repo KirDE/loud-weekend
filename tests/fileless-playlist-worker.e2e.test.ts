@@ -1,3 +1,4 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -5,10 +6,10 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { requireLocalDisposableDatabase } from './support/disposable-db.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
-const db = new PrismaClient();
+const db = createPrismaClient();
 test.after(async () => { await db.$disconnect(); });
 
 test('actual worker pipes durable plans to Python and commits fenced read-back without any plan files', async () => {

@@ -1,13 +1,13 @@
+import { createPrismaClient } from '../../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl || !/(?:test|integration)/i.test(new URL(databaseUrl).pathname)) throw new Error("A test DATABASE_URL is required");
-const db = new PrismaClient();
+const db = createPrismaClient();
 const port = 3244;
 const origin = `http://127.0.0.1:${port}`;
 let app;

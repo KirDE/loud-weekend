@@ -1,13 +1,13 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { PrismaClient } from '@prisma/client';
 import { requireLocalDisposableDatabase } from './support/disposable-db.ts';
 import { claimPlaylistRefresh, finishPlaylistRefresh, PlaylistLeaseLostError } from '../lib/catalog/playlist-queue.ts';
 import { stageYoutubePlan, youtubeProviderState } from '../lib/catalog/youtube-playlist-queue.ts';
 
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
-const db = new PrismaClient();
+const db = createPrismaClient();
 test.after(async () => { await db.$disconnect(); });
 
 test('real PostgreSQL existing adoption, exact rejected-write recovery and expired-lease fencing', async () => {

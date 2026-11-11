@@ -1,7 +1,7 @@
+import { createPrismaClient } from '../../lib/prisma-client.mjs';
 import { expect, test } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
 
-const db = new PrismaClient();
+const db = createPrismaClient();
 
 test.beforeAll(async () => {
   if (!process.env.DATABASE_URL || !/(?:test|integration)/i.test(new URL(process.env.DATABASE_URL).pathname)) throw new Error("A test DATABASE_URL is required");

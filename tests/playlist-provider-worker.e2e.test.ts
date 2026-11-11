@@ -1,12 +1,12 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {PrismaClient} from '@prisma/client';
 import {requireLocalDisposableDatabase} from './support/disposable-db.ts';
 import {runProviderWorker} from '../lib/catalog/playlist-provider-worker.ts';
 import {assertPlaylistRefreshLease} from '../lib/catalog/playlist-queue.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
-const db=new PrismaClient();
+const db=createPrismaClient();
 async function fixture(run:(value:{id:string;slug:string})=>Promise<void>,providers=['spotify','youtube_music']){
  const slug='provider-'+randomUUID();
  const f=await db.festival.create({data:{slug,name:'Synthetic',country:'Test',countryCode:'DE',genres:[],officialUrl:'https://example.test/',editions:{create:{year:2027,status:'PARTIAL',ticketStatus:'UNKNOWN',recordState:'CURRENT',completeness:'PARTIAL',sourceUpdatedAt:new Date()}}}});
