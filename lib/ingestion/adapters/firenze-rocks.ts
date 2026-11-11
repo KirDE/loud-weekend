@@ -25,8 +25,11 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   const logos = [...headers[0][1].matchAll(/<img\b[^>]*>/gi)];
   if (logos.length !== 2 || !logos.every(logo => {
     const years = [...logo[0].matchAll(/firenze-rocks-(20\d{2})_primary_black\.png/gi)];
+    // Live Nation also serves an unversioned brand logo. This route contains
+    // no edition claim; all main/video/metadata/announcement gates still apply.
+    const genericLogo = /^https:\/\/networksites\.livenationinternational\.com\/networksites\/[a-z0-9]+\/logo\.svg$/.test(attribute(logo[0], "src"));
     return attribute(logo[0], "alt") === "Site logo - www.firenzerocks.it - go to homepage" &&
-      years.length > 0 && years.every(year => Number(year[1]) < source.editionYear);
+      ((genericLogo && years.length === 0 && !attribute(logo[0], "srcset")) || years.length > 0 && years.every(year => Number(year[1]) < source.editionYear));
   })) return drift;
   const mains = [...html.matchAll(/<main\b[^>]*>([\s\S]*?)<\/main>/gi)];
   if (mains.length !== 1) return drift;

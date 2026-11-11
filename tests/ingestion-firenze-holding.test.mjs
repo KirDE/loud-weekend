@@ -47,3 +47,16 @@ test('successful no-announcement checks reset health and remain unchanged, not r
  const health=JSON.parse(await readFile(stateFile,'utf8')).sources['firenze-rocks'];assert.equal(health.consecutiveFailures,0);assert.equal(health.lastSuccessfulCheck,observed);assert.equal(health.lastSuccessfulExtraction,'2026-09-01T00:00:00Z');
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+const svgFixture=await readFile(new URL('./fixtures/official-markup/firenze-rocks-holding-svg.html',import.meta.url),'utf8');
+test('actual November generic SVG logo holding shell is quiet and provider-inert',()=>{quiet(svgFixture);quiet(svgFixture.replace('/u4lp0w3n/','/laterasset/'),{...source,editionYear:2028});});
+test('generic brand-logo exception rejects foreign/credentialed/query/edition/poster logo variants',()=>{
+ for(const bad of ['https://evil.invalid/networksites/a/logo.svg','https://user@networksites.livenationinternational.com/networksites/a/logo.svg','https://networksites.livenationinternational.com/networksites/a/logo.svg?year=2027','https://networksites.livenationinternational.com/networksites/a/poster.svg','https://networksites.livenationinternational.com/networksites/a/logo-2027.svg']){
+  review(svgFixture.replaceAll('https://networksites.livenationinternational.com/networksites/u4lp0w3n/logo.svg',bad));
+ }
+});
+test('generic SVG route cannot hide a responsive announcement image',()=>review(svgFixture.replaceAll('src="https://networksites.livenationinternational.com/networksites/u4lp0w3n/logo.svg"','src="https://networksites.livenationinternational.com/networksites/u4lp0w3n/logo.svg" srcset="/announcement-2027.png 2x"')));
+test('real SVG shell still escalates new facts, media, ticket and metadata announcements',()=>{
+ for(const h of [svgFixture.replace('</main>','<h3>2027 LINEUP ANNOUNCED</h3></main>'),svgFixture.replace('</main>','<img src="/poster.jpg"></main>'),svgFixture.replace('</main>','<a href="/tickets">Tickets</a></main>'),svgFixture.replace('video-sito-mob.mp4','announcement.mp4'),svgFixture.replace('name="description" content="Home | Firenze Rocks"','name="description" content="2027 lineup announced"')])review(h);
+ const c=quiet(svgFixture);const r=evaluateCandidate({...current,status:'confirmed',lineup:['Previously Verified'],ticketsUrl:'https://example.invalid/saved'},c);assert.deepEqual(r.changes,[]);assert.deepEqual(r.reviewReasons,[]);
+});
