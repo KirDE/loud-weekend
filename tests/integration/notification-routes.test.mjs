@@ -1,9 +1,9 @@
+import { createPrismaClient } from '../../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import http from "node:http";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
@@ -15,7 +15,7 @@ const providerPort = 3232;
 const appUrl = `http://127.0.0.1:${appPort}`;
 const providerUrl = `http://127.0.0.1:${providerPort}`;
 const internalSecret = "notification-integration-secret";
-const db = new PrismaClient();
+const db = createPrismaClient();
 let app;
 let provider;
 let providerStatus = 200;

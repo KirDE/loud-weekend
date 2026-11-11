@@ -1,8 +1,8 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { logoFixture } from "./support/logo-fixtures.ts";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 import { MAX_LOGO_BYTES, readFestivalLogo, saveFestivalLogo, validateLogo } from "../lib/catalog/logo-assets.ts";
@@ -11,7 +11,7 @@ const url = process.env.DATABASE_URL;
 if (!url || !/(?:test|integration)/i.test(new URL(url).pathname)) {
   throw new Error("A disposable test/integration DATABASE_URL is required");
 }
-const db = new PrismaClient();
+const db = createPrismaClient();
 const slugs = [randomUUID(), randomUUID()].map((id) => 'asset-test-' + id);
 let images: Buffer[];
 
@@ -51,7 +51,7 @@ test("reviewed image bytes dedupe by hash, retain immutable ETag and replace fes
 });
 
 test("two independent clients save the same hash concurrently without a uniqueness race", async () => {
-  const other = new PrismaClient();
+  const other = createPrismaClient();
   try {
     await saveFestivalLogo(db, slugs[1], images[1], "image/png");
     const hash = validateLogo(images[0], "image/png").sha256;

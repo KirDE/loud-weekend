@@ -306,3 +306,26 @@ Regression coverage: `tests/admin-language.test.mjs`,
 Run `npx playwright test --config playwright.preference.config.mjs` for the
 browser tests marked `[no-db]`, which need no catalogue or account database;
 planner/admin browser coverage uses the existing disposable-database E2E setup.
+
+### Prisma 7 release contract
+
+CLI, client and PostgreSQL adapter move together (7.10.1). CLI commands read
+`prisma.config.ts` (including `.env`); generation needs no database connection,
+while migrations require `DATABASE_URL`. All application, maintenance and test
+clients use `lib/prisma-client.mjs`; explicit `url` overrides are never replaced
+by the process environment. The URL's `schema` selects the Prisma namespace.
+The pg pool defaults to 10 connections and a 10-second acquisition/connect
+timeout; `connection_limit`, `pool_timeout` (or `connect_timeout` when no pool
+timeout is set) override these. pg has one shared acquisition/connect timeout,
+not Prisma 6's two independent settings. Each client owns its adapter pool and
+`$disconnect()` closes it; interactive transaction options remain unchanged.
+
+Before deployment, Quality extracts the real archive, installs production-only
+dependencies, runs its bundled Prisma generation/migrations, and executes
+`scripts/deploy/check-prisma-release.mjs` (query, timestamp and rollback checks).
+The installer runs the same CLI commands from the extracted release root, where
+`prisma.config.ts` is packaged. No schema migration is introduced by this upgrade.
+Application rollback uses the previous stamped release and its own Prisma 6
+runtime/dependencies, not a downgraded client in a Prisma 7 release. The existing
+failed-health rollback test verifies release selection and environment restoration.
+Never run `migrate reset` on production; disposable integration DBs only.

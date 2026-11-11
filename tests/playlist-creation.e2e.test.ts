@@ -1,7 +1,7 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { PrismaClient } from '@prisma/client';
 import { claimPlaylistRefresh, finishPlaylistRefresh, spotifyCreationState, stagePlaylistPlan, PlaylistLeaseLostError } from '../lib/catalog/playlist-queue.ts';
 import { runProviderWorker } from '../lib/catalog/playlist-provider-worker.ts';
 import { publishSpotifyCheckpoint } from '../lib/catalog/spotify-playlist-checkpoint.ts';
@@ -17,7 +17,7 @@ if (url) {
 }
 
 test('creation intent survives reclaim and newer publications; worker publishes only verified ID', { skip: !url }, async () => {
-  const db = new PrismaClient({ datasourceUrl: url });
+  const db = createPrismaClient({ url });
   const slug = `creation-test-${randomUUID()}`;
   try {
     const festival = await db.festival.create({ data: {

@@ -1,14 +1,14 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { saveFestivalLogo } from "../lib/catalog/logo-assets.ts";
 import { logoFixture } from "./support/logo-fixtures.ts";
 import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
 
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
-const db = new PrismaClient();
+const db = createPrismaClient();
 const rows = [await logoFixture(), { ...await logoFixture("image/jpeg"), slug: "synthetic-jpeg", file: "synthetic-jpeg.png" }];
 const origin = "http://127.0.0.1:3267";
 let app: ReturnType<typeof spawn> | undefined;

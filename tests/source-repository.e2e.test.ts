@@ -1,10 +1,10 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
 import { listConfiguredSources } from "../lib/sources/repository.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
-const db = new PrismaClient();
+const db = createPrismaClient();
 const slug = "synthetic-source";
 test.before(async () => {
   await db.festival.create({ data: { slug, name: "Synthetic Source", country: "Testland", countryCode: "DE", officialUrl: "https://source.example.test/", genres: [], editions: { create: { year: 2027, status: "TBA", ticketStatus: "UNKNOWN", recordState: "CURRENT", completeness: "TBA", sourceUpdatedAt: new Date("2026-01-01") } } } });

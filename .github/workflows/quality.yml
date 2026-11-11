@@ -39,6 +39,7 @@ jobs:
       - run: npm audit --audit-level=high
       - run: npm run prisma:generate
       - run: npx prisma migrate deploy
+      - run: node --import tsx --test tests/prisma-adapter.e2e.test.mjs
       - run: npm run test:logo-assets
       - run: npm run test:playlist-queue
       - run: node --import tsx --test tests/spotify-playlist-checkpoint.e2e.test.ts
@@ -54,13 +55,13 @@ jobs:
       - run: npm run test:logo-serving
       - run: npm run test:logo-serving-db
       - run: npm run test:due-worker
-      # Prisma binds Date as timestamptz; exercise the source lease and fenced
+      # Explicit ISO UTC binds must preserve the source lease and fenced
       # publication against UTC-naive columns with a non-UTC database session.
-      - run: printf "ALTER DATABASE festival_integration SET TimeZone TO 'Europe/Berlin';" | npx prisma db execute --stdin --schema prisma/schema.prisma
+      - run: printf "ALTER DATABASE festival_integration SET TimeZone TO 'Europe/Berlin';" | npx prisma db execute --stdin
       - run: node --import tsx --test tests/ingestion-lease.e2e.test.ts && node --import tsx --test tests/ingestion-due-worker.e2e.test.mjs
         env:
           TEST_DB_TIMEZONE: Europe/Berlin
-      - run: printf "ALTER DATABASE festival_integration SET TimeZone TO 'UTC';" | npx prisma db execute --stdin --schema prisma/schema.prisma
+      - run: printf "ALTER DATABASE festival_integration SET TimeZone TO 'UTC';" | npx prisma db execute --stdin
       - run: npm run test:integration
       - run: npm run test:admin:integration
       - run: npx prisma migrate reset --force
@@ -78,6 +79,15 @@ jobs:
       - run: npm run build
       # Exercise the actual archive: builder and production both target Python 3.13.
       - run: bash scripts/deploy/package-release.sh "$GITHUB_SHA" "$RUNNER_TEMP/python313-release.tar.gz"
+      - name: Validate Prisma in the extracted production archive
+        run: |
+          mkdir "$RUNNER_TEMP/prisma7-release"
+          tar -xzf "$RUNNER_TEMP/python313-release.tar.gz" -C "$RUNNER_TEMP/prisma7-release"
+          cd "$RUNNER_TEMP/prisma7-release/app"
+          .runtime/node .runtime/npm/bin/npm-cli.js ci --omit=dev --ignore-scripts --no-audit --no-fund
+          .runtime/node node_modules/prisma/build/index.js generate
+          .runtime/node node_modules/prisma/build/index.js migrate deploy
+          .runtime/node scripts/deploy/check-prisma-release.mjs
       - name: Validate archive in the production Python version
         run: |
           docker run --rm \

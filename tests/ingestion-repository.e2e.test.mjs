@@ -1,10 +1,10 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { createIngestionRun, finishIngestionRun, ingestionQueries, persistAttempt } from "../lib/ingestion/repository.ts";
 
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required for ingestion repository E2E tests");
-const db = new PrismaClient();
+const db = createPrismaClient();
 const suffix = `${Date.now()}-${process.pid}`;
 const slug = `repository-e2e-${suffix}`;
 const now = new Date();

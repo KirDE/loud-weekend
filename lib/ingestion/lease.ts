@@ -17,10 +17,10 @@ function validateNow(now: Date) {
  * Keep weekly probes enabled: a successful check restores the source. */
 export async function markDeprecatedSources(db: PrismaClient, now = new Date()): Promise<number> {
   validateNow(now);
-  return db.$executeRaw`UPDATE "FestivalSource" SET "deprecatedAt" = (${now}::timestamptz AT TIME ZONE 'UTC'),
-    "updatedAt" = (${now}::timestamptz AT TIME ZONE 'UTC') WHERE enabled = true AND "deprecatedAt" IS NULL
-    AND "consecutiveFailures" > 0 AND "failureStartedAt" <= (${now}::timestamptz AT TIME ZONE 'UTC') - interval '21 days'
-    AND ("leaseExpiresAt" IS NULL OR "leaseExpiresAt" <= (${now}::timestamptz AT TIME ZONE 'UTC'))`;
+  return db.$executeRaw`UPDATE "FestivalSource" SET "deprecatedAt" = (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC'),
+    "updatedAt" = (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') WHERE enabled = true AND "deprecatedAt" IS NULL
+    AND "consecutiveFailures" > 0 AND "failureStartedAt" <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') - interval '21 days'
+    AND ("leaseExpiresAt" IS NULL OR "leaseExpiresAt" <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC'))`;
 }
 
 /** One atomic PostgreSQL statement: no worker may claim the same source while another holds its row lock. */
@@ -37,15 +37,15 @@ export async function claimDueSources(db: PrismaClient, { owner, now, limit, ttl
       WHERE enabled = true AND "configurationBackfilledAt" IS NOT NULL
         AND "festivalId" IS NOT NULL AND "editionId" IS NOT NULL
         AND "parserKey" IS NOT NULL AND "cadenceSeconds" > 0
-        AND ("nextRunAt" IS NULL OR "nextRunAt" <= (${now}::timestamptz AT TIME ZONE 'UTC'))
-        AND ("leaseExpiresAt" IS NULL OR "leaseExpiresAt" <= (${now}::timestamptz AT TIME ZONE 'UTC'))
+        AND ("nextRunAt" IS NULL OR "nextRunAt" <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC'))
+        AND ("leaseExpiresAt" IS NULL OR "leaseExpiresAt" <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC'))
       ORDER BY "nextRunAt" ASC NULLS FIRST, id ASC
       FOR UPDATE SKIP LOCKED LIMIT ${limit}
     )
     UPDATE "FestivalSource" AS source
     SET "leaseOwner" = ${owner},
-        "leaseExpiresAt" = (${expires}::timestamptz AT TIME ZONE 'UTC'),
-        "updatedAt" = (${now}::timestamptz AT TIME ZONE 'UTC')
+        "leaseExpiresAt" = (${expires.toISOString()}::timestamptz AT TIME ZONE 'UTC'),
+        "updatedAt" = (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC')
     FROM due WHERE source.id = due.id
     RETURNING source.id, source."updatedAt"
   `;
@@ -67,9 +67,9 @@ export async function renewSourceLease(db: PrismaClient, lease: LeaseIdentity, t
     UPDATE "FestivalSource"
     SET "leaseExpiresAt" = (clock_timestamp() AT TIME ZONE 'UTC') + (${ttlMs}::int * interval '1 millisecond')
     WHERE id = ${lease.id} AND "leaseOwner" = ${lease.owner}
-      -- Prisma binds Date as timestamptz; updatedAt is timestamp without time zone.
+      -- Bind an explicit ISO UTC string; pg adapter Date parameters are timezone-naive.
       -- Compare UTC wall time explicitly instead of using the session TimeZone.
-      AND "updatedAt" = (${lease.updatedAt}::timestamptz AT TIME ZONE 'UTC')
+      AND "updatedAt" = (${lease.updatedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC')
       AND "leaseExpiresAt" > (clock_timestamp() AT TIME ZONE 'UTC')
       AND enabled = true AND "configurationBackfilledAt" IS NOT NULL
       AND "festivalId" IS NOT NULL AND "editionId" IS NOT NULL
@@ -120,23 +120,23 @@ export async function completeSourceLease(db: PrismaClient, { id, owner, now, up
   const rows = await db.$queryRaw<Array<{ id: string }>>`
     UPDATE "FestivalSource"
     SET "leaseOwner" = NULL, "leaseExpiresAt" = NULL,
-        "lastAttemptAt" = (${now}::timestamptz AT TIME ZONE 'UTC'),
-        "lastSuccessAt" = CASE WHEN ${success} THEN (${now}::timestamptz AT TIME ZONE 'UTC') ELSE "lastSuccessAt" END,
+        "lastAttemptAt" = (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC'),
+        "lastSuccessAt" = CASE WHEN ${success} THEN (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') ELSE "lastSuccessAt" END,
         "lastError" = CASE WHEN ${success} THEN NULL ELSE ${outcome} END,
-        "failureStartedAt" = CASE WHEN ${success} THEN NULL ELSE CASE WHEN "consecutiveFailures" = 0 THEN (${now}::timestamptz AT TIME ZONE 'UTC') ELSE COALESCE("failureStartedAt", (${now}::timestamptz AT TIME ZONE 'UTC')) END END,
+        "failureStartedAt" = CASE WHEN ${success} THEN NULL ELSE CASE WHEN "consecutiveFailures" = 0 THEN (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') ELSE COALESCE("failureStartedAt", (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC')) END END,
         "deprecatedAt" = CASE WHEN ${success} THEN NULL
-          WHEN (CASE WHEN "consecutiveFailures" = 0 THEN (${now}::timestamptz AT TIME ZONE 'UTC') ELSE COALESCE("failureStartedAt", (${now}::timestamptz AT TIME ZONE 'UTC')) END) <= (${now}::timestamptz AT TIME ZONE 'UTC') - interval '21 days'
-          THEN COALESCE("deprecatedAt", (${now}::timestamptz AT TIME ZONE 'UTC')) ELSE "deprecatedAt" END,
+          WHEN (CASE WHEN "consecutiveFailures" = 0 THEN (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') ELSE COALESCE("failureStartedAt", (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC')) END) <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') - interval '21 days'
+          THEN COALESCE("deprecatedAt", (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC')) ELSE "deprecatedAt" END,
         "consecutiveFailures" = CASE WHEN ${success} THEN 0 ELSE "consecutiveFailures" + 1 END,
         "nextRunAt" = CASE WHEN ${success}
-          THEN (${now}::timestamptz AT TIME ZONE 'UTC') + make_interval(secs => "cadenceSeconds")
-          ELSE (${now}::timestamptz AT TIME ZONE 'UTC') + make_interval(secs => CASE "consecutiveFailures" WHEN 0 THEN 3600 WHEN 1 THEN 21600 WHEN 2 THEN 86400 WHEN 3 THEN 259200 ELSE 604800 END)
+          THEN (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') + make_interval(secs => "cadenceSeconds")
+          ELSE (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') + make_interval(secs => CASE "consecutiveFailures" WHEN 0 THEN 3600 WHEN 1 THEN 21600 WHEN 2 THEN 86400 WHEN 3 THEN 259200 ELSE 604800 END)
         END,
-        "updatedAt" = (${now}::timestamptz AT TIME ZONE 'UTC')
+        "updatedAt" = (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC')
     WHERE id = ${id} AND "leaseOwner" = ${owner}
-      AND "leaseExpiresAt" > (${now}::timestamptz AT TIME ZONE 'UTC')
+      AND "leaseExpiresAt" > (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC')
       AND enabled = true AND "configurationBackfilledAt" IS NOT NULL
-      AND "updatedAt" = (${updatedAt}::timestamptz AT TIME ZONE 'UTC')
+      AND "updatedAt" = (${updatedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC')
     RETURNING id
   `;
   return rows.length === 1;

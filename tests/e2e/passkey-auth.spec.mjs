@@ -1,7 +1,7 @@
+import { createPrismaClient } from '../../lib/prisma-client.mjs';
 import { expect, test } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
 
-const db = new PrismaClient();
+const db = createPrismaClient();
 const email = "passkey-browser@example.test";
 
 test.beforeEach(async () => {

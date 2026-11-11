@@ -1,7 +1,7 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { readOfflineCatalog, serveOfflineCatalog } from "../lib/catalog/offline.ts";
 
 // This test requires an already migrated/synthetically seeded local disposable database.
@@ -13,7 +13,7 @@ if (!target || !["postgres:", "postgresql:"].includes(target.protocol)
   || !/^[a-zA-Z0-9_-]*(?:test|integration)[a-zA-Z0-9_-]*$/i.test(target.pathname.slice(1))) {
   throw new Error("Already seeded local disposable test/integration DATABASE_URL required");
 }
-const db = new PrismaClient();
+const db = createPrismaClient();
 test.after(async () => { await db.$disconnect(); });
 const request = (tag?: string | null) => new Request("http://localhost/api/offline/catalog", {
   headers: tag ? { "If-None-Match": tag } : {},

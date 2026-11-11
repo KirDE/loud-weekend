@@ -1,7 +1,7 @@
+import { createPrismaClient } from '../../lib/prisma-client.mjs';
 import { expect, test } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
 
-const db = new PrismaClient();
+const db = createPrismaClient();
 const email = "notification-account-with-a-long-valid-address@example.test";
 const localeEmail = "notification-locales@example.test";
 const password = "correct horse battery staple";
