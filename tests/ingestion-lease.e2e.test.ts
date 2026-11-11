@@ -1,13 +1,14 @@
+import type { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { claimDueSourceIds, claimDueSources, completeSourceLease, releaseOwnedSourceLease, renewSourceLease, startSourceLeaseRenewal } from "../lib/ingestion/lease.ts";
 
 const url = process.env.DATABASE_URL;
 if (!url || !/(?:test|integration)/i.test(new URL(url).pathname)) throw new Error("A disposable test/integration DATABASE_URL is required");
-const first = new PrismaClient();
-const second = new PrismaClient();
+const first = createPrismaClient();
+const second = createPrismaClient();
 const slug = "lease-fixture-" + randomUUID().slice(0, 8);
 const base = new Date("2027-03-01T00:00:00.000Z");
 const ownerA = randomUUID();
@@ -157,7 +158,7 @@ test("renewal preserves revision/configuration and fails closed on expiry, recla
   assert.equal(renewed.nextRunAt?.getTime(), before.nextRunAt?.getTime());
   assert.equal(renewed.leaseOwner, ownerA);
   assert.ok(renewed.leaseExpiresAt! > new Date());
-  await first.$executeRaw`UPDATE "FestivalSource" SET "leaseExpiresAt" = (${new Date(Date.now() - 1000)}::timestamptz AT TIME ZONE 'UTC') WHERE id = ${id}`;
+  await first.$executeRaw`UPDATE "FestivalSource" SET "leaseExpiresAt" = (${new Date(Date.now() - 1000).toISOString()}::timestamptz AT TIME ZONE 'UTC') WHERE id = ${id}`;
   const expired = await first.festivalSource.findUniqueOrThrow({ where: { id } });
   assert.equal(await renewSourceLease(first, { ...claim, owner: ownerA }, 30_000), false);
   assert.deepEqual(await first.festivalSource.findUniqueOrThrow({ where: { id } }), expired);
@@ -198,7 +199,7 @@ test("heartbeat extends a shortened lease during asynchronous work and detects s
   const now = new Date();
   await first.festivalSource.update({ where: { id }, data: { enabled: true, parserKey: "manual_review", nextRunAt: now, leaseOwner: null, leaseExpiresAt: null } });
   const [claim] = await claimDueSources(first, options(ownerA, now));
-  await first.$executeRaw`UPDATE "FestivalSource" SET "leaseExpiresAt" = (${new Date(Date.now() + 200)}::timestamptz AT TIME ZONE 'UTC') WHERE id = ${id}`;
+  await first.$executeRaw`UPDATE "FestivalSource" SET "leaseExpiresAt" = (${new Date(Date.now() + 200).toISOString()}::timestamptz AT TIME ZONE 'UTC') WHERE id = ${id}`;
   const heartbeat = startSourceLeaseRenewal(first, { ...claim, owner: ownerA }, { intervalMs: 30, ttlMs: 30_000 });
   try {
     await new Promise((resolve) => setTimeout(resolve, 90));

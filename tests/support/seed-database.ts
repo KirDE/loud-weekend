@@ -1,9 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from '../../lib/prisma-client.mjs';
 import { requireLocalDisposableDatabase } from "./disposable-db.ts";
 import { seedCatalog } from "./seed-catalog.ts";
 import { catalogSeed, festival, artist } from "./catalog.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
-const db = new PrismaClient();
+const db = createPrismaClient();
 const fixtures = [festival,
   { ...festival, slug: "synthetic-alpine", name: "Synthetic Alpine", country: "Austria", countryCode: "AT", coordinates: { latitude: 47, longitude: 14 } },
   { ...festival, slug: "synthetic-west", name: "Synthetic West", country: "France", countryCode: "FR", coordinates: { latitude: 48, longitude: 2 } },

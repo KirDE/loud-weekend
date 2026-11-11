@@ -1,6 +1,6 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {PrismaClient} from '@prisma/client';
 import {catalogSeed} from './support/catalog.ts';
 import {seedCatalog} from './support/seed-catalog.ts';
 import {requireLocalDisposableDatabase} from './support/disposable-db.ts';
@@ -11,7 +11,7 @@ import {DatabaseCatalogRepository} from '../lib/catalog/repository.ts';
 import {createIngestionRun,persistAttempt} from '../lib/ingestion/repository.ts';
 import {publishIngestionResult} from '../lib/catalog/publication.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
-const db=new PrismaClient();
+const db=createPrismaClient();
 test.beforeEach(async()=>{
  const festival={...catalogSeed.festivals[0],slug:'impericon',name:'Synthetic Impericon',officialUrl:source.url,startDate:'2027-06-25',endDate:'2027-06-26',lineup:['Support One']};
  await seedCatalog(db,{festivals:[festival],editions:catalogSeed.editions.map(e=>({...e,slug:'impericon',...(e.recordState==='current'?festival:{})})),

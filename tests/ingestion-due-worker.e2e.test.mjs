@@ -1,3 +1,4 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
@@ -9,11 +10,10 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
 
 const url = process.env.DATABASE_URL;
 if (!url || !/(?:test|integration)/i.test(new URL(url).pathname)) throw new Error("Disposable test/integration DATABASE_URL required");
-const db = new PrismaClient();
+const db = createPrismaClient();
 const slug = "due-worker-" + randomUUID().slice(0, 8);
 let sourceId;
 let dir;

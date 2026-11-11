@@ -1,10 +1,10 @@
+import { createPrismaClient } from '../../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import { createDecipheriv, createHash } from "node:crypto";
 import { once } from "node:events";
 import http from "node:http";
 import { spawn } from "node:child_process";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required for integration tests");
@@ -18,7 +18,7 @@ const mockPort = 3220;
 const appUrl = `http://127.0.0.1:${appPort}`;
 const mockUrl = `http://127.0.0.1:${mockPort}`;
 const authSecret = "integration-auth-secret-with-at-least-32-characters";
-const db = new PrismaClient();
+const db = createPrismaClient();
 let app;
 let mock;
 let failPlaylists = false;

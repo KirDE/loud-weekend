@@ -1,7 +1,7 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PrismaClient } from '@prisma/client';
-import { validateDisposableDatabase } from '../scripts/prepare-activation-test-db.mjs';
+import { validateDisposableDatabase } from '../scripts/prepare-test-db.mjs';
 import { claimOperationalState } from '../lib/catalog/operational-state.ts';
 import { spotifyResolution, publishSpotifyIdentity } from '../lib/catalog/spotify-identity-publication.ts';
 import { runSpotifyStats } from '../scripts/refresh-spotify-stats.mjs';
@@ -20,7 +20,7 @@ test('only one corroborated exact cross-provider match is publishable', () => {
 const url = process.env.SPOTIFY_STATS_TEST_DATABASE_URL;
 if (url) validateDisposableDatabase(url);
 test('real DB: resolver proof → canonical identity → stats; MusicBrainz completed checkpoint is irrelevant; fencing and conflicts', { skip: !url }, async () => {
-  const db = new PrismaClient({ datasources: { db: { url } } }); let lease;
+  const db = createPrismaClient({ url }); let lease;
   try {
     await db.artist.create({ data: { name: 'Synthetic', slug: 'synthetic', aliases: [], genres: [], identityState: 'UNRESOLVED', topTracks: [], recentSetlists: [], freshness: {} } });
     await db.operationalState.create({ data: { key: 'artist-identities', payload: { artists: { Synthetic: evidence } } } });

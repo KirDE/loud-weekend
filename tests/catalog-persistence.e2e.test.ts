@@ -1,12 +1,13 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { claimOperationalState } from '../lib/catalog/operational-state.ts';
 import { importTimetable } from '../lib/catalog/timetable-import.ts';
 const url = process.env.DATABASE_URL;
 if (!url || !/(?:test|integration)/i.test(new URL(url).pathname)) throw new Error('Disposable test/integration DATABASE_URL required');
-const db = new PrismaClient();
-const other = new PrismaClient();
+const db = createPrismaClient();
+const other = createPrismaClient();
 const slug = 'synthetic-persistence-test';
 test.before(async () => {
   const models = Prisma.dmmf.datamodel.models;

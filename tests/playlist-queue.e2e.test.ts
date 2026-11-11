@@ -1,14 +1,15 @@
+import type { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { claimPlaylistRefresh as claimPage, enqueuePlaylistRefresh, finishPlaylistRefresh, assertPlaylistRefreshLease, assertSpotifyPlanCurrent, commitPlaylistRefresh, PlaylistLeaseLostError, renewPlaylistRefreshLease } from "../lib/catalog/playlist-queue.ts";
 import type { PlaylistClaimCursor } from "../lib/catalog/playlist-queue.ts";
 
 const url = process.env.DATABASE_URL;
 if (!url || !/(?:test|integration)/i.test(new URL(url).pathname)) throw new Error("A disposable test/integration DATABASE_URL is required");
-const first = new PrismaClient();
-const second = new PrismaClient();
+const first = createPrismaClient();
+const second = createPrismaClient();
 const ownerA = randomUUID();
 const ownerB = randomUUID();
 // Only a stable queue-order key, never a lease clock.

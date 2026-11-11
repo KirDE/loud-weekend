@@ -1,12 +1,12 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {randomUUID} from 'node:crypto';
-import {PrismaClient} from '@prisma/client';
 import {requireLocalDisposableDatabase} from './support/disposable-db.ts';
 import {publishSpotifyCheckpoint} from '../lib/catalog/spotify-playlist-checkpoint.ts';
 import {claimPlaylistRefresh,stagePlaylistPlan,spotifyCreationState,finishPlaylistRefresh,PlaylistLeaseLostError} from '../lib/catalog/playlist-queue.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
-const db=new PrismaClient();
+const db=createPrismaClient();
 const spotifyUrl='https://open.spotify.com/playlist/'+'a'.repeat(22);
 const uris=['spotify:track:'+'b'.repeat(22),'spotify:track:'+'c'.repeat(22)];
 async function fixture(run:(value:{slug:string;editionId:string;jobId:string;claim:NonNullable<Awaited<ReturnType<typeof claimPlaylistRefresh>>['claim']>})=>Promise<void>){

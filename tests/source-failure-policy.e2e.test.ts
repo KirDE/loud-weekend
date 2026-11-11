@@ -1,12 +1,13 @@
+import type { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
 import { requireLocalDisposableDatabase } from './support/disposable-db.ts';
 import { claimDueSources, completeSourceLease, markDeprecatedSources } from '../lib/ingestion/lease.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 test('real DB stepped retry, exact 21-day deprecation between weekly probes, successful unchanged recovery', async () => {
- const client = new PrismaClient();
+ const client = createPrismaClient();
  const rollback = new Error('rollback failure-policy fixture');
  try {
   await client.$transaction(async transaction => {

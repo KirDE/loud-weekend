@@ -30,7 +30,7 @@ test('packager builds a DB-only archive from a tree with no Git catalogue inputs
     for (const directory of ['scripts', 'lib', 'prisma', 'public']) {
       await cp(directory, path.join(root, directory), { recursive: true });
     }
-    for (const file of ['package.json', 'package-lock.json', 'requirements.txt']) await cp(file, path.join(root, file));
+    for (const file of ['prisma.config.ts', 'package.json', 'package-lock.json', 'requirements.txt']) await cp(file, path.join(root, file));
     for (const directory of ['.next/standalone', '.next/static', 'bin']) await mkdir(path.join(root, directory), { recursive: true });
     await writeFile(path.join(root, '.next/standalone/server.js'), '// synthetic build artifact');
     await writeFile(path.join(root, '.next/static/synthetic.js'), '// synthetic static asset');

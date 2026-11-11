@@ -1,3 +1,4 @@
+import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -8,10 +9,9 @@ const databaseUrl = process.env.ARTIST_ENRICHMENT_TEST_DATABASE_URL;
 if (databaseUrl) validateDisposableDatabase(databaseUrl);
 
 test('disposable PostgreSQL: changed/unchanged, rollback, fencing, restart and review', { skip: !databaseUrl }, async () => {
-  const { PrismaClient } = await import('@prisma/client');
   const { claimOperationalState } = await import('../lib/catalog/operational-state.ts');
   const { publishArtistEnrichment } = await import('../lib/catalog/artist-enrichment-publication.ts');
-  const db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+  const db = createPrismaClient({ url: databaseUrl });
   const suffix = randomUUID();
   const slug = `enrichment-test-${suffix}`;
   const name = `Synthetic ${suffix}`;
@@ -56,10 +56,10 @@ test('disposable PostgreSQL: changed/unchanged, rollback, fencing, restart and r
     // Crash after durable result, before publication; a separate Node process retries.
     await lease.release();
     execFileSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
-      import { PrismaClient } from '@prisma/client';
+      import { createPrismaClient } from './lib/prisma-client.mjs';
       import { claimOperationalState } from './lib/catalog/operational-state.ts';
       import { publishArtistEnrichment } from './lib/catalog/artist-enrichment-publication.ts';
-      const db = new PrismaClient(); let lease;
+      const db = createPrismaClient(); let lease;
       try { lease = await claimOperationalState(db, 'artist-enrichment'); console.log(JSON.stringify(await publishArtistEnrichment(db, lease))); }
       finally { await lease?.release(); await db.$disconnect(); }
     `], { cwd: process.cwd(), env: { ...process.env, DATABASE_URL: databaseUrl }, encoding: 'utf8' });
