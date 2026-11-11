@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { createPrismaClient } from '../../lib/prisma-client.mjs';
 
 // Run from an extracted archive AFTER its production-only npm ci and generation.
 // No catalogue or provider changes: the intentional failure rolls back all SQL.
 const require = createRequire(import.meta.url);
-const versions = ['prisma', '@prisma/client', '@prisma/adapter-pg'].map(name => require(`${name}/package.json`).version);
+// adapter-pg intentionally does not export its package.json subpath.
+const adapterPackage = JSON.parse(readFileSync(resolve(dirname(require.resolve('@prisma/adapter-pg')), '../package.json'), 'utf8'));
+const versions = ['prisma', '@prisma/client'].map(name => require(`${name}/package.json`).version).concat(adapterPackage.version);
 assert.equal(new Set(versions).size, 1, 'CLI, client and adapter must match');
 assert.match(versions[0], /^7\./);
 const db = createPrismaClient();
