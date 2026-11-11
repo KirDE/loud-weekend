@@ -66,3 +66,14 @@ test('unknown SVG asset cannot silently hide a header-only edition announcement'
  // A single changed responsive header logo must also trigger review.
  review(svgFixture.replace('/u4lp0w3n/','/newedition/'));
 });
+
+for(const [name,base] of [['SVG',svgFixture],['legacy PNG',fixture]]) {
+ test(`responsive picture source cannot hide a header-only announcement (${name})`,()=>{
+  for(const art of ['/lineup-2027.svg','/future-edition.webp']) {
+   const html=base.replace(/<img\b[^>]*>/i,img=>`<picture><source media="(min-width: 800px)" srcset="${art}">${img}</picture>`);
+   review(html);
+  }
+ });
+}
+
+test('unquoted SVG img srcset is not ignored',()=>review(svgFixture.replace(/<img\b/i,'<img srcset=/announcement-2027.svg')));

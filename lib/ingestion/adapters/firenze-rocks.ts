@@ -22,6 +22,9 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   }
   const headers = [...html.matchAll(/<header\b[^>]*>([\s\S]*?)<\/header>/gi)];
   if (headers.length !== 1 || text(headers[0][1]) !== "Switch language. Current language is Italiano IT") return drift;
+  // A picture source can override an unchanged img with edition artwork.
+  // Unknown responsive header evidence is not a verified holding page.
+  if (/<source\b/i.test(headers[0][1])) return drift;
   const logos = [...headers[0][1].matchAll(/<img\b[^>]*>/gi)];
   if (logos.length !== 2 || !logos.every(logo => {
     const years = [...logo[0].matchAll(/firenze-rocks-(20\d{2})_primary_black\.png/gi)];
@@ -30,7 +33,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
     // unknown replacements must return to review even when named logo.svg.
     const genericLogo = attribute(logo[0], "src") === "https://networksites.livenationinternational.com/networksites/u4lp0w3n/logo.svg";
     return attribute(logo[0], "alt") === "Site logo - www.firenzerocks.it - go to homepage" &&
-      ((genericLogo && years.length === 0 && !attribute(logo[0], "srcset")) || years.length > 0 && years.every(year => Number(year[1]) < source.editionYear));
+      ((genericLogo && years.length === 0 && !/\bsrcset\s*=/i.test(logo[0])) || years.length > 0 && years.every(year => Number(year[1]) < source.editionYear));
   })) return drift;
   const mains = [...html.matchAll(/<main\b[^>]*>([\s\S]*?)<\/main>/gi)];
   if (mains.length !== 1) return drift;
