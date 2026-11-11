@@ -186,3 +186,20 @@ test('other stripped regions cannot conceal artwork in legal markup or social sr
   review(base.replace(/(<a\b[^>]*href="https:\/\/www.facebook.com[^>]*><img)/i,'$1 srcset="/poster.jpg 2x"'));
  }
 });
+
+test('inline stylesheets are inspected before head/outside content is removed', () => {
+ for (const css of ["body::before{content:'Firenze Rocks 2027 tickets on sale'}", "body{background-image:url('/poster.jpg')}", "body{border-image:image-set('/poster.jpg' 1x) 100 fill}", "@import '/announcement.css';", "body::before{c\\6f ntent:'2028 lineup'}"]) {
+  review(svgFixture+`<style>${css}</style>`);
+  review(`<head><style>${css}</style></head>${svgFixture}`);
+ }
+});
+test('unknown social icon assets cannot masquerade as small generic icons', () => {
+ for (const base of [svgFixture, fixture]) {
+  for (const asset of ['atlhchcy','5rnlifmz','vfhh3rto']) review(base.replace(`/${asset}/image.png`,'/lineup2027/image.png'));
+ }
+});
+test('main semantic/accessible announcements cannot be dropped with unchanged text nodes', () => {
+ for (const base of [svgFixture, fixture]) {
+  for (const attrs of ['role="img" aria-label="Firenze Rocks 2027 lineup announced"', 'title="Tickets on sale"', 'aria-description="New lineup"', 'aria-labelledby="poster-title"', 'role="button"']) review(base.replace('</main>',`<div ${attrs}></div></main>`));
+ }
+});

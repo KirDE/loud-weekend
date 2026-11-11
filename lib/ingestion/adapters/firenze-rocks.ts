@@ -31,6 +31,17 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   if (!/<title\b[^>]*>\s*Home\s*\|\s*Firenze Rocks\s*<\/title>/i.test(html) ||
       !/<script\b[^>]*\bsrc=["'][^"']*\/holdingPage\/page-[^"']+["']/i.test(html) ||
       /["']@type["']\s*:\s*["'](?:MusicEvent|Festival|Event)["']/i.test(html)) return drift;
+  // Inspect inline CSS before head/runtime styles are removed. Generated layout
+  // rules can change freely, but generated text, imports and artwork cannot.
+  for (const sheet of html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)) {
+    const css = sheet[1].replace(/\/\*[\s\S]*?\*\//g, "").replace(/\\([0-9a-f]{1,6})\s?|\\([^\r\n])/gi,
+      (_, hex: string, char: string) => hex ? String.fromCodePoint(Math.min(parseInt(hex, 16), 0x10ffff)) : char);
+    if (/@import\b|(?:^|[;{])\s*content\s*:|\b(?:url|(?:-webkit-)?image-set|image|paint|(?:-moz-)?element)\s*\(/i.test(css)) return drift;
+    for (const declaration of css.matchAll(/(?:^|[;{])\s*([-\w]+)\s*:\s*([^;{}]*)/g)) {
+      if (/^(?:background(?:-image)?|border-image(?:-source)?|mask(?:-image)?|list-style(?:-image)?)$/i.test(declaration[1]) &&
+          !(declaration[1].toLowerCase() === "background-image" && /^(?:none|var\(\s*--Paper-overlay\s*\))$/.test(declaration[2].trim()))) return drift;
+    }
+  }
   for (const meta of html.matchAll(/<meta\b[^>]*>/gi)) {
     const kind = attribute(meta[0], "name") || attribute(meta[0], "property");
     // The visually verified share card is generic branding too. Unknown image
@@ -82,6 +93,8 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   if (mains.length !== 1) return drift;
   let body = mains[0][1];
   if (!safeStyles(mains[0][0])) return drift;
+  if ([...mains[0][0].matchAll(/<[a-z][^>]*>/gi)].some(tag =>
+    ["role", "aria-label", "title", "aria-labelledby", "aria-describedby", "aria-description"].some(name => attribute(tag[0], name)))) return drift;
   // Full responses also contain runtime wrappers, a GTM noscript and a skip
   // link. No other visible content outside the checked regions is known safe.
   let outside = html.replace(headers[0][0], "").replace(mains[0][0], "")
@@ -110,6 +123,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   });
   const socials = [...body.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)];
   const expectedSocials = ["https://www.facebook.com/firenzerocks/", "https://www.instagram.com/firenze_rocks/", "https://x.com/firenzerocks"];
+  const expectedIcons = ["atlhchcy", "5rnlifmz", "vfhh3rto"];
   if (socials.length !== 3 || !socials.every((a, i) => {
     let link: URL;
     try { link = new URL(attribute(a[0], "href")); } catch { return false; }
@@ -118,7 +132,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
       /^<a\b[^>]*>\s*<img\b[^>]*>\s*<\/a>$/i.test(a[0]) &&
       images.length === 1 && !attribute(images[0][0], "srcset") && ["width", "height"].every(key => Number(attribute(images[0][0], key)) > 0 && Number(attribute(images[0][0], key)) <= 70) &&
       /^(?:|Facebook|Instagram|X)$/i.test(attribute(images[0][0], "alt")) &&
-      /^https:\/\/networksites\.livenationinternational\.com\/networksites\/[^/]+\/image\.png(?:\?|$)/i.test(attribute(images[0][0], "src")) && !text(a[0]);
+      new RegExp(`^https://networksites\\.livenationinternational\\.com/networksites/${expectedIcons[i]}/image\\.png(?:\\?|$)`, "i").test(attribute(images[0][0], "src")) && !text(a[0]);
   })) return drift;
   body = body.replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi, "");
   const videos = [...body.matchAll(/<video\b[^>]*>([\s\S]*?)<\/video>/gi)];
