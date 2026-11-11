@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  test-and-build:
+  core:
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -68,29 +68,6 @@ jobs:
       - run: npm run test:admin:integration
       - run: npx prisma migrate reset --force
       - run: npm run test:seed
-      # Probe before changing sources: hosted runner DNS can lose both Azure
-      # and archive.ubuntu.com. APT still verifies Ubuntu's original signing key.
-      - name: Select a reachable signed Ubuntu mirror for browser dependencies
-        run: |
-          ubuntu_mirror=''
-          for candidate in \
-            https://archive.ubuntu.com/ubuntu \
-            https://azure.archive.ubuntu.com/ubuntu \
-            https://mirrors.edge.kernel.org/ubuntu \
-            https://mirror.hetzner.com/ubuntu/packages; do
-            if curl --fail --silent --show-error --location --max-time 15 \
-              "$candidate/dists/noble/InRelease" -o "$RUNNER_TEMP/ubuntu-InRelease" \
-              && grep -q '^-----BEGIN PGP SIGNED MESSAGE-----' "$RUNNER_TEMP/ubuntu-InRelease"; then
-              ubuntu_mirror="$candidate"
-              break
-            fi
-          done
-          test -n "$ubuntu_mirror" || { echo 'No Ubuntu mirror is reachable'; exit 1; }
-          echo "Selected Ubuntu mirror: $ubuntu_mirror"
-          sudo sed -i -E "s|^URIs:.*|URIs: $ubuntu_mirror|" \
-            /etc/apt/sources.list.d/ubuntu.sources
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:admin:e2e
       - run: npm run typecheck
       - run: npm run test:persistence-db
       - run: npm run test:data
@@ -118,3 +95,53 @@ jobs:
             -v "$GITHUB_WORKSPACE/scripts/deploy/check-python-release.sh:/check.sh:ro" \
             python:3.13.18-slim bash /check.sh /release.tar.gz
       - run: npm run test:routes
+
+  browser-tests:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: festival
+          POSTGRES_PASSWORD: festival
+          POSTGRES_DB: festival_integration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U festival -d festival_integration"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: '.node-version'
+      - name: Run full browser suite in the prebuilt Playwright image
+        env:
+          PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:6e3fb709361521eb27161606e6da6d2674e5e89fa16516cb37d6fdd91372273d
+        run: |
+          node_root="$(dirname "$(dirname "$(command -v node)")")"
+          # Host networking keeps the isolated Postgres service at loopback,
+          # preserving the tests' strict local-disposable-database guards.
+          docker run --rm --init --ipc=host --network=host \
+            -v "$GITHUB_WORKSPACE:/work" -w /work \
+            -v "$node_root:/node-runtime:ro" \
+            -e CI=true -e PLAYWRIGHT_IMAGE_VERSION=1.65.0 \
+            -e DATABASE_URL=postgresql://festival:festival@127.0.0.1:5432/festival_integration \
+            "$PLAYWRIGHT_IMAGE" bash scripts/ci-browser-tests.sh
+
+  # Preserve the existing required-check name. A failed, cancelled or skipped
+  # browser job must never make the release gate green.
+  test-and-build:
+    runs-on: ubuntu-24.04
+    needs: [core, browser-tests]
+    if: ${{ always() }}
+    steps:
+      - name: Require both core and browser checks
+        env:
+          CORE_RESULT: ${{ needs.core.result }}
+          BROWSER_RESULT: ${{ needs.browser-tests.result }}
+        run: |
+          test "$CORE_RESULT" = success
+          test "$BROWSER_RESULT" = success

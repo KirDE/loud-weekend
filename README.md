@@ -83,6 +83,16 @@ Next.js server, and mocks Spotify OAuth and Web API traffic. Never point it at
 a shared or production database. CI provisions a fresh PostgreSQL 16 service
 for every job before running this required check.
 
+Quality runs independent `core` and `browser-tests` jobs. The existing required
+`test-and-build` check succeeds only when both jobs succeed (including on cancel
+or skip). The browser job runs the full `tests/e2e` suite in the official
+Playwright 1.65.0 Noble image, pinned by digest; browsers and OS libraries are
+preinstalled, so no APT or `playwright install` step is needed. The supported
+Node runtime from `.node-version` is mounted into the image rather than using
+its default Node. Host networking preserves the strict loopback-only test DB
+guards. Update the image tag/digest and `PLAYWRIGHT_IMAGE_VERSION` together with
+the lockfile's Playwright version; the browser runner rejects mismatches.
+
 The account API uses 30-day opaque, hashed database sessions in an HTTP-only
 cookie. New accounts can use either a password or a discoverable WebAuthn
 passkey; passkey ceremonies require user verification, bind challenges to the
