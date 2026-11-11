@@ -101,3 +101,20 @@ test('only the verified language globe vector is quiet, not added or changed SVG
   review(base.replace('<path ', '<rect width="100" height="100"/><path '));
  }
 });
+
+test('prefixed attributes cannot spoof header src, alt or SVG geometry', () => {
+  const pinned='https://networksites.livenationinternational.com/networksites/u4lp0w3n/logo.svg';
+  for (const prefix of ['data-', 'x-', ':']) {
+   review(svgFixture.replaceAll(`src="${pinned}"`, `${prefix}src="${pinned}" src="/firenze-rocks-2027-poster.svg"`));
+   review(svgFixture.replaceAll('alt="Site logo - www.firenzerocks.it - go to homepage"', `${prefix}alt="Site logo - www.firenzerocks.it - go to homepage" alt="Edition announcement"`));
+   review(svgFixture.replace('viewBox="0 0 24 24"', `${prefix}viewBox="0 0 24 24" viewBox="0 0 300 200"`));
+   review(svgFixture.replace(/<path d="([^"]+)"/, (_, d) => `<path ${prefix}d="${d}" d="M0 0H300V200H0Z"`));
+  }
+ });
+
+test('quoted attribute values cannot impersonate a pinned logo src', () => {
+ const pinned='https://networksites.livenationinternational.com/networksites/u4lp0w3n/logo.svg';
+ review(svgFixture.replaceAll(`src="${pinned}"`, `title=' src="${pinned}" ' src="/edition-2027.svg"`));
+ quiet(svgFixture.replaceAll(`src="${pinned}"`, `data-src="/unused.svg" src="${pinned}"`));
+ quiet(svgFixture.replaceAll(`src="${pinned}"`, `src=${pinned} `));
+});
