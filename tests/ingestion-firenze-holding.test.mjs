@@ -158,3 +158,31 @@ test('header controls must retain their count, home destinations and known acces
   review(base.replace('data-testid="lang-selector"','href="/tickets" data-testid="lang-selector"'));
  }
 });
+
+test('holding video cannot override its validated sources or conceal extra content', () => {
+ for (const base of [svgFixture, fixture]) {
+  for (const attr of ['src="/lineup-2027.mp4"', 'poster="/lineup-2027.jpg"', 'SRC=/lineup-2028.mp4', 'aria-label="2027 lineup"']) review(base.replace('<video', `<video ${attr}`));
+  review(base.replace('</video>', '<input type="image" src="/poster.jpg"></video>'));
+ }
+});
+test('main-content CSS cannot introduce artwork through image-set or unknown properties', () => {
+ for (const base of [svgFixture, fixture]) {
+  review(base.replace('<main', `<main style="border-image:image-set('/lineup-2027.jpg' 1x) 100 fill"`));
+  review(base.replace('</main>', `<div style="mask-image:image-set('/poster.jpg' 1x)"></div></main>`));
+ }
+});
+test('visible markup outside the validated header and main returns to review', () => {
+ for (const base of [svgFixture, fixture]) {
+  for (const markup of ['<img src="/lineup-2027.jpg" alt="2027 lineup">', '<h2>Tickets on sale 2027</h2>', '<video src="/poster.mp4"></video>', '<div style="background-image:url(/poster.jpg)"></div>']) {
+   review(base+markup);review(markup+base);
+  }
+ }
+});
+
+test('other stripped regions cannot conceal artwork in legal markup or social srcset', () => {
+ for (const base of [svgFixture, fixture]) {
+  review(base.replace('Copyright ©', '<input type="image" src="/poster.jpg">Copyright ©'));
+  review(base.replace('Termini e condizioni del sito','<input type="image" src="/poster.jpg">Termini e condizioni del sito'));
+  review(base.replace(/(<a\b[^>]*href="https:\/\/www.facebook.com[^>]*><img)/i,'$1 srcset="/poster.jpg 2x"'));
+ }
+});

@@ -18,6 +18,12 @@ function attribute(tag: string, name: string): string {
   }
   return "";
 }
+// Only observed presentation-only CSS; unknown functions/properties may render artwork.
+function safeStyles(markup: string): boolean {
+  return [...markup.matchAll(/<[a-z][^>]*>/gi)].every(tag =>
+    attribute(tag[0], "style").split(";").map(value => value.trim()).filter(Boolean).every(value =>
+      /^(?:color\s*:\s*transparent|text-align\s*:\s*center|--Paper-shadow\s*:\s*var\(\s*--mui-shadows-\d+\s*\)|--Paper-overlay\s*:\s*var\(\s*--mui-overlays-\d+\s*\))$/i.test(value)));
+}
 // Verified generic language-selector globe geometry, not edition artwork.
 const LANGUAGE_ICON_PATH = 'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2m6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56M12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96M4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2s.06 1.34.14 2zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56m2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8M12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96M14.34 14H9.66c-.09-.66-.16-1.32-.16-2s.07-1.35.16-2h4.68c.09.65.16 1.32.16 2s-.07 1.34-.16 2m.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56M16.36 14c.08-.66.14-1.32.14-2s-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2z';
 export function firenzeRocks(html: string, source: FestivalSource) {
@@ -40,12 +46,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   // New controls (including image inputs), responsive sources, SVG animation,
   // custom widgets and all other unknown elements must return to review.
   if (/<\/?(?!(?:header|div|nav|a|img|label|svg|path|span)(?=[\s/>]))[a-z][^>]*>/i.test(headers[0][0])) return drift;
-  // Only the observed presentation-only declarations are known safe. Reject
-  // unknown CSS rather than enumerating image functions (image-set, paint, ...).
-  for (const tag of headers[0][0].matchAll(/<[a-z][^>]*>/gi)) {
-    const declarations = attribute(tag[0], "style").split(";").map(value => value.trim()).filter(Boolean);
-    if (!declarations.every(value => /^(?:color\s*:\s*transparent|--Paper-shadow\s*:\s*var\(\s*--mui-shadows-\d+\s*\)|--Paper-overlay\s*:\s*var\(\s*--mui-overlays-\d+\s*\))$/i.test(value))) return drift;
-  }
+  if (!safeStyles(headers[0][0])) return drift;
   // The only controls are two home-logo links and the language selector.
   // Empty ticket anchors still carry official evidence through href/ARIA.
   const controls = [...headers[0][1].matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)];
@@ -80,13 +81,31 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   const mains = [...html.matchAll(/<main\b[^>]*>([\s\S]*?)<\/main>/gi)];
   if (mains.length !== 1) return drift;
   let body = mains[0][1];
-  if (/\bstyle\s*=\s*["'][^"']*(?:url\s*\(|background)/i.test(body)) return drift;
+  if (!safeStyles(mains[0][0])) return drift;
+  // Full responses also contain runtime wrappers, a GTM noscript and a skip
+  // link. No other visible content outside the checked regions is known safe.
+  let outside = html.replace(headers[0][0], "").replace(mains[0][0], "")
+    .replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, "")
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<title\b[^>]*>[\s\S]*?<\/title>|<meta\b[^>]*>|<link\b[^>]*>/gi, "");
+  if (!safeStyles(outside)) return drift;
+  outside = outside.replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, block => {
+    const frame = block.match(/^<noscript\b[^>]*>\s*(<iframe\b[^>]*>)\s*<\/iframe>\s*<\/noscript>$/i)?.[1];
+    return frame && attribute(frame, "src") === "https://www.googletagmanager.com/ns.html?id=GTM-NV6L247" &&
+      attribute(frame, "width") === "0" && attribute(frame, "height") === "0" ? "" : block;
+  }).replace(/<aside\b[^>]*>[\s\S]*?<\/aside>/gi, block => {
+    const skip = block.match(/^<aside\b[^>]*>\s*(<a\b[^>]*>)([^<]*)<\/a>\s*<\/aside>$/i);
+    return skip && attribute(skip[1], "href") === "#main" && text(skip[2]) === "Salta al contenuto principale" ? "" : block;
+  }).replace(/<!--[\s\S]*?-->|<!doctype[^>]*>/gi, "");
+  if (/<\/?(?!(?:html|body|div)(?=[\s/>]))[a-z][^>]*>/i.test(outside) || text(outside) ||
+      [...outside.matchAll(/<[a-z][^>]*>/gi)].some(tag => ["aria-label", "title"].some(name => attribute(tag[0], name)))) return drift;
   // Legal footer text and annual copyright are not an edition announcement.
   body = body.replace(/<div\b[^>]*class=["']footer-copyright["'][^>]*>([\s\S]*?)<\/div>/gi, (block, contents: string) => {
-    if (!/<(?:img|video|iframe|svg)\b/i.test(contents) && /^Copyright\s*©\s*20\d{2}\s+Firenze Rocks\. Tutti i diritti riservati\.$/i.test(text(contents))) return "";
+    if (!/<[a-z]/i.test(contents) && /^Copyright\s*©\s*20\d{2}\s+Firenze Rocks\. Tutti i diritti riservati\.$/i.test(text(contents))) return "";
     const legal = [...contents.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)];
     const expected = ["https://www.livenation.it/terms", "https://www.livenation.it/cookies", "https://www.livenation.it/privacy", "https://info.livenationinternational.com/accessibility-statement"];
-    return !/<(?:img|video|iframe|svg)\b/i.test(contents) && legal.length === expected.length && legal.every((a, i) => attribute(a[0], "href") === expected[i]) &&
+    return !/<[a-z]/i.test(contents.replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi, "")) &&
+      legal.every(a => !/<[a-z]/i.test(a[1])) && legal.length === expected.length && legal.every((a, i) => attribute(a[0], "href") === expected[i]) &&
       text(contents) === "Termini e condizioni del sito | Informazioni sull'utilizzo del cookie | Privacy Policy | Accessibility Statement" ? "" : block;
   });
   const socials = [...body.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)];
@@ -97,13 +116,16 @@ export function firenzeRocks(html: string, source: FestivalSource) {
     const images = [...a[0].matchAll(/<img\b[^>]*>/gi)];
     return link.origin + link.pathname === expectedSocials[i] && !link.username && !link.password &&
       /^<a\b[^>]*>\s*<img\b[^>]*>\s*<\/a>$/i.test(a[0]) &&
-      images.length === 1 && ["width", "height"].every(key => Number(attribute(images[0][0], key)) > 0 && Number(attribute(images[0][0], key)) <= 70) &&
+      images.length === 1 && !attribute(images[0][0], "srcset") && ["width", "height"].every(key => Number(attribute(images[0][0], key)) > 0 && Number(attribute(images[0][0], key)) <= 70) &&
       /^(?:|Facebook|Instagram|X)$/i.test(attribute(images[0][0], "alt")) &&
       /^https:\/\/networksites\.livenationinternational\.com\/networksites\/[^/]+\/image\.png(?:\?|$)/i.test(attribute(images[0][0], "src")) && !text(a[0]);
   })) return drift;
   body = body.replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi, "");
   const videos = [...body.matchAll(/<video\b[^>]*>([\s\S]*?)<\/video>/gi)];
   if (videos.length !== 1) return drift;
+  const videoTag = videos[0][0].match(/^<video\b[^>]*>/i)?.[0] ?? "";
+  if (["src", "poster", "aria-label", "title"].some(name => attribute(videoTag, name)) ||
+      videos[0][1].replace(/<source\b[^>]*>/gi, "").trim()) return drift;
   const sources = [...videos[0][1].matchAll(/<source\b[^>]*>/gi)];
   if (sources.length !== 2 || !sources.every(s => /^https:\/\/networksites\.livenationinternational\.com\/networksites\/(?:k4tcpivz\/video-sito-mob|4jklndou\/video-sito-desk)\.mp4$/i.test(attribute(s[0], "src"))) ||
       text(videos[0][1])) return drift;
