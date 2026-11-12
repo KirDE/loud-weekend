@@ -44,3 +44,11 @@ test('artist-list retries retain homepage and listing attempts on HTTP failure',
  }});
  assert.equal(r.response.status,503);assert.equal(r.attempts,3);assert.equal(calls,3);
 });
+
+test('artist-list thrown failures retain homepage attempts and the original error',async()=>{
+ let calls=0; const failure=new Error('connection reset');
+ await assert.rejects(fetchSource(source,{maxAttempts:2,baseDelayMs:0,sleep:async()=>{},fetchImpl:async()=>{
+  calls++;if(calls===1)return new Response(bundle.home);throw failure;
+ }}),error=>error===failure && error.attempts===3);
+ assert.equal(calls,3);
+});

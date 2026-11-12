@@ -267,7 +267,16 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
         (field!=='headliners'||kind==='headliner_added') && (field!=='lineup'||kind==='artist_added') &&
         candidate.evidence.some(e=>e.field===field && e.sourceUrl===GRASPOP_FAQ && same(e.observedValue,(input.result.candidate as unknown as Record<string,unknown>)[field])))))throw new Error('Graspop publication requires matching persisted official addition evidence');
     const downloadLineup = input.result.festivalSlug === "download" && input.result.changes.some(({field}) => ["lineup", "headliners"].includes(field));
-    if((graspopLineup || downloadLineup) && applied.edition.completeness==='TBA') {
+    const verifiedDownloadAnnouncement = input.result.festivalSlug === "download" &&
+      candidate.festivalSlug === "download" && input.result.sourceUrl === "https://downloadfestival.co.uk/" &&
+      candidate.attempt.requestedUrl === input.result.sourceUrl &&
+      [input.result.candidate, candidate.normalized as unknown as FestivalCandidate].every(value =>
+        value.festivalSlug === "download" && value.sourceUrl === input.result.sourceUrl &&
+        value.status === "partial" && value.artistListMode === "additive" && value.lineupScope === "announcement" &&
+        value.observedEditionYears.length === 1 && value.observedEditionYears[0] === applied.edition.year &&
+        Boolean(value.headliners?.length && value.lineup?.length) &&
+        ["headliners", "lineup", "status"].every(field => value.evidence.some(e => e.field === field && e.sourceUrl === input.result.sourceUrl)));
+    if((graspopLineup || verifiedDownloadAnnouncement) && applied.edition.completeness==='TBA') {
       await db.festivalEdition.update({where:{id:applied.edition.id},data:{completeness:'PARTIAL'}});
       applied.changedFields.push('completeness');
     }

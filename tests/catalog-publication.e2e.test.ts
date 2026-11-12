@@ -507,3 +507,18 @@ test('real Graspop full bill crosses persisted publication fences once, preservi
  assert.equal(ed.lineup.length,100);assert.equal(ed.lineup.filter(l=>l.billing==='HEADLINER').length,3);assert.equal(ed.status,'PARTIAL');assert.equal(ed.completeness,'PARTIAL');
  assert.equal(await db.catalogPlaylistRefresh.count(),jobs);assert.equal((await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}))?.id,pub.id);assert.equal(await db.catalogPlaylistRefresh.count(),jobs);
  });
+
+test('Download status-only announcement repairs TBA completeness with an already stored roster',async()=>{
+ const bundle=JSON.parse(await readFile(new URL('./fixtures/download-announcement.json',import.meta.url),'utf8'));
+ const candidate=extractFestivalCandidate(JSON.stringify(bundle),parserSource('download',{url:'https://downloadfestival.co.uk/'}),new Date().toISOString());
+ const ed=await db.festivalEdition.findFirstOrThrow({where:{festival:{slug:'download'},recordState:'CURRENT'}});
+ await db.festivalEdition.update({where:{id:ed.id},data:{status:'TBA',completeness:'TBA'}});
+ const value=evaluateCandidate({slug:'download',editionYear:2027,startDate:'2027-06-09',endDate:'2027-06-13',headliners:candidate.headliners!,lineup:candidate.lineup!,status:'tba',ticketStatus:'unknown'} as any,candidate);
+ assert.equal(value.publishable,true);assert.deepEqual(value.changes.map(c=>c.field),['status']);
+ const attempt=await persist(value);const jobs=await db.catalogPlaylistRefresh.count();
+ const pub=await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix});assert.ok(pub);
+ const after=await db.festivalEdition.findUniqueOrThrow({where:{id:ed.id},include:{lineup:true}});
+ assert.equal(after.status,'PARTIAL');assert.equal(after.completeness,'PARTIAL');assert.equal(after.lineup.length,100);
+ assert.equal(await db.catalogPlaylistRefresh.count(),jobs);
+ assert.equal((await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}))?.id,pub.id);
+});
