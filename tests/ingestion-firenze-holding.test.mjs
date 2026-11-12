@@ -292,3 +292,11 @@ test('only observed ARIA attributes are accepted, not unverified human-readable 
  test('human-readable social image alt metadata requires review for either metadata key', () => {
   for (const name of ['og:image:alt','twitter:image:alt']) for (const key of ['name','property']) review(`<meta ${key}="${name}" content="Firenze Rocks 2027 lineup announced">${svgFixture}`);
  });
+
+test('character references cannot hide image, video or text metadata keys', () => {
+ for (const key of ['og&#58;image','og&#x3a;video','twitter&colon;image&colon;alt','og&#58image','og&#x3aimage','&#111;g:title','twitter:pl&#97;yer','og&unknown;image']) for (const name of ['name','property']) review(`<meta ${name}="${key}" content="/lineup-2027.jpg">${svgFixture}`);
+});
+test('decoded verified metadata keys remain quiet without freezing their spelling', () => {
+ quiet(`<meta property="og&#58;title" content="Home | Firenze Rocks">${svgFixture}`);
+ quiet(`<meta name="descr&#105;ption" content="Home | Firenze Rocks">${svgFixture}`);
+});

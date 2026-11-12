@@ -20,6 +20,17 @@ function attribute(tag: string, name: string): string {
   }
   return "";
 }
+// Metadata consumers decode character references before interpreting keys.
+// Decode numeric references (including omitted semicolons) and key punctuation;
+// unfamiliar named references fail closed rather than bypassing classification.
+function metadataKey(value: string): string {
+  return value.replace(/&#(?:x([0-9a-f]+)|(\d+));?|&(colon|lowbar|period);/gi,
+    (_, hex: string, decimal: string, named: string) => {
+      if (named) return ({colon: ":", lowbar: "_", period: "."} as Record<string, string>)[named.toLowerCase()];
+      const code = parseInt(hex ?? decimal, hex ? 16 : 10);
+      return code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : "\ufffd";
+    }).toLowerCase();
+}
 function onlyAttributes(tag: string, allowed: string[]): boolean {
   return attributes(tag).every(attr => allowed.includes(attr[1].toLowerCase()));
 }
@@ -135,7 +146,8 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   }
   for (const meta of html.matchAll(/<meta\b[^>]*>/gi)) {
     if (attribute(meta[0], "http-equiv")) return drift;
-    for (const kind of [attribute(meta[0], "name"), attribute(meta[0], "property")].map(value => value.toLowerCase())) {
+    for (const kind of [attribute(meta[0], "name"), attribute(meta[0], "property")].map(metadataKey)) {
+      if (kind.includes("&")) return drift;
       if (/^(?:og:image:alt|twitter:image:alt)$/.test(kind)) return drift;
       if (/^(?:og:(?:video|audio)|twitter:player)(?::|$)/.test(kind) ||
           kind === "twitter:card" && attribute(meta[0], "content").toLowerCase() === "player") return drift;
