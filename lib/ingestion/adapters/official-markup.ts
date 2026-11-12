@@ -1,3 +1,4 @@
+import { download } from "./download.ts";
 import {vainstream, rockTheLakes} from "./onboarding-official.ts";
 import { heavyWeekEnd } from "./heavy-weekend.ts";
 import { pinkpop } from "./pinkpop.ts";
@@ -457,6 +458,7 @@ function tolminator(html: string): AdapterResult | undefined {
 }
 
 const adapters: Record<string, (html: string, source: FestivalSource, fetchedAt: string) => AdapterResult | undefined> = {
+  download,
   "firenze-rocks": firenzeRocks,
   "rock-werchter": rockWerchter,
   "2000trees": trees,

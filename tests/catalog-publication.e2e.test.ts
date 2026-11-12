@@ -1,3 +1,4 @@
+import { readCatalog } from "../lib/catalog/repository.ts";
 import { createPrismaClient } from '../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -70,18 +71,20 @@ test.before(async () => {
   const rockharz = { ...catalogSeed.festivals[0], slug: "rockharz", name: "Synthetic Rockharz", city: "Ballenstedt", headliners: [], lineup: [], startDate: "2027-07-07", endDate: "2027-07-10" };
   const rfp = JSON.parse(await readFile(new URL('./fixtures/official-markup/rfp-reviewed-20261103.json', import.meta.url), 'utf8'));
   const rfpFestival = {...rockharz, ...rfp, name:'Synthetic Rock for People'};
+  const download={...rockharz,slug:"download",name:"Synthetic Download",headliners:[],lineup:[],status:"tba" as const,startDate:"2027-06-09",endDate:"2027-06-13"};
   const graspop={...rockharz,slug:'graspop',name:'Synthetic Graspop',status:'tba' as const,startDate:'2027-06-17',endDate:'2027-06-20'};
   const rfpArtists = [...rfp.headliners, ...rfp.lineup].map((name: string) => ({
     ...catalogSeed.artists[0], name, slug: name.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
   }));
-  await seedCatalog(db, { ...catalogSeed, artists:[...catalogSeed.artists,...rfpArtists], festivals: [...catalogSeed.festivals, rfpFestival, rockharz, {...rockharz,slug:"idays",name:"Synthetic I-Days"},graspop], editions: [...catalogSeed.editions,
+  await seedCatalog(db, { ...catalogSeed, artists:[...catalogSeed.artists,...rfpArtists], festivals: [...catalogSeed.festivals, rfpFestival, rockharz, {...rockharz,slug:"idays",name:"Synthetic I-Days"},graspop,download], editions: [...catalogSeed.editions,
     { ...catalogSeed.editions.find((e) => e.recordState === "current")!, ...rfpFestival, recordState: "current" as const },
     { ...catalogSeed.editions.find((e) => e.recordState === "current")!, ...rockharz, recordState: "current" as const },
     { ...catalogSeed.editions.find((e) => e.recordState === "current")!, ...rockharz, slug:"idays", recordState: "current" as const },
+    { ...catalogSeed.editions.find((e) => e.recordState === "current")!, ...download, completeness:"tba" as const, recordState:"current" as const },
     { ...catalogSeed.editions.find((e) => e.recordState === "current")!, ...graspop, completeness:'tba' as const, recordState: "current" as const }],
   });
   // The shared fixture seeder deliberately defaults records to confirmed.
-  await db.festivalEdition.updateMany({where:{festival:{slug:'graspop'},recordState:'CURRENT'},data:{status:'TBA',completeness:'TBA'}});
+  await db.festivalEdition.updateMany({where:{festival:{slug:{in:['graspop','download']}},recordState:'CURRENT'},data:{status:'TBA',completeness:'TBA'}});
   initialRockharzJobs = await db.catalogPlaylistRefresh.count({ where: { festivalSlug: "rockharz" } });
 });
 test.after(async () => {
@@ -493,4 +496,61 @@ test('real Graspop full bill crosses persisted publication fences once, preservi
  const broken=structuredClone(value);broken.candidate.evidence=broken.candidate.evidence.filter(e=>e.field!=='lineup');const invalid=await persist(broken);
  const counts=()=>Promise.all([db.artist.count(),db.lineupEntry.count(),db.catalogPublication.count(),db.catalogPlaylistRefresh.count()]);
  const before=await counts();await assert.rejects(publishIngestionResult(db,{attemptId:invalid.id,result:broken,sourceCommit:suffix}),/Graspop publication requires/);assert.deepEqual(await counts(),before);
+});
+
+ test('Download full official bill publishes 100 acts and partial completeness without provider jobs, replay is idempotent',async()=>{
+ const bundle=JSON.parse(await readFile(new URL('./fixtures/download-announcement.json',import.meta.url),'utf8'));
+ const candidate=extractFestivalCandidate(JSON.stringify(bundle),parserSource('download',{url:'https://downloadfestival.co.uk/'}),new Date().toISOString());
+ const value=evaluateCandidate({slug:'download',editionYear:2027,startDate:'2027-06-09',endDate:'2027-06-13',headliners:[],lineup:[],status:'tba',ticketStatus:'unknown'} as any,candidate);
+ assert.equal(value.publishable,true);const attempt=await persist(value);const jobs=await db.catalogPlaylistRefresh.count();
+ const pub=await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix});assert.ok(pub);assert.equal(pub.playlistRefreshRequested,false);
+ const ed=await db.festivalEdition.findFirstOrThrow({where:{festival:{slug:'download'},recordState:'CURRENT'},include:{lineup:true}});
+ assert.equal(ed.lineup.length,100);assert.equal(ed.lineup.filter(l=>l.billing==='HEADLINER').length,3);assert.equal(ed.status,'PARTIAL');assert.equal(ed.completeness,'PARTIAL');
+ assert.equal(await db.catalogPlaylistRefresh.count(),jobs);assert.equal((await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}))?.id,pub.id);assert.equal(await db.catalogPlaylistRefresh.count(),jobs);
+ });
+
+test('Download status-only announcement repairs TBA completeness with an already stored roster',async()=>{
+ const bundle=JSON.parse(await readFile(new URL('./fixtures/download-announcement.json',import.meta.url),'utf8'));
+ const candidate=extractFestivalCandidate(JSON.stringify(bundle),parserSource('download',{url:'https://downloadfestival.co.uk/'}),new Date().toISOString());
+ const ed=await db.festivalEdition.findFirstOrThrow({where:{festival:{slug:'download'},recordState:'CURRENT'}});
+ await db.festivalEdition.update({where:{id:ed.id},data:{status:'TBA',completeness:'TBA'}});
+ const value=evaluateCandidate({slug:'download',editionYear:2027,startDate:'2027-06-09',endDate:'2027-06-13',headliners:candidate.headliners!,lineup:candidate.lineup!,status:'tba',ticketStatus:'unknown'} as any,candidate);
+ assert.equal(value.publishable,true);assert.deepEqual(value.changes.map(c=>c.field),['status']);
+ const attempt=await persist(value);const jobs=await db.catalogPlaylistRefresh.count();
+ const pub=await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix});assert.ok(pub);
+ const after=await db.festivalEdition.findUniqueOrThrow({where:{id:ed.id},include:{lineup:true}});
+ assert.equal(after.status,'PARTIAL');assert.equal(after.completeness,'PARTIAL');assert.equal(after.lineup.length,100);
+ assert.equal(await db.catalogPlaylistRefresh.count(),jobs);
+ assert.equal((await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}))?.id,pub.id);
+});
+
+test('Download completeness-only repair flows through DB catalog, policy, persisted diffs and publication',async()=>{
+ const bundle=JSON.parse(await readFile(new URL('./fixtures/download-announcement.json',import.meta.url),'utf8'));
+ const candidate=extractFestivalCandidate(JSON.stringify(bundle),parserSource('download',{url:'https://downloadfestival.co.uk/'}),new Date().toISOString());
+ const ed=await db.festivalEdition.findFirstOrThrow({where:{festival:{slug:'download'},recordState:'CURRENT'}});
+ await db.festivalEdition.update({where:{id:ed.id},data:{status:'PARTIAL',completeness:'TBA'}});
+ const current=(await readCatalog({database:db})).festivals.find(f=>f.slug==='download')!;
+ assert.equal(current.completeness,'tba');
+ const value=evaluateCandidate(current,candidate);assert.equal(value.publishable,true);assert.deepEqual(value.changes.map(c=>c.field),['completeness']);
+ const jobs=await db.catalogPlaylistRefresh.count();const attempt=await persist(value);
+ const pub=await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix});assert.ok(pub);
+ assert.deepEqual(pub.fields,['completeness']);assert.equal(pub.playlistRefreshRequested,false);
+ assert.equal((await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}))?.id,pub.id);
+ const after=(await readCatalog({database:db})).festivals.find(f=>f.slug==='download')!;
+ assert.equal(after.completeness,'partial');assert.equal(after.status,'partial');assert.equal(after.headliners.length+after.lineup.length,100);
+ assert.deepEqual(evaluateCandidate(after,candidate).changes,[]);assert.equal(await db.catalogPlaylistRefresh.count(),jobs);
+});
+test('unverified Download addition cannot acquire provider deferral or publish catalogue rows',async()=>{
+ const bundle=JSON.parse(await readFile(new URL('./fixtures/download-announcement.json',import.meta.url),'utf8'));
+ const candidate=extractFestivalCandidate(JSON.stringify(bundle),parserSource('download',{url:'https://downloadfestival.co.uk/'}),new Date().toISOString());
+ candidate.sourceUrl='https://untrusted.example/';candidate.lineup!.push(`Unverified Download ${suffix}`);
+ const current=(await readCatalog({database:db})).festivals.find(f=>f.slug==='download')!;
+ const value=evaluateCandidate(current,candidate);assert.equal(value.publishable,false);
+ // Exercise publication's independent guard even if an upstream caller bypasses policy.
+ value.publishable=true;value.reviewReasons=[];
+ const attempt=await persist(value);
+ const counts=()=>Promise.all([db.artist.count(),db.lineupEntry.count(),db.catalogPublication.count(),db.catalogPlaylistRefresh.count()]);
+ const before=await counts();
+ await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/Download publication requires verified official announcement evidence/);
+ assert.deepEqual(await counts(),before);
 });

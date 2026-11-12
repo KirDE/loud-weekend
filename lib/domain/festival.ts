@@ -28,6 +28,7 @@ export type Festival = {
   sourceDeprecatedAt?: string;
   status: "confirmed" | "partial" | "tba";
   editionYear?: number;
+  completeness?: "complete" | "partial" | "tba";
   ticketStatus: "available" | "low" | "unavailable" | "unknown";
   updatedAt: string;
   genres: string[];

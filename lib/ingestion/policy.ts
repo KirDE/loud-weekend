@@ -1,3 +1,4 @@
+import { isDownloadAnnouncement } from "./adapters/download.ts";
 import {ROSKILDE_HOME,ROSKILDE_REVIEW} from "./adapters/roskilde.ts";
 import { ROADBURN_ARTIST_REVIEW } from "./adapters/roadburn.ts";
 import { ALPEN_ARTIST_REVIEW } from './adapters/alpen-flair.ts';
@@ -88,6 +89,16 @@ export function evaluateCandidate(current: Festival, candidate: FestivalCandidat
   if(candidate.festivalSlug==='graspop' && changes.some(change=>['lineup','headliners'].includes(change.field))) {
     if(!isGraspopAnnouncement(candidate,current.editionYear ?? Number(current.startDate?.slice(0,4))))reviewReasons.add('Graspop additions require verified current official announcement evidence');
     if(candidate.headliners?.some(name=>current.lineup.some(old=>old.toLowerCase()===name.toLowerCase())) || candidate.lineup?.some(name=>[...current.headliners,...(candidate.headliners ?? [])].some(old=>old.toLowerCase()===name.toLowerCase())))reviewReasons.add('Graspop billing changes require reviewed reclassification');
+  }
+  if (candidate.festivalSlug === "download") {
+    const verified = isDownloadAnnouncement(candidate, current.editionYear);
+    if (changes.some(c => ["lineup", "headliners"].includes(c.field)) && !verified)
+      reviewReasons.add("Download additions require verified official announcement evidence");
+    if (verified && current.completeness === "tba")
+      changes.push({kind:"completeness_changed",field:"completeness",before:"tba",after:"partial",reviewRequired:false});
+    const support = new Set([...current.lineup, ...(candidate.lineup ?? [])].map(name => name.toLocaleLowerCase()));
+    if ([...current.headliners, ...(candidate.headliners ?? [])].some(name => support.has(name.toLocaleLowerCase())))
+      reviewReasons.add("Download billing changes require reviewed reclassification");
   }
   if (candidate.festivalSlug !== current.slug) reviewReasons.add("Candidate slug does not match the current festival");
   if (candidate.festivalSlug === "idays" && changes.some(change => ["lineup", "headliners"].includes(change.field))) {

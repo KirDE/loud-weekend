@@ -1,3 +1,4 @@
+import { isDownloadSource, DOWNLOAD_ARTISTS, DOWNLOAD_DOCUMENTS } from "./adapters/download.ts";
 import { isHeavyHomepage, heavyMissingArtistUrls, HEAVY_DOCUMENTS } from "./adapters/heavy-weekend.ts";
 import {isRoskildeSource,fetchRoskildeDocuments} from "./adapters/roskilde.ts";
 import { isImpericonCurrentSource, discoverImpericonAnnouncements, sameImpericonArticle, impericonArticleUrl, IMPERICON_DOCUMENTS } from "./adapters/impericon-current.ts";
@@ -70,6 +71,24 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
   if (isRoskildeSource(source) && !options.fetchImpl) return fetchRoskildeDocuments(source.editionYear);
 
   let initial = await fetchWithRetry(source.fetchUrl ?? source.url);
+  if (initial.response.ok && isDownloadSource(source)) {
+    let attempts = initial.attempts;
+    try {
+      if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url)) throw new Error("Download homepage identity changed");
+      const home = await initial.response.text();
+      const artists = await fetchWithRetry(DOWNLOAD_ARTISTS, "error");
+      attempts += artists.attempts;
+      if (!artists.response.ok) return { response: artists.response, attempts };
+      if (artists.response.url && artists.response.url !== DOWNLOAD_ARTISTS) throw new Error("Download artist listing identity changed");
+      const artistHtml = await artists.response.text();
+      const response = new Response(JSON.stringify({ kind: DOWNLOAD_DOCUMENTS, home, artists: artistHtml }), { headers: { "content-type": "application/json" } });
+      Object.defineProperty(response, "url", {value: source.url});
+      return { response, attempts };
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      throw Object.assign(failure, { attempts: attempts + Number((failure as Error & { attempts?: number }).attempts ?? 0) });
+    }
+  }
   if (initial.response.ok && isHeavyHomepage(source)) {
     if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url)) throw new Error("Heavy Week-End homepage changed its configured identity");
     const home = await initial.response.text(), urls = heavyMissingArtistUrls(home);

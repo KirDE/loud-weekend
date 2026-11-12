@@ -79,7 +79,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     const currentEditions = editions.filter(({ recordState }) => recordState === "current");
     const currentArtistNames = new Set(currentEditions.flatMap(({ headliners, lineup }) => [...headliners, ...lineup]));
     const festivalsFromDatabase: Festival[] = currentEditions.map((edition) => {
-      const { recordState: _recordState, completeness: _completeness, snapshotAt: _snapshotAt, provenance: _provenance, ...festival } = edition;
+      const { recordState: _recordState, snapshotAt: _snapshotAt, provenance: _provenance, ...festival } = edition;
       const row = editionRows.find(({ festival: item, year }) => item.slug === edition.slug && year === edition.editionYear)!;
       return {
         ...festival,
