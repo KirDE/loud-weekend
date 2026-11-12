@@ -269,3 +269,19 @@ test('video/player social metadata cannot introduce an unreviewed announcement',
  for (const key of ['og:video','og:video:url','og:video:secure_url','og:audio','twitter:player','twitter:player:stream']) review(`<meta name="viewport" property="${key}" content="/lineup-2027.mp4">${svgFixture}`);
  review(`<meta name="twitter:card" content="player">${svgFixture}`);
 });
+
+test('the verified holding title must be the sole document title', () => {
+ for (const base of [svgFixture, fixture]) {
+  review('<title>Firenze Rocks 2027 tickets on sale</title>'+base);
+  review(base+'<title>2028 lineup announced</title>');
+  review('<title>Home | Firenze Rocks</title>'+base);
+ }
+});
+test('only observed ARIA attributes are accepted, not unverified human-readable semantics', () => {
+ for (const base of [svgFixture, fixture]) {
+  for (const name of ['aria-roledescription','aria-valuetext','aria-placeholder','aria-description','aria-future-field']) {
+   review(base.replace('href="/"',`href="/" ${name}="Firenze Rocks 2027 tickets"`));
+   review(base.replace('</main>',`<div ${name}="2028 lineup announced"></div></main>`));
+  }
+ }
+});

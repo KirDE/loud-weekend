@@ -23,6 +23,19 @@ function attribute(tag: string, name: string): string {
 function onlyAttributes(tag: string, allowed: string[]): boolean {
   return attributes(tag).every(attr => allowed.includes(attr[1].toLowerCase()));
 }
+function knownAria(tag: string): boolean {
+  return attributes(tag).every(attr => {
+    const name = attr[1].toLowerCase(), value = attr[2] ?? attr[3] ?? attr[4] ?? "";
+    if (!name.startsWith("aria-")) return true;
+    if (name === "aria-label") return /^<(?:nav|a)\b/i.test(tag) &&
+      ["Primario", "Switch language. Current language is Italiano"].includes(value);
+    if (name === "aria-hidden") return /^<(?:svg|video)\b/i.test(tag) && value === "true";
+    if (/^<a\b/i.test(tag) && attribute(tag, "data-testid") === "lang-selector") {
+      return name === "aria-haspopup" && value === "menu" || name === "aria-expanded" && value === "false";
+    }
+    return false;
+  });
+}
 // Only observed presentation-only CSS; unknown functions/properties may render artwork.
 function safeStyles(markup: string): boolean {
   return [...markup.matchAll(/<[a-z][^>]*>/gi)].every(tag =>
@@ -94,14 +107,16 @@ function knownLinks(html: string): boolean {
 const LANGUAGE_ICON_PATH = 'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2m6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56M12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96M4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2s.06 1.34.14 2zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56m2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8M12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96M14.34 14H9.66c-.09-.66-.16-1.32-.16-2s.07-1.35.16-2h4.68c.09.65.16 1.32.16 2s-.07 1.34-.16 2m.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56M16.36 14c.08-.66.14-1.32.14-2s-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2z';
 export function firenzeRocks(html: string, source: FestivalSource) {
   const drift = { excerpt: "Firenze Rocks official page changed", warning: "Firenze Rocks holding page changed or is incomplete; review the official announcement before extracting facts" };
-  if (!/<title\b[^>]*>\s*Home\s*\|\s*Firenze Rocks\s*<\/title>/i.test(html) ||
+  const titles = [...html.matchAll(/<title\b[^>]*>([\s\S]*?)<\/title>/gi)];
+  if (titles.length !== 1 || !/^\s*Home\s*\|\s*Firenze Rocks\s*$/i.test(titles[0][1]) ||
       !/<script\b[^>]*\bsrc=["'][^"']*\/holdingPage\/page-[^"']+["']/i.test(html) ||
       /["']@type["']\s*:\s*["'](?:MusicEvent|Festival|Event)["']/i.test(html)) return drift;
   // Inspect inline CSS before head/runtime styles are removed. Generated layout
   // rules can change freely, but generated text, imports and artwork cannot.
   if (!knownScripts(html) || !knownLinks(html)) return drift;
   const markup = html.replace(/(<(?:script|style)\b[^>]*>)[\s\S]*?(<\/(?:script|style)>)/gi, "$1$2").replace(/<!--[\s\S]*?-->/g, "");
-  if ([...markup.matchAll(/<[a-z][^>]*>/gi)].some(tag => attributes(tag[0]).some(attr => /^on[a-z]/i.test(attr[1]) || /^(?:background|dynsrc|lowsrc)$/i.test(attr[1])))) return drift;
+  if ([...markup.matchAll(/<[a-z][^>]*>/gi)].some(tag => !knownAria(tag[0]) ||
+      attributes(tag[0]).some(attr => /^on[a-z]/i.test(attr[1]) || /^(?:background|dynsrc|lowsrc)$/i.test(attr[1])))) return drift;
   // Browsers reprocess invalid head children in the body. Do not discard them
   // merely because they are surrounded by raw head delimiters.
   for (const head of html.matchAll(/<head\b[^>]*>([\s\S]*?)<\/head>/gi)) {
