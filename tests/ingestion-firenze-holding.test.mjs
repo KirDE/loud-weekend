@@ -336,3 +336,9 @@ test('CSS comment markers inside strings cannot erase later announcement rules',
  quiet(`<style>/* ordinary deployment note */body{color:black}</style>${svgFixture}`);
  review(`<style>.x{font-family:"broken\n/*"}body{background-image:url(/poster.jpg)}/* end */</style>${svgFixture}`);
 });
+
+test('Microdata and RDFa event semantics are new announcement evidence', () => {
+ review(svgFixture.replace('<main','<main itemscope itemtype="https://schema.org/MusicEvent" itemref="fr-date fr-artist"')+'<meta id="fr-date" itemprop="startDate" content="2027-06-15"><meta id="fr-artist" itemprop="performer" content="New Artist">');
+ for (const attr of ['itemscope','itemtype="https://schema.org/Festival"','itemprop="performer"','itemref="announcement"','itemid="https://www.firenzerocks.it/2027"','vocab="https://schema.org/"','typeof="MusicEvent"','about="/2028"','resource="/lineup"','prefix="schema: https://schema.org/"']) review(svgFixture.replace('<main',`<main ${attr}`));
+ review(`<meta itemprop="startDate" content="2028-06-15">${svgFixture}`);
+});

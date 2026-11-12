@@ -207,7 +207,8 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   if (!knownScripts(html) || !knownLinks(html)) return drift;
   const markup = html.replace(/(<(?:script|style)\b[^>]*>)[\s\S]*?(<\/(?:script|style)>)/gi, "$1$2").replace(/<!--[\s\S]*?-->/g, "");
   if ([...markup.matchAll(/<[a-z][^>]*>/gi)].some(tag => !knownAria(tag[0]) ||
-      attributes(tag[0]).some(attr => /^on[a-z]/i.test(attr[1]) || /^(?:background|dynsrc|lowsrc|fill|stroke|filter|mask|clip-path|marker(?:-start|-mid|-end)?)$/i.test(attr[1])))) return drift;
+      attributes(tag[0]).some(attr => /^(?:item(?:scope|type|prop|ref|id)|vocab|typeof|about|resource|prefix)$/i.test(attr[1]) ||
+        /^on[a-z]/i.test(attr[1]) || /^(?:background|dynsrc|lowsrc|fill|stroke|filter|mask|clip-path|marker(?:-start|-mid|-end)?)$/i.test(attr[1])))) return drift;
   // Browsers reprocess invalid head children in the body. Do not discard them
   // merely because they are surrounded by raw head delimiters.
   for (const head of html.matchAll(/<head\b[^>]*>([\s\S]*?)<\/head>/gi)) {
