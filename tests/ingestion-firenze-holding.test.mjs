@@ -314,3 +314,8 @@ test('commented shell nodes are not evidence of a complete browser holding page'
 test('ordinary comments remain inert and do not freeze the shell snapshot', () => {
  quiet(`<!-- changed deployment note -->${svgFixture}<!-- footer note -->`);
 });
+
+test('comment delimiters in quoted attributes cannot erase actual announcement nodes', () => {
+ for (const quote of ['"', "'"]) for (const tag of ['div','span']) review(svgFixture+`<${tag} class=${quote}<!--${quote}><img src="/lineup-2027.jpg"><div class=${quote}-->${quote}></div>`);
+ review(svgFixture+'<!-- harmless --!><img src="/lineup-2027.jpg"><!-- end -->');
+});

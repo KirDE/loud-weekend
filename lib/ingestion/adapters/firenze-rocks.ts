@@ -116,12 +116,55 @@ function knownLinks(html: string): boolean {
 }
 // Verified generic language-selector globe geometry, not edition artwork.
 const LANGUAGE_ICON_PATH = 'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2m6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56M12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96M4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2s.06 1.34.14 2zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56m2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8M12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96M14.34 14H9.66c-.09-.66-.16-1.32-.16-2s.07-1.35.16-2h4.68c.09.65.16 1.32.16 2s-.07 1.34-.16 2m.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56M16.36 14c.08-.66.14-1.32.14-2s-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2z';
+// A narrow fail-closed lexer: comment openers are recognized only in data,
+// never inside a quoted tag attribute or script/style/title raw text. Ambiguous
+// or nonstandard comment forms require review rather than erasing evidence.
+function withoutComments(html: string): string | null {
+  let result = "", offset = 0;
+  while (offset < html.length) {
+    if (html.startsWith("<!--", offset)) {
+      const end = html.indexOf("-->", offset + 4);
+      if (end < 0) return null;
+      const body = html.slice(offset + 4, end);
+      if (body.startsWith(">") || body.startsWith("->") || body.includes("--")) return null;
+      offset = end + 3;
+      continue;
+    }
+    if (html[offset] !== "<" || !/^<\/?[a-z!]/i.test(html.slice(offset, offset + 3))) {
+      result += html[offset++];
+      continue;
+    }
+    let end = offset + 1, quote = "";
+    for (; end < html.length; end++) {
+      const char = html[end];
+      if (quote) { if (char === quote) quote = ""; }
+      else if (char === '"' || char === "'") quote = char;
+      else if (char === ">") break;
+    }
+    if (end === html.length) return null;
+    const tag = html.slice(offset, end + 1);
+    // Later shell checks use tag regexes, so do not allow delimiter-like
+    // attribute data to be reinterpreted by any subsequent cleanup either.
+    if (tag.includes("<!--") || tag.includes("-->")) return null;
+    result += tag;
+    offset = end + 1;
+    const raw = tag.match(/^<(script|style|title)\b/i)?.[1];
+    if (raw) {
+      const close = new RegExp(`<\\/${raw}\\s*>`, "ig");
+      close.lastIndex = offset;
+      const match = close.exec(html);
+      if (!match) return null;
+      result += html.slice(offset, close.lastIndex);
+      offset = close.lastIndex;
+    }
+  }
+  return result;
+}
 export function firenzeRocks(html: string, source: FestivalSource) {
-  // Commented nodes do not exist in the browser DOM. Remove comments before
-  // any shell evidence checks, retaining script/style raw-text contents.
-  html = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>|<!--[\s\S]*?(?:-->|$)/gi,
-    block => block.startsWith("<!--") ? "" : block);
   const drift = { excerpt: "Firenze Rocks official page changed", warning: "Firenze Rocks holding page changed or is incomplete; review the official announcement before extracting facts" };
+  const cleaned = withoutComments(html);
+  if (cleaned === null) return drift;
+  html = cleaned;
   const titles = [...html.matchAll(/<title\b[^>]*>([\s\S]*?)<\/title>/gi)];
   if (titles.length !== 1 || !/^\s*Home\s*\|\s*Firenze Rocks\s*$/i.test(titles[0][1]) ||
       !/<script\b[^>]*\bsrc=["'][^"']*\/holdingPage\/page-[^"']+["']/i.test(html) ||
