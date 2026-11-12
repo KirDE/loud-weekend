@@ -389,6 +389,14 @@ main {
   background: rgba(23, 23, 18, 0.96);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
 }
+/* Keep secondary switches together beneath the primary filter controls. */
+.filterToggles { display: flex; flex: 1 0 100%; flex-wrap: wrap; gap: 10px; }
+@media (min-width: 1101px) {
+  .filterBar { display: grid; grid-template-columns: minmax(160px, 1.5fr) repeat(5, minmax(0, 1fr)) auto; }
+  .filterBar > * { min-width: 0; }
+  .filterBar .clearFilters { white-space: nowrap; }
+  .filterToggles { grid-column: 1 / -1; }
+}
 .filterBar .search { flex: 1 1 230px; }
 .filterBar select { flex: 1 1 145px; width: auto; }
 .search {
