@@ -20,6 +20,9 @@ function attribute(tag: string, name: string): string {
   }
   return "";
 }
+function onlyAttributes(tag: string, allowed: string[]): boolean {
+  return attributes(tag).every(attr => allowed.includes(attr[1].toLowerCase()));
+}
 // Only observed presentation-only CSS; unknown functions/properties may render artwork.
 function safeStyles(markup: string): boolean {
   return [...markup.matchAll(/<[a-z][^>]*>/gi)].every(tag =>
@@ -99,13 +102,14 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   }
   for (const meta of html.matchAll(/<meta\b[^>]*>/gi)) {
     if (attribute(meta[0], "http-equiv")) return drift;
-    const kind = attribute(meta[0], "name") || attribute(meta[0], "property");
-    // The visually verified share card is generic branding too. Unknown image
-    // metadata can be an image-only edition announcement even on this shell.
-    if (/^(?:og:image|twitter:image)(?::(?:url|src|secure_url))?$/i.test(kind) &&
-        attribute(meta[0], "content") !== "https://networksites.livenationinternational.com/networksites/vrudcnfc/firenze-rocks-share-image.jpg") return drift;
-    if (["description", "og:description", "og:title", "twitter:description", "twitter:title"].includes(kind) &&
-        attribute(meta[0], "content") !== "Home | Firenze Rocks") return drift;
+    for (const kind of [attribute(meta[0], "name"), attribute(meta[0], "property")].map(value => value.toLowerCase())) {
+      // The visually verified share card is generic branding too. Unknown image
+      // metadata can be an image-only edition announcement even on this shell.
+      if (/^(?:og:image|twitter:image)(?::(?:url|src|secure_url))?$/i.test(kind) &&
+          attribute(meta[0], "content") !== "https://networksites.livenationinternational.com/networksites/vrudcnfc/firenze-rocks-share-image.jpg") return drift;
+      if (["description", "og:description", "og:title", "twitter:description", "twitter:title"].includes(kind) &&
+          attribute(meta[0], "content") !== "Home | Firenze Rocks") return drift;
+    }
   }
   const headers = [...html.matchAll(/<header\b[^>]*>([\s\S]*?)<\/header>/gi)];
   if (headers.length !== 1 || text(headers[0][1]) !== "Switch language. Current language is Italiano IT") return drift;
@@ -160,11 +164,16 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   if (!safeStyles(outside)) return drift;
   outside = outside.replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, block => {
     const frame = block.match(/^<noscript\b[^>]*>\s*(<iframe\b[^>]*>)\s*<\/iframe>\s*<\/noscript>$/i)?.[1];
-    return frame && attribute(frame, "src") === "https://www.googletagmanager.com/ns.html?id=GTM-NV6L247" &&
+    return frame && onlyAttributes(block.match(/^<noscript\b[^>]*>/i)?.[0] ?? "", ["id", "class", "style"]) &&
+      onlyAttributes(frame, ["src", "width", "height", "title"]) &&
+      ["", "gtm-GTM-NV6L247"].includes(attribute(frame, "title")) &&
+      attribute(frame, "src") === "https://www.googletagmanager.com/ns.html?id=GTM-NV6L247" &&
       attribute(frame, "width") === "0" && attribute(frame, "height") === "0" ? "" : block;
   }).replace(/<aside\b[^>]*>[\s\S]*?<\/aside>/gi, block => {
-    const skip = block.match(/^<aside\b[^>]*>\s*(<a\b[^>]*>)([^<]*)<\/a>\s*<\/aside>$/i);
-    return skip && attribute(skip[1], "href") === "#main" && text(skip[2]) === "Salta al contenuto principale" ? "" : block;
+    const skip = block.match(/^(<aside\b[^>]*>)\s*(<a\b[^>]*>)([^<]*)<\/a>\s*<\/aside>$/i);
+    return skip && onlyAttributes(skip[1], ["id", "class", "style"]) &&
+      onlyAttributes(skip[2], ["href", "id", "class", "style", "tabindex"]) &&
+      attribute(skip[2], "href") === "#main" && text(skip[3]) === "Salta al contenuto principale" ? "" : block;
   }).replace(/<!--[\s\S]*?-->|<!doctype[^>]*>/gi, "");
   if (/<\/?(?!(?:html|body|div)(?=[\s/>]))[a-z][^>]*>/i.test(outside) || text(outside) ||
       [...outside.matchAll(/<[a-z][^>]*>/gi)].some(tag =>

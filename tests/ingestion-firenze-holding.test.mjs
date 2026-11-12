@@ -247,3 +247,14 @@ test('legacy background attributes and unknown outside-wrapper attributes requir
 test('ordinary runtime wrapper attributes do not require an exact HTML snapshot', () => {
  quiet(`<html lang="it-IT" dir="ltr" data-dpl-id="v200"><body class="new-layout" id="page"><div hidden></div>${svgFixture}</body></html>`);
 });
+
+test('metadata name and property cannot mask one another', () => {
+ for (const attrs of ['name="viewport" property="og:image" content="/lineup-2027.jpg"','property="viewport" name="twitter:image" content="/lineup-2027.jpg"','name="viewport" property="og:description" content="2027 lineup announced"']) review(`<meta ${attrs}>${svgFixture}`);
+});
+test('skip-link and noscript attributes are checked before those blocks are discarded', () => {
+ for (const attrs of ['aria-label="Firenze Rocks 2027 tickets on sale"','aria-description="2027 lineup"','role="img"','title="New lineup"']) {
+  review(svgFixture+`<aside><a href="#main" ${attrs}>Salta al contenuto principale</a></aside>`);
+  review(svgFixture+`<aside ${attrs}><a href="#main">Salta al contenuto principale</a></aside>`);
+ }
+ review(svgFixture+'<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NV6L247" width="0" height="0" aria-label="2027 tickets"></iframe></noscript>');
+});
