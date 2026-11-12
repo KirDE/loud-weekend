@@ -319,3 +319,12 @@ test('comment delimiters in quoted attributes cannot erase actual announcement n
  for (const quote of ['"', "'"]) for (const tag of ['div','span']) review(svgFixture+`<${tag} class=${quote}<!--${quote}><img src="/lineup-2027.jpg"><div class=${quote}-->${quote}></div>`);
  review(svgFixture+'<!-- harmless --!><img src="/lineup-2027.jpg"><!-- end -->');
 });
+
+test('literal less-than data is visible evidence, not a removable HTML tag', () => {
+ for (const value of ['< 2027 LINEUP ANNOUNCED >','<3 New Artist announced >','<? 2028 tickets >']) review(svgFixture.replace('</main>',`<p>${value}</p></main>`));
+});
+test('hidden wrappers cannot conceal the required holding-page regions', () => {
+ for (const tag of ['div','body','html']) for (const attr of ['hidden','hidden="hidden"','HIDDEN=until-found']) review(`<${tag} ${attr}>${svgFixture}</${tag}>`);
+ for (const tag of ['header','main']) review(svgFixture.replace(`<${tag}`,`<${tag} hidden`));
+ quiet(`<div hidden></div>${svgFixture}`);
+});

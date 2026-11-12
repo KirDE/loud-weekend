@@ -130,10 +130,12 @@ function withoutComments(html: string): string | null {
       offset = end + 3;
       continue;
     }
-    if (html[offset] !== "<" || !/^<\/?[a-z!]/i.test(html.slice(offset, offset + 3))) {
+    if (html[offset] !== "<") {
       result += html[offset++];
       continue;
     }
+    // A literal less-than in data must not be erased by later tag cleanup.
+    if (!/^<\/?[a-z!]/i.test(html.slice(offset, offset + 3))) return null;
     let end = offset + 1, quote = "";
     for (; end < html.length; end++) {
       const char = html[end];
@@ -146,6 +148,11 @@ function withoutComments(html: string): string | null {
     // Later shell checks use tag regexes, so do not allow delimiter-like
     // attribute data to be reinterpreted by any subsequent cleanup either.
     if (tag.includes("<!--") || tag.includes("-->")) return null;
+    const name = tag.match(/^<([a-z][\w:-]*)\b/i)?.[1];
+    // Only empty runtime nodes may be hidden, never a required shell region
+    // or an ancestor that would make all its evidence invisible.
+    if (name && attributes(tag).some(attr => attr[1].toLowerCase() === "hidden") &&
+        !new RegExp(`^\\s*</${name}\\s*>`, "i").test(html.slice(end + 1))) return null;
     result += tag;
     offset = end + 1;
     const raw = tag.match(/^<(script|style|title)\b/i)?.[1];
