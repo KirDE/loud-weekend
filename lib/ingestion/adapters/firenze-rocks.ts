@@ -8,13 +8,14 @@ function text(value: string): string {
   return value.replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#160;/gi, " ")
     .replace(/\s+/g, " ").trim();
 }
-function attribute(tag: string, name: string): string {
-  // Tokenize complete attributes so data-src (or text inside a quoted value)
-  // cannot impersonate the browser's actual src/viewBox/d attribute.
-  const attributes = tag.replace(/^<[^\s/>]+/, "").matchAll(
+function attributes(tag: string) {
+  // Tokenize complete attributes, not names inside quoted values or data-*.
+  return [...tag.replace(/^<[^\s/>]+/, "").matchAll(
     /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g,
-  );
-  for (const match of attributes) {
+  )];
+}
+function attribute(tag: string, name: string): string {
+  for (const match of attributes(tag)) {
     if (match[1].toLowerCase() === name.toLowerCase()) return match[2] ?? match[3] ?? match[4] ?? "";
   }
   return "";
@@ -78,6 +79,15 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   // Inspect inline CSS before head/runtime styles are removed. Generated layout
   // rules can change freely, but generated text, imports and artwork cannot.
   if (!knownScripts(html) || !knownLinks(html)) return drift;
+  const markup = html.replace(/(<(?:script|style)\b[^>]*>)[\s\S]*?(<\/(?:script|style)>)/gi, "$1$2").replace(/<!--[\s\S]*?-->/g, "");
+  if ([...markup.matchAll(/<[a-z][^>]*>/gi)].some(tag => attributes(tag[0]).some(attr => /^on[a-z]/i.test(attr[1])))) return drift;
+  // Browsers reprocess invalid head children in the body. Do not discard them
+  // merely because they are surrounded by raw head delimiters.
+  for (const head of html.matchAll(/<head\b[^>]*>([\s\S]*?)<\/head>/gi)) {
+    const remaining = head[1].replace(/<(script|style|title)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+      .replace(/<meta\b[^>]*>|<link\b[^>]*>|<!--[\s\S]*?-->/gi, "");
+    if (remaining.trim()) return drift;
+  }
   for (const sheet of html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)) {
     const css = sheet[1].replace(/\/\*[\s\S]*?\*\//g, "").replace(/\\([0-9a-f]{1,6})\s?|\\([^\r\n])/gi,
       (_, hex: string, char: string) => hex ? String.fromCodePoint(Math.min(parseInt(hex, 16), 0x10ffff)) : char);
@@ -88,6 +98,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
     }
   }
   for (const meta of html.matchAll(/<meta\b[^>]*>/gi)) {
+    if (attribute(meta[0], "http-equiv")) return drift;
     const kind = attribute(meta[0], "name") || attribute(meta[0], "property");
     // The visually verified share card is generic branding too. Unknown image
     // metadata can be an image-only edition announcement even on this shell.

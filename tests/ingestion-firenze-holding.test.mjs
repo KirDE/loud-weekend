@@ -222,3 +222,18 @@ test('unknown linked stylesheets return to review before links/head are removed'
   review(svgFixture+link);review(`<head>${link}</head>${svgFixture}`);
  }
 });
+
+test('executable attributes anywhere in the accepted shell return to review', () => {
+ for (const base of [svgFixture, fixture]) {
+  review(base.replace(/<img\b/i, `<img onload="document.body.innerHTML='2027 tickets on sale'"`));
+  review(base.replace('<main', '<main onpointerenter="showLineup()"'));
+  review(base.replace('<video', '<video onloadeddata=showLineup()'));
+  review(base.replace('<meta', '<meta onclick="showTickets()"'));
+ }
+});
+test('head children must be metadata/runtime, not body-visible announcement nodes', () => {
+ for (const markup of ['<img src="/lineup-2027.jpg">','<div>2027 tickets on sale</div>','<video src="/lineup.mp4"></video>','<base href="https://announcement.invalid/">']) review(`<head>${markup}</head>${svgFixture}`);
+});
+test('active http-equiv metadata cannot navigate away from the holding shell', () => {
+ for (const attrs of ['http-equiv="refresh" content="0;url=/tickets"', 'HTTP-EQUIV=refresh content="0;url=/lineup-2028"', 'name="ignored" http-equiv="refresh" content="0;url=/tickets"']) review(`<meta ${attrs}>${svgFixture}`);
+});
