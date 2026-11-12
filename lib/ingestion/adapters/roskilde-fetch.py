@@ -56,9 +56,17 @@ def main():
     # Homepage news cards rotate. Follow only the same-origin news index
     # actually linked there; retain the existing five-document/byte limits.
     if len(paths) < 3 and re.search(r'href=["\']/nyheder["\']', home['html']):
-        index = document('/nyheder', opener)
-        documents.append(index)
-        paths = list(dict.fromkeys(current_paths(index['html']) + paths))[:2]
+        try:
+            index = document('/nyheder', opener)
+        except (urllib.error.URLError, TimeoutError, ValueError):
+            # The index is optional when direct homepage evidence exists.
+            # Without any such evidence, retain the real source failure/backoff.
+            if not paths:
+                raise
+        else:
+            documents.append(index)
+            # Never evict the original directly linked announcement evidence.
+            paths = list(dict.fromkeys(paths + current_paths(index['html'])))[:2]
     documents.extend(document(path, opener) for path in paths)
     print(json.dumps({'kind': 'roskilde-documents-v1', 'documents': documents}, ensure_ascii=False))
 
