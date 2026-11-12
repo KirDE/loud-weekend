@@ -266,12 +266,13 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
       input.result.changes.every(({field,kind})=>['startDate','endDate','headliners','lineup','status'].includes(field) &&
         (field!=='headliners'||kind==='headliner_added') && (field!=='lineup'||kind==='artist_added') &&
         candidate.evidence.some(e=>e.field===field && e.sourceUrl===GRASPOP_FAQ && same(e.observedValue,(input.result.candidate as unknown as Record<string,unknown>)[field])))))throw new Error('Graspop publication requires matching persisted official addition evidence');
-    if(graspopLineup && applied.edition.completeness==='TBA') {
+    const downloadLineup = input.result.festivalSlug === "download" && input.result.changes.some(({field}) => ["lineup", "headliners"].includes(field));
+    if((graspopLineup || downloadLineup) && applied.edition.completeness==='TBA') {
       await db.festivalEdition.update({where:{id:applied.edition.id},data:{completeness:'PARTIAL'}});
       applied.changedFields.push('completeness');
     }
-    const playlistRefreshDeferral = idaysLineup || graspopLineup ? {
-      policy: "explicit-refresh-only", reason: `Verified ${graspopLineup?'Graspop':'I-Days'} catalog additions do not authorize provider activity`,
+    const playlistRefreshDeferral = idaysLineup || graspopLineup || downloadLineup ? {
+      policy: "explicit-refresh-only", reason: `Verified ${downloadLineup?'Download':graspopLineup?'Graspop':'I-Days'} catalog additions do not authorize provider activity`,
     } : undefined;
     const publication = await createPublication(db, {
       source: CatalogPublicationSource.INGESTION, sourceId, festivalSlug: input.result.festivalSlug,
