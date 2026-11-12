@@ -50,6 +50,21 @@ class TrackFilterTest(unittest.TestCase):
         self.assertEqual(artists, ['A'])
         self.assertEqual(headliners, ['A'])
 
+    def test_massive_attack_is_an_original_act_but_tributes_stay_excluded(self):
+        _, festivals, skipped = playlists.parse_canonical_festivals({
+            'season': 2027, 'festivals': [{
+                'slug': 'werchter', 'name': 'Rock Werchter', 'editionYear': 2027,
+                'headliners': [], 'artists': ['Massive Attack', 'Massive Attack Tribute', 'Thrash Attack'],
+            }],
+        })
+        self.assertEqual(skipped, [])
+        self.assertEqual(festivals[0].lineup_fn(), (['Massive Attack'], []))
+        self.assertFalse(playlists.should_exclude('Massive Attack', festivals[0]))
+        self.assertFalse(playlists.looks_like_tribute('MASSIVE ATTACK'))
+        self.assertTrue(playlists.should_exclude('Thrash Attack', festivals[0]))
+        self.assertTrue(playlists.looks_like_tribute('Massive Attack Tribute'))
+        self.assertTrue(playlists.looks_like_tribute('Korn Again'))
+
     def test_canonical_catalog_rejects_wrong_edition_before_mutation(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = self.write_catalog(tmpdir, [

@@ -226,6 +226,10 @@ def looks_like_tribute(name: str) -> bool:
     lowered = name.lower()
     if any(keyword in lowered for keyword in KEYWORDS_EXCLUDE):
         return True
+    # The original act is not a tribute merely because its name contains
+    # 'attack'. Keep explicit tribute keywords and every other exclusion.
+    if lowered.strip() == 'massive attack':
+        return False
     tokens = set(simplify_name(name).split())
     return any(token in tokens for token in TRIBUTE_NAME_HINTS if len(tokens) <= 3)
 
