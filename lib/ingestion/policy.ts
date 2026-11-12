@@ -89,6 +89,11 @@ export function evaluateCandidate(current: Festival, candidate: FestivalCandidat
     if(!isGraspopAnnouncement(candidate,current.editionYear ?? Number(current.startDate?.slice(0,4))))reviewReasons.add('Graspop additions require verified current official announcement evidence');
     if(candidate.headliners?.some(name=>current.lineup.some(old=>old.toLowerCase()===name.toLowerCase())) || candidate.lineup?.some(name=>[...current.headliners,...(candidate.headliners ?? [])].some(old=>old.toLowerCase()===name.toLowerCase())))reviewReasons.add('Graspop billing changes require reviewed reclassification');
   }
+  if (candidate.festivalSlug === "download" && changes.some(change => ["lineup", "headliners"].includes(change.field))) {
+    const support = new Set([...current.lineup, ...(candidate.lineup ?? [])].map(name => name.toLocaleLowerCase()));
+    if ([...current.headliners, ...(candidate.headliners ?? [])].some(name => support.has(name.toLocaleLowerCase())))
+      reviewReasons.add("Download billing changes require reviewed reclassification");
+  }
   if (candidate.festivalSlug !== current.slug) reviewReasons.add("Candidate slug does not match the current festival");
   if (candidate.festivalSlug === "idays" && changes.some(change => ["lineup", "headliners"].includes(change.field))) {
     if (!isIdaysAnnouncement(candidate, current.editionYear)) reviewReasons.add("I-Days additions require verified official edition evidence");

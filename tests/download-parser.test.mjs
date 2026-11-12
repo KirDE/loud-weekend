@@ -22,6 +22,25 @@ test('wrong edition, incomplete listing, missing billing or untrusted artist lin
  for(const mutate of [b=>b.artists=b.artists.replaceAll('2027','2026'),b=>b.artists=b.artists.replaceAll('</nav>',''),b=>b.home=b.home.replace('are your #DLXXIV headliners','are performing'),b=>b.artists=b.artists.replace('https://downloadfestival.co.uk/artists-a-z/blink-182/','https://evil.invalid/artists-a-z/blink-182/'),b=>b.artists=b.artists.replaceAll('>blink-182<','>Other Act<')]){const b=structuredClone(bundle);mutate(b);assert.deepEqual(parse(b).evidence,[]);}
 });
 test('two-document transport propagates HTTP failures and rejects identity changes',async()=>{
- for(const status of [200,403]){const calls=[];const r=await fetchSource(source,{maxAttempts:1,fetchImpl:async(u,o)=>{calls.push(u);if(u===source.url)return new Response(bundle.home);assert.equal(u,source.url+'artists-a-z/');assert.equal(o.redirect,'error');return new Response(bundle.artists,{status});}});assert.equal(r.response.status,status);assert.equal(calls.length,2);if(status===200)assert.equal(parse(JSON.parse(await r.response.text())).lineup.length,97);}
+ for(const status of [200,403]){const calls=[];const r=await fetchSource(source,{maxAttempts:1,fetchImpl:async(u,o)=>{calls.push(u);if(u===source.url)return new Response(bundle.home);assert.equal(u,source.url+'artists-a-z/');assert.equal(o.redirect,'error');return new Response(bundle.artists,{status});}});assert.equal(r.response.status,status);assert.equal(calls.length,2);assert.equal(r.attempts,2);if(status===200)assert.equal(parse(JSON.parse(await r.response.text())).lineup.length,97);}
  await assert.rejects(fetchSource({...source,fetchUrl:'https://evil.invalid/'},{fetchImpl:async()=>new Response(bundle.home)}),/identity changed/);
+});
+
+test('billing promotions and demotions require review rather than failed publication',()=>{
+ const c=parse();
+ for(const current of [
+  {...saved,lineup:['BLINK-182']},
+  {...saved,headliners:[c.lineup[0].toUpperCase()]},
+ ]) {
+  const r=evaluateCandidate(current,c);
+  assert.equal(r.publishable,false);
+  assert.ok(r.reviewReasons.includes('Download billing changes require reviewed reclassification'));
+ }
+});
+test('artist-list retries retain homepage and listing attempts on HTTP failure',async()=>{
+ let calls=0;
+ const r=await fetchSource(source,{maxAttempts:2,baseDelayMs:0,sleep:async()=>{},fetchImpl:async()=>{
+  calls++;return calls===1?new Response(bundle.home):new Response('unavailable',{status:503});
+ }});
+ assert.equal(r.response.status,503);assert.equal(r.attempts,3);assert.equal(calls,3);
 });

@@ -75,7 +75,7 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url)) throw new Error("Download homepage identity changed");
     const home = await initial.response.text();
     const artists = await fetchWithRetry(DOWNLOAD_ARTISTS, "error");
-    if (!artists.response.ok) return artists;
+    if (!artists.response.ok) return { response: artists.response, attempts: initial.attempts + artists.attempts };
     if (artists.response.url && artists.response.url !== DOWNLOAD_ARTISTS) throw new Error("Download artist listing identity changed");
     return { response: new Response(JSON.stringify({ kind: DOWNLOAD_DOCUMENTS, home, artists: await artists.response.text() }), { headers: { "content-type": "application/json" } }), attempts: initial.attempts + artists.attempts };
   }
