@@ -420,3 +420,24 @@ test('holding video sources retain observed media selection and usable attribute
   quiet(base);
  }
 });
+
+
+test('unknown and absolute RDFa meta property keys require announcement review', () => {
+ for (const base of [fixture, svgFixture]) for (const property of ['https://schema.org/startDate','https://schema.org/performer','schema:startDate','future:announcement']) review(base+`<meta property="${property}" content="2027-06-15">`);
+ quiet(svgFixture);
+});
+test('social href must belong to the anchor, not its image child', () => {
+ for (const base of [fixture, svgFixture]) for (const host of ['facebook.com','instagram.com','x.com']) {
+  const changed=base.replace(/<a\b[^>]*>[\s\S]*?<\/a>/g, block=>{
+   const url=block.match(/^<a\b[^>]*\bhref="([^"]+)"/)?.[1];
+   return url?.includes(host) ? block.replace(`href="${url}"`,'').replace('<img ',`<img href="${url}" `) : block;
+  });
+  assert.notEqual(changed,base);review(changed);
+ }
+});
+test('unquoted equals signs cannot truncate browser-applied inline CSS', () => {
+ for (const base of [fixture, svgFixture]) {
+  for (const style of ['color:transparent=;background-image:url(/lineup-2027.jpg)','color:transparent=;opacity:0']) review(base.replace('<main',`<main style=${style}`));
+  quiet(base.replace('<main','<main style=color:transparent'));
+ }
+});

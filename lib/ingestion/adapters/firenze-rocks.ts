@@ -10,8 +10,9 @@ function text(value: string): string {
 }
 function attributes(tag: string) {
   // Tokenize complete attributes, not names inside quoted values or data-*.
+  // HTML retains equals signs and parse-error characters in unquoted values.
   return [...tag.replace(/^<[^\s/>]+/, "").matchAll(
-    /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g,
+    /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g,
   )];
 }
 function attribute(tag: string, name: string): string {
@@ -326,6 +327,10 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   }
   for (const meta of structure.matchAll(/<meta\b[^>]*>/gi)) {
     if (attribute(meta[0], "http-equiv")) return drift;
+    const property = metadataKey(attribute(meta[0], "property"));
+    // Only observed, separately validated social metadata is non-announcement
+    // evidence. Unknown RDFa predicates may carry machine-readable facts.
+    if (property && !["og:title", "og:description", "og:site_name", "og:image", "og:image:url", "og:image:src", "og:image:secure_url", "og:image:width", "og:image:height"].includes(property)) return drift;
     for (const kind of [attribute(meta[0], "name"), attribute(meta[0], "property")].map(metadataKey)) {
       if (kind.includes("&")) return drift;
       if (/^(?:og:image:alt|twitter:image:alt)$/.test(kind)) return drift;
@@ -418,7 +423,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   const expectedIcons = ["atlhchcy", "5rnlifmz", "vfhh3rto"];
   if (socials.length !== 3 || !socials.every((a, i) => {
     let link: URL;
-    try { link = new URL(attribute(a[0], "href")); } catch { return false; }
+    try { link = new URL(attribute(a[0].match(/^<a\b[^>]*>/i)?.[0] ?? "", "href")); } catch { return false; }
     const images = [...a[0].matchAll(/<img\b[^>]*>/gi)];
     return link.origin + link.pathname === expectedSocials[i] && !link.username && !link.password &&
       /^<a\b[^>]*>\s*<img\b[^>]*>\s*<\/a>$/i.test(a[0]) &&
