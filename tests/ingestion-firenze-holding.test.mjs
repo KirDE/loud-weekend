@@ -258,3 +258,14 @@ test('skip-link and noscript attributes are checked before those blocks are disc
  }
  review(svgFixture+'<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NV6L247" width="0" height="0" aria-label="2027 tickets"></iframe></noscript>');
 });
+
+test('every legacy responsive logo candidate must be a verified older-year logo URL', () => {
+ review(fixture.replace(/srcSet="[^"]*"/i,'srcSet="/lineup-2027.jpg 1x"'));
+ review(fixture.replace(/srcSet="[^"]*"/i,'srcSet="https://evil.invalid/firenze-rocks-2026_primary_black.png 1x"'));
+ review(fixture.replace(/srcSet="[^"]*"/i,'srcSet="https://networksites.livenationinternational.com/networksites/hp5a3tkz/firenze-rocks-2026_primary_black.png 1x, /lineup-2028.jpg 2x"'));
+ review(fixture.replace(/(<img\b[^>]*\s)src="[^"]*"/i,'$1src="/poster.jpg"'));
+});
+test('video/player social metadata cannot introduce an unreviewed announcement', () => {
+ for (const key of ['og:video','og:video:url','og:video:secure_url','og:audio','twitter:player','twitter:player:stream']) review(`<meta name="viewport" property="${key}" content="/lineup-2027.mp4">${svgFixture}`);
+ review(`<meta name="twitter:card" content="player">${svgFixture}`);
+});

@@ -29,6 +29,24 @@ function safeStyles(markup: string): boolean {
     attribute(tag[0], "style").split(";").map(value => value.trim()).filter(Boolean).every(value =>
       /^(?:color\s*:\s*transparent|text-align\s*:\s*center|--Paper-shadow\s*:\s*var\(\s*--mui-shadows-\d+\s*\)|--Paper-overlay\s*:\s*var\(\s*--mui-overlays-\d+\s*\))$/i.test(value)));
 }
+function legacyLogoUrl(value: string, editionYear: number): boolean {
+  try {
+    const url = new URL(value.replace(/&amp;/gi, "&"));
+    const year = url.pathname.match(/^\/networksites\/hp5a3tkz\/firenze-rocks-(20\d{2})_primary_black\.png$/i)?.[1];
+    return url.origin === "https://networksites.livenationinternational.com" && !url.username && !url.password &&
+      Boolean(year && Number(year) < editionYear) && [...url.searchParams].every(([key, val]) =>
+        key === "format" ? /^(?:webp|png|jpe?g)$/.test(val) : key === "rmode" ? val === "max" :
+        ["width", "height", "quality"].includes(key) && /^\d+$/.test(val));
+  } catch { return false; }
+}
+function legacyLogo(tag: string, editionYear: number): boolean {
+  if (!legacyLogoUrl(attribute(tag, "src"), editionYear)) return false;
+  const srcset = attribute(tag, "srcset");
+  return !srcset || srcset.split(",").every(candidate => {
+    const match = candidate.trim().match(/^(\S+)(?:\s+(?:\d+(?:\.\d+)?x|[1-9]\d*w))?$/);
+    return Boolean(match && legacyLogoUrl(match[1], editionYear));
+  });
+}
 // Observed runtime module identities; deployment hashes/versions may change.
 // A new module or arbitrary inline executable can render an announcement.
 const RUNTIME_CHUNKS = new Set(["9361d2c7", "8210", "main-app", "app/layout", "b27dc69b", "fcf3a8d9", "8087", "3945", "app/render/%5BcacheKey%5D/layout", "1738", "4860", "9385", "3734", "5993", "1441", "2085", "446", "1897", "8818", "app/render/%5BcacheKey%5D/(header-none-footer-none)/layout", "322", "1744", "5800", "3529", "7602", "443", "4865", "4475", "8784", "3464", "3604", "6292", "4418", "2393", "4793", "2392", "1584", "3393", "7018", "app/render/%5BcacheKey%5D/(header-minimal-footer-none)/holdingPage/page", "3208", "6841", "app/render/%5BcacheKey%5D/(header-minimal-footer-none)/layout", "3998", "app/render/%5BcacheKey%5D/error", "3887", "app/render/%5BcacheKey%5D/not-found", "9235", "7878", "app/render/%5BcacheKey%5D/(header-minimal-footer-minimal)/layout", "polyfills", "webpack"]);
@@ -103,6 +121,8 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   for (const meta of html.matchAll(/<meta\b[^>]*>/gi)) {
     if (attribute(meta[0], "http-equiv")) return drift;
     for (const kind of [attribute(meta[0], "name"), attribute(meta[0], "property")].map(value => value.toLowerCase())) {
+      if (/^(?:og:(?:video|audio)|twitter:player)(?::|$)/.test(kind) ||
+          kind === "twitter:card" && attribute(meta[0], "content").toLowerCase() === "player") return drift;
       // The visually verified share card is generic branding too. Unknown image
       // metadata can be an image-only edition announcement even on this shell.
       if (/^(?:og:image|twitter:image)(?::(?:url|src|secure_url))?$/i.test(kind) &&
@@ -141,13 +161,11 @@ export function firenzeRocks(html: string, source: FestivalSource) {
       /<\/?(?:svg|path|circle|rect|polygon|polyline|ellipse|line|text)\b/i.test(headers[0][1].replace(vectors[0][0], ""))) return drift;
   const logos = [...headers[0][1].matchAll(/<img\b[^>]*>/gi)];
   if (logos.length !== 2 || !logos.every(logo => {
-    const years = [...logo[0].matchAll(/firenze-rocks-(20\d{2})_primary_black\.png/gi)];
-    // Only this visually verified, yearless brand asset is known to be generic.
-    // A different asset ID may contain a logo-only edition announcement, so
-    // unknown replacements must return to review even when named logo.svg.
+    // Every browser-selected candidate must be the known generic brand or an
+    // older-year official logo; an old fallback cannot approve an unknown srcset.
     const genericLogo = attribute(logo[0], "src") === "https://networksites.livenationinternational.com/networksites/u4lp0w3n/logo.svg";
     return attribute(logo[0], "alt") === "Site logo - www.firenzerocks.it - go to homepage" &&
-      ((genericLogo && years.length === 0 && !/\bsrcset\s*=/i.test(logo[0])) || years.length > 0 && years.every(year => Number(year[1]) < source.editionYear));
+      (genericLogo ? !attributes(logo[0]).some(attr => attr[1].toLowerCase() === "srcset") : legacyLogo(logo[0], source.editionYear));
   })) return drift;
   const mains = [...html.matchAll(/<main\b[^>]*>([\s\S]*?)<\/main>/gi)];
   if (mains.length !== 1) return drift;
