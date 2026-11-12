@@ -7,7 +7,6 @@ for (const locale of ['en', 'de', 'ru']) {
       await page.goto(`/${locale}/`);
       const bar = page.locator('.filterBar');
       await expect(bar.locator('.search')).toHaveAttribute('data-ready', 'true');
-      if (locale === 'en' && [1440, 390].includes(width)) await page.screenshot({ path: `.tmp/filters-${width}.png`, fullPage: false });
       const layout = await bar.evaluate(node => {
         const rect = selector => node.querySelector(selector).getBoundingClientRect().toJSON();
         return { search: rect('.search'), clear: rect('.clearFilters'),
