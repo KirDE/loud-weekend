@@ -347,3 +347,14 @@ test('required shell nodes cannot be supplied by script or stylesheet raw text',
  for (const tag of ['header','main','title']) review(svgFixture.replace(new RegExp(`<${tag}\\b[\\s\\S]*?</${tag}>`,'i'),block=>`<style>${block}</style>`));
  review(svgFixture.replace(/<header\b[\s\S]*?<\/header>/i,block=>`<script>${block}</script>`));
 });
+
+test('noscript fallback markup cannot supply the required visible shell', () => {
+ const fallback='<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NV6L247" width="0" height="0"></iframe></noscript>';
+ review(fallback.replace('<iframe',svgFixture+'<iframe'));
+ review(`<noscript>${svgFixture}</noscript>`);
+ quiet(svgFixture+fallback);
+});
+test('styles that hide the shell must return to review', () => {
+ for (const css of ['header,main{display:none}','body{visibility:hidden}','html{content-visibility:hidden}','main{display:var(--future-display)}']) review(`<style>${css}</style>${svgFixture}`);
+ quiet(`<style>header{display:flex}main{display:block;visibility:visible}</style>${svgFixture}`);
+});

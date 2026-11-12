@@ -193,13 +193,24 @@ function withoutComments(html: string): string | null {
   }
   return result;
 }
+function knownNoscript(block: string): boolean {
+    const frame = block.match(/^<noscript\b[^>]*>\s*(<iframe\b[^>]*>)\s*<\/iframe>\s*<\/noscript>$/i)?.[1];
+    return Boolean(frame && safeStyles(block) && onlyAttributes(block.match(/^<noscript\b[^>]*>/i)?.[0] ?? "", ["id", "class", "style"]) &&
+      onlyAttributes(frame, ["src", "width", "height", "title"]) &&
+      ["", "gtm-GTM-NV6L247"].includes(attribute(frame, "title")) &&
+      attribute(frame, "src") === "https://www.googletagmanager.com/ns.html?id=GTM-NV6L247" &&
+      attribute(frame, "width") === "0" && attribute(frame, "height") === "0");
+}
 export function firenzeRocks(html: string, source: FestivalSource) {
   const drift = { excerpt: "Firenze Rocks official page changed", warning: "Firenze Rocks holding page changed or is incomplete; review the official announcement before extracting facts" };
   const cleaned = withoutComments(html);
   if (cleaned === null) return drift;
   html = cleaned;
   // Raw-text payloads are inspected separately, but are not DOM shell nodes.
-  const structure = html.replace(/(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2>)/gi, "$1$3");
+  const rawTextExcluded = html.replace(/(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2>)/gi, "$1$3");
+  const noscripts = [...rawTextExcluded.matchAll(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi)];
+  if (noscripts.some(block => !knownNoscript(block[0]))) return drift;
+  const structure = rawTextExcluded.replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, "");
   const titles = [...structure.matchAll(/<title\b[^>]*>([\s\S]*?)<\/title>/gi)];
   if (titles.length !== 1 || !/^\s*Home\s*\|\s*Firenze Rocks\s*$/i.test(titles[0][1]) ||
       !/<script\b[^>]*\bsrc=["'][^"']*\/holdingPage\/page-[^"']+["']/i.test(structure) ||
@@ -225,6 +236,10 @@ export function firenzeRocks(html: string, source: FestivalSource) {
       (_, hex: string, char: string) => hex ? String.fromCodePoint(Math.min(parseInt(hex, 16), 0x10ffff)) : char);
     if (/@(?:import|counter-style)\b|(?:^|[;{])\s*content\s*:|\b(?:url|(?:-webkit-)?image-set|image|paint|(?:-moz-)?element|symbols)\s*\(/i.test(css)) return drift;
     for (const declaration of css.matchAll(/(?:^|[;{])\s*([-\w]+)\s*:\s*([^;{}]*)/g)) {
+      const property = declaration[1].toLowerCase(), value = declaration[2].trim().toLowerCase().replace(/\s*!important$/, "").trim();
+      // Unknown visibility/display values can hide every required shell node.
+      if (property === "display" && !/^(?:block|inline|inline-block|flex|inline-flex|grid|inline-grid|flow-root|contents|table|table-row|table-cell|list-item)$/.test(value) ||
+          /^(?:visibility|content-visibility)$/.test(property) && value !== "visible") return drift;
       if (/^(?:list-style-type|background(?:-image)?|border-image(?:-source)?|mask(?:-image)?|list-style(?:-image)?)$/i.test(declaration[1]) &&
           !(declaration[1].toLowerCase() === "background-image" && /^(?:none|var\(\s*--Paper-overlay\s*\))$/.test(declaration[2].trim()))) return drift;
     }
@@ -299,14 +314,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
     .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
     .replace(/<title\b[^>]*>[\s\S]*?<\/title>|<meta\b[^>]*>|<link\b[^>]*>/gi, "");
   if (!safeStyles(outside)) return drift;
-  outside = outside.replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, block => {
-    const frame = block.match(/^<noscript\b[^>]*>\s*(<iframe\b[^>]*>)\s*<\/iframe>\s*<\/noscript>$/i)?.[1];
-    return frame && onlyAttributes(block.match(/^<noscript\b[^>]*>/i)?.[0] ?? "", ["id", "class", "style"]) &&
-      onlyAttributes(frame, ["src", "width", "height", "title"]) &&
-      ["", "gtm-GTM-NV6L247"].includes(attribute(frame, "title")) &&
-      attribute(frame, "src") === "https://www.googletagmanager.com/ns.html?id=GTM-NV6L247" &&
-      attribute(frame, "width") === "0" && attribute(frame, "height") === "0" ? "" : block;
-  }).replace(/<aside\b[^>]*>[\s\S]*?<\/aside>/gi, block => {
+  outside = outside.replace(/<aside\b[^>]*>[\s\S]*?<\/aside>/gi, block => {
     const skip = block.match(/^(<aside\b[^>]*>)\s*(<a\b[^>]*>)([^<]*)<\/a>\s*<\/aside>$/i);
     return skip && onlyAttributes(skip[1], ["id", "class", "style"]) &&
       onlyAttributes(skip[2], ["href", "id", "class", "style", "tabindex"]) &&
