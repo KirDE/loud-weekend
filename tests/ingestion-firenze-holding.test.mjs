@@ -209,6 +209,16 @@ test('unexpected executable scripts cannot be discarded as generic runtime', () 
   for (const script of ['<script src="/lineup-2027.js"></script>', '<script src="https://www.firenzerocks.it/tickets.js"></script>', '<script>document.body.innerHTML="2027 tickets on sale"</script>', '<script src="/_next/static/chunks/99999-abcdefabcdefabcd.js"></script>', '<script>self.__next_f.push([0]);document.body.innerHTML="2027 lineup"</script>']) review(base+script);
  }
 });
+const flightFixture=await readFile(new URL('./fixtures/official-markup/firenze-rocks-holding.flight.txt',import.meta.url),'utf8');
 test('known data-only Next bootstrap remains supported without executing it', () => {
- quiet(svgFixture+'<script>(self.__next_f=self.__next_f||[]).push([0])</script><script>self.__next_f.push([1,"runtime payload"])</script>');
+ quiet(svgFixture+`<script>(self.__next_f=self.__next_f||[]).push([0])</script><script>self.__next_f.push(${JSON.stringify([1,flightFixture])})</script>`);
+});
+
+test('unknown or changed Flight components cannot render a hidden announcement', () => {
+ for (const payload of ['1:["$","div",null,{"children":"Firenze Rocks 2027 lineup announced"}]',flightFixture.replace('Home | Firenze Rocks','Firenze Rocks 2027 tickets on sale')]) review(svgFixture+`<script>self.__next_f.push(${JSON.stringify([1,payload])})</script>`);
+});
+test('unknown linked stylesheets return to review before links/head are removed', () => {
+ for (const link of ['<link rel="stylesheet" href="/lineup-2027.css">','<link rel="preload" as="style" href="/lineup-2027.css">','<link rel="stylesheet" href="https://example.invalid/announcement.css">']) {
+  review(svgFixture+link);review(`<head>${link}</head>${svgFixture}`);
+ }
 });
