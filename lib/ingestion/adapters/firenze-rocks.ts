@@ -79,6 +79,19 @@ function withoutCssComments(css: string): string | null {
   }
   return quote ? null : result;
 }
+// Verified runtime styles include narrowly scoped clipped labels/disabled UI.
+// Trust those complete stylesheets, not reusable hiding declarations or a whole
+// document hash. Unknown CSS may only use non-concealing presentation rules.
+const VERIFIED_INLINE_STYLES = new Set(["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "c282e5299fbd6e53650fe3a761438b868c98fd8e3b69fb59d158d25ecdbd8417", "da70efd079cf8b54617ca21178ea933cc5747f52183cd09fc247851eb93e3fc3", "9c9faa4a135236ca56032a963d629bd7821be2e233c531b5903b991b6cebd6c4"]);
+function nonConcealingStyles(css: string): boolean {
+  let valid = true;
+  const rest = css.replace(/[^{}]+\{([^{}]*)\}/g, (_, body: string) => {
+    if (!body.split(";").every(value => !value.trim() ||
+        /^\s*(?:color\s*:\s*black|text-align\s*:\s*(?:left|center|right|justify)|display\s*:\s*(?:block|inline|inline-block|flex|inline-flex|grid|inline-grid|flow-root|contents|table|table-row|table-cell|list-item)|(?:visibility|content-visibility)\s*:\s*visible)\s*(?:!important\s*)?$/i.test(value))) valid = false;
+    return "";
+  });
+  return valid && !rest.trim();
+}
 function legacyLogoUrl(value: string, editionYear: number): boolean {
   try {
     const url = new URL(value.replace(/&amp;/gi, "&"));
@@ -234,6 +247,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
     if (uncommented === null) return drift;
     const css = uncommented.replace(/\\([0-9a-f]{1,6})\s?|\\([^\r\n])/gi,
       (_, hex: string, char: string) => hex ? String.fromCodePoint(Math.min(parseInt(hex, 16), 0x10ffff)) : char);
+    if (!VERIFIED_INLINE_STYLES.has(createHash("sha256").update(sheet[1]).digest("hex")) && !nonConcealingStyles(css)) return drift;
     if (/@(?:import|counter-style)\b|(?:^|[;{])\s*content\s*:|\b(?:url|(?:-webkit-)?image-set|image|paint|(?:-moz-)?element|symbols)\s*\(/i.test(css)) return drift;
     for (const declaration of css.matchAll(/(?:^|[;{])\s*([-\w]+)\s*:\s*([^;{}]*)/g)) {
       const property = declaration[1].toLowerCase(), value = declaration[2].trim().toLowerCase().replace(/\s*!important$/, "").trim();

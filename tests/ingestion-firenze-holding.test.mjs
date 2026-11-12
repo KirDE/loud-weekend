@@ -358,3 +358,11 @@ test('styles that hide the shell must return to review', () => {
  for (const css of ['header,main{display:none}','body{visibility:hidden}','html{content-visibility:hidden}','main{display:var(--future-display)}']) review(`<style>${css}</style>${svgFixture}`);
  quiet(`<style>header{display:flex}main{display:block;visibility:visible}</style>${svgFixture}`);
 });
+
+test('unverified styles cannot conceal the shell with opacity, transforms or positioning', async () => {
+ for (const css of ['body{opacity:0}','body{transform:scale(0)}','body{position:absolute;left:-99999px}','main{clip-path:inset(50%)}','body{height:0;overflow:hidden}','body{filter:opacity(0)}']) review(`<style>${css}</style>${svgFixture}`);
+ const sheets=JSON.parse(await readFile(new URL('./fixtures/official-markup/firenze-rocks-inline-styles.json',import.meta.url),'utf8'));
+ quiet(sheets.map(css=>`<style>${css}</style>`).join('')+svgFixture);
+ review(`<style>${sheets.find(Boolean)}body{opacity:0}</style>${svgFixture}`);
+ review(sheets.map(css=>`<style>${css}</style>`).join('')+`<style>body{opacity:0}</style>${svgFixture}`);
+});
