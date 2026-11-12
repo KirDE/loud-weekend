@@ -186,7 +186,10 @@ function withoutComments(html: string): string | null {
     const tag = html.slice(offset, end + 1);
     // Later shell checks use tag regexes, so do not allow delimiter-like
     // attribute data to be reinterpreted by any subsequent cleanup either.
-    if (tag.includes("<!--") || tag.includes("-->")) return null;
+    // Reject raw markup delimiters inside attributes before downstream bounded
+    // tag scans. The quote-aware lexer sees the complete tag; no later scan
+    // may truncate it and discard unchecked attributes as apparent text.
+    if (/[<>]/.test(tag.slice(1, -1))) return null;
     const name = tag.match(/^<([a-z][\w:-]*)\b/i)?.[1];
     // Only empty runtime nodes may be hidden, never a required shell region
     // or an ancestor that would make all its evidence invisible.

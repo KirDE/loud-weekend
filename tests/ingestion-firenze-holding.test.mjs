@@ -380,3 +380,9 @@ test('verified clipped class is restricted to the generic h1, not shell regions'
  }
  quiet(styles+svgFixture.replace(/<h1\b[^>]*>/,'<h1 class="ffehc-11cgpkn">'));
 });
+
+test('quoted markup delimiters cannot truncate later attribute validation', () => {
+ for (const quote of ['"', "'"]) for (const attrs of ['style="background-image:url(/lineup-2027.jpg)"','aria-description="2027 lineup announced"','popover']) review(svgFixture.replace('<main',`<main class=${quote}><!x ${quote} ${attrs}`));
+ review(svgFixture.replace('<header','<header class=">" style="background-image:url(/poster.jpg)"'));
+ quiet(svgFixture.replace('<main','<main class="ordinary future-layout"'));
+});
