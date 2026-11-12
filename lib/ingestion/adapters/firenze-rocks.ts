@@ -198,20 +198,22 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   const cleaned = withoutComments(html);
   if (cleaned === null) return drift;
   html = cleaned;
-  const titles = [...html.matchAll(/<title\b[^>]*>([\s\S]*?)<\/title>/gi)];
+  // Raw-text payloads are inspected separately, but are not DOM shell nodes.
+  const structure = html.replace(/(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2>)/gi, "$1$3");
+  const titles = [...structure.matchAll(/<title\b[^>]*>([\s\S]*?)<\/title>/gi)];
   if (titles.length !== 1 || !/^\s*Home\s*\|\s*Firenze Rocks\s*$/i.test(titles[0][1]) ||
-      !/<script\b[^>]*\bsrc=["'][^"']*\/holdingPage\/page-[^"']+["']/i.test(html) ||
+      !/<script\b[^>]*\bsrc=["'][^"']*\/holdingPage\/page-[^"']+["']/i.test(structure) ||
       /["']@type["']\s*:\s*["'](?:MusicEvent|Festival|Event)["']/i.test(html)) return drift;
   // Inspect inline CSS before head/runtime styles are removed. Generated layout
   // rules can change freely, but generated text, imports and artwork cannot.
-  if (!knownScripts(html) || !knownLinks(html)) return drift;
-  const markup = html.replace(/(<(?:script|style)\b[^>]*>)[\s\S]*?(<\/(?:script|style)>)/gi, "$1$2").replace(/<!--[\s\S]*?-->/g, "");
+  if (!knownScripts(html) || !knownLinks(structure)) return drift;
+  const markup = structure;
   if ([...markup.matchAll(/<[a-z][^>]*>/gi)].some(tag => !knownAria(tag[0]) ||
       attributes(tag[0]).some(attr => /^(?:item(?:scope|type|prop|ref|id)|vocab|typeof|about|resource|prefix)$/i.test(attr[1]) ||
         /^on[a-z]/i.test(attr[1]) || /^(?:background|dynsrc|lowsrc|fill|stroke|filter|mask|clip-path|marker(?:-start|-mid|-end)?)$/i.test(attr[1])))) return drift;
   // Browsers reprocess invalid head children in the body. Do not discard them
   // merely because they are surrounded by raw head delimiters.
-  for (const head of html.matchAll(/<head\b[^>]*>([\s\S]*?)<\/head>/gi)) {
+  for (const head of structure.matchAll(/<head\b[^>]*>([\s\S]*?)<\/head>/gi)) {
     const remaining = head[1].replace(/<(script|style|title)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
       .replace(/<meta\b[^>]*>|<link\b[^>]*>|<!--[\s\S]*?-->/gi, "");
     if (remaining.trim()) return drift;
@@ -227,7 +229,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
           !(declaration[1].toLowerCase() === "background-image" && /^(?:none|var\(\s*--Paper-overlay\s*\))$/.test(declaration[2].trim()))) return drift;
     }
   }
-  for (const meta of html.matchAll(/<meta\b[^>]*>/gi)) {
+  for (const meta of structure.matchAll(/<meta\b[^>]*>/gi)) {
     if (attribute(meta[0], "http-equiv")) return drift;
     for (const kind of [attribute(meta[0], "name"), attribute(meta[0], "property")].map(metadataKey)) {
       if (kind.includes("&")) return drift;
@@ -242,7 +244,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
           attribute(meta[0], "content") !== "Home | Firenze Rocks") return drift;
     }
   }
-  const headers = [...html.matchAll(/<header\b[^>]*>([\s\S]*?)<\/header>/gi)];
+  const headers = [...structure.matchAll(/<header\b[^>]*>([\s\S]*?)<\/header>/gi)];
   if (headers.length !== 1 || text(headers[0][1]) !== "Switch language. Current language is Italiano IT") return drift;
   // Accept only the observed shell elements, not an expanding media denylist.
   // New controls (including image inputs), responsive sources, SVG animation,
@@ -284,7 +286,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
     return attribute(logo[0], "alt") === "Site logo - www.firenzerocks.it - go to homepage" &&
       (genericLogo ? !attributes(logo[0]).some(attr => attr[1].toLowerCase() === "srcset") : legacyLogo(logo[0], source.editionYear));
   })) return drift;
-  const mains = [...html.matchAll(/<main\b[^>]*>([\s\S]*?)<\/main>/gi)];
+  const mains = [...structure.matchAll(/<main\b[^>]*>([\s\S]*?)<\/main>/gi)];
   if (mains.length !== 1) return drift;
   let body = mains[0][1];
   if (!safeStyles(mains[0][0])) return drift;
@@ -292,7 +294,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
     ["role", "aria-label", "title", "aria-labelledby", "aria-describedby", "aria-description"].some(name => attribute(tag[0], name)))) return drift;
   // Full responses also contain runtime wrappers, a GTM noscript and a skip
   // link. No other visible content outside the checked regions is known safe.
-  let outside = html.replace(headers[0][0], "").replace(mains[0][0], "")
+  let outside = structure.replace(headers[0][0], "").replace(mains[0][0], "")
     .replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, "")
     .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
     .replace(/<title\b[^>]*>[\s\S]*?<\/title>|<meta\b[^>]*>|<link\b[^>]*>/gi, "");

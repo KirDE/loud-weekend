@@ -342,3 +342,8 @@ test('Microdata and RDFa event semantics are new announcement evidence', () => {
  for (const attr of ['itemscope','itemtype="https://schema.org/Festival"','itemprop="performer"','itemref="announcement"','itemid="https://www.firenzerocks.it/2027"','vocab="https://schema.org/"','typeof="MusicEvent"','about="/2028"','resource="/lineup"','prefix="schema: https://schema.org/"']) review(svgFixture.replace('<main',`<main ${attr}`));
  review(`<meta itemprop="startDate" content="2028-06-15">${svgFixture}`);
 });
+
+test('required shell nodes cannot be supplied by script or stylesheet raw text', () => {
+ for (const tag of ['header','main','title']) review(svgFixture.replace(new RegExp(`<${tag}\\b[\\s\\S]*?</${tag}>`,'i'),block=>`<style>${block}</style>`));
+ review(svgFixture.replace(/<header\b[\s\S]*?<\/header>/i,block=>`<script>${block}</script>`));
+});
