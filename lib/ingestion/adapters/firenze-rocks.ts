@@ -127,15 +127,16 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   for (const sheet of html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)) {
     const css = sheet[1].replace(/\/\*[\s\S]*?\*\//g, "").replace(/\\([0-9a-f]{1,6})\s?|\\([^\r\n])/gi,
       (_, hex: string, char: string) => hex ? String.fromCodePoint(Math.min(parseInt(hex, 16), 0x10ffff)) : char);
-    if (/@import\b|(?:^|[;{])\s*content\s*:|\b(?:url|(?:-webkit-)?image-set|image|paint|(?:-moz-)?element)\s*\(/i.test(css)) return drift;
+    if (/@(?:import|counter-style)\b|(?:^|[;{])\s*content\s*:|\b(?:url|(?:-webkit-)?image-set|image|paint|(?:-moz-)?element|symbols)\s*\(/i.test(css)) return drift;
     for (const declaration of css.matchAll(/(?:^|[;{])\s*([-\w]+)\s*:\s*([^;{}]*)/g)) {
-      if (/^(?:background(?:-image)?|border-image(?:-source)?|mask(?:-image)?|list-style(?:-image)?)$/i.test(declaration[1]) &&
+      if (/^(?:list-style-type|background(?:-image)?|border-image(?:-source)?|mask(?:-image)?|list-style(?:-image)?)$/i.test(declaration[1]) &&
           !(declaration[1].toLowerCase() === "background-image" && /^(?:none|var\(\s*--Paper-overlay\s*\))$/.test(declaration[2].trim()))) return drift;
     }
   }
   for (const meta of html.matchAll(/<meta\b[^>]*>/gi)) {
     if (attribute(meta[0], "http-equiv")) return drift;
     for (const kind of [attribute(meta[0], "name"), attribute(meta[0], "property")].map(value => value.toLowerCase())) {
+      if (/^(?:og:image:alt|twitter:image:alt)$/.test(kind)) return drift;
       if (/^(?:og:(?:video|audio)|twitter:player)(?::|$)/.test(kind) ||
           kind === "twitter:card" && attribute(meta[0], "content").toLowerCase() === "player") return drift;
       // The visually verified share card is generic branding too. Unknown image

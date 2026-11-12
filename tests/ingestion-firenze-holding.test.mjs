@@ -285,3 +285,10 @@ test('only observed ARIA attributes are accepted, not unverified human-readable 
   }
  }
 });
+
+ test('CSS string markers and custom counter symbols cannot hide announcements', () => {
+  for (const css of ['h1{display:list-item;list-style-type:"Firenze Rocks 2027 tickets on sale"}', 'h1{list-style-type:symbols("2028 lineup")}', '@counter-style announcement{system:cyclic;symbols:"2027 lineup"}h1{display:list-item;list-style-type:announcement}']) review(`<style>${css}</style>${svgFixture}`);
+ });
+ test('human-readable social image alt metadata requires review for either metadata key', () => {
+  for (const name of ['og:image:alt','twitter:image:alt']) for (const key of ['name','property']) review(`<meta ${key}="${name}" content="Firenze Rocks 2027 lineup announced">${svgFixture}`);
+ });
