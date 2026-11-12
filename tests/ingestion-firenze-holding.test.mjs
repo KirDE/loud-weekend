@@ -329,3 +329,10 @@ test('hidden wrappers cannot conceal the required holding-page regions', () => {
  quiet(`<div hidden></div>${svgFixture}`);
  quiet(`<div hidden=""><!--$--><!--/$--></div>${svgFixture}`);
 });
+
+test('CSS comment markers inside strings cannot erase later announcement rules', () => {
+ for (const quote of ['"', "'"]) for (const rule of ['body{background-image:url(/lineup-2027.jpg)}','body::before{content:"2028 tickets on sale"}']) review(`<style>.x{font-family:${quote}/*${quote}}${rule}/* end */</style>${svgFixture}`);
+ review(`<style>.x{font-family:"escaped\\"/*"}body{background-image:url(/lineup-2027.jpg)}/* end */</style>${svgFixture}`);
+ quiet(`<style>/* ordinary deployment note */body{color:black}</style>${svgFixture}`);
+ review(`<style>.x{font-family:"broken\n/*"}body{background-image:url(/poster.jpg)}/* end */</style>${svgFixture}`);
+});

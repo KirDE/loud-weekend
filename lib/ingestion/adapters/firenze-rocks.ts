@@ -53,6 +53,32 @@ function safeStyles(markup: string): boolean {
     attribute(tag[0], "style").split(";").map(value => value.trim()).filter(Boolean).every(value =>
       /^(?:color\s*:\s*transparent|text-align\s*:\s*center|--Paper-shadow\s*:\s*var\(\s*--mui-shadows-\d+\s*\)|--Paper-overlay\s*:\s*var\(\s*--mui-overlays-\d+\s*\))$/i.test(value)));
 }
+// CSS comment syntax is active only outside strings and escaped characters.
+function withoutCssComments(css: string): string | null {
+  let result = "", quote = "";
+  for (let i = 0; i < css.length; i++) {
+    const char = css[i];
+    if (char === "\\") {
+      result += char;
+      if (i + 1 < css.length) result += css[++i];
+      continue;
+    }
+    if (quote) {
+      if (/[\r\n\f]/.test(char)) return null;
+      result += char;
+      if (char === quote) quote = "";
+      continue;
+    }
+    if (char === '"' || char === "'") { quote = char; result += char; continue; }
+    if (char === "/" && css[i + 1] === "*") {
+      const end = css.indexOf("*/", i + 2);
+      if (end < 0) return null;
+      result += " ";
+      i = end + 1;
+    } else result += char;
+  }
+  return quote ? null : result;
+}
 function legacyLogoUrl(value: string, editionYear: number): boolean {
   try {
     const url = new URL(value.replace(/&amp;/gi, "&"));
@@ -190,7 +216,9 @@ export function firenzeRocks(html: string, source: FestivalSource) {
     if (remaining.trim()) return drift;
   }
   for (const sheet of html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)) {
-    const css = sheet[1].replace(/\/\*[\s\S]*?\*\//g, "").replace(/\\([0-9a-f]{1,6})\s?|\\([^\r\n])/gi,
+    const uncommented = withoutCssComments(sheet[1]);
+    if (uncommented === null) return drift;
+    const css = uncommented.replace(/\\([0-9a-f]{1,6})\s?|\\([^\r\n])/gi,
       (_, hex: string, char: string) => hex ? String.fromCodePoint(Math.min(parseInt(hex, 16), 0x10ffff)) : char);
     if (/@(?:import|counter-style)\b|(?:^|[;{])\s*content\s*:|\b(?:url|(?:-webkit-)?image-set|image|paint|(?:-moz-)?element|symbols)\s*\(/i.test(css)) return drift;
     for (const declaration of css.matchAll(/(?:^|[;{])\s*([-\w]+)\s*:\s*([^;{}]*)/g)) {
