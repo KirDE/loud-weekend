@@ -327,4 +327,5 @@ test('hidden wrappers cannot conceal the required holding-page regions', () => {
  for (const tag of ['div','body','html']) for (const attr of ['hidden','hidden="hidden"','HIDDEN=until-found']) review(`<${tag} ${attr}>${svgFixture}</${tag}>`);
  for (const tag of ['header','main']) review(svgFixture.replace(`<${tag}`,`<${tag} hidden`));
  quiet(`<div hidden></div>${svgFixture}`);
+ quiet(`<div hidden=""><!--$--><!--/$--></div>${svgFixture}`);
 });

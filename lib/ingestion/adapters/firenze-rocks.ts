@@ -152,7 +152,7 @@ function withoutComments(html: string): string | null {
     // Only empty runtime nodes may be hidden, never a required shell region
     // or an ancestor that would make all its evidence invisible.
     if (name && attributes(tag).some(attr => attr[1].toLowerCase() === "hidden") &&
-        !new RegExp(`^\\s*</${name}\\s*>`, "i").test(html.slice(end + 1))) return null;
+        !new RegExp(`^</${name}\\s*>`, "i").test(html.slice(end + 1).replace(/^(?:\s|<!--\/?\$-->)+/, ""))) return null;
     result += tag;
     offset = end + 1;
     const raw = tag.match(/^<(script|style|title)\b/i)?.[1];
