@@ -52,3 +52,24 @@ test('artist-list thrown failures retain homepage attempts and the original erro
  }}),error=>error===failure && error.attempts===3);
  assert.equal(calls,3);
 });
+
+test('complete stored roster with misbilled support requires review even with zero roster diffs',()=>{
+ const c=parse();const support=c.lineup[0];
+ const r=evaluateCandidate({...saved,status:'partial',headliners:[...c.headliners,support],lineup:c.lineup.filter(n=>n!==support)},c);
+ assert.deepEqual(r.changes,[]);assert.equal(r.publishable,false);
+ assert.ok(r.reviewReasons.includes('Download billing changes require reviewed reclassification'));
+});
+test('Download body stream errors preserve all completed request attempts',async()=>{
+ for(const failedDocument of ['home','artists']) {
+  const failure=new Error('body stream reset');let calls=0;
+  const broken=()=>new Response(new ReadableStream({start(controller){controller.error(failure);}}));
+  await assert.rejects(fetchSource(source,{maxAttempts:2,baseDelayMs:0,sleep:async()=>{},fetchImpl:async()=>{
+   calls++;
+   if(failedDocument==='home') return broken();
+   if(calls===1)return new Response(bundle.home);
+   if(calls===2)return new Response('retry',{status:503});
+   return broken();
+  }}),error=>error===failure && error.attempts===(failedDocument==='home'?1:3));
+  assert.equal(calls,failedDocument==='home'?1:3);
+ }
+});
