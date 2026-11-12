@@ -19,7 +19,7 @@ def allowed(url):
     u = urllib.parse.urlsplit(url)
     return (u.scheme == 'https' and u.netloc == 'www.roskilde-festival.dk'
             and not u.query and not u.fragment
-            and (u.path in ['/', '/program', '/billetter']
+            and (u.path in ['/', '/program', '/billetter', '/nyheder']
                  or re.fullmatch(r'/nyheder/[a-z0-9-]+', u.path) is not None))
 
 
@@ -48,10 +48,25 @@ def main():
         raise ValueError('Invalid edition year')
     opener = urllib.request.build_opener(SameOriginRedirect())
     home = document('/', opener)
-    # Only current-edition announcement links actually published by the homepage.
-    paths = list(dict.fromkeys(re.findall(r'href=[\"\'](/nyheder/[^\"\']+)[\"\']', home['html'])))
-    paths = [p for p in paths if re.search(r'(?:^|-)rf' + str(year)[-2:] + r'(?:-|$)', p.rsplit('/', 1)[-1])][:3]
+    def current_paths(html):
+        paths = list(dict.fromkeys(re.findall(r'href=["\'](/nyheder/[a-z0-9-]+)["\']', html)))
+        return [p for p in paths if re.search(r'(?:^|-)rf' + str(year)[-2:] + r'(?:-|$)', p.rsplit('/', 1)[-1])]
+    paths = current_paths(home['html'])[:3]
     documents = [home, document('/program', opener)]
+    # Homepage news cards rotate. Follow only the same-origin news index
+    # actually linked there; retain the existing five-document/byte limits.
+    if len(paths) < 3 and re.search(r'href=["\']/nyheder["\']', home['html']):
+        try:
+            index = document('/nyheder', opener)
+        except (urllib.error.URLError, TimeoutError, ValueError):
+            # The index is optional when direct homepage evidence exists.
+            # Without any such evidence, retain the real source failure/backoff.
+            if not paths:
+                raise
+        else:
+            documents.append(index)
+            # Never evict the original directly linked announcement evidence.
+            paths = list(dict.fromkeys(paths + current_paths(index['html'])))[:2]
     documents.extend(document(path, opener) for path in paths)
     print(json.dumps({'kind': 'roskilde-documents-v1', 'documents': documents}, ensure_ascii=False))
 

@@ -36,7 +36,7 @@ export function extractRoskildeCandidate(html: string, source: FestivalSource, f
     const data = JSON.parse(html);
     if (data.kind !== "roskilde-documents-v1" || !Array.isArray(data.documents) || data.documents.length > 5) throw Error();
     docs = data.documents;
-    if (docs.some(d => typeof d.html !== "string" || typeof d.url !== "string" || !new RegExp("^https://www\\.roskilde-festival\\.dk/(?:program|nyheder/[a-z0-9-]+)?$").test(d.url))) throw Error();
+    if (docs.some(d => typeof d.html !== "string" || typeof d.url !== "string" || !new RegExp("^https://www\\.roskilde-festival\\.dk/(?:program|nyheder(?:/[a-z0-9-]+)?)?$").test(d.url))) throw Error();
     if (new Set(docs.map(d => d.url)).size !== docs.length) throw Error();
   } catch { c.warnings.push("Invalid Roskilde official document envelope"); return c; }
   const home = docs.find(d => d.url === source.url), programme = docs.find(d => d.url === origin + "/program");
@@ -50,7 +50,9 @@ export function extractRoskildeCandidate(html: string, source: FestivalSource, f
   const evidence = (field: FieldEvidence["field"], d: Document, excerpt: string) => c.evidence.push({ field, sourceUrl: d.url, observedAt: fetchedAt, excerpt: excerpt.slice(0,500) });
   c.startDate=start; c.endDate=end; c.observedEditionYears=[source.editionYear]; evidence("startDate",home,date[0]);evidence("endDate",home,date[0]);
   const roster=cards(programme.html);
-  const articles=docs.filter(d => d.url.startsWith(origin+"/nyheder/") && home.html.includes(`href="${d.url.slice(origin.length)}"`) &&
+  const index = home.html.match(/href=["']\/nyheder["']/) && docs.find(d => d.url === origin+"/nyheder");
+  const linked = (d: Document, url: string) => [...d.html.matchAll(/href=["']([^"']+)["']/g)].some(m => m[1] === url.slice(origin.length));
+  const articles=docs.filter(d => d.url.startsWith(origin+"/nyheder/") && (linked(home,d.url) || index && linked(index,d.url)) &&
     new RegExp(`\\bRF${String(source.editionYear).slice(-2)}\\b`).test(plain(d.html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? "")));
   const announced=new Set(articles.flatMap(d => [...d.html.matchAll(/href=["']\/program\/musik\/([a-z0-9-]+)["']/gi)].map(m=>m[1])));
   if (!roster.length || roster.some(r=>!r.name || r.name.length>100 || !announced.has(r.slug)) || new Set(roster.map(r=>r.slug)).size!==roster.length) {

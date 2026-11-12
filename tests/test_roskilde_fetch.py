@@ -13,7 +13,7 @@ spec.loader.exec_module(helper)
 
 class RoskildeFetchTests(unittest.TestCase):
     def test_only_official_bounded_paths(self):
-        for path in ['/', '/program', '/nyheder/rf27-first-wave', '/billetter']:
+        for path in ['/', '/program', '/nyheder', '/nyheder/rf27-first-wave', '/billetter']:
             self.assertTrue(helper.allowed(helper.ORIGIN + path))
         for url in ['http://www.roskilde-festival.dk/', 'https://example.test/',
                     'https://www.roskilde-festival.dk.evil.test/',
@@ -21,6 +21,65 @@ class RoskildeFetchTests(unittest.TestCase):
                     helper.ORIGIN + '/program?q=evil', helper.ORIGIN + '/program#fragment',
                     helper.ORIGIN + '/admin', helper.ORIGIN + '/nyheder/../../admin']:
             self.assertFalse(helper.allowed(url), url)
+
+    def test_rotated_home_uses_linked_index_and_keeps_five_document_cap(self):
+        fetched = []
+        def document(path, opener):
+            fetched.append(path)
+            html = '<a href="/nyheder">News</a>' if path == '/' else ''.join('<a href="/nyheder/rf27-wave-%d">Wave</a>' % i for i in range(9))
+            return {'url': helper.ORIGIN + path, 'html': html}
+        with patch.object(helper, 'document', document), patch.object(helper.sys, 'argv', ['helper', '2027']), patch('sys.stdout', new_callable=io.StringIO) as output:
+            helper.main()
+            data = json.loads(output.getvalue())
+        self.assertEqual(fetched, ['/', '/program', '/nyheder', '/nyheder/rf27-wave-0', '/nyheder/rf27-wave-1'])
+        self.assertEqual(len(data['documents']), 5)
+
+    def test_unlinked_or_foreign_index_is_not_fetched(self):
+        fetched = []
+        def document(path, opener):
+            fetched.append(path)
+            return {'url': helper.ORIGIN + path, 'html': '<a href="https://example.test/nyheder">News</a>'}
+        with patch.object(helper, 'document', document), patch.object(helper.sys, 'argv', ['helper', '2027']), patch('sys.stdout', new_callable=io.StringIO):
+            helper.main()
+        self.assertEqual(fetched, ['/', '/program'])
+
+    def test_home_articles_precede_index_discoveries(self):
+        for count in [1, 2]:
+            with self.subTest(home_articles=count):
+                fetched = []
+                home_paths = ['/nyheder/rf27-home-%d' % i for i in range(count)]
+                def document(path, opener):
+                    fetched.append(path)
+                    html = '<a href="/nyheder">News</a>' + ''.join('<a href="%s">Lineup</a>' % p for p in home_paths) if path == '/' else '<a href="/nyheder/rf27-other-1">Other</a><a href="/nyheder/rf27-other-2">Other</a>'
+                    return {'url': helper.ORIGIN + path, 'html': html}
+                with patch.object(helper, 'document', document), patch.object(helper.sys, 'argv', ['helper', '2027']), patch('sys.stdout', new_callable=io.StringIO):
+                    helper.main()
+                self.assertEqual(fetched, ['/', '/program', '/nyheder'] + (home_paths + ['/nyheder/rf27-other-1'])[:2])
+
+    def test_optional_index_errors_retain_homepage_path(self):
+        import urllib.error
+        for error in [TimeoutError('index timeout'), urllib.error.HTTPError(helper.ORIGIN+'/nyheder', 404, 'Not found', {}, None), urllib.error.HTTPError(helper.ORIGIN+'/nyheder', 503, 'Unavailable', {}, None)]:
+            with self.subTest(error=type(error).__name__):
+                fetched = []
+                def document(path, opener):
+                    fetched.append(path)
+                    if path == '/nyheder':
+                        raise error
+                    return {'url': helper.ORIGIN + path, 'html': '<a href="/nyheder">News</a><a href="/nyheder/rf27-home-lineup">Lineup</a>'}
+                with patch.object(helper, 'document', document), patch.object(helper.sys, 'argv', ['helper', '2027']), patch('sys.stdout', new_callable=io.StringIO) as output:
+                    helper.main()
+                    result = json.loads(output.getvalue())
+                self.assertEqual(fetched, ['/', '/program', '/nyheder', '/nyheder/rf27-home-lineup'])
+                self.assertEqual(len(result['documents']), 3)
+
+    def test_index_failure_without_home_articles_stays_a_transport_failure(self):
+        def document(path, opener):
+            if path == '/nyheder':
+                raise TimeoutError('index required')
+            return {'url': helper.ORIGIN + path, 'html': '<a href="/nyheder">News</a>'}
+        with patch.object(helper, 'document', document), patch.object(helper.sys, 'argv', ['helper', '2027']), patch('sys.stdout', new_callable=io.StringIO):
+            with self.assertRaises(TimeoutError):
+                helper.main()
 
     def test_foreign_redirect_rejected_before_follow(self):
         with self.assertRaises(ValueError):
