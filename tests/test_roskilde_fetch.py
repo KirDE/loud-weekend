@@ -13,7 +13,7 @@ spec.loader.exec_module(helper)
 
 class RoskildeFetchTests(unittest.TestCase):
     def test_only_official_bounded_paths(self):
-        for path in ['/', '/program', '/nyheder/rf27-first-wave', '/billetter']:
+        for path in ['/', '/program', '/nyheder', '/nyheder/rf27-first-wave', '/billetter']:
             self.assertTrue(helper.allowed(helper.ORIGIN + path))
         for url in ['http://www.roskilde-festival.dk/', 'https://example.test/',
                     'https://www.roskilde-festival.dk.evil.test/',
@@ -21,6 +21,27 @@ class RoskildeFetchTests(unittest.TestCase):
                     helper.ORIGIN + '/program?q=evil', helper.ORIGIN + '/program#fragment',
                     helper.ORIGIN + '/admin', helper.ORIGIN + '/nyheder/../../admin']:
             self.assertFalse(helper.allowed(url), url)
+
+    def test_rotated_home_uses_linked_index_and_keeps_five_document_cap(self):
+        fetched = []
+        def document(path, opener):
+            fetched.append(path)
+            html = '<a href="/nyheder">News</a>' if path == '/' else ''.join('<a href="/nyheder/rf27-wave-%d">Wave</a>' % i for i in range(9))
+            return {'url': helper.ORIGIN + path, 'html': html}
+        with patch.object(helper, 'document', document), patch.object(helper.sys, 'argv', ['helper', '2027']), patch('sys.stdout', new_callable=io.StringIO) as output:
+            helper.main()
+            data = json.loads(output.getvalue())
+        self.assertEqual(fetched, ['/', '/program', '/nyheder', '/nyheder/rf27-wave-0', '/nyheder/rf27-wave-1'])
+        self.assertEqual(len(data['documents']), 5)
+
+    def test_unlinked_or_foreign_index_is_not_fetched(self):
+        fetched = []
+        def document(path, opener):
+            fetched.append(path)
+            return {'url': helper.ORIGIN + path, 'html': '<a href="https://example.test/nyheder">News</a>'}
+        with patch.object(helper, 'document', document), patch.object(helper.sys, 'argv', ['helper', '2027']), patch('sys.stdout', new_callable=io.StringIO):
+            helper.main()
+        self.assertEqual(fetched, ['/', '/program'])
 
     def test_foreign_redirect_rejected_before_follow(self):
         with self.assertRaises(ValueError):
