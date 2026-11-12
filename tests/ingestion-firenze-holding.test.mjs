@@ -237,3 +237,13 @@ test('head children must be metadata/runtime, not body-visible announcement node
 test('active http-equiv metadata cannot navigate away from the holding shell', () => {
  for (const attrs of ['http-equiv="refresh" content="0;url=/tickets"', 'HTTP-EQUIV=refresh content="0;url=/lineup-2028"', 'name="ignored" http-equiv="refresh" content="0;url=/tickets"']) review(`<meta ${attrs}>${svgFixture}`);
 });
+
+test('legacy background attributes and unknown outside-wrapper attributes require review', () => {
+ for (const base of [svgFixture, fixture]) {
+  for (const attrs of ['background="/lineup-2027.jpg"','BACKGROUND=/lineup-2028.jpg','aria-description="2027 lineup announced"','role="img"']) review(`<body ${attrs}>${base}</body>`);
+  review(`<div background="/poster.jpg">${base}</div>`);
+ }
+});
+test('ordinary runtime wrapper attributes do not require an exact HTML snapshot', () => {
+ quiet(`<html lang="it-IT" dir="ltr" data-dpl-id="v200"><body class="new-layout" id="page"><div hidden></div>${svgFixture}</body></html>`);
+});

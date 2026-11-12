@@ -80,7 +80,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   // rules can change freely, but generated text, imports and artwork cannot.
   if (!knownScripts(html) || !knownLinks(html)) return drift;
   const markup = html.replace(/(<(?:script|style)\b[^>]*>)[\s\S]*?(<\/(?:script|style)>)/gi, "$1$2").replace(/<!--[\s\S]*?-->/g, "");
-  if ([...markup.matchAll(/<[a-z][^>]*>/gi)].some(tag => attributes(tag[0]).some(attr => /^on[a-z]/i.test(attr[1])))) return drift;
+  if ([...markup.matchAll(/<[a-z][^>]*>/gi)].some(tag => attributes(tag[0]).some(attr => /^on[a-z]/i.test(attr[1]) || /^(?:background|dynsrc|lowsrc)$/i.test(attr[1])))) return drift;
   // Browsers reprocess invalid head children in the body. Do not discard them
   // merely because they are surrounded by raw head delimiters.
   for (const head of html.matchAll(/<head\b[^>]*>([\s\S]*?)<\/head>/gi)) {
@@ -167,7 +167,8 @@ export function firenzeRocks(html: string, source: FestivalSource) {
     return skip && attribute(skip[1], "href") === "#main" && text(skip[2]) === "Salta al contenuto principale" ? "" : block;
   }).replace(/<!--[\s\S]*?-->|<!doctype[^>]*>/gi, "");
   if (/<\/?(?!(?:html|body|div)(?=[\s/>]))[a-z][^>]*>/i.test(outside) || text(outside) ||
-      [...outside.matchAll(/<[a-z][^>]*>/gi)].some(tag => ["aria-label", "title"].some(name => attribute(tag[0], name)))) return drift;
+      [...outside.matchAll(/<[a-z][^>]*>/gi)].some(tag =>
+        attributes(tag[0]).some(attr => !["id", "class", "style", "lang", "dir", "hidden", "data-dpl-id"].includes(attr[1].toLowerCase())))) return drift;
   // Legal footer text and annual copyright are not an edition announcement.
   body = body.replace(/<div\b[^>]*class=["']footer-copyright["'][^>]*>([\s\S]*?)<\/div>/gi, (block, contents: string) => {
     if (!/<[a-z]/i.test(contents) && /^Copyright\s*©\s*20\d{2}\s+Firenze Rocks\. Tutti i diritti riservati\.$/i.test(text(contents))) return "";
