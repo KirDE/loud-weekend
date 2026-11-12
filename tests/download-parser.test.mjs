@@ -73,3 +73,20 @@ test('Download body stream errors preserve all completed request attempts',async
   assert.equal(calls,failedDocument==='home'?1:3);
  }
 });
+
+test('Download bundle retains the validated final homepage URL',async()=>{
+ let calls=0;
+ const result=await fetchSource(source,{fetchImpl:async()=>new Response(++calls===1?bundle.home:bundle.artists)});
+ assert.equal(result.response.url,source.url);
+ assert.equal(parse(JSON.parse(await result.response.text())).lineup.length,97);
+});
+test('verified Download evidence emits completeness-only repair and rejects generic additions',()=>{
+ const c=parse();const current={...saved,status:'partial',headliners:c.headliners,lineup:c.lineup,completeness:'tba'};
+ const result=evaluateCandidate(current,c);assert.equal(result.publishable,true);
+ assert.deepEqual(result.changes,[{kind:'completeness_changed',field:'completeness',before:'tba',after:'partial',reviewRequired:false}]);
+ assert.deepEqual(evaluateCandidate({...current,completeness:'partial'},c).changes,[]);
+ for(const candidate of [{...c,sourceUrl:'https://other.example/'},{...c,evidence:[]},{...c,artistListMode:undefined}]){
+  const invalid=evaluateCandidate(saved,candidate);assert.equal(invalid.publishable,false);
+  assert.ok(invalid.reviewReasons.includes('Download additions require verified official announcement evidence'));
+ }
+});

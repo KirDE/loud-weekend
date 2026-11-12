@@ -81,7 +81,9 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
       if (!artists.response.ok) return { response: artists.response, attempts };
       if (artists.response.url && artists.response.url !== DOWNLOAD_ARTISTS) throw new Error("Download artist listing identity changed");
       const artistHtml = await artists.response.text();
-      return { response: new Response(JSON.stringify({ kind: DOWNLOAD_DOCUMENTS, home, artists: artistHtml }), { headers: { "content-type": "application/json" } }), attempts };
+      const response = new Response(JSON.stringify({ kind: DOWNLOAD_DOCUMENTS, home, artists: artistHtml }), { headers: { "content-type": "application/json" } });
+      Object.defineProperty(response, "url", {value: source.url});
+      return { response, attempts };
     } catch (error) {
       const failure = error instanceof Error ? error : new Error(String(error));
       throw Object.assign(failure, { attempts: attempts + Number((failure as Error & { attempts?: number }).attempts ?? 0) });

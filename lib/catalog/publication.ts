@@ -1,3 +1,4 @@
+import { isDownloadAnnouncement } from "../ingestion/adapters/download.ts";
 import {
   ArtistIdentityState,
   CatalogPublicationSource,
@@ -131,6 +132,13 @@ async function applyFestivalChanges(db: Database, input: {
           await db.festivalEdition.update({ where: { id: edition.id }, data: { ticketsUrl: change.after as string | null | undefined, sourceUpdatedAt: input.observedAt } });
           changed = true;
         }
+        break;
+      }
+      case "completeness": {
+        current = edition.completeness.toLocaleLowerCase();
+        if (input.festivalSlug !== "download" || change.before !== "tba" || change.after !== "partial") throw new Error("Invalid completeness promotion");
+        if (input.strictBefore && current !== change.before && current !== change.after) throw new Error("Stale completeness");
+        if (current !== change.after) { await db.festivalEdition.update({where:{id:edition.id},data:{completeness:"PARTIAL",sourceUpdatedAt:input.observedAt}}); changed = true; }
         break;
       }
       case "status": {
@@ -267,20 +275,17 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
         (field!=='headliners'||kind==='headliner_added') && (field!=='lineup'||kind==='artist_added') &&
         candidate.evidence.some(e=>e.field===field && e.sourceUrl===GRASPOP_FAQ && same(e.observedValue,(input.result.candidate as unknown as Record<string,unknown>)[field])))))throw new Error('Graspop publication requires matching persisted official addition evidence');
     const downloadLineup = input.result.festivalSlug === "download" && input.result.changes.some(({field}) => ["lineup", "headliners"].includes(field));
-    const verifiedDownloadAnnouncement = input.result.festivalSlug === "download" &&
-      candidate.festivalSlug === "download" && input.result.sourceUrl === "https://downloadfestival.co.uk/" &&
-      candidate.attempt.requestedUrl === input.result.sourceUrl &&
-      [input.result.candidate, candidate.normalized as unknown as FestivalCandidate].every(value =>
-        value.festivalSlug === "download" && value.sourceUrl === input.result.sourceUrl &&
-        value.status === "partial" && value.artistListMode === "additive" && value.lineupScope === "announcement" &&
-        value.observedEditionYears.length === 1 && value.observedEditionYears[0] === applied.edition.year &&
-        Boolean(value.headliners?.length && value.lineup?.length) &&
-        ["headliners", "lineup", "status"].every(field => value.evidence.some(e => e.field === field && e.sourceUrl === input.result.sourceUrl)));
+    const verifiedDownloadAnnouncement = candidate.festivalSlug === "download" &&
+      candidate.attempt.requestedUrl === input.result.sourceUrl && input.result.sourceUrl === "https://downloadfestival.co.uk/" &&
+      isDownloadAnnouncement(input.result.candidate, applied.edition.year) &&
+      isDownloadAnnouncement(candidate.normalized as unknown as FestivalCandidate, applied.edition.year);
+    if ((downloadLineup || input.result.changes.some(c => c.field === "completeness")) && !verifiedDownloadAnnouncement)
+      throw new Error("Download publication requires verified official announcement evidence");
     if((graspopLineup || verifiedDownloadAnnouncement) && applied.edition.completeness==='TBA') {
       await db.festivalEdition.update({where:{id:applied.edition.id},data:{completeness:'PARTIAL'}});
-      applied.changedFields.push('completeness');
+      if (!applied.changedFields.includes('completeness')) applied.changedFields.push('completeness');
     }
-    const playlistRefreshDeferral = idaysLineup || graspopLineup || downloadLineup ? {
+    const playlistRefreshDeferral = idaysLineup || graspopLineup || (downloadLineup && verifiedDownloadAnnouncement) ? {
       policy: "explicit-refresh-only", reason: `Verified ${downloadLineup?'Download':graspopLineup?'Graspop':'I-Days'} catalog additions do not authorize provider activity`,
     } : undefined;
     const publication = await createPublication(db, {

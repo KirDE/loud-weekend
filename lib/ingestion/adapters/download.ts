@@ -1,3 +1,4 @@
+import type { FestivalCandidate } from "../types.ts";
 import type { FestivalSource } from "../types.ts";
 
 export const DOWNLOAD_HOME = "https://downloadfestival.co.uk/";
@@ -42,4 +43,12 @@ export function download(input: string, source: FestivalSource) {
   if (headliners.length < 1 || headliners.some(h => !names.includes(h))) return undefined;
   return { ...d, editionYear: source.editionYear, headliners, lineup: names.filter(n => !headliners.includes(n)), status: "partial" as const,
     lineupScope: "announcement" as const, artistListMode: "additive" as const, excerpt: headlines[0] + "; official Artist Listing: " + names.slice(0,8).join(", ") };
+}
+
+export function isDownloadAnnouncement(value: FestivalCandidate, year: number | undefined) {
+  return value.festivalSlug === "download" && value.sourceUrl === DOWNLOAD_HOME &&
+    value.status === "partial" && value.artistListMode === "additive" && value.lineupScope === "announcement" &&
+    value.observedEditionYears.length === 1 && value.observedEditionYears[0] === year &&
+    Boolean(value.headliners?.length && value.lineup?.length) &&
+    ["headliners", "lineup", "status"].every(field => value.evidence.some(e => e.field === field && e.sourceUrl === DOWNLOAD_HOME));
 }
