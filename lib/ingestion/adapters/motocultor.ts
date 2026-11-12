@@ -46,7 +46,7 @@ function astroAnnouncement(article: string, source: FestivalSource) {
   const paragraphs = [...body.matchAll(/<p\b([^>]*)>([\s\S]*?)<\/p>/gi)]
     .filter(m => !attr(m[1], "class")).map(m => text(m[2]));
   let names: string[];
-  const next = paragraphs.findIndex(p => /nouveaux noms qui rejoignent la programmation/i.test(p) && /:\s*$/.test(p));
+  const next = paragraphs.findIndex(p => (/nouveaux noms qui rejoignent la programmation/i.test(p) || /^La \d+e édition continue de se dévoiler avec \d+ nouveaux groupes attendus du \d{1,2} au \d{1,2} août à Carhaix\s*:$/.test(p)) && /:\s*$/.test(p));
   if (next >= 0 && paragraphs[next + 1]) {
     names = paragraphs[next + 1].replace(/\.$/, "").split(/,\s*|\s+et\s+/i);
   } else {
@@ -61,8 +61,9 @@ function astroAnnouncement(article: string, source: FestivalSource) {
   }
   const lineup = names.map(n => /^peeling\s*flesh$/i.test(n.trim()) ? "PeelingFlesh" : n.trim());
   const count = title.match(/\b(\d+) nouveaux (?:noms|groupes)\b/i);
-  if (count && Number(count[1]) !== lineup.length) return undefined;
-  if (!lineup.length || lineup.length > 150 || lineup.some(n => !n || n.length > 100 || /[():;.!?]|\b20\d{2}\b|€|billet|early bird/i.test(n)) || new Set(lineup.map(n => n.toLocaleLowerCase())).size !== lineup.length) return undefined;
+  const introCount = next >= 0 ? paragraphs[next].match(/avec (\d+) nouveaux groupes/) : undefined;
+  if ((count && Number(count[1]) !== lineup.length) || (introCount && Number(introCount[1]) !== lineup.length)) return undefined;
+  if (!lineup.length || lineup.length > 150 || lineup.some(n => !n || n.length > 100 || /[():;.!?]|\b20\d{2}\b|€|billet|early bird/i.test(n.replace(/\b(?:[A-Za-z]\.){2,}/g, ""))) || new Set(lineup.map(n => n.toLocaleLowerCase())).size !== lineup.length) return undefined;
   return {editionYear: source.editionYear, lineup, lineupScope: "announcement" as const,
     status: "partial" as const, excerpt: `Motocultor Festival ${source.editionYear}: ${title}; announced acts: ${lineup.join(", ")}`};
 }

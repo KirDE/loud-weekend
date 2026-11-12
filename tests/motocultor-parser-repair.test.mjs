@@ -99,3 +99,16 @@ test('Astro year must be in the article, not siblings; wrong years, incomplete l
     const c=parse(h);assert.equal(c.lineup,undefined);assert.ok(c.warnings.length);
   }
 });
+
+const third=await readFile(new URL('./fixtures/official-markup/motocultor-20261112.html',import.meta.url),'utf8');
+const thirdNames=['Alestorm','Cavalera Chaos A.D.','DevilDriver','Eluveitie','Gogol Bordello','Katatonia','Sventevith','Agriculture','Flotsam & Jetsam','Grima','Villagers of Ioannina City','Dirty Sound Magnet','Godsleep','Gorod','Holy Fawn','Les Bâtards du Roi','Les Garçons Bouchers','Lion’s Law','Spitting Glass','Suicidal Angels','VCTMS'];
+test('complete November12 official response: 21 additions including dotted A.D. artist, no billing/date/ticket drift',()=>{
+ const c=parse(third);assert.deepEqual(c.lineup,thirdNames);assert.deepEqual(c.warnings,[]);
+ const baseline={...current,lineup:[...current.lineup,...added]};const r=evaluateCandidate(baseline,c);assert.equal(r.publishable,true);assert.deepEqual(r.changes.map(x=>x.kind),Array(21).fill('artist_added'));
+ assert.deepEqual(evaluateCandidate({...baseline,lineup:[...baseline.lineup,...thirdNames]},c).changes,[]);
+ for(const f of ['headliners','startDate','endDate','ticketsUrl','ticketStatus'])assert.equal(c[f],undefined);
+});
+test('November pattern supports later bounded additions, but rejects count mismatch, missing roster, old edition and prose',()=>{
+ const later=third.replaceAll('21 nouveaux','22 nouveaux').replace('Suicidal Angels et VCTMS.','Suicidal Angels, VCTMS et Gojira.');assert.deepEqual(parse(later).lineup,[...thirdNames,'Gojira']);
+ for(const doc of [third.replaceAll('21 nouveaux noms','22 nouveaux noms'),third.replaceAll('2027','2026'),third.replace('Suicidal Angels et VCTMS.','Suicidal Angels et VCTMS. New ticket sentence.'),third.replace(/<p>Alestorm[\s\S]*?<\/p>/,'')])assert.equal(parse(doc).lineup,undefined);
+});
