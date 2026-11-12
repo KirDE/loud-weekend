@@ -203,3 +203,12 @@ test('main semantic/accessible announcements cannot be dropped with unchanged te
   for (const attrs of ['role="img" aria-label="Firenze Rocks 2027 lineup announced"', 'title="Tickets on sale"', 'aria-description="New lineup"', 'aria-labelledby="poster-title"', 'role="button"']) review(base.replace('</main>',`<div ${attrs}></div></main>`));
  }
 });
+
+test('unexpected executable scripts cannot be discarded as generic runtime', () => {
+ for (const base of [svgFixture, fixture]) {
+  for (const script of ['<script src="/lineup-2027.js"></script>', '<script src="https://www.firenzerocks.it/tickets.js"></script>', '<script>document.body.innerHTML="2027 tickets on sale"</script>', '<script src="/_next/static/chunks/99999-abcdefabcdefabcd.js"></script>', '<script>self.__next_f.push([0]);document.body.innerHTML="2027 lineup"</script>']) review(base+script);
+ }
+});
+test('known data-only Next bootstrap remains supported without executing it', () => {
+ quiet(svgFixture+'<script>(self.__next_f=self.__next_f||[]).push([0])</script><script>self.__next_f.push([1,"runtime payload"])</script>');
+});

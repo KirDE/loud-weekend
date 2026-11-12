@@ -24,6 +24,31 @@ function safeStyles(markup: string): boolean {
     attribute(tag[0], "style").split(";").map(value => value.trim()).filter(Boolean).every(value =>
       /^(?:color\s*:\s*transparent|text-align\s*:\s*center|--Paper-shadow\s*:\s*var\(\s*--mui-shadows-\d+\s*\)|--Paper-overlay\s*:\s*var\(\s*--mui-overlays-\d+\s*\))$/i.test(value)));
 }
+// Observed runtime module identities; deployment hashes/versions may change.
+// A new module or arbitrary inline executable can render an announcement.
+const RUNTIME_CHUNKS = new Set(["9361d2c7", "8210", "main-app", "app/layout", "b27dc69b", "fcf3a8d9", "8087", "3945", "app/render/%5BcacheKey%5D/layout", "1738", "4860", "9385", "3734", "5993", "1441", "2085", "446", "1897", "8818", "app/render/%5BcacheKey%5D/(header-none-footer-none)/layout", "322", "1744", "5800", "3529", "7602", "443", "4865", "4475", "8784", "3464", "3604", "6292", "4418", "2393", "4793", "2392", "1584", "3393", "7018", "app/render/%5BcacheKey%5D/(header-minimal-footer-none)/holdingPage/page", "3208", "6841", "app/render/%5BcacheKey%5D/(header-minimal-footer-none)/layout", "3998", "app/render/%5BcacheKey%5D/error", "3887", "app/render/%5BcacheKey%5D/not-found", "9235", "7878", "app/render/%5BcacheKey%5D/(header-minimal-footer-minimal)/layout", "polyfills", "webpack"]);
+function knownScripts(html: string): boolean {
+  const seen = new Set<string>();
+  for (const script of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) {
+    const opening = script[0].match(/^<script\b[^>]*>/i)?.[0] ?? "";
+    const src = attribute(opening, "src"), body = script[1].trim();
+    if (src) {
+      const chunk = src.match(/^\/_next\/static\/chunks\/(.+)-[0-9a-f]{16}\.js(?:\?dpl=v\d+)?$/i)?.[1];
+      if (!chunk || !RUNTIME_CHUNKS.has(chunk) || seen.has(src) || body) return false;
+      seen.add(src);
+      continue;
+    }
+    if (body === "(function(){var w=window;w.googletag=w.googletag||{};w.googletag.cmd=w.googletag.cmd||[]})();") continue;
+    const push = body.match(/^(?:\(self\.__next_f=self\.__next_f\|\|\[\]\)|self\.__next_f)\.push\((\[[\s\S]*\])\);?$/)?.[1];
+    if (!push) return false;
+    try {
+      const payload = JSON.parse(push);
+      if (!(Array.isArray(payload) && (payload.length === 1 && payload[0] === 0 ||
+          payload.length === 2 && payload[0] === 1 && typeof payload[1] === "string"))) return false;
+    } catch { return false; }
+  }
+  return true;
+}
 // Verified generic language-selector globe geometry, not edition artwork.
 const LANGUAGE_ICON_PATH = 'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2m6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56M12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96M4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2s.06 1.34.14 2zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56m2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8M12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96M14.34 14H9.66c-.09-.66-.16-1.32-.16-2s.07-1.35.16-2h4.68c.09.65.16 1.32.16 2s-.07 1.34-.16 2m.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56M16.36 14c.08-.66.14-1.32.14-2s-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2z';
 export function firenzeRocks(html: string, source: FestivalSource) {
@@ -33,6 +58,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
       /["']@type["']\s*:\s*["'](?:MusicEvent|Festival|Event)["']/i.test(html)) return drift;
   // Inspect inline CSS before head/runtime styles are removed. Generated layout
   // rules can change freely, but generated text, imports and artwork cannot.
+  if (!knownScripts(html)) return drift;
   for (const sheet of html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)) {
     const css = sheet[1].replace(/\/\*[\s\S]*?\*\//g, "").replace(/\\([0-9a-f]{1,6})\s?|\\([^\r\n])/gi,
       (_, hex: string, char: string) => hex ? String.fromCodePoint(Math.min(parseInt(hex, 16), 0x10ffff)) : char);
