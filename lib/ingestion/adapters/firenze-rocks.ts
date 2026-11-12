@@ -127,7 +127,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   if (!knownScripts(html) || !knownLinks(html)) return drift;
   const markup = html.replace(/(<(?:script|style)\b[^>]*>)[\s\S]*?(<\/(?:script|style)>)/gi, "$1$2").replace(/<!--[\s\S]*?-->/g, "");
   if ([...markup.matchAll(/<[a-z][^>]*>/gi)].some(tag => !knownAria(tag[0]) ||
-      attributes(tag[0]).some(attr => /^on[a-z]/i.test(attr[1]) || /^(?:background|dynsrc|lowsrc)$/i.test(attr[1])))) return drift;
+      attributes(tag[0]).some(attr => /^on[a-z]/i.test(attr[1]) || /^(?:background|dynsrc|lowsrc|fill|stroke|filter|mask|clip-path|marker(?:-start|-mid|-end)?)$/i.test(attr[1])))) return drift;
   // Browsers reprocess invalid head children in the body. Do not discard them
   // merely because they are surrounded by raw head delimiters.
   for (const head of html.matchAll(/<head\b[^>]*>([\s\S]*?)<\/head>/gi)) {
@@ -183,7 +183,13 @@ export function firenzeRocks(html: string, source: FestivalSource) {
         ["title", "aria-labelledby", "aria-describedby", "aria-description"].some(name => attribute(tag[0], name))) return drift;
   }
   const vectors = [...headers[0][1].matchAll(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi)];
-  if (vectors.length !== 1 || attribute(vectors[0][0], "viewBox") !== "0 0 24 24" ||
+  // Geometry alone does not constrain paint servers or other presentation.
+  // Keep both icon nodes limited to observed attributes, including inherited
+  // paint attributes rejected globally above.
+  if (vectors.length !== 1 ||
+      !onlyAttributes(vectors[0][0].match(/^<svg\b[^>]*>/i)?.[0] ?? "", ["class", "focusable", "aria-hidden", "viewbox"]) ||
+      !onlyAttributes(vectors[0][0].match(/<path\b[^>]*>/i)?.[0] ?? "", ["d"]) ||
+      attribute(vectors[0][0], "viewBox") !== "0 0 24 24" ||
       !/^<svg\b[^>]*>\s*<path\b[^>]*>(?:\s*<\/path>)?\s*<\/svg>$/i.test(vectors[0][0]) ||
       attribute(vectors[0][0].match(/<path\b[^>]*>/i)?.[0] ?? "", "d") !== LANGUAGE_ICON_PATH ||
       /<\/?(?:svg|path|circle|rect|polygon|polyline|ellipse|line|text)\b/i.test(headers[0][1].replace(vectors[0][0], ""))) return drift;

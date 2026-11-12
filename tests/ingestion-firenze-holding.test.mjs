@@ -300,3 +300,8 @@ test('decoded verified metadata keys remain quiet without freezing their spellin
  quiet(`<meta property="og&#58;title" content="Home | Firenze Rocks">${svgFixture}`);
  quiet(`<meta name="descr&#105;ption" content="Home | Firenze Rocks">${svgFixture}`);
 });
+
+test('verified SVG geometry cannot admit new paint, filter or presentation attributes', () => {
+ for (const tag of ['svg','path']) for (const name of ['fill','stroke','filter','mask','clip-path','marker-start','href','xlink:href','data-future-paint']) review(svgFixture.replace(`<${tag} `,`<${tag} ${name}="url(/lineup-2027.svg#poster)" `));
+ for (const name of ['fill','stroke','filter','mask','clip-path']) review(svgFixture.replace('<header ',`<header ${name}="url(/poster.svg#announcement)" `));
+});
