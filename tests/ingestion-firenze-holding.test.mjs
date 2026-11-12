@@ -386,3 +386,17 @@ test('quoted markup delimiters cannot truncate later attribute validation', () =
  review(svgFixture.replace('<header','<header class=">" style="background-image:url(/poster.jpg)"'));
  quiet(svgFixture.replace('<main','<main class="ordinary future-layout"'));
 });
+
+test('absolute RDFa properties and content on non-metadata shell nodes require review', () => {
+ for (const base of [fixture, svgFixture]) for (const attrs of ['property="https://schema.org/startDate" content="2027-06-15"', 'property="https://schema.org/performer" content="New Artist"', 'property="https://schema.org/startDate"', 'content="2027-06-15"']) review(base.replace('</main>', `<div ${attrs}></div></main>`));
+ quiet(`<meta property="og:title" content="Home | Firenze Rocks">${svgFixture}`);
+});
+test('known runtime modules with unseen executable hashes require review', () => {
+ for (const base of [fixture, svgFixture]) {
+  const src=base.match(/<script\b[^>]*\bsrc="([^"]*\/holdingPage\/page-[^"]+)"/)[1];
+  const changed=src.replace(/-[0-9a-f]{16}\.js/, '-deadbeefdeadbeef.js');
+  review(base.replace(src,changed));
+  review(base+`<script src="${changed}"></script>`);
+  review(`<link rel="preload" as="script" href="/_next/static/chunks/webpack-deadbeefdeadbeef.js">${base}`);
+ }
+});

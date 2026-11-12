@@ -110,9 +110,63 @@ function legacyLogo(tag: string, editionYear: number): boolean {
     return Boolean(match && legacyLogoUrl(match[1], editionYear));
   });
 }
-// Observed runtime module identities; deployment hashes/versions may change.
-// A new module or arbitrary inline executable can render an announcement.
-const RUNTIME_CHUNKS = new Set(["9361d2c7", "8210", "main-app", "app/layout", "b27dc69b", "fcf3a8d9", "8087", "3945", "app/render/%5BcacheKey%5D/layout", "1738", "4860", "9385", "3734", "5993", "1441", "2085", "446", "1897", "8818", "app/render/%5BcacheKey%5D/(header-none-footer-none)/layout", "322", "1744", "5800", "3529", "7602", "443", "4865", "4475", "8784", "3464", "3604", "6292", "4418", "2393", "4793", "2392", "1584", "3393", "7018", "app/render/%5BcacheKey%5D/(header-minimal-footer-none)/holdingPage/page", "3208", "6841", "app/render/%5BcacheKey%5D/(header-minimal-footer-none)/layout", "3998", "app/render/%5BcacheKey%5D/error", "3887", "app/render/%5BcacheKey%5D/not-found", "9235", "7878", "app/render/%5BcacheKey%5D/(header-minimal-footer-minimal)/layout", "polyfills", "webpack"]);
+// Observed content-addressed executable URLs. A new hash can render new
+// announcement content even under a known module name; require review.
+const RUNTIME_SCRIPTS = new Set([
+  "/_next/static/chunks/1441-1a9f5db39bb3d603.js",
+  "/_next/static/chunks/1584-5a3f076c72138999.js",
+  "/_next/static/chunks/1738-971a42064e49ad4b.js",
+  "/_next/static/chunks/1744-6d82b1728ec87c18.js",
+  "/_next/static/chunks/1897-17bc1218805bb7ba.js",
+  "/_next/static/chunks/2085-82b9375f41279ee0.js",
+  "/_next/static/chunks/2392-2afd390b38b14ad8.js",
+  "/_next/static/chunks/2393-f1eb7b7d5aab46b7.js",
+  "/_next/static/chunks/3208-e06af040b0d29fcf.js",
+  "/_next/static/chunks/322-79b3ac47cbbc6c13.js",
+  "/_next/static/chunks/3393-e7ddfc5cf772324d.js",
+  "/_next/static/chunks/3464-805a5b56ce576c5e.js",
+  "/_next/static/chunks/3529-ad113db9d52e5655.js",
+  "/_next/static/chunks/3604-044ef4ab53b1480c.js",
+  "/_next/static/chunks/3734-be571cfcaa57a375.js",
+  "/_next/static/chunks/3887-44fed1836c2fde80.js",
+  "/_next/static/chunks/3945-de5e7a93f7c980dc.js",
+  "/_next/static/chunks/3998-4f32fa886bcad592.js",
+  "/_next/static/chunks/4418-edfe01ddd05776e2.js",
+  "/_next/static/chunks/443-db1ba20cd5ff9aaf.js",
+  "/_next/static/chunks/446-8a70dd7e42440e07.js",
+  "/_next/static/chunks/4475-fadf0c3346e133e5.js",
+  "/_next/static/chunks/4793-16427a91b3272b90.js",
+  "/_next/static/chunks/4860-cae4f97b5f31f184.js",
+  "/_next/static/chunks/4865-638ee982b0fdee0c.js",
+  "/_next/static/chunks/5800-54a9d231c8d8495b.js",
+  "/_next/static/chunks/5993-e0f56456d322f484.js",
+  "/_next/static/chunks/6292-e467beae16610040.js",
+  "/_next/static/chunks/6841-e25a4c71afd87fe5.js",
+  "/_next/static/chunks/7018-b68948af00828cc2.js",
+  "/_next/static/chunks/7602-e00868b777e9b9b4.js",
+  "/_next/static/chunks/7878-d6f15760d00575e0.js",
+  "/_next/static/chunks/8087-4ac9a47f0a3c06e5.js",
+  "/_next/static/chunks/8210-7a30009c79e2c4e6.js",
+  "/_next/static/chunks/8784-f3bb92eb4e4ebec3.js",
+  "/_next/static/chunks/8818-8813836f473da47c.js",
+  "/_next/static/chunks/9235-b2c3ceb40bcc64c6.js",
+  "/_next/static/chunks/9361d2c7-dc28c1914eca729f.js",
+  "/_next/static/chunks/9385-93b5c5e4bd701c7f.js",
+  "/_next/static/chunks/app/layout-fbeb7709e98ef5d2.js",
+  "/_next/static/chunks/app/render/%5BcacheKey%5D/(header-minimal-footer-minimal)/layout-a21d3eee09ffe3dd.js",
+  "/_next/static/chunks/app/render/%5BcacheKey%5D/(header-minimal-footer-none)/holdingPage/page-1e8c97ae30d57f31.js",
+  "/_next/static/chunks/app/render/%5BcacheKey%5D/(header-minimal-footer-none)/holdingPage/page-4fbaa98f7d93405d.js",
+  "/_next/static/chunks/app/render/%5BcacheKey%5D/(header-minimal-footer-none)/layout-256e42069b366e0d.js",
+  "/_next/static/chunks/app/render/%5BcacheKey%5D/(header-none-footer-none)/layout-5de80d6459be848a.js",
+  "/_next/static/chunks/app/render/%5BcacheKey%5D/error-7fa700d2eb78ffed.js",
+  "/_next/static/chunks/app/render/%5BcacheKey%5D/layout-a94747a7c92de669.js",
+  "/_next/static/chunks/app/render/%5BcacheKey%5D/not-found-844d04c47527870d.js",
+  "/_next/static/chunks/b27dc69b-ade44f13bb6f9571.js",
+  "/_next/static/chunks/fcf3a8d9-ff5ad1515d5d42ef.js",
+  "/_next/static/chunks/main-app-6f5c024b390666a1.js",
+  "/_next/static/chunks/polyfills-42372ed130431b0a.js",
+  "/_next/static/chunks/webpack-9d462315f16170f5.js"
+]);
 function knownScripts(html: string): boolean {
   const seen = new Set<string>();
   let flight = "";
@@ -120,9 +174,9 @@ function knownScripts(html: string): boolean {
     const opening = script[0].match(/^<script\b[^>]*>/i)?.[0] ?? "";
     const src = attribute(opening, "src"), body = script[1].trim();
     if (src) {
-      const chunk = src.match(/^\/_next\/static\/chunks\/(.+)-[0-9a-f]{16}\.js(?:\?dpl=v\d+)?$/i)?.[1];
-      if (!chunk || !RUNTIME_CHUNKS.has(chunk) || seen.has(src) || body) return false;
-      seen.add(src);
+      const identity = src.replace(/\?dpl=v\d+$/, "");
+      if (!RUNTIME_SCRIPTS.has(identity) || seen.has(identity) || body) return false;
+      seen.add(identity);
       continue;
     }
     if (body === "(function(){var w=window;w.googletag=w.googletag||{};w.googletag.cmd=w.googletag.cmd||[]})();") continue;
@@ -148,7 +202,7 @@ function knownLinks(html: string): boolean {
       const css = href.match(/^\/_next\/static\/css\/([0-9a-f]{16})\.css(?:\?dpl=v\d+)?$/i)?.[1];
       return Boolean(css && HOLDING_STYLESHEETS.has(css));
     }
-    if (rel === "preload" && attribute(link[0], "as") === "script") return /^\/_next\/static\/chunks\/webpack-[0-9a-f]{16}\.js(?:\?dpl=v\d+)?$/i.test(href);
+    if (rel === "preload" && attribute(link[0], "as") === "script") return RUNTIME_SCRIPTS.has(href.replace(/\?dpl=v\d+$/, "")) && /^\/_next\/static\/chunks\/webpack-/.test(href);
     if (rel === "icon" || rel === "apple-touch-icon") return href === "data:," || href === "https://networksites.livenationinternational.com/networksites/fk2hygpj/fr-2025_48x48.png";
     return rel === "alternate" && href === "https://www.firenzerocks.it/en" && attribute(link[0], "hreflang") === "en-IT";
   });
@@ -242,6 +296,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
     if (classes.includes("&") || classes.split(/\s+/).includes("ffehc-11cgpkn") && !/^<h1\b/i.test(tag[0])) return drift;
   }
   if ([...markup.matchAll(/<[a-z][^>]*>/gi)].some(tag => !knownAria(tag[0]) ||
+      !/^<meta\b/i.test(tag[0]) && attributes(tag[0]).some(attr => /^(?:property|content)$/i.test(attr[1])) ||
       attributes(tag[0]).some(attr => /^(?:item(?:scope|type|prop|ref|id)|vocab|typeof|about|resource|prefix|popover)$/i.test(attr[1]) ||
         /^on[a-z]/i.test(attr[1]) || /^(?:background|dynsrc|lowsrc|fill|stroke|filter|mask|clip-path|marker(?:-start|-mid|-end)?)$/i.test(attr[1])))) return drift;
   // Browsers reprocess invalid head children in the body. Do not discard them
