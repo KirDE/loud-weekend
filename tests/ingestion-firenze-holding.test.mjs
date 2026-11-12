@@ -305,3 +305,12 @@ test('verified SVG geometry cannot admit new paint, filter or presentation attri
  for (const tag of ['svg','path']) for (const name of ['fill','stroke','filter','mask','clip-path','marker-start','href','xlink:href','data-future-paint']) review(svgFixture.replace(`<${tag} `,`<${tag} ${name}="url(/lineup-2027.svg#poster)" `));
  for (const name of ['fill','stroke','filter','mask','clip-path']) review(svgFixture.replace('<header ',`<header ${name}="url(/poster.svg#announcement)" `));
 });
+
+test('commented shell nodes are not evidence of a complete browser holding page', () => {
+ review(`<!--${svgFixture}-->`);
+ for (const tag of ['header','main','title','script']) review(svgFixture.replace(new RegExp(`<${tag}\\b[\\s\\S]*?</${tag}>`,'i'), block=>`<!--${block}-->`));
+ review(`<!--${svgFixture}`);
+});
+test('ordinary comments remain inert and do not freeze the shell snapshot', () => {
+ quiet(`<!-- changed deployment note -->${svgFixture}<!-- footer note -->`);
+});
