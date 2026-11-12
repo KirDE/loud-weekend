@@ -249,7 +249,7 @@ function withoutComments(html: string): string | null {
     // Only empty runtime nodes may be hidden, never a required shell region
     // or an ancestor that would make all its evidence invisible.
     if (name && attributes(tag).some(attr => attr[1].toLowerCase() === "hidden") &&
-        !new RegExp(`^</${name}\\s*>`, "i").test(html.slice(end + 1).replace(/^(?:\s|<!--\/?\$-->)+/, ""))) return null;
+        (/^(?:html|body)$/i.test(name) || !new RegExp(`^</${name}\\s*>`, "i").test(html.slice(end + 1).replace(/^(?:\s|<!--\/?\$-->)+/, "")))) return null;
     result += tag;
     offset = end + 1;
     const raw = tag.match(/^<(script|style|title)\b/i)?.[1];
@@ -284,7 +284,10 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   const structure = rawTextExcluded.replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, "");
   const titles = [...structure.matchAll(/<title\b[^>]*>([\s\S]*?)<\/title>/gi)];
   if (titles.length !== 1 || !/^\s*Home\s*\|\s*Firenze Rocks\s*$/i.test(titles[0][1]) ||
-      !/<script\b[^>]*\bsrc=["'][^"']*\/holdingPage\/page-[^"']+["']/i.test(structure) ||
+      ![...structure.matchAll(/<script\b[^>]*>/gi)].some(tag => {
+        const src = attribute(tag[0], "src").replace(/\?dpl=v\d+$/, "");
+        return src.includes("/holdingPage/page-") && RUNTIME_SCRIPTS.has(src);
+      }) ||
       /["']@type["']\s*:\s*["'](?:MusicEvent|Festival|Event)["']/i.test(html)) return drift;
   // Inspect inline CSS before head/runtime styles are removed. Verified runtime
   // sheets remain accepted; unknown rules must be non-concealing presentation.
@@ -327,6 +330,10 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   }
   for (const meta of structure.matchAll(/<meta\b[^>]*>/gi)) {
     if (attribute(meta[0], "http-equiv")) return drift;
+    const name = metadataKey(attribute(meta[0], "name"));
+    // Unobserved named metadata (including installable-app labels) can expose
+    // an announcement independently of the visible holding-page shell.
+    if (name && !["viewport", "description", "keywords", "robots", "twitter:card", "twitter:title", "twitter:description", "twitter:image", "twitter:image:width", "twitter:image:height"].includes(name)) return drift;
     const property = metadataKey(attribute(meta[0], "property"));
     // Only observed, separately validated social metadata is non-announcement
     // evidence. Unknown RDFa predicates may carry machine-readable facts.

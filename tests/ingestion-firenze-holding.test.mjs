@@ -450,3 +450,19 @@ test('keyword metadata must remain generic rather than announce edition or artis
  }
  review(svgFixture.replace('name="keywords" content="Home, |, Firenze, Rocks, Home | Firenze Rocks"','name="keywords" content="Firenze Rocks 2027, Artist A, tickets on sale"'));
 });
+
+
+test('hidden document and body roots remain invisible after premature closing', () => {
+ for (const base of [fixture, svgFixture]) for (const tag of ['html','body']) for (const attr of ['hidden','hidden="until-found"']) review(`<${tag} ${attr}></${tag}>${base}`);
+ quiet('<div hidden></div>'+svgFixture);
+});
+test('unobserved application and other named metadata require review', () => {
+ for (const base of [fixture, svgFixture]) for (const name of ['application-name','apple-mobile-web-app-title','future-title']) review(base+`<meta name="${name}" content="Firenze Rocks 2027 tickets on sale">`);
+ quiet(svgFixture);
+});
+test('required holding module must be the actual executable src, never data-src', () => {
+ for (const base of [fixture, svgFixture]) {
+  const changed=base.replace(/<script\b[^>]*src="([^" ]*\/holdingPage\/page-[^"]+)"[^>]*><\/script>/,(_,url)=>`<script data-src="${url}" src="/_next/static/chunks/1441-1a9f5db39bb3d603.js"></script>`);
+  assert.notEqual(changed,base);review(changed);
+ }
+});
