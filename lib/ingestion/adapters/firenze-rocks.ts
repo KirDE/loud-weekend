@@ -340,6 +340,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
       // metadata can be an image-only edition announcement even on this shell.
       if (/^(?:og:image|twitter:image)(?::(?:url|src|secure_url))?$/i.test(kind) &&
           attribute(meta[0], "content") !== "https://networksites.livenationinternational.com/networksites/vrudcnfc/firenze-rocks-share-image.jpg") return drift;
+      if (kind === "keywords" && attribute(meta[0], "content") !== "Home, |, Firenze, Rocks, Home | Firenze Rocks") return drift;
       if (kind === "og:site_name" && attribute(meta[0], "content") !== "www.firenzerocks.it") return drift;
       if (["description", "og:description", "og:title", "twitter:description", "twitter:title"].includes(kind) &&
           attribute(meta[0], "content") !== "Home | Firenze Rocks") return drift;

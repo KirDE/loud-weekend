@@ -441,3 +441,12 @@ test('unquoted equals signs cannot truncate browser-applied inline CSS', () => {
   quiet(base.replace('<main','<main style=color:transparent'));
  }
 });
+
+
+test('keyword metadata must remain generic rather than announce edition or artists', () => {
+ for (const base of [fixture, svgFixture]) {
+  for (const value of ['Firenze Rocks 2027, Artist A, tickets on sale','Artist A, Artist B','2028 lineup']) review(base+`<meta name="keywords" content="${value}">`);
+  quiet(base+'<meta name="keywords" content="Home, |, Firenze, Rocks, Home | Firenze Rocks">');
+ }
+ review(svgFixture.replace('name="keywords" content="Home, |, Firenze, Rocks, Home | Firenze Rocks"','name="keywords" content="Firenze Rocks 2027, Artist A, tickets on sale"'));
+});
