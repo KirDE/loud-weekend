@@ -366,3 +366,17 @@ test('unverified styles cannot conceal the shell with opacity, transforms or pos
  review(`<style>${sheets.find(Boolean)}body{opacity:0}</style>${svgFixture}`);
  review(sheets.map(css=>`<style>${css}</style>`).join('')+`<style>body{opacity:0}</style>${svgFixture}`);
 });
+
+test('popover cannot hide required regions or their ancestors', () => {
+ review(svgFixture.replace('<header','<header popover').replace('<main','<main popover'));
+ for (const attr of ['popover','popover="auto"','popover="manual"']) review(`<div ${attr}>${svgFixture}</div>`);
+});
+test('verified clipped class is restricted to the generic h1, not shell regions', async () => {
+ const sheets=JSON.parse(await readFile(new URL('./fixtures/official-markup/firenze-rocks-inline-styles.json',import.meta.url),'utf8'));
+ const styles=sheets.map(css=>`<style>${css}</style>`).join('');
+ for (const name of ['ffehc-11cgpkn','ffehc-11cgp&#107;n','ffehc&hyphen;11cgpkn']) {
+  review(styles+svgFixture.replace('<header',`<header class="${name}"`).replace('<main',`<main class="${name}"`));
+  review(styles+`<div class="${name}">${svgFixture}</div>`);
+ }
+ quiet(styles+svgFixture.replace(/<h1\b[^>]*>/,'<h1 class="ffehc-11cgpkn">'));
+});

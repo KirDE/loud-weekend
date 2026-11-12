@@ -228,12 +228,18 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   if (titles.length !== 1 || !/^\s*Home\s*\|\s*Firenze Rocks\s*$/i.test(titles[0][1]) ||
       !/<script\b[^>]*\bsrc=["'][^"']*\/holdingPage\/page-[^"']+["']/i.test(structure) ||
       /["']@type["']\s*:\s*["'](?:MusicEvent|Festival|Event)["']/i.test(html)) return drift;
-  // Inspect inline CSS before head/runtime styles are removed. Generated layout
-  // rules can change freely, but generated text, imports and artwork cannot.
+  // Inspect inline CSS before head/runtime styles are removed. Verified runtime
+  // sheets remain accepted; unknown rules must be non-concealing presentation.
   if (!knownScripts(html) || !knownLinks(structure)) return drift;
   const markup = structure;
+  // The sole verified clipped class is an accessibility-only generic h1,
+  // never a required region or wrapper. Decode references before assignment checks.
+  for (const tag of markup.matchAll(/<[a-z][^>]*>/gi)) {
+    const classes = metadataKey(attribute(tag[0], "class"));
+    if (classes.includes("&") || classes.split(/\s+/).includes("ffehc-11cgpkn") && !/^<h1\b/i.test(tag[0])) return drift;
+  }
   if ([...markup.matchAll(/<[a-z][^>]*>/gi)].some(tag => !knownAria(tag[0]) ||
-      attributes(tag[0]).some(attr => /^(?:item(?:scope|type|prop|ref|id)|vocab|typeof|about|resource|prefix)$/i.test(attr[1]) ||
+      attributes(tag[0]).some(attr => /^(?:item(?:scope|type|prop|ref|id)|vocab|typeof|about|resource|prefix|popover)$/i.test(attr[1]) ||
         /^on[a-z]/i.test(attr[1]) || /^(?:background|dynsrc|lowsrc|fill|stroke|filter|mask|clip-path|marker(?:-start|-mid|-end)?)$/i.test(attr[1])))) return drift;
   // Browsers reprocess invalid head children in the body. Do not discard them
   // merely because they are surrounded by raw head delimiters.
