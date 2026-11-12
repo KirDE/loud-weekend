@@ -293,7 +293,9 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   // never a required region or wrapper. Decode references before assignment checks.
   for (const tag of markup.matchAll(/<[a-z][^>]*>/gi)) {
     const classes = metadataKey(attribute(tag[0], "class"));
-    if (classes.includes("&") || classes.split(/\s+/).includes("ffehc-11cgpkn") && !/^<h1\b/i.test(tag[0])) return drift;
+    if (classes.includes("&")) return drift;
+    if (classes.split(/\s+/).includes("ffehc-11cgpkn") &&
+        (!/^<h1\b/i.test(tag[0]) || !/^\s*Home\s*\|\s*Firenze Rocks\s*<\/h1>/i.test(markup.slice(tag.index! + tag[0].length)))) return drift;
   }
   if ([...markup.matchAll(/<[a-z][^>]*>/gi)].some(tag => !knownAria(tag[0]) ||
       !/^<meta\b/i.test(tag[0]) && attributes(tag[0]).some(attr => /^(?:property|content)$/i.test(attr[1])) ||
@@ -333,6 +335,7 @@ export function firenzeRocks(html: string, source: FestivalSource) {
       // metadata can be an image-only edition announcement even on this shell.
       if (/^(?:og:image|twitter:image)(?::(?:url|src|secure_url))?$/i.test(kind) &&
           attribute(meta[0], "content") !== "https://networksites.livenationinternational.com/networksites/vrudcnfc/firenze-rocks-share-image.jpg") return drift;
+      if (kind === "og:site_name" && attribute(meta[0], "content") !== "www.firenzerocks.it") return drift;
       if (["description", "og:description", "og:title", "twitter:description", "twitter:title"].includes(kind) &&
           attribute(meta[0], "content") !== "Home | Firenze Rocks") return drift;
     }
@@ -430,7 +433,12 @@ export function firenzeRocks(html: string, source: FestivalSource) {
   if (["src", "poster", "aria-label", "title"].some(name => attribute(videoTag, name)) ||
       videos[0][1].replace(/<source\b[^>]*>/gi, "").trim()) return drift;
   const sources = [...videos[0][1].matchAll(/<source\b[^>]*>/gi)];
-  if (sources.length !== 2 || !sources.every(s => /^https:\/\/networksites\.livenationinternational\.com\/networksites\/(?:k4tcpivz\/video-sito-mob|4jklndou\/video-sito-desk)\.mp4$/i.test(attribute(s[0], "src"))) ||
+  const expectedSources = [
+    ["https://networksites.livenationinternational.com/networksites/k4tcpivz/video-sito-mob.mp4", "(max-width: 768px)"],
+    ["https://networksites.livenationinternational.com/networksites/4jklndou/video-sito-desk.mp4", "(min-width: 769px)"]
+  ];
+  if (sources.length !== 2 || !sources.every((s, i) => onlyAttributes(s[0], ["src", "media"]) &&
+      attribute(s[0], "src") === expectedSources[i][0] && attribute(s[0], "media") === expectedSources[i][1]) ||
       text(videos[0][1])) return drift;
   body = body.replace(videos[0][0], "");
   // Unknown widgets, poster images, ticket links and even text-only announcements

@@ -400,3 +400,23 @@ test('known runtime modules with unseen executable hashes require review', () =>
   review(`<link rel="preload" as="script" href="/_next/static/chunks/webpack-deadbeefdeadbeef.js">${base}`);
  }
 });
+
+
+test('clipped generic heading cannot wrap the required media, socials or footer', () => {
+ review(svgFixture.replace('</h1>', '').replace('</main>', '</h1></main>'));
+ review(svgFixture.replace('Home | Firenze Rocks</h1>', 'Home | Firenze Rocks<div></div></h1>'));
+ quiet(svgFixture);
+});
+test('social site name is pinned branding, not an unreviewed announcement', () => {
+ for (const value of ['Firenze Rocks 2027 tickets on sale', 'New Artist announced']) review(svgFixture.replace('property="og:site_name" content="www.firenzerocks.it"', `property="og:site_name" content="${value}"`));
+ quiet(svgFixture);
+});
+test('holding video sources retain observed media selection and usable attributes', () => {
+ for (const base of [fixture, svgFixture]) {
+  for (const media of ['not all', 'print', '(max-width: 1px)']) review(base.replaceAll(/media="[^"]*"/g, `media="${media}"`));
+  for (const attr of ['type="video/unknown"', 'type="audio/mpeg"', 'srcset="/unverified.mp4"']) review(base.replaceAll('<source ', `<source ${attr} `));
+  review(base.replace('(max-width: 768px)', '(min-width: 769px)'));
+  review(base.replace('4jklndou/video-sito-desk', 'k4tcpivz/video-sito-mob'));
+  quiet(base);
+ }
+});
