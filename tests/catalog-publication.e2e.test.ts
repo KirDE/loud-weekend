@@ -580,3 +580,18 @@ test("formatting-equivalent duplicate identities stay blocked and roll back", as
   await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/Ambiguous artist identity/);
   assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}})).reviewState,"PENDING");
 });
+
+test("mixed-apostrophe duplicate identity is rejected before any catalog write", async () => {
+  const stem=`Rock 'n' Roll ${suffix}`;
+  const slug=stem.toLowerCase().replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"");
+  for(const [name,identitySlug] of [[stem,slug],[`Rock ‘n’ Roll ${suffix}`,slug+"-other"]]) {
+    await db.artist.create({data:{slug:identitySlug,name,aliases:[],genres:[],identityState:"UNRESOLVED",topTracks:[],recentSetlists:[],freshness:{}}});
+    createdArtists.push(identitySlug);
+  }
+  const value=result(stem),attempt=await persist(value);
+  const counts=()=>Promise.all([db.lineupEntry.count(),db.catalogPublication.count(),db.catalogPlaylistRefresh.count()]);
+  const before=await counts();
+  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/Ambiguous artist identity/);
+  assert.deepEqual(await counts(),before);
+  assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}})).reviewState,"PENDING");
+});

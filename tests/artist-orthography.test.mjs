@@ -10,3 +10,11 @@ test('real Rock am Ring publication spellings match canonical formatting only',(
 test('other slug collisions and substantive punctuation remain distinct',()=>{
   for(const [a,b] of [['AC/DC','AC DC'],['Band!','Band'],['Band..','Band'],['A.B','AB'],['Maples Pet Dinosaur',"Maple's Pet Dinosaur"],['Artist','Artist Other']]) assert.notEqual(key(a),key(b));
 });
+
+test('mixed quote positions are included, with bounded fail-closed expansion',()=>{
+  const spellings=variants("Rock 'n' Roll");
+  assert.ok(spellings.includes('Rock ‘n’ Roll'));
+  assert.ok(spellings.includes('Rock ’n‘ Roll.'));
+  assert.equal(spellings.length,18);
+  assert.throws(()=>variants("'".repeat(7)),/Ambiguous artist identity/);
+});
