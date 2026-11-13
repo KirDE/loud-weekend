@@ -554,3 +554,44 @@ test('unverified Download addition cannot acquire provider deferral or publish c
  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/Download publication requires verified official announcement evidence/);
  assert.deepEqual(await counts(),before);
 });
+
+
+test("Rock am Ring formatting variants reuse canonical IDs without renaming artists", async () => {
+  for (const [canonicalName, observedName] of [[`HANABIE ${suffix}.`, `Hanabie ${suffix}`], [`Maple's Pet Dinosaur ${suffix}`, `Maple’s Pet Dinosaur ${suffix}`]]) {
+    const slug = canonicalName.toLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
+    const canonical = await db.artist.create({data:{slug,name:canonicalName,aliases:[],genres:[],identityState:"UNRESOLVED",topTracks:[],recentSetlists:[],freshness:{}}});
+    createdArtists.push(slug);
+    const value=result(observedName), attempt=await persist(value);
+    assert.ok(await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}));
+    assert.equal((await db.artist.findUniqueOrThrow({where:{id:canonical.id}})).name,canonicalName);
+    assert.equal(await db.artist.count({where:{slug}}),1);
+    assert.equal(await db.lineupEntry.count({where:{artistId:canonical.id,edition:{festival:{slug:"synthetic-fest"}}}}),1);
+  }
+});
+
+test("formatting-equivalent duplicate identities stay blocked and roll back", async () => {
+  const stem=`Formatting Duplicate ${suffix}`;
+  const slug=stem.toLowerCase().replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"");
+  for(const [name,identitySlug] of [[stem,slug],[stem+".",slug+"-other"]]) {
+    await db.artist.create({data:{slug:identitySlug,name,aliases:[],genres:[],identityState:"UNRESOLVED",topTracks:[],recentSetlists:[],freshness:{}}});
+    createdArtists.push(identitySlug);
+  }
+  const value=result(stem),attempt=await persist(value);
+  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/Ambiguous artist identity/);
+  assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}})).reviewState,"PENDING");
+});
+
+test("mixed-apostrophe duplicate identity is rejected before any catalog write", async () => {
+  const stem=`Rock 'n' Roll ${suffix}`;
+  const slug=stem.toLowerCase().replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"");
+  for(const [name,identitySlug] of [[stem,slug],[`Rock ‘n’ Roll ${suffix}`,slug+"-other"]]) {
+    await db.artist.create({data:{slug:identitySlug,name,aliases:[],genres:[],identityState:"UNRESOLVED",topTracks:[],recentSetlists:[],freshness:{}}});
+    createdArtists.push(identitySlug);
+  }
+  const value=result(stem),attempt=await persist(value);
+  const counts=()=>Promise.all([db.lineupEntry.count(),db.catalogPublication.count(),db.catalogPlaylistRefresh.count()]);
+  const before=await counts();
+  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/Ambiguous artist identity/);
+  assert.deepEqual(await counts(),before);
+  assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}})).reviewState,"PENDING");
+});

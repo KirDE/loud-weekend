@@ -1,3 +1,4 @@
+import { artistOrthographyKey, artistOrthographyVariants } from "./artist-orthography.ts";
 import { isDownloadAnnouncement } from "../ingestion/adapters/download.ts";
 import {
   ArtistIdentityState,
@@ -41,9 +42,9 @@ async function ensureArtist(db: Database, name: string, observedAt: Date) {
   const slug = artistSlug(name);
   if (!slug) throw new Error(`Cannot derive artist slug for ${name}`);
   const bySlug = await db.artist.findUnique({ where: { slug } });
-  if (bySlug && bySlug.name.toLocaleLowerCase() !== name.toLocaleLowerCase()) throw new Error(`Artist slug collision: ${slug} (${bySlug.name} / ${name})`);
-  const byName = await db.artist.findMany({ where: { name: { equals: name, mode: "insensitive" } }, select: { id: true, slug: true, name: true } });
-  if (byName.length > 1 || (byName.length === 1 && byName[0].slug !== slug)) throw new Error(`Ambiguous artist identity for ${name}`);
+  if (bySlug && artistOrthographyKey(bySlug.name) !== artistOrthographyKey(name)) throw new Error(`Artist slug collision: ${slug} (${bySlug.name} / ${name})`);
+  const byName = await db.artist.findMany({ where: { OR: artistOrthographyVariants(name).map(spelling => ({ name: { equals: spelling, mode: "insensitive" as const } })) }, select: { id: true, slug: true, name: true } });
+  if (byName.length > 1 || (byName.length === 1 && byName[0].id !== bySlug?.id)) throw new Error(`Ambiguous artist identity for ${name}`);
   if (bySlug) return bySlug;
   const checkedAt = observedAt.toISOString().slice(0, 10);
   return db.artist.create({ data: {
