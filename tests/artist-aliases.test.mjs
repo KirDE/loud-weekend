@@ -39,3 +39,9 @@ test('source evidence is preserved and caller inputs are not mutated',()=>{
  const r=evaluateCandidate({...fixture.current,headliners:[],lineup:['Canonical Band']},c,artists);
  assert.deepEqual(c,original);assert.deepEqual(r.candidate.evidence,c.evidence);
 });
+test('unregistered formatting variants do not bypass additive billing review',()=>{
+ const a=[{id:'h',slug:'hanabie',name:'HANABIE.',aliases:[]}];
+ const current={...fixture.current,headliners:['HANABIE.'],lineup:[]};
+ const c={...fixture.candidate,headliners:undefined,lineup:['Hanabie'],lineupScope:'announcement',artistListMode:'additive'};
+ const r=evaluateCandidate(current,c,a);assert.ok(r.reviewReasons.length);assert.ok(r.changes.some(c=>c.after==='Hanabie'));
+});
