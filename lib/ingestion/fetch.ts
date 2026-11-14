@@ -109,15 +109,21 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     return initial;
   }
   if (initial.response.ok && isFullRewind(source)) {
-    if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url)) throw new Error('Full Rewind homepage identity changed');
-    const home = await initial.response.text();
-    const linked = [...home.matchAll(/<a\b[^>]*href=["']([^"']+)["']/gi)].some(m => { try { return new URL(m[1],source.url).href === FULL_REWIND_BANDS; } catch { return false; } });
-    if (!linked) throw new Error('Full Rewind official bands link missing');
-    const bands = await fetchWithRetry(FULL_REWIND_BANDS, 'error');
-    const attempts = initial.attempts + bands.attempts;
-    if (!bands.response.ok) return {response:bands.response,attempts};
-    if (bands.response.url && bands.response.url !== FULL_REWIND_BANDS) throw new Error('Full Rewind bands identity changed');
-    return {response:new Response(JSON.stringify({kind:FULL_REWIND_DOCUMENTS,home,bands:await bands.response.text()}),{headers:{'content-type':'application/json'}}),attempts};
+    let attempts = initial.attempts;
+    try {
+      if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url)) throw new Error('Full Rewind homepage identity changed');
+      const home = await initial.response.text();
+      const linked = [...home.matchAll(/<a\b[^>]*href=["']([^"']+)["']/gi)].some(m => { try { return new URL(m[1],source.url).href === FULL_REWIND_BANDS; } catch { return false; } });
+      if (!linked) throw new Error('Full Rewind official bands link missing');
+      const bands = await fetchWithRetry(FULL_REWIND_BANDS, 'error');
+      attempts += bands.attempts;
+      if (!bands.response.ok) return {response:bands.response,attempts};
+      if (bands.response.url && bands.response.url !== FULL_REWIND_BANDS) throw new Error('Full Rewind bands identity changed');
+      return {response:new Response(JSON.stringify({kind:FULL_REWIND_DOCUMENTS,home,bands:await bands.response.text()}),{headers:{'content-type':'application/json'}}),attempts};
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      throw Object.assign(failure, { attempts: attempts + Number((failure as Error & { attempts?: number }).attempts ?? 0) });
+    }
   }
   if (initial.response.ok && isGraspopSource(source)) {
     if (initial.response.url && initial.response.url !== source.url) throw new Error('Graspop FAQ changed its official identity');

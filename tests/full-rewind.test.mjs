@@ -21,3 +21,32 @@ test('duplicate and script-only rosters fail closed; genuinely added official ca
  const added=extract(home,bands.replace('</main>',card.replaceAll('AILD','Another-Band')+'</main>'));
  assert.equal(added.lineup.length,17);assert(evaluateCandidate(current,added).reviewReasons.length);
 });
+
+
+test('linked-fetch exceptions count all completed requests plus failing retries', async () => {
+  let calls = 0;
+  await assert.rejects(fetchSource(source, { maxAttempts: 3, sleep: async () => {}, fetchImpl: async u => {
+    calls++; if (u === FULL_REWIND_HOME) return new Response(home);
+    throw new Error('offline');
+  }}), error => error.message === 'offline' && error.attempts === 4);
+  assert.equal(calls, 4);
+  await assert.rejects(fetchSource(source, {fetchImpl: async u => {
+    const r = new Response(u === FULL_REWIND_HOME ? home : bands);
+    if (u === FULL_REWIND_BANDS) Object.defineProperty(r, 'url', {value: 'https://other.invalid/'});
+    return r;
+  }}), error => /bands identity changed/.test(error.message) && error.attempts === 2);
+  await assert.rejects(fetchSource(source, {fetchImpl: async () => new Response(home.replaceAll('/pages/bands_2025', '/pages/archive'))}), error => error.attempts === 1);
+});
+
+test('admin whole-field artist replacement is refused, including stale approvals, before DB mutation', async () => {
+  const { assertAdminArtistReviewAllowed } = await import('../lib/catalog/admin-artist-review.ts');
+  const { publishAdminFestivalChange } = await import('../lib/catalog/publication.ts');
+  for (const field of ['lineup', 'headliners']) {
+    assert.throws(() => assertAdminArtistReviewAllowed('full-rewind', [field]), /protected ingestion review/);
+    await assert.rejects(publishAdminFestivalChange({}, {change: {
+      id: 'stale-change', resourceKey: 'full-rewind', field, beforeValue: ['Saved Artist'], afterValue: ['New Artist'], sourceEvidence: [], parserRunId: 'run',
+    }, actorLabel: 'test'}), /protected ingestion review/);
+  }
+  assert.doesNotThrow(() => assertAdminArtistReviewAllowed('full-rewind', ['startDate', 'endDate']));
+  assert.doesNotThrow(() => assertAdminArtistReviewAllowed('other-festival', ['lineup', 'headliners']));
+});
