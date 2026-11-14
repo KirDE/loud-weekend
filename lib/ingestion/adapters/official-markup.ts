@@ -1,3 +1,4 @@
+import {fullRewind} from './full-rewind.ts';
 import { download } from "./download.ts";
 import {vainstream, rockTheLakes} from "./onboarding-official.ts";
 import { heavyWeekEnd } from "./heavy-weekend.ts";
@@ -477,6 +478,7 @@ const adapters: Record<string, (html: string, source: FestivalSource, fetchedAt:
   "mera-luna": meraLuna,
   "pinkpop": pinkpop,
   "rock-am-ring": ringAndPark,
+  "full-rewind": fullRewind,
   "rock-for-people": rockForPeople,
   "heavy-weekend": heavyWeekEnd,
   vainstream,

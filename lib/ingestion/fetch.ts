@@ -1,3 +1,4 @@
+import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters/full-rewind.ts';
 import { isDownloadSource, DOWNLOAD_ARTISTS, DOWNLOAD_DOCUMENTS } from "./adapters/download.ts";
 import { isHeavyHomepage, heavyMissingArtistUrls, HEAVY_DOCUMENTS } from "./adapters/heavy-weekend.ts";
 import {isRoskildeSource,fetchRoskildeDocuments} from "./adapters/roskilde.ts";
@@ -106,6 +107,17 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url))
       throw new Error("Official artist listing changed its configured identity");
     return initial;
+  }
+  if (initial.response.ok && isFullRewind(source)) {
+    if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url)) throw new Error('Full Rewind homepage identity changed');
+    const home = await initial.response.text();
+    const linked = [...home.matchAll(/<a\b[^>]*href=["']([^"']+)["']/gi)].some(m => { try { return new URL(m[1],source.url).href === FULL_REWIND_BANDS; } catch { return false; } });
+    if (!linked) throw new Error('Full Rewind official bands link missing');
+    const bands = await fetchWithRetry(FULL_REWIND_BANDS, 'error');
+    const attempts = initial.attempts + bands.attempts;
+    if (!bands.response.ok) return {response:bands.response,attempts};
+    if (bands.response.url && bands.response.url !== FULL_REWIND_BANDS) throw new Error('Full Rewind bands identity changed');
+    return {response:new Response(JSON.stringify({kind:FULL_REWIND_DOCUMENTS,home,bands:await bands.response.text()}),{headers:{'content-type':'application/json'}}),attempts};
   }
   if (initial.response.ok && isGraspopSource(source)) {
     if (initial.response.url && initial.response.url !== source.url) throw new Error('Graspop FAQ changed its official identity');

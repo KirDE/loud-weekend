@@ -76,6 +76,8 @@ export function evaluateCandidate(current: Festival, candidate: FestivalCandidat
     !(unchangedCopenhell && warning === COPENHELL_REVIEW) &&
     !(unchangedLeyendas && warning === LEYENDAS_ARTIST_REVIEW) &&
     !(unchangedNovaLineup && warning === "Agent review required before lineup-triggered provider activity")));
+  if (current.slug === 'full-rewind' && changes.some(change => ['lineup','headliners'].includes(change.field)))
+    reviewReasons.add('Full Rewind artist changes require official-card review; provider refresh is explicit only');
   // Dynamo/Tons of Rock/Heavy Week-End retain their separate provider policy.
   if (["dynamo-metal-fest", "tons-of-rock", "heavy-weekend", "barcelona-rock-fest"].includes(current.slug) && changes.some(change => change.kind === "artist_added" || change.kind === "headliner_added"))
     reviewReasons.add("Agent review required before lineup-triggered provider activity");
