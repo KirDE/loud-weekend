@@ -1,3 +1,4 @@
+import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { isDownloadAnnouncement } from "../ingestion/adapters/download.ts";
 import {
@@ -210,7 +211,7 @@ async function createPublication(db: Database, input: {
     editionYear: input.editionYear, actorLabel: input.actorLabel, fields: input.fields,
     lineupChanged, evidence: json(input.evidence),
   } });
-  const playlistRefreshRequested = lineupChanged && !input.playlistRefreshDeferral;
+  const playlistRefreshRequested = lineupChanged && !input.playlistRefreshDeferral && input.festivalSlug !== "full-rewind";
   if (playlistRefreshRequested) await db.catalogPlaylistRefresh.create({ data: { publicationId: publication.id, festivalSlug: input.festivalSlug } });
   return { ...publication, playlistRefreshRequested };
 }
@@ -334,6 +335,7 @@ export async function publishAdminFestivalChange(db: Prisma.TransactionClient, i
   change: { id: string; resourceKey: string; field: string; beforeValue: unknown; afterValue: unknown; sourceEvidence: unknown; parserRunId: string | null };
   actorLabel: string;
 }) {
+  assertAdminArtistReviewAllowed(input.change.resourceKey, [input.change.field]);
   const sourceId = `admin:${input.change.id}`;
   const existing = await db.catalogPublication.findUnique({ where: { sourceId } });
   if (existing) return { ...existing, playlistRefreshRequested: existing.lineupChanged };

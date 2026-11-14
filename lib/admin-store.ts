@@ -1,3 +1,4 @@
+import { assertAdminArtistReviewAllowed } from "@/lib/catalog/admin-artist-review";
 import { AdminChangeStatus, AdminDraftStatus, AdminResourceKind, AdminRunStatus, Prisma } from "@prisma/client";
 import { listConfiguredSources } from "@/lib/sources/repository";
 import { fetchSource } from "@/lib/ingestion/fetch";
@@ -141,6 +142,7 @@ export async function refreshFestival(slug: string, actor: { id: string; email: 
     const candidate = extractFestivalCandidate(await response.text(), source, new Date().toISOString());
     const fields = ["startDate", "endDate", "city", "headliners", "lineup", "ticketsUrl", "status"] as const;
     const changes = fields.filter((field) => candidate[field] !== undefined && JSON.stringify(candidate[field]) !== JSON.stringify(festival[field])).map((field) => ({ resourceKind: AdminResourceKind.FESTIVAL, resourceKey: slug, field, baseRevision: 0, beforeValue: json(festival[field] ?? null), afterValue: json(candidate[field] ?? null), sourceEvidence: json(candidate.evidence.filter((item) => item.field === field)), confidence: candidate.evidence.some((item) => item.field === field) ? 90 : 60, parserRunId: run.id }));
+    assertAdminArtistReviewAllowed(slug, changes.map(change => change.field));
     if (changes.length) await db.adminChange.createMany({ data: changes });
     const finishedAt = new Date();
     const updated = await db.adminParserRun.update({ where: { id: run.id }, data: { status: candidate.warnings.length ? AdminRunStatus.PARTIAL : AdminRunStatus.SUCCEEDED, finishedAt, durationMs: Date.now() - started, extracted: candidate.evidence.length, message: `${changes.length} change(s) queued`, log: json([{ at: run.startedAt.toISOString(), message: "Fetch started" }, { at: finishedAt.toISOString(), message: "Parse completed", warnings: candidate.warnings, queued: changes.length }]) } });
