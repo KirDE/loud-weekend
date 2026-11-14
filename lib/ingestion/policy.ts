@@ -14,6 +14,7 @@ import { INGESTION_SCHEMA_VERSION } from "./types.ts";
 import { diffFestival } from "./diff.ts";
 
 export function evaluateCandidate(current: Festival, candidate: FestivalCandidate, artists: AliasArtist[] = []): IngestionResult {
+  const observedCandidate = candidate;
   if (artists.length) {
     const before = canonicalArtistNames([...current.headliners, ...current.lineup], artists);
     const after = canonicalArtistNames([...(candidate.headliners ?? []), ...(candidate.lineup ?? [])], artists);
@@ -127,5 +128,5 @@ export function evaluateCandidate(current: Festival, candidate: FestivalCandidat
   if (candidate.lineup && candidate.lineup.length > 0 && candidate.observedEditionYears.length === 0) reviewReasons.add("Lineup edition could not be verified against the catalogue year");
   if (candidate.lineup && candidate.lineup.length === 0 && current.lineup.length > 0) reviewReasons.add("A non-empty lineup cannot be replaced by an empty lineup");
   changes.filter((change) => change.reviewRequired).forEach((change) => reviewReasons.add(change.reason || `${change.kind} requires review`));
-  return { schemaVersion: INGESTION_SCHEMA_VERSION, festivalSlug: current.slug, sourceUrl: candidate.sourceUrl, fetchedAt: candidate.fetchedAt, changes, candidate: effective, publishable: changes.length > 0 && reviewReasons.size === 0, reviewReasons: [...reviewReasons] };
+  return { schemaVersion: INGESTION_SCHEMA_VERSION, festivalSlug: current.slug, sourceUrl: candidate.sourceUrl, fetchedAt: candidate.fetchedAt, changes, candidate: artists.length ? { ...effective, headliners: observedCandidate.headliners, lineup: observedCandidate.lineup } : effective, publishable: changes.length > 0 && reviewReasons.size === 0, reviewReasons: [...reviewReasons] };
 }

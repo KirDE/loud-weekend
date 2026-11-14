@@ -52,6 +52,38 @@ test('replacement rosters reject duplicate alias IDs before any lineup writes',a
  const attempt=await persist(value);await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:'alias-test'}),/duplicate alias/);
  assert.deepEqual(await db.lineupEntry.findMany({orderBy:{id:'asc'}}),before);assert.equal(await db.catalogPlaylistRefresh.count(),jobs);
 });
+test('valid aliases beat unrelated derived slugs and a roster reads identities only once',async()=>{
+ await db.artist.update({where:{slug:'archived-other'},data:{slug:'a-b',name:'A B',aliases:[]}});
+ try {
+  await addArtistAliases(db,{...input,aliases:['A/B']});
+  let reads=0;
+  const measured=db.$extends({query:{artist:{async findMany({args,query}){reads++;return query(args);}}}});
+  const value=result('A/B');value.changes=[{field:'headliners',after:['A/B','Other New Act'],reviewRequired:false}];
+  const attempt=await persist(value);
+  await publishIngestionResult(measured,{attemptId:attempt.id,result:value,sourceCommit:'alias-test'});
+  assert.equal(reads,1);
+  const entries=await db.lineupEntry.findMany({where:{edition:{recordState:'CURRENT',festival:{slug:'synthetic-fest'}}},include:{artist:true}});
+  assert.deepEqual(entries.map(e=>e.artist.slug).sort(),['other-new-act','sample-artist']);
+ } finally {
+  await seedCatalog(db,catalogSeed);
+  await db.artist.deleteMany({where:{slug:'other-new-act'}});
+  await db.artist.update({where:{slug:'a-b'},data:{slug:'archived-other',name:'Other Identity'}});
+  await addArtistAliases(db,input);
+ }
+});
+test('Unicode-normalized registration collision rolls back audit',async()=>{
+ await db.artist.update({where:{slug:'archived-other'},data:{name:'Beyoncé'}});
+ const count=await db.adminAuditEntry.count();
+ await assert.rejects(addArtistAliases(db,{...input,aliases:['Beyonce\u0301']}),/collision/);
+ assert.equal(await db.adminAuditEntry.count(),count);
+});
+test('persisted observed artist list retains the exact extracted alias',async()=>{
+ const c=result('別名').candidate;
+ const evaluated=evaluateCandidate(catalogSeed.festivals[0],c,await other.artist.findMany());
+ const attempt=await persist(evaluated);
+ const stored=await other.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}});
+ assert.deepEqual(stored.normalized.headliners,['別名']);
+});
 test('publication refuses alias-driven cross-billing changes and global collisions',async()=>{
  let value=result('Alternate Name');value.changes=[{kind:'artist_added',field:'lineup',after:'Alternate Name',reviewRequired:false}];let attempt=await persist(value);
  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:'alias-test'}),/Ambiguous billing/);

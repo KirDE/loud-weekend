@@ -4,15 +4,17 @@ export type AliasArtist = { id: string; slug: string; name: string; aliases: str
 
 /** Global DB identities, including archived/unlisted artists. Never fuzzy-match. */
 export function artistAliasIndex(artists: AliasArtist[], options: { orthography?: boolean } = {}) {
-  const identityKey = options.orthography ? artistOrthographyKey : (name: string) => name.trim().normalize("NFC").toLocaleLowerCase();
+  const identityKey = options.orthography ? (name: string) => artistOrthographyKey(name.normalize("NFC")) : (name: string) => name.trim().normalize("NFC").toLocaleLowerCase();
   const index = new Map<string, Map<string, AliasArtist>>();
-  for (const artist of artists) for (const name of [artist.name, ...artist.aliases]) {
+  const add = (artist: AliasArtist) => { for (const name of [artist.name, ...artist.aliases]) {
     const key = identityKey(name);
     const owners = index.get(key) ?? new Map<string, AliasArtist>();
     owners.set(artist.id, artist);
     index.set(key, owners);
   }
-  return (name: string) => [...(index.get(identityKey(name))?.values() ?? [])];
+  };
+  artists.forEach(add);
+  return Object.assign((name: string) => [...(index.get(identityKey(name))?.values() ?? [])], { add });
 }
 
 /** Canonicalize only unambiguous, one-to-one roster entries. Keep evidence raw. */
