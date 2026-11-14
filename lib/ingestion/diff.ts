@@ -39,9 +39,13 @@ function operationalChanges(changes: FestivalChange[], current: Festival, candid
 
 export function diffFestival(current: Festival, candidate: FestivalCandidate): FestivalChange[] {
   const changes: FestivalChange[] = [];
+  // Only replacement snapshots assert a complete roster. Additive/announcement
+  // sources retain literal matching and their existing billing/provider gates.
+  const snapshot = candidate.artistListMode !== "additive" && candidate.lineupScope !== "announcement";
   const ambiguous = new Set([
     ...ambiguousOrthography([...current.headliners, ...current.lineup]),
     ...ambiguousOrthography([...(candidate.headliners ?? []), ...(candidate.lineup ?? [])]),
+    ...(!snapshot ? [...current.headliners, ...current.lineup, ...(candidate.headliners ?? []), ...(candidate.lineup ?? [])].map(artistOrthographyKey) : []),
   ]);
   scalarChange(changes, "startDate", current.startDate, candidate.startDate);
   scalarChange(changes, "endDate", current.endDate, candidate.endDate);
@@ -52,6 +56,14 @@ export function diffFestival(current: Festival, candidate: FestivalCandidate): F
   const announcement = candidate.lineupScope === "announcement";
   const headliners = new Set(current.headliners.map(name => identityKey(name, ambiguous)));
   listChanges(changes, "lineup", current.lineup, announcement ? candidate.lineup?.filter(name => !headliners.has(identityKey(name, ambiguous))) : candidate.lineup, announcement || candidate.artistListMode === "additive", ambiguous);
+  // A differently spelled support entry must not silently retain obsolete
+  // headliner billing in an additive source whose policy uses literal names.
+  if (!snapshot) for (const change of changes) {
+    if (change.kind === "artist_added" && current.headliners.some(name => artistOrthographyKey(name) === artistOrthographyKey(change.after!))) {
+      change.reviewRequired = true;
+      change.reason = "Billing changes require reviewed reclassification";
+    }
+  }
   operationalChanges(changes, current, candidate);
   return changes;
 }

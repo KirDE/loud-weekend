@@ -22,10 +22,17 @@ test('real punctuation differences and billing moves remain changes',()=>{
  const r=evaluateCandidate({...fixture.current,headliners:['HANABIE.'],lineup:[]},{...fixture.candidate,headliners:[],lineup:['Hanabie']});
  assert.ok(r.changes.some(c=>c.kind==='headliner_removed'));assert.equal(r.publishable,false);
 });
-test('announcement skips formatting-equivalent known headliner without changing billing',()=>{
- const r=evaluateCandidate({...fixture.current,headliners:['HANABIE.'],lineup:[]},{...fixture.candidate,headliners:undefined,lineup:['Hanabie'],lineupScope:'announcement'});assert.deepEqual(r.changes,[]);
+test('announcement retains literal billing semantics rather than hiding an orthographic demotion',()=>{
+ const r=evaluateCandidate({...fixture.current,headliners:['HANABIE.'],lineup:[]},{...fixture.candidate,headliners:undefined,lineup:['Hanabie','Later Act'],lineupScope:'announcement',artistListMode:'additive'});assert.ok(r.changes.some(c=>c.kind==='artist_added' && c.after==='Hanabie' && c.reviewRequired));assert.equal(r.publishable,false);
 });
 test('cross-billing formatting siblings retain their separate removal guard',()=>{
  const r=evaluateCandidate({...fixture.current,headliners:['HANABIE.'],lineup:['Hanabie']},{...fixture.candidate,headliners:['Hanabie'],lineup:[]});
  assert.ok(r.changes.some(c=>c.kind==='headliner_removed'));assert.equal(r.publishable,false);
+});
+
+test('additive Rockstadt replay keeps existing provider review and literal diff together',()=>{
+ const sourceUrl='https://bilete.rockstadtextremefest.ro/bilete-rockstadt-fest-2027-129242/';
+ const warning='Agent review required before lineup-triggered provider activity';
+ const r=evaluateCandidate({...fixture.current,slug:'rockstadt',editionYear:2027,headliners:[],lineup:['HANABIE.']},{...fixture.candidate,festivalSlug:'rockstadt',sourceUrl,observedEditionYears:[2027],headliners:[],lineup:['Hanabie'],artistListMode:'additive',warnings:[warning],evidence:[{field:'lineup',sourceUrl}]});
+ assert.ok(r.changes.some(c=>c.kind==='artist_added'));assert.ok(r.reviewReasons.includes(warning));assert.equal(r.publishable,false);
 });
