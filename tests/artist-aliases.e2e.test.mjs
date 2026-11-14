@@ -12,8 +12,8 @@ requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db=createPrismaClient();
 const other=createPrismaClient();
 const input={slug:'sample-artist',aliases:['Alternate Name','別名'],actorLabel:'alias-test',evidence:'https://official.example.test/verified'};
-test.before(async()=>seedCatalog(db,catalogSeed));
-test.after(async()=>{await db.artist.deleteMany({where:{slug:'archived-other'}});await seedCatalog(db,catalogSeed);await other.$disconnect();await db.$disconnect();});
+test.before(async()=>{await seedCatalog(db,catalogSeed);await db.artist.deleteMany({where:{slug:'archived-other'}});});
+test.after(async()=>{await seedCatalog(db,catalogSeed);await db.artist.deleteMany({where:{slug:'archived-other'}});await other.$disconnect();await db.$disconnect();});
 async function persist(value) {
  const run=await createIngestionRun(db,{trigger:'TEST',sourceCommit:'alias-test',totalSources:1});
  return persistAttempt(db,{runId:run.id,festivalSlug:value.festivalSlug,requestedUrl:value.sourceUrl,httpStatus:200,durationMs:1,startedAt:new Date(value.fetchedAt),endedAt:new Date(value.fetchedAt),result:value});
@@ -21,11 +21,12 @@ async function persist(value) {
 function result(name){const fetchedAt=new Date().toISOString();return {schemaVersion:1,festivalSlug:'synthetic-fest',sourceUrl:'https://festival.example.test/',fetchedAt,changes:[{kind:'artist_added',field:'headliners',after:name,reviewRequired:false}],candidate:{schemaVersion:1,festivalSlug:'synthetic-fest',sourceUrl:'https://festival.example.test/',fetchedAt,startDate:'2027-06-10',headliners:[name],warnings:[],observedEditionYears:[2027],evidence:[]},publishable:true,reviewReasons:[]};}
 test('verified aliases survive independent client read, audit once and leave facts/providers unchanged',async()=>{
  const before=await db.lineupEntry.findMany({orderBy:{id:'asc'}});const jobs=await db.catalogPlaylistRefresh.count();
+ const auditsBefore=await db.adminAuditEntry.count({where:{action:'artist.aliases.add',resourceKey:input.slug}});
  const first=await addArtistAliases(db,input);assert.equal(first.changed,true);
  const stored=await other.artist.findUniqueOrThrow({where:{slug:input.slug}});assert.deepEqual(stored.aliases,input.aliases);
  assert.equal(stored.name,'Sample Artist');assert.equal(stored.id,first.id);
  assert.equal((await addArtistAliases(db,input)).changed,false);
- assert.equal(await db.adminAuditEntry.count({where:{action:'artist.aliases.add',resourceKey:input.slug}}),1);
+ assert.equal(await db.adminAuditEntry.count({where:{action:'artist.aliases.add',resourceKey:input.slug}}),auditsBefore+1);
  assert.deepEqual(await db.lineupEntry.findMany({orderBy:{id:'asc'}}),before);assert.equal(await db.catalogPlaylistRefresh.count(),jobs);
  const c=result('Alternate Name').candidate;
  const evaluated=evaluateCandidate(catalogSeed.festivals[0],c,await other.artist.findMany());assert.deepEqual(evaluated.changes,[]);assert.deepEqual(evaluated.reviewReasons,[]);
