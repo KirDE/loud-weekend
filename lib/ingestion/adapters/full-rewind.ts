@@ -32,7 +32,7 @@ export function fullRewind(document: string, source: FestivalSource) {
   if (!home.includes(`/collections/tickets-${source.editionYear}`) && !bundle.home.includes(`href="/collections/tickets-${source.editionYear}"`)) return undefined;
   const names: string[] = [];
   const verifiedLabels: Record<string,string> = {AILD:'As I Lay Dying',LOD:'Legion of the Damned','Booze-_-Glory':'Booze & Glory'};
-  for (const match of bands.matchAll(/<img\b[^>]*>/gi)) {
+  for (const match of bands.replace(/<!--[\s\S]*?-->/g, '').replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '').matchAll(/<img\b[^>]*>/gi)) {
     const alt = attr(match[0], 'alt') ?? '';
     if (!alt.startsWith('Full-Rewind_Bands_')) continue;
     const label = alt.slice('Full-Rewind_Bands_'.length);
