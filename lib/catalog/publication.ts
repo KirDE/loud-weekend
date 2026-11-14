@@ -1,4 +1,4 @@
-import { artistOrthographyKey, artistOrthographyVariants } from "./artist-orthography.ts";
+import { artistAliasIndex } from "./artist-aliases.ts";
 import { isDownloadAnnouncement } from "../ingestion/adapters/download.ts";
 import {
   ArtistIdentityState,
@@ -40,12 +40,14 @@ function stringList(value: unknown, field: string) {
 
 async function ensureArtist(db: Database, name: string, observedAt: Date) {
   const slug = artistSlug(name);
+  const all = await db.artist.findMany({ select: { id: true, slug: true, name: true, aliases: true } });
+  const matches = artistAliasIndex(all, { orthography: true })(name);
+  if (matches.length > 1) throw new Error(`Ambiguous artist identity for ${name}`);
+  const bySlug = all.find(artist => artist.slug === slug);
+  const matched = matches[0];
+  if (bySlug && bySlug.id !== matched?.id) throw new Error(`Artist slug collision: ${slug} (${bySlug.name} / ${name})`);
+  if (matched) return matched;
   if (!slug) throw new Error(`Cannot derive artist slug for ${name}`);
-  const bySlug = await db.artist.findUnique({ where: { slug } });
-  if (bySlug && artistOrthographyKey(bySlug.name) !== artistOrthographyKey(name)) throw new Error(`Artist slug collision: ${slug} (${bySlug.name} / ${name})`);
-  const byName = await db.artist.findMany({ where: { OR: artistOrthographyVariants(name).map(spelling => ({ name: { equals: spelling, mode: "insensitive" as const } })) }, select: { id: true, slug: true, name: true } });
-  if (byName.length > 1 || (byName.length === 1 && byName[0].id !== bySlug?.id)) throw new Error(`Ambiguous artist identity for ${name}`);
-  if (bySlug) return bySlug;
   const checkedAt = observedAt.toISOString().slice(0, 10);
   return db.artist.create({ data: {
     slug, name, aliases: [], genres: [], identityState: ArtistIdentityState.UNRESOLVED,
@@ -67,6 +69,8 @@ async function replaceLineup(db: Database, editionId: string, billing: LineupBil
   if (names.some((name) => otherNames.has(name.toLocaleLowerCase()))) throw new Error("Artist cannot have ambiguous lineup billing");
   const artists = [];
   for (const name of names) artists.push(await ensureArtist(db, name, observedAt));
+  if (new Set(artists.map(a => a.id)).size !== artists.length || artists.some(a => other.some(entry => entry.artistId === a.id))) throw new Error("Artist cannot have ambiguous lineup billing or duplicate alias identities");
+  if (same(existing.map(entry => entry.artistId), artists.map(a => a.id))) return false;
   await db.lineupEntry.deleteMany({ where: { editionId, billing } });
   if (artists.length) await db.lineupEntry.createMany({ data: artists.map((artist, position) => ({ editionId, artistId: artist.id, billing, position })) });
   return true;

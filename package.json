@@ -44,7 +44,8 @@
     "catalog:audit": "tsx scripts/audit-catalog.ts",
     "test:runtime": "node --import tsx --test tests/production-release.test.mjs tests/playlist-provider-lock.test.mjs tests/provider-timers.test.mjs tests/logo-serving.test.ts tests/festival-logo.test.ts && python3 -m unittest discover -s tests -p test_playlist_plan.py",
     "test:persistence-db": "node --import tsx --test tests/catalog-persistence.e2e.test.ts",
-    "pretest:persistence-db": "node scripts/prepare-test-db.mjs"
+    "pretest:persistence-db": "node scripts/prepare-test-db.mjs",
+    "artists:add-alias": "node --import tsx scripts/add-artist-aliases.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",

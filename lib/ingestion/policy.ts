@@ -1,3 +1,4 @@
+import { canonicalArtistNames, type AliasArtist } from "../catalog/artist-aliases.ts";
 import { isDownloadAnnouncement } from "./adapters/download.ts";
 import {ROSKILDE_HOME,ROSKILDE_REVIEW} from "./adapters/roskilde.ts";
 import { ROADBURN_ARTIST_REVIEW } from "./adapters/roadburn.ts";
@@ -12,7 +13,18 @@ import type { FestivalCandidate, IngestionResult } from "./types.ts";
 import { INGESTION_SCHEMA_VERSION } from "./types.ts";
 import { diffFestival } from "./diff.ts";
 
-export function evaluateCandidate(current: Festival, candidate: FestivalCandidate): IngestionResult {
+export function evaluateCandidate(current: Festival, candidate: FestivalCandidate, artists: AliasArtist[] = []): IngestionResult {
+  if (artists.length) {
+    const before = canonicalArtistNames([...current.headliners, ...current.lineup], artists);
+    const after = canonicalArtistNames([...(candidate.headliners ?? []), ...(candidate.lineup ?? [])], artists);
+    // Normalize identity names, retaining the original source evidence unchanged.
+    if (before.warnings.length || after.warnings.length) {
+      candidate = { ...candidate, warnings: [...candidate.warnings, ...before.warnings, ...after.warnings] };
+    } else {
+      current = { ...current, headliners: before.names.slice(0, current.headliners.length), lineup: before.names.slice(current.headliners.length) };
+      candidate = { ...candidate, headliners: candidate.headliners && after.names.slice(0, candidate.headliners.length), lineup: candidate.lineup && after.names.slice(candidate.headliners?.length ?? 0) };
+    }
+  }
   // An incomplete I-Days announcement cannot downgrade a verified full bill.
   if (candidate.festivalSlug === "idays" && candidate.artistListMode === "additive" && candidate.status === "partial" && current.status === "confirmed") candidate = { ...candidate, status: undefined };
   // Additive first-wave pages do not redefine independently reviewed billing.

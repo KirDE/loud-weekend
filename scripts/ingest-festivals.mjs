@@ -34,6 +34,8 @@ const persistenceEnabled = Boolean(process.env.DATABASE_URL);
 // Sources and catalogue always come from the database, including --fixture HTML runs.
 if (!persistenceEnabled) throw new Error("Database-backed sources require DATABASE_URL");
 const runtimeFestivals = (await readCatalog({ database: db })).festivals;
+// Include archived artists too: aliases must not shadow a non-current identity.
+const aliasArtists = await db.artist.findMany({ select: { id: true, slug: true, name: true, aliases: true } });
 const configuredSources = dbDue ? [] : await listConfiguredSources(db);
 if (persistenceEnabled && !dbDue && configuredSources.length === 0) throw new Error("No configured database sources");
 const dueOnly = args.has("--due") && !force;
@@ -152,7 +154,7 @@ for (const source of selected) {
   failureStage = "extraction";
   try {
     candidate = extractFestivalCandidate(html, source, fetchedAt);
-    result = evaluateCandidate(current, candidate);
+    result = evaluateCandidate(current, candidate, aliasArtists);
   } catch (error) {
     failureOutcome = "parser_error";
     if (run) await persistAttempt(db, { runId: run.id, festivalSlug: source.festivalSlug, requestedUrl: source.url,

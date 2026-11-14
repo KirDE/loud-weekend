@@ -339,3 +339,24 @@ Application rollback uses the previous stamped release and its own Prisma 6
 runtime/dependencies, not a downgraded client in a Prisma 7 release. The existing
 failed-health rollback test verifies release selection and environment restoration.
 Never run `migrate reset` on production; disposable integration DBs only.
+
+### Verified artist aliases
+
+`Artist.aliases` is the persistent PostgreSQL source of alternate artist names.
+Import comparison and catalogue publication use the same collision-checked index
+across **all** artists, including archived artists. Aliases reuse the existing
+artist ID and canonical display name; they do not merge records or trigger
+playlist/provider work. Duplicate identities, conflicting aliases and real
+removals retain review gates. Source text cannot register arbitrary new aliases.
+
+After independently verifying that a spelling belongs to the same artist, add it
+with an explicit evidence reference (repeat `--alias` for multiple names):
+
+```sh
+npm run artists:add-alias -- --slug=hanabie --alias=Hanabie --actor=operator --evidence=https://official.example/artist
+```
+
+This command updates only that artist's aliases and an atomic audit entry. It is
+idempotent and rejects canonical-name or alias collisions. The existing array
+column requires no schema migration. Subsequent imports load these aliases from
+the database, not from a hard-coded festival-specific name list.

@@ -1,3 +1,4 @@
+import type { AliasArtist } from "../catalog/artist-aliases.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Festival } from "../domain/festival.ts";
@@ -19,7 +20,7 @@ export async function readHealthState(file: string): Promise<HealthState> {
   }
 }
 
-export async function runIngestion(input: { sources: FestivalSource[]; festivals: Festival[]; outputDirectory: string; stateFile: string; failureThreshold: number; now?: () => Date; fetchOptions?: FetchOptions }) {
+export async function runIngestion(input: { sources: FestivalSource[]; artists?: AliasArtist[]; festivals: Festival[]; outputDirectory: string; stateFile: string; failureThreshold: number; now?: () => Date; fetchOptions?: FetchOptions }) {
   const now = input.now ?? (() => new Date());
   const state = await readHealthState(input.stateFile);
   const summary = { schemaVersion: 2, generatedAt: now().toISOString(), status: "healthy" as "healthy" | "degraded" | "failed", processed: 0, changed: 0, publishable: 0, reviewRequired: 0, fetchErrors: 0, escalatedFailures: 0, results: [] as Record<string, unknown>[] };
@@ -33,7 +34,7 @@ export async function runIngestion(input: { sources: FestivalSource[]; festivals
       const { response, attempts } = await fetchSource(source, input.fetchOptions);
       if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`), { httpStatus: response.status, attempts });
       const candidate = extractFestivalCandidate(await response.text(), source, fetchedAt);
-      const result = evaluateCandidate(current, candidate);
+      const result = evaluateCandidate(current, candidate, input.artists);
       const status = result.reviewReasons.length ? "review" : result.publishable ? "publishable" : "unchanged";
       await writeFile(path.join(input.outputDirectory, `${source.festivalSlug}.json`), `${JSON.stringify({ status, source: { ...source, httpStatus: response.status, finalUrl: response.url, attempts }, result }, null, 2)}\n`);
       const previous = state.sources[source.festivalSlug];
