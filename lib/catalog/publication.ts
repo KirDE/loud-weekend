@@ -1,4 +1,4 @@
-import { artistOrthographyKey, artistOrthographyVariants } from "./artist-orthography.ts";
+import { artistAliasIndex } from "./artist-aliases.ts";
 import { isDownloadAnnouncement } from "../ingestion/adapters/download.ts";
 import {
   ArtistIdentityState,
@@ -38,27 +38,43 @@ function stringList(value: unknown, field: string) {
   return cleaned;
 }
 
-async function ensureArtist(db: Database, name: string, observedAt: Date) {
-  const slug = artistSlug(name);
-  if (!slug) throw new Error(`Cannot derive artist slug for ${name}`);
-  const bySlug = await db.artist.findUnique({ where: { slug } });
-  if (bySlug && artistOrthographyKey(bySlug.name) !== artistOrthographyKey(name)) throw new Error(`Artist slug collision: ${slug} (${bySlug.name} / ${name})`);
-  const byName = await db.artist.findMany({ where: { OR: artistOrthographyVariants(name).map(spelling => ({ name: { equals: spelling, mode: "insensitive" as const } })) }, select: { id: true, slug: true, name: true } });
-  if (byName.length > 1 || (byName.length === 1 && byName[0].id !== bySlug?.id)) throw new Error(`Ambiguous artist identity for ${name}`);
-  if (bySlug) return bySlug;
-  const checkedAt = observedAt.toISOString().slice(0, 10);
-  return db.artist.create({ data: {
-    slug, name, aliases: [], genres: [], identityState: ArtistIdentityState.UNRESOLVED,
-    topTracks: [], recentSetlists: json([]),
-    freshness: json({
-      profile: { checkedAt, cadenceDays: 90, refreshAfter: checkedAt },
-      music: { checkedAt, cadenceDays: 14, refreshAfter: checkedAt },
-      setlists: { checkedAt, cadenceDays: 7, refreshAfter: checkedAt },
-    }),
-  } });
+function artistResolver(db: Database, observedAt: Date) {
+  // One lazy global read per publication; newly created identities enter the
+  // same index immediately, including slug collisions within this roster.
+  const load = async () => {
+    const all = await db.artist.findMany({ select: { id: true, slug: true, name: true, aliases: true } });
+    return { lookup: artistAliasIndex(all, { orthography: true }), bySlug: new Map(all.map(a => [a.slug, a])) };
+  };
+  let snapshot: ReturnType<typeof load> | undefined;
+  return async (name: string) => {
+    const { lookup, bySlug } = await (snapshot ??= load());
+    const slug = artistSlug(name);
+    const matches = lookup(name);
+    if (matches.length > 1) throw new Error(`Ambiguous artist identity for ${name}`);
+    const matched = matches[0];
+    if (matched) return matched;
+    const collision = bySlug.get(slug);
+    if (collision) throw new Error(`Artist slug collision: ${slug} (${collision.name} / ${name})`);
+    if (!slug) throw new Error(`Cannot derive artist slug for ${name}`);
+    const checkedAt = observedAt.toISOString().slice(0, 10);
+    const created = await db.artist.create({ data: {
+      slug, name, aliases: [], genres: [], identityState: ArtistIdentityState.UNRESOLVED,
+      topTracks: [], recentSetlists: json([]),
+      freshness: json({
+        profile: { checkedAt, cadenceDays: 90, refreshAfter: checkedAt },
+        music: { checkedAt, cadenceDays: 14, refreshAfter: checkedAt },
+        setlists: { checkedAt, cadenceDays: 7, refreshAfter: checkedAt },
+      }),
+    } });
+    lookup.add(created);
+    bySlug.set(created.slug, created);
+    return created;
+  };
 }
 
-async function replaceLineup(db: Database, editionId: string, billing: LineupBilling, names: string[], observedAt: Date) {
+type EnsureArtist = ReturnType<typeof artistResolver>;
+
+async function replaceLineup(db: Database, editionId: string, billing: LineupBilling, names: string[], ensureArtist: EnsureArtist) {
   const otherBilling = billing === LineupBilling.HEADLINER ? LineupBilling.LINEUP : LineupBilling.HEADLINER;
   const existing = await db.lineupEntry.findMany({ where: { editionId, billing }, include: { artist: true }, orderBy: { position: "asc" } });
   if (same(existing.map(({ artist }) => artist.name), names)) return false;
@@ -66,14 +82,16 @@ async function replaceLineup(db: Database, editionId: string, billing: LineupBil
   const otherNames = new Set(other.map(({ artist }) => artist.name.toLocaleLowerCase()));
   if (names.some((name) => otherNames.has(name.toLocaleLowerCase()))) throw new Error("Artist cannot have ambiguous lineup billing");
   const artists = [];
-  for (const name of names) artists.push(await ensureArtist(db, name, observedAt));
+  for (const name of names) artists.push(await ensureArtist(name));
+  if (new Set(artists.map(a => a.id)).size !== artists.length || artists.some(a => other.some(entry => entry.artistId === a.id))) throw new Error("Artist cannot have ambiguous lineup billing or duplicate alias identities");
+  if (same(existing.map(entry => entry.artistId), artists.map(a => a.id))) return false;
   await db.lineupEntry.deleteMany({ where: { editionId, billing } });
   if (artists.length) await db.lineupEntry.createMany({ data: artists.map((artist, position) => ({ editionId, artistId: artist.id, billing, position })) });
   return true;
 }
 
-async function addLineupArtist(db: Database, editionId: string, billing: LineupBilling, name: string, observedAt: Date) {
-  const artist = await ensureArtist(db, name, observedAt);
+async function addLineupArtist(db: Database, editionId: string, billing: LineupBilling, name: string, ensureArtist: EnsureArtist) {
+  const artist = await ensureArtist(name);
   const existing = await db.lineupEntry.findUnique({ where: { editionId_artistId: { editionId, artistId: artist.id } } });
   if (existing) {
     if (existing.billing !== billing) throw new Error(`Ambiguous billing change for ${name}`);
@@ -97,6 +115,7 @@ async function applyFestivalChanges(db: Database, input: {
   const edition = festival.editions[0];
   if (input.expectedYear !== undefined && edition.year !== input.expectedYear) throw new Error(`Candidate edition ${input.expectedYear} does not match catalogue edition ${edition.year}`);
 
+  const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
   for (const change of input.changes) {
     let current: unknown;
@@ -162,8 +181,8 @@ async function applyFestivalChanges(db: Database, input: {
       case "headliners": {
         const billing = change.field === "headliners" ? LineupBilling.HEADLINER : LineupBilling.LINEUP;
         changed = Array.isArray(change.after) || (typeof change.after === "string" && /\r?\n|,/.test(change.after))
-          ? await replaceLineup(db, edition.id, billing, stringList(change.after, change.field), input.observedAt)
-          : await addLineupArtist(db, edition.id, billing, String(change.after), input.observedAt);
+          ? await replaceLineup(db, edition.id, billing, stringList(change.after, change.field), ensureArtist)
+          : await addLineupArtist(db, edition.id, billing, String(change.after), ensureArtist);
         break;
       }
       default:
@@ -372,6 +391,7 @@ export async function publishAgentFestivalResolution(
     (dateStart && dateEnd && dateStart > dateEnd)
   )
     throw new Error("Reviewed dates mismatch");
+  const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
   if (
     input.facts.headliners !== undefined &&
@@ -394,7 +414,7 @@ export async function publishAgentFestivalResolution(
     if (!same(oldHeadliners, headliners) || !same(oldLineup, lineup)) {
       const artists = [];
       for (const name of [...headliners, ...lineup])
-        artists.push(await ensureArtist(db, name, input.observedAt));
+        artists.push(await ensureArtist(name));
       const cancelled = edition.lineup.filter((l) => l.status === "CANCELLED");
       if (artists.some((a) => cancelled.some((l) => l.artistId === a.id)))
         throw new Error("Cancellation requires separate explicit review");

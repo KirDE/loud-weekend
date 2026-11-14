@@ -53,7 +53,7 @@ printf '%s' '# synthetic wheel' > "$1/requests/__init__.py"
     await execute('bash', ['scripts/deploy/package-release.sh', sha, archive], { cwd: root, env });
     const { stdout: contents } = await execute('tar', ['-tzf', archive]);
     assert.doesNotMatch(contents, /^app\/(?:data\/|tests\/|public\/(?:logos|offline)\/|lib\/catalog\/(?:seed|backfill|logo-import)\.ts)/m);
-    for (const file of ['lib/catalog/repository.ts', 'lib/catalog/logo-assets.ts', 'lib/catalog/operational-state.ts', 'scripts/ingest-festivals.mjs', 'scripts/playlist-provider-worker.ts', 'scripts/audit-catalog.ts']) {
+    for (const file of ['lib/catalog/repository.ts', 'lib/catalog/logo-assets.ts', 'lib/catalog/operational-state.ts', 'scripts/add-artist-aliases.mjs', 'scripts/ingest-festivals.mjs', 'scripts/playlist-provider-worker.ts', 'scripts/audit-catalog.ts']) {
       assert.ok(contents.split('\n').includes('app/' + file), file);
     }
   } finally { await rm(root, { recursive: true, force: true }); }
