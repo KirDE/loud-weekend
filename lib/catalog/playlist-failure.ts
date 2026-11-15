@@ -9,7 +9,7 @@ const diagnostic = new RegExp(`^playlist_worker_failed stage=(setup|spotify_disc
 export function playlistFailure(stage: PlaylistStage, error: unknown): string {
   const failure = error as { stderr?: unknown; message?: unknown; playlistRpcTimedOut?: unknown } | null;
   const lines = typeof failure?.stderr === 'string' ? failure.stderr.split('\n') : [];
-  const reason = failure?.message === 'Spotify plan superseded' ? 'spotify_plan_superseded' : lines.findLast(line => youtubeHoldReasons.includes(line)) ?? lines.findLast(line => line === 'youtube_invalid_owned_discovery_id') ?? lines.findLast(line => reasons.includes(line)) ?? (failure?.playlistRpcTimedOut === true ? 'playlist_rpc_timeout' : 'unclassified');
+  const reason = failure?.message === 'Spotify plan superseded' ? 'spotify_plan_superseded' : lines.findLast(line => youtubeHoldReasons.includes(line)) ?? lines.findLast(line => line === 'youtube_invalid_owned_discovery_id') ?? lines.findLast(line => reasons.includes(line) && !['playlist_rpc_failed', 'unclassified'].includes(line)) ?? (failure?.playlistRpcTimedOut === true ? 'playlist_rpc_timeout' : lines.findLast(line => reasons.includes(line)) ?? 'unclassified');
   return `playlist_worker_failed stage=${stage} reason=${reason}`;
 }
 

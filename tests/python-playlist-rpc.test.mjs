@@ -60,3 +60,18 @@ test('deadline evidence never masks an explicit provider quota or uncertain-writ
     assert.equal(playlistFailure('youtube_apply',{playlistRpcTimedOut:true,stderr:reason}),`playlist_worker_failed stage=youtube_apply reason=${reason}`);
   }
 });
+
+
+test('a generic RPC marker cannot mask a real deadline', async () => {
+  await assert.rejects(run(`console.error('playlist_rpc_failed');setInterval(()=>{},1000)`, {}, {timeout:150}), error => {
+    assert.equal(playlistFailure('spotify_discovery',error),'playlist_worker_failed stage=spotify_discovery reason=playlist_rpc_timeout');
+    return true;
+  });
+});
+
+test('deadline closes inherited pipes even after the direct worker exits successfully', async () => {
+  const started=Date.now();
+  const program = `const {spawn}=require('node:child_process');const child=spawn(process.execPath,['-e','setTimeout(()=>{},1400)'],{detached:true,stdio:['ignore',1,2]});child.unref();console.log('{}');`;
+  await assert.rejects(run(program, {}, {timeout:150}), error => error.playlistRpcTimedOut === true);
+  assert.ok(Date.now()-started < 1000, 'RPC must not wait for detached descendant');
+});

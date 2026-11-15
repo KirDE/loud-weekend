@@ -12,9 +12,16 @@ export async function executePlaylistJson(
   return new Promise((resolve, reject) => {
     let inputError: Error | undefined;
     let timedOut = false;
+    let diagnostics = '';
+    let diagnosticBytes = 0;
     let deadline: ReturnType<typeof setTimeout> | undefined;
     const child = execFile(executable, args, { ...options, timeout: 0, maxBuffer: MAX_BYTES, encoding: 'utf8' }, (error, stdout, stderr) => {
       if (deadline) clearTimeout(deadline);
+      if (timedOut) {
+        reject(Object.assign(new Error('Playlist RPC deadline exceeded'), {
+          code: 'ETIMEDOUT', stdout, stderr, playlistRpcTimedOut: true,
+        })); return;
+      }
       // Keep provider exit codes and bounded diagnostics for the existing retry policy.
       if (error) {
         reject(Object.assign(error, { stdout, stderr, playlistRpcTimedOut: timedOut && error.name !== 'AbortError' })); return;
@@ -23,8 +30,23 @@ export async function executePlaylistJson(
       try { resolve(JSON.parse(stdout)); } catch { reject(new Error('Invalid playlist provider reply')); }
     });
     if (options.timeout > 0) {
-      deadline = setTimeout(() => { timedOut = child.kill('SIGTERM'); }, options.timeout);
+      deadline = setTimeout(() => {
+        timedOut = true;
+        // A descendant can retain pipes after the worker exits. Do not await its
+        // close event or accept a buffered JSON reply after the deadline.
+        const killed = child.kill('SIGTERM');
+        child.stdin?.destroy();
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        reject(Object.assign(new Error('Playlist RPC deadline exceeded'), {
+          code: 'ETIMEDOUT', killed, stderr: diagnostics, playlistRpcTimedOut: true,
+        }));
+      }, options.timeout);
     }
+    child.stderr?.on('data', (chunk: string) => {
+      diagnosticBytes += Buffer.byteLength(chunk);
+      if (diagnosticBytes <= MAX_BYTES) diagnostics += chunk;
+    });
     child.stdin!.on('error', error => { inputError = error; });
     child.stdin!.end(input);
   });
