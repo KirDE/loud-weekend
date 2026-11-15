@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { playlistFailure, dispatchedPlaylistFailure } from '../lib/catalog/playlist-failure.ts';
 import { executePlaylistJson } from '../lib/catalog/python-playlist-rpc.ts';
 
 function run(program, value, overrides = {}) {
@@ -35,4 +36,42 @@ test('database playlist worker has no file-backed plan/report exchange', async (
   for (const operation of ['discover-spotify', 'apply-spotify', 'discover-youtube', 'apply-youtube']) assert.ok(worker.includes(operation));
   assert.match(worker, /stagePlaylistPlan/); assert.match(worker, /stageYoutubePlan/);
   assert.match(worker, /publishSpotifyCheckpoint/); assert.match(worker, /PLAYLIST_LEASE/);
+});
+
+
+test('a real RPC deadline survives sanitization without accepting partial JSON or exposing stderr', async () => {
+  await assert.rejects(run(`console.error('private token');console.log('{}');setInterval(()=>{},1000)`, {}, {timeout: 150}), error => {
+    assert.equal(error.killed, true);
+    assert.equal(error.playlistRpcTimedOut,true);
+    const line=playlistFailure('spotify_discovery',error);
+    assert.equal(line,'playlist_worker_failed stage=spotify_discovery reason=playlist_rpc_timeout');
+    assert.equal(dispatchedPlaylistFailure({stderr:line}),line);
+    return true;
+  });
+  const controller=new AbortController();
+  const pending=run('setInterval(()=>{},1000)', {}, {signal:controller.signal,timeout:5000});
+  controller.abort();
+  await assert.rejects(pending, error => error.name === 'AbortError' && !error.playlistRpcTimedOut);
+});
+
+
+test('deadline evidence never masks an explicit provider quota or uncertain-write reason', () => {
+  for (const reason of ['youtube_provider_rejected_403_quotaExceeded','youtube_insert_unknown_no_resend']) {
+    assert.equal(playlistFailure('youtube_apply',{playlistRpcTimedOut:true,stderr:reason}),`playlist_worker_failed stage=youtube_apply reason=${reason}`);
+  }
+});
+
+
+test('a generic RPC marker cannot mask a real deadline', async () => {
+  await assert.rejects(run(`console.error('playlist_rpc_failed');setInterval(()=>{},1000)`, {}, {timeout:150}), error => {
+    assert.equal(playlistFailure('spotify_discovery',error),'playlist_worker_failed stage=spotify_discovery reason=playlist_rpc_timeout');
+    return true;
+  });
+});
+
+test('deadline closes inherited pipes even after the direct worker exits successfully', async () => {
+  const started=Date.now();
+  const program = `const {spawn}=require('node:child_process');const child=spawn(process.execPath,['-e','setTimeout(()=>{},1400)'],{detached:true,stdio:['ignore',1,2]});child.unref();console.log('{}');`;
+  await assert.rejects(run(program, {}, {timeout:150}), error => error.playlistRpcTimedOut === true);
+  assert.ok(Date.now()-started < 1000, 'RPC must not wait for detached descendant');
 });
