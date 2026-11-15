@@ -11,12 +11,20 @@ export async function executePlaylistJson(
   if (typeof input !== 'string' || Buffer.byteLength(input) > MAX_BYTES) throw new Error('Playlist request too large');
   return new Promise((resolve, reject) => {
     let inputError: Error | undefined;
-    const child = execFile(executable, args, { ...options, maxBuffer: MAX_BYTES, encoding: 'utf8' }, (error, stdout, stderr) => {
+    let timedOut = false;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    const child = execFile(executable, args, { ...options, timeout: 0, maxBuffer: MAX_BYTES, encoding: 'utf8' }, (error, stdout, stderr) => {
+      if (deadline) clearTimeout(deadline);
       // Keep provider exit codes and bounded diagnostics for the existing retry policy.
-      if (error) { reject(Object.assign(error, { stdout, stderr })); return; }
+      if (error) {
+        reject(Object.assign(error, { stdout, stderr, playlistRpcTimedOut: timedOut && error.name !== 'AbortError' })); return;
+      }
       if (inputError) { reject(inputError); return; }
       try { resolve(JSON.parse(stdout)); } catch { reject(new Error('Invalid playlist provider reply')); }
     });
+    if (options.timeout > 0) {
+      deadline = setTimeout(() => { timedOut = child.kill('SIGTERM'); }, options.timeout);
+    }
     child.stdin!.on('error', error => { inputError = error; });
     child.stdin!.end(input);
   });
