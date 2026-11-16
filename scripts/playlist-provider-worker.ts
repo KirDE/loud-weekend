@@ -1,4 +1,4 @@
-import { discoverSpotifyChunk } from '../lib/catalog/spotify-discovery.ts';
+import { clearSpotifyDiscovery, discoverSpotifyChunk } from '../lib/catalog/spotify-discovery.ts';
 import path from 'node:path';
 import {Prisma} from '@prisma/client';
 import { publishYoutubeCheckpoint } from '../lib/catalog/youtube-playlist-checkpoint.ts';
@@ -34,6 +34,7 @@ try {
     plan=await discoverSpotifyChunk(db,claim,{season:publication.editionYear,festivals:[{...festival,spotifyRepertoireProfiles:profiles,artists:[...names],playlistUrl:url}]},value=>execute('discover-spotify',value)) as Record<string,any>;
     plan=await stagePlaylistPlan(db,claim,plan) as Record<string,any>;
    }
+   await clearSpotifyDiscovery(db,claim);
    await guard();await assertSpotifyPlanCurrent(db,claim);
    stage='spotify_apply';
    const report=await execute('apply-spotify',plan,{PLAYLIST_EXPECTED_URL:url}) as {playlist_url:string;artists_count:number;track_count:number};

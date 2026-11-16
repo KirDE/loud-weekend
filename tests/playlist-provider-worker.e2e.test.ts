@@ -175,3 +175,22 @@ for(const reason of ['youtube_invalid_readback','youtube_incomplete_readback','y
   assert.equal((row.payload as any).status,'FAILED');assert.ok((row.payload as any).retryAt);
  }));
 }
+
+// Checkpoints preserve prior real-failure history but do not inflate the next failure delay.
+test('discovery chunks do not count toward ordinary failure backoff',()=>fixture(async({id})=>{
+ const key=`playlist-provider:v1:spotify:${id}`;
+ for(let i=0;i<4;i++){
+  await runProviderWorker(db,'spotify',async()=>{throw Object.assign(Error('progress'),{code:'SPOTIFY_DISCOVERY_CHECKPOINT'})});
+  const row=await db.operationalState.findUniqueOrThrow({where:{key}});
+  assert.equal((row.payload as any).attempts,0);
+  await db.operationalState.update({where:{key},data:{payload:{...(row.payload as any),retryAt:null}}});
+ }
+ await runProviderWorker(db,'spotify',async()=>{throw Error('first real failure')});
+ let row=await db.operationalState.findUniqueOrThrow({where:{key}});
+ assert.equal((row.payload as any).attempts,1);
+ assert.ok(new Date((row.payload as any).retryAt).getTime()-Date.now() <= 60000);
+ await db.operationalState.update({where:{key},data:{payload:{...(row.payload as any),retryAt:null}}});
+ await runProviderWorker(db,'spotify',async()=>{throw Object.assign(Error('progress'),{code:'SPOTIFY_DISCOVERY_CHECKPOINT'})});
+ row=await db.operationalState.findUniqueOrThrow({where:{key}});
+ assert.equal((row.payload as any).attempts,1);
+}));

@@ -108,7 +108,9 @@ export async function runProviderWorker(db:PrismaClient,provider:PlaylistProvide
   const blocked=provider==='youtube_music'&&(error as {code?:unknown})?.code===3
    &&lines.includes('youtube_reconciliation_required')&&lines.some(line=>youtubeHoldReasons.includes(line));
   if(blocked)retryAt=null;
-  const done:ProviderState={version:1,provider,jobId:claim.id,status:blocked?'BLOCKED':error?'FAILED':'SUCCEEDED',attempts:state.attempts,retryAt,...(error?{diagnostic:playlistFailure(stage(),error)}:{completedAt:now.toISOString()})};
+  // Claim counters fence invocations; successful discovery progress is not a failure.
+  const attempts = state.attempts - ((error as {code?:unknown})?.code === 'SPOTIFY_DISCOVERY_CHECKPOINT' ? 1 : 0);
+  const done:ProviderState={version:1,provider,jobId:claim.id,status:blocked?'BLOCKED':error?'FAILED':'SUCCEEDED',attempts,retryAt,...(error?{diagnostic:playlistFailure(stage(),error)}:{completedAt:now.toISOString()})};
   await tx.operationalState.update({where:{key},data:{payload:done as unknown as Prisma.InputJsonValue}});
   let complete=true;
   for(const wanted of providers){const row=await tx.operationalState.findUnique({where:{key:stateKey(wanted,claim.id)}});if((row?.payload as unknown as ProviderState)?.status!=='SUCCEEDED')complete=false}
