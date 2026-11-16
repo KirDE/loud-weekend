@@ -22,7 +22,8 @@ def execute(operation, value):
         _, festivals, skipped = planner.parse_canonical_festivals(value)
         if skipped or len(festivals) != 1:
             raise ValueError('Exactly one eligible edition required')
-        return planner.build_playlist(festivals[0], '', persist_report=False)
+        return planner.build_playlist(festivals[0], '', persist_report=False,
+            discovery_checkpoint=value.get('discoveryCheckpoint'), discovery_budget=120)
     if operation == 'apply-spotify':
         from apply_playlist_plan import run_plan
         return run_plan(value)

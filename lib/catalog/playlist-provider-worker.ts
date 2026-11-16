@@ -13,6 +13,7 @@ type ProviderState = { version: 1; provider: PlaylistProvider; jobId: string; st
 const stateKey = (provider: PlaylistProvider, id: string) => `playlist-provider:v1:${provider}:${id}`;
 export function providerRetryDelay(attempt: number, error: unknown) {
   const failure=error as {code?:unknown;stderr?:unknown};
+  if (failure?.code === 'SPOTIFY_DISCOVERY_CHECKPOINT') return 60_000;
   const lines=typeof failure?.stderr==='string'?failure.stderr.split('\n'):[];
   if ((failure?.code===2&&lines.includes('youtube_quota_bound_reached')) || (failure?.code===3&&lines.some(l=>['youtube_insert_readback_failed','youtube_metadata_readback_failed','youtube_delete_readback_failed'].includes(l)))) return 60_000;
   return Math.min(86_400_000,60_000*2**Math.min(attempt-1,11));

@@ -667,7 +667,16 @@ def setlist_track_sort_key(item: tuple[int, int, str, dict]) -> tuple:
     return (-play_count, -popularity, is_feat_track(track), song.lower())
 
 
-def build_playlist(festival: Festival, user_id: str, *, persist_report=True):
+def build_playlist(festival: Festival, user_id: str, *, persist_report=True, discovery_checkpoint=None, discovery_budget=None):
+    import time
+    started = time.monotonic()
+    if discovery_budget is not None and (persist_report or not REPORT_ONLY or discovery_budget <= 0):
+        raise ValueError("Discovery checkpoints require bounded report-only mode")
+    progress = discovery_checkpoint or {}
+    def expired():
+        return discovery_budget is not None and time.monotonic() - started >= discovery_budget
+    def checkpoint():
+        return {"discoveryCheckpoint": {"followers": followers, "report": report, "uris": playlist_uris, "songKeys": sorted(seen_song_keys)}}
     artists_raw, headliners = festival.lineup_fn()
     aliases = festival.aliases or {}
     spotify_artist_ids = festival.spotify_artist_ids or {}
@@ -681,9 +690,16 @@ def build_playlist(festival: Festival, user_id: str, *, persist_report=True):
     if not artists:
         raise RuntimeError(f'{festival.key}: lineup is empty; refusing to overwrite playlist')
     fast_sort = os.environ.get('FESTIVAL_FAST_SORT') == '1'
-    followers = {}
+    followers = dict(progress.get("followers", {}))
+    report = list(progress.get("report", []))
+    playlist_uris = list(progress.get("uris", []))
+    seen_song_keys = set(progress.get("songKeys", []))
     if not fast_sort:
         for artist in artists:
+            if artist in followers:
+                continue
+            if expired():
+                return checkpoint()
             query = aliases.get(artist, artist)
             followers[artist] = 0 if artist in repertoire_profiles else get_followers(query, spotify_artist_ids.get(artist))
     ordered_artists = [a for a in headliners if a in artists]
@@ -692,11 +708,13 @@ def build_playlist(festival: Festival, user_id: str, *, persist_report=True):
         rest.sort(key=lambda a: followers.get(aliases.get(a, a), followers.get(a, 0)), reverse=True)
     ordered_artists.extend(rest)
 
-    seen_uris = set()
-    seen_song_keys = set()
-    playlist_uris = []
-    report = []
-    for artist in ordered_artists:
+    seen_uris = set(playlist_uris)
+    completed = [row["artist"] for row in report]
+    if completed != ordered_artists[:len(completed)]:
+        raise ValueError("Invalid discovery checkpoint prefix")
+    for artist in ordered_artists[len(completed):]:
+        if expired():
+            return checkpoint()
         query_artist = aliases.get(artist, artist)
         setlist_artist = setlist_lookup_name(query_artist)
         spotify_artist_id = spotify_artist_ids.get(artist)
