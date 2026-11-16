@@ -2,6 +2,7 @@
  * Provider states never clear an intent, alter another provider's retry, or adopt an archive.
  * The shared parent lease deliberately serializes providers of the SAME festival.
  */
+import { pruneSpotifyDiscovery } from './spotify-discovery.ts';
 import { randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { assertPlaylistRefreshLease, renewPlaylistRefreshLease, type PlaylistLease } from './playlist-queue.ts';
@@ -13,6 +14,7 @@ type ProviderState = { version: 1; provider: PlaylistProvider; jobId: string; st
 const stateKey = (provider: PlaylistProvider, id: string) => `playlist-provider:v1:${provider}:${id}`;
 export function providerRetryDelay(attempt: number, error: unknown) {
   const failure=error as {code?:unknown;stderr?:unknown};
+  if (failure?.code === 'SPOTIFY_DISCOVERY_CHECKPOINT') return 60_000;
   const lines=typeof failure?.stderr==='string'?failure.stderr.split('\n'):[];
   if ((failure?.code===2&&lines.includes('youtube_quota_bound_reached')) || (failure?.code===3&&lines.some(l=>['youtube_insert_readback_failed','youtube_metadata_readback_failed','youtube_delete_readback_failed'].includes(l)))) return 60_000;
   return Math.min(86_400_000,60_000*2**Math.min(attempt-1,11));
@@ -81,6 +83,7 @@ async function claimProvider(db:PrismaClient, provider:PlaylistProvider) {
  return null;
 }
 export async function runProviderWorker(db:PrismaClient,provider:PlaylistProvider,execute:(claim:PlaylistLease,guard:()=>Promise<void>,signal:AbortSignal)=>Promise<void>,stage:()=>PlaylistStage=()=> 'setup') {
+ if(provider==='spotify')await pruneSpotifyDiscovery(db);
  const selected=await claimProvider(db,provider);
  if(!selected)return {status:'IDLE',provider};
  const {claim,state,key,providers}=selected,abort=new AbortController();let lost:unknown;let renewal=Promise.resolve();
@@ -107,7 +110,9 @@ export async function runProviderWorker(db:PrismaClient,provider:PlaylistProvide
   const blocked=provider==='youtube_music'&&(error as {code?:unknown})?.code===3
    &&lines.includes('youtube_reconciliation_required')&&lines.some(line=>youtubeHoldReasons.includes(line));
   if(blocked)retryAt=null;
-  const done:ProviderState={version:1,provider,jobId:claim.id,status:blocked?'BLOCKED':error?'FAILED':'SUCCEEDED',attempts:state.attempts,retryAt,...(error?{diagnostic:playlistFailure(stage(),error)}:{completedAt:now.toISOString()})};
+  // Claim counters fence invocations; successful discovery progress is not a failure.
+  const attempts = state.attempts - ((error as {code?:unknown})?.code === 'SPOTIFY_DISCOVERY_CHECKPOINT' ? 1 : 0);
+  const done:ProviderState={version:1,provider,jobId:claim.id,status:blocked?'BLOCKED':error?'FAILED':'SUCCEEDED',attempts,retryAt,...(error?{diagnostic:playlistFailure(stage(),error)}:{completedAt:now.toISOString()})};
   await tx.operationalState.update({where:{key},data:{payload:done as unknown as Prisma.InputJsonValue}});
   let complete=true;
   for(const wanted of providers){const row=await tx.operationalState.findUnique({where:{key:stateKey(wanted,claim.id)}});if((row?.payload as unknown as ProviderState)?.status!=='SUCCEEDED')complete=false}
