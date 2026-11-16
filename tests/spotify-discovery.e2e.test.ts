@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { requireLocalDisposableDatabase } from './support/disposable-db.ts';
-import { clearSpotifyDiscovery, discoverSpotifyChunk } from '../lib/catalog/spotify-discovery.ts';
+import { clearSpotifyDiscovery, discoverSpotifyChunk, pruneSpotifyDiscovery } from '../lib/catalog/spotify-discovery.ts';
 import { claimPlaylistRefresh } from '../lib/catalog/playlist-queue.ts';
 import { providerRetryDelay } from '../lib/catalog/playlist-provider-worker.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
@@ -36,6 +36,20 @@ test('discovery scratch resumes exact inputs, rejects lost lease, never stages a
   await db.catalogPlaylistRefresh.update({where:{id:j.id},data:{leaseExpiresAt:new Date('1900-01-01')}});
   await assert.rejects(discoverSpotifyChunk(db,claim,{season:2027},async()=>{throw Error('must not run')}));
   assert.equal(await db.operationalState.findUnique({where:{key}}), null);
+  // Superseded/abandoned jobs are never reclaimed: native idle retention still
+  // collects stale scratch, but not fresh scratch, unrelated state or active jobs.
+  const stale = new Date(Date.now()-8*86400000);
+  await db.operationalState.create({data:{key,payload:checkpoint,updatedAt:stale}});
+  const freshKey=key+'-fresh',unrelated='unrelated-'+randomUUID();
+  await db.operationalState.createMany({data:[{key:freshKey,payload:checkpoint},{key:unrelated,payload:checkpoint,updatedAt:stale}]});
+  await pruneSpotifyDiscovery(db);
+  assert.ok(await db.operationalState.findUnique({where:{key}})); // RUNNING, even expired: recovery owns it
+  await db.catalogPlaylistRefresh.update({where:{id:j.id},data:{status:'PENDING',leaseOwner:null,leaseExpiresAt:null}});
+  await pruneSpotifyDiscovery(db);
+  assert.equal(await db.operationalState.findUnique({where:{key}}),null);
+  assert.ok(await db.operationalState.findUnique({where:{key:freshKey}}));
+  assert.ok(await db.operationalState.findUnique({where:{key:unrelated}}));
+  await db.operationalState.deleteMany({where:{key:{in:[freshKey,unrelated]}}});
   assert.equal(providerRetryDelay(100,{code:'SPOTIFY_DISCOVERY_CHECKPOINT'}),60000);
   assert.equal(providerRetryDelay(100,{playlistRpcTimedOut:true}),86400000);
  } finally {

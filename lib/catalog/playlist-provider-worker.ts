@@ -2,6 +2,7 @@
  * Provider states never clear an intent, alter another provider's retry, or adopt an archive.
  * The shared parent lease deliberately serializes providers of the SAME festival.
  */
+import { pruneSpotifyDiscovery } from './spotify-discovery.ts';
 import { randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { assertPlaylistRefreshLease, renewPlaylistRefreshLease, type PlaylistLease } from './playlist-queue.ts';
@@ -82,6 +83,7 @@ async function claimProvider(db:PrismaClient, provider:PlaylistProvider) {
  return null;
 }
 export async function runProviderWorker(db:PrismaClient,provider:PlaylistProvider,execute:(claim:PlaylistLease,guard:()=>Promise<void>,signal:AbortSignal)=>Promise<void>,stage:()=>PlaylistStage=()=> 'setup') {
+ if(provider==='spotify')await pruneSpotifyDiscovery(db);
  const selected=await claimProvider(db,provider);
  if(!selected)return {status:'IDLE',provider};
  const {claim,state,key,providers}=selected,abort=new AbortController();let lost:unknown;let renewal=Promise.resolve();

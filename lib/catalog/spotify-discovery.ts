@@ -18,6 +18,31 @@ export async function clearSpotifyDiscovery(db: PrismaClient, claim: PlaylistLea
   });
 }
 
+/** Scratch is disposable; bound retention even when a newer publication means the
+ * old job is never claimed again. Run from the existing Spotify timer, also idle.
+ * Never touch plans/intents or a live job; CAS protects refreshed scratch. */
+export async function pruneSpotifyDiscovery(db: PrismaClient) {
+  const prefix = 'playlist-discovery:spotify:v1:';
+  const cutoff = new Date(Date.now() - 7 * 86_400_000);
+  const rows = await db.$queryRaw<{ key: string }[]>`
+    SELECT scratch.key FROM "OperationalState" scratch
+    LEFT JOIN "CatalogPlaylistRefresh" job ON scratch.key = ${prefix} || job.id
+    WHERE scratch.key LIKE ${prefix + '%'} AND scratch."updatedAt" < ${cutoff}
+      AND (job.id IS NULL OR (job.status <> 'RUNNING' AND job."leaseOwner" IS NULL))
+    ORDER BY scratch."updatedAt", scratch.key LIMIT 64`;
+  for (const row of rows) await db.$transaction(async tx => {
+    const id = row.key.slice(prefix.length);
+    const job = await tx.catalogPlaylistRefresh.findUnique({ where: { id }, select: { festivalSlug: true } });
+    if (job) {
+      const [{ locked }] = await tx.$queryRaw<{ locked: boolean }[]>`SELECT pg_try_advisory_xact_lock(210,hashtext(${job.festivalSlug})) AS locked`;
+      if (!locked) return;
+      const current = await tx.catalogPlaylistRefresh.findUnique({ where: { id } });
+      if (current?.status === 'RUNNING' || current?.leaseOwner) return;
+    }
+    await tx.operationalState.deleteMany({ where: { key: row.key, updatedAt: { lt: cutoff } } });
+  });
+}
+
 /** Read-only discovery scratch, never a plan or write intent. Bound to exact inputs
  * and job; all durable changes use the existing edition/lease fence. */
 export async function discoverSpotifyChunk(db: PrismaClient, claim: PlaylistLease, input: Record<string, unknown>, execute: (value: unknown) => Promise<unknown>) {
