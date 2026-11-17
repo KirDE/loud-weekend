@@ -61,3 +61,9 @@ test('detail transport failures retain preceding homepage and detail request att
  const {fetchSource}=await import('../lib/ingestion/fetch.ts');let calls=0;
  await assert.rejects(fetchSource(source,{maxAttempts:3,sleep:async()=>{},fetchImpl:async url=>{calls++;if(url===source.url)return new Response(base.home);if(url===base.documents[1].url)throw new Error('detail unavailable');return new Response(base.documents.find(d=>d.url===url).html);}}),error=>{assert.equal(calls,5);assert.equal(error.attempts,5);return true;});
 });
+
+test('historical introductory clauses do not override explicit current group identity',()=>{
+ for(const intro of ['Après son ancien album, ','Après son ancien album ','Depuis son ancien projet, ','Après un ancien single, puis plusieurs tournées, ']){
+  const html=detail.replace(/<p>[\s\S]*?<\/p>/,`<p>${intro}<strong>SLASH FT MYLES KENNEDY AND THE CONSPIRATORS</strong> est un groupe de rock.</p>`);assert.ok(parse(html).lineup.includes('SLASH featuring MYLES KENNEDY AND THE CONSPIRATORS'));
+ }
+});

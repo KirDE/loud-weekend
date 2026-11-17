@@ -67,8 +67,11 @@ function detailName(html: string, year: number, label = ""): string | undefined 
     const before = text(block[2].slice(0, credit.index!));
     const after = text(block[2].slice(credit.index! + credit[0].length));
     // A present-tense release statement ("est sorti") is not identification.
-    // Require a performing-group noun and exclude a historical/release subject.
-    if (/\b(?:ancien(?:ne)?s?|historique|single|titre|morceau|chanson)\b|\b(?:son|leur|cet|ce|le|un)\s+album\b/i.test(before) ||
+    // Require a performing-group noun and exclude only an adjacent release
+    // subject, not historical material mentioned in an introductory clause.
+    const subject = before.split(/[,;:]/).at(-1)!.trim();
+    const releaseSubject = /^(?:(?:son|sa|ses|leur|leurs|cet|cette|ce|ces|le|la|les|un|une|des)\s+|l['’])?(?:(?:ancien(?:ne)?s?|historique)\s+)?(?:single|album|titre|morceau|chanson|projet|groupe)s?$/i.test(subject);
+    if (releaseSubject ||
       !/^est\s+(?:sans aucun doute\s+)?(?:(?:un|une|le|la|l['’]un(?:e)?)(?:\s+des)?\s+)?(?:collaborations?|groupes?|formations?|duos?|trios?|quatuors?|quintettes?)\b/i.test(after)) continue;
     const full = text(credit[2]).match(/^(.+?)\s+(?:ft\.?|feat\.?|featuring)\s+(.+)$/i);
     if (full && full[1].toLowerCase() === headings[0].toLowerCase()) {
