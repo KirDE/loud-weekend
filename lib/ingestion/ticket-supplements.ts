@@ -3,13 +3,16 @@ import type { FestivalSource, FestivalCandidate } from "./types.ts";
 
 export const TICKET_SUPPLEMENT = "official-ticket-supplement-v1";
 type TicketState = NonNullable<FestivalCandidate["ticketStatus"]>;
-export type TicketObservation = { status?: TicketState; excerpt: string; warning?: string };
+export type TicketObservation = { status?: TicketState; excerpt: string; warning?: string; ticketsUrl?: string };
 
 /** Reviewed source routes, not URLs supplied by arbitrary markup or API clients. */
 export function ticketSupplementUrl(source: FestivalSource): string | undefined {
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review")) return;
   let url: URL; try { url = new URL(source.url); } catch { return; }
   if (url.protocol !== "https:" || url.username || url.password || url.port || url.search || url.hash) return;
+  if (source.festivalSlug === "full-rewind" && url.href === "https://full-rewind.de/" && source.strategies.includes("official_markup")
+    && Number.isInteger(source.editionYear) && source.editionYear >= 2027 && source.editionYear <= 2100)
+    return "https://full-rewind.de/products/full-rewind-weekend-ticket-" + source.editionYear + ".js";
   if (source.festivalSlug === "download" && url.hostname === "downloadfestival.co.uk" && url.pathname === "/")
     return "https://downloadfestival.co.uk/tickets/";
   if (source.festivalSlug === "wacken-open-air" && url.hostname === "www.wacken.com" && url.pathname === "/")
@@ -20,9 +23,42 @@ export function isTicketSupplementUrl(source: FestivalSource, actual: string): b
   return actual === ticketSupplementUrl(source);
 }
 
-export function observeTicketSupplement(html: string, source: FestivalSource, url: string): TicketObservation {
+export function observeTicketSupplement(html: string, source: FestivalSource, url: string, dates?: Pick<FestivalCandidate, "startDate" | "endDate">): TicketObservation {
   const fail = (reason: string): TicketObservation => ({ excerpt: "", warning: `Official ${source.festivalSlug} ticket source requires review: ${reason}` });
   if (!isTicketSupplementUrl(source, url) || html.length > 2_000_000) return fail("source identity or size changed");
+  if (source.festivalSlug === "full-rewind") {
+    const year = source.editionYear;
+    try {
+      const product = JSON.parse(html);
+      const title = "Full Rewind Weekend Ticket " + year, handle = "full-rewind-weekend-ticket-" + year;
+      if (!product || product.title !== title || product.handle !== handle || product.url !== "/products/" + handle
+        || product.vendor !== "Full Rewind" || product.requires_selling_plan !== false || typeof product.available !== "boolean"
+        || !Number.isSafeInteger(product.price) || product.price <= 0 || typeof product.description !== "string"
+        || !Array.isArray(product.variants) || product.variants.length !== 1)
+        return fail("standard weekend product identity or schema changed");
+      const $product = load(product.description);
+      $product("script, style, template, [hidden], [aria-hidden='true']").remove();
+      const description = $product("p").first().text().replace(/\s+/g, " ").trim();
+      const range = description.match(/^Full Rewind \((\d{1,2})\.\s*-\s*(\d{1,2})\.(\d{2})\.(20\d{2})\) Weekend Ticket beinhaltet ein Weekend Ticket inkl\. Camping\./);
+      if (!range || Number(range[4]) !== year) return fail("weekend admission edition/dates absent");
+      const iso = (day: string) => range[4] + "-" + range[3] + "-" + day.padStart(2, "0");
+      const start = iso(range[1]), end = iso(range[2]);
+      if (!dates?.startDate || !dates.endDate || start !== dates.startDate || end !== dates.endDate)
+        return fail("weekend admission dates disagree with verified official festival dates");
+      const variant = product.variants[0], quantity = variant?.quantity_rule;
+      if (!variant || variant.title !== "Default Title" || variant.name !== title || variant.sku !== "T-" + year + "-Weekend"
+        || typeof variant.available !== "boolean" || variant.available !== product.available
+        || variant.requires_selling_plan !== false || !Number.isSafeInteger(variant.price) || variant.price <= 0 || variant.price !== product.price
+        || !quantity || quantity.min !== 1 || quantity.increment !== 1
+        || !(quantity.max === null || Number.isSafeInteger(quantity.max) && quantity.max >= 1))
+        return fail("standard weekend variant inventory or quantity schema changed");
+      // Shopify false means unavailable for purchase, not a confirmed global
+      // sellout. Parking stock and shipping deadlines are not admission stock.
+      return { status: product.available ? "available" : "unavailable",
+        ticketsUrl: "https://full-rewind.de/collections/tickets-" + year,
+        excerpt: title + "; " + start + "–" + end + "; official Shopify standard weekend variant available=" + product.available };
+    } catch { return fail("invalid public weekend product JSON"); }
+  }
   const $ = load(html);
   const declaredEvents: Array<{ name?: unknown; startDate?: unknown; endDate?: unknown; eventStatus?: unknown }> = [];
   if (source.festivalSlug === "download") $("script[type='application/ld+json']").each((_, element) => {
