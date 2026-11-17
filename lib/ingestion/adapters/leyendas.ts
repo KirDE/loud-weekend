@@ -72,7 +72,7 @@ export function leyendas(html: string, source: FestivalSource) {
   }
   if (links.slice(0, 8).some(url => !data.posts.some(p => p.url === url))) warnings.push('Leyendas current-edition article was not fetched');
   const $tickets = load(data.tickets);
-  $tickets("script, style, template, noscript, nav, header, footer, [hidden], [inert], [aria-hidden='true']").remove();
+  $tickets("script, style, template, noscript, nav, header, footer, [hidden], [inert], [aria-hidden='true'], [disabled], [aria-disabled='true']").remove();
   $tickets("[style]").each((_, element) => {
     if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($tickets(element).attr("style") ?? "")) $tickets(element).remove();
   });
@@ -84,10 +84,15 @@ export function leyendas(html: string, source: FestivalSource) {
     // products, a stale anniversary banner or disabled purchase controls.
     const headings = $tickets("h2").filter((_, element) => /^ABONO LEYENDAS DEL ROCK$/i.test(text($tickets(element).text())));
     if (headings.length === 1) {
-      const section = headings.first().nextUntil("h2");
-      const prose = section.map((_, element) => text($tickets(element).text())).get().join(" ");
-      const buy = section.find("a[href]").add(section.filter("a[href]")).filter((_, element) => {
-        const link = $tickets(element);
+      // Stop at the next product heading anywhere in document order, not
+      // only a sibling. Theme layout wrappers can nest later product sections.
+      const serialized = $tickets.html(), heading = headings.first().toString();
+      const after = serialized.slice(serialized.indexOf(heading) + heading.length);
+      const boundary = after.search(/<h2\b/i);
+      const $pass = load(boundary < 0 ? after : after.slice(0, boundary));
+      const prose = text($pass.root().text());
+      const buy = $pass("a[href]").filter((_, element) => {
+        const link = $pass(element);
         if (text(link.text()) !== "COMPRAR ABONO" || link.is("[disabled], [aria-disabled='true']")
           || link.parents("[disabled], [aria-disabled='true']").length) return false;
         try {

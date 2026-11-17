@@ -74,3 +74,13 @@ test('footer copies and other product sellouts cannot override the current ordin
  assert.equal(parse(hidden).ticketStatus,'available');
  assert.deepEqual(evaluateCandidate(current,parse(d)).changes,[]);
 });
+
+test('nested subsequent product headings end ordinary admission scope in document order',()=>{
+ const d=copy();d.tickets+='<section><div><h2>CAMPING</h2><p>Agotado</p></div></section>';
+ assert.equal(parse(d).ticketStatus,'available');
+ const missing=copy();missing.tickets=missing.tickets.replace('COMPRAR ABONO','Información');
+ missing.tickets+='<section><div><h2>CAMPING</h2><p>Ya se pueden adquirir los abonos para la XXI edición de Leyendas del Rock</p><a href="https://www.enterticket.es/eventos/leyendas-del-rock-999">COMPRAR ABONO</a></div></section>';
+ assert.equal(parse(missing).ticketStatus,undefined);
+ const disabled=copy();disabled.tickets='<section aria-disabled="true">'+disabled.tickets+'</section>';
+ assert.equal(parse(disabled).ticketStatus,undefined);
+});
