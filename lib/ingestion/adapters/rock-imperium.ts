@@ -1,3 +1,4 @@
+import { load } from "cheerio";
 import type { FestivalCandidate, FestivalSource, FieldEvidence } from "../types.ts";
 import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 
@@ -162,16 +163,39 @@ export function extractRockImperiumCandidate(input: string, source: FestivalSour
   const categoryUrl = landing && findRockImperiumCategory(landing, source.editionYear);
   const category = documents.find(d => d.url === categoryUrl);
   const productUrl = category && findRockImperiumProduct(category, source.editionYear);
-  const product = documents.find(d => d.url === productUrl);
-  if (!product) { candidate.warnings.push("Current general-pass availability has not been verified"); return candidate; }
-  const h1 = text(clean(product.html).match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? "");
-  if (!generalPass(h1, source.editionYear)) { candidate.warnings.push("Linked Rock Imperium product is not the current general pass"); return candidate; }
-  const form = clean(product.html).match(/<form\b[^>]*id=["']add-to-cart-or-refresh["'][^>]*>[\s\S]*?<\/form>/i)?.[0];
-  const buttons = form && [...form.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/gi)].filter(m => /data-button-action=["']add-to-cart["']/i.test(m[1]));
-  if (buttons?.length === 1 && !/\bdisabled(?:\s|=|$)|aria-disabled\s*=\s*["']true["']/i.test(buttons[0][1]) && /^(?:comprar(?: entradas?)?|buy(?: tickets?)?)$/i.test(text(buttons[0][2]))) {
-    add("ticketStatus", "available", product, `${h1}: ${buttons[0][0]}`);
+  const products = documents.filter(d => d.url === productUrl);
+  const product = products.length === 1 ? products[0] : undefined;
+  if (!product) { candidate.warnings.push("Current general-pass availability has not been uniquely verified"); return candidate; }
+  const $ = load(product.html);
+  $("script, style, template, noscript, nav, header, footer, [hidden], [inert], [aria-hidden='true']").remove();
+  $("[style]").each((_, element) => {
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();
+  });
+  $("br").replaceWith(" ");
+  const headings = $("h1"), h1 = text(headings.text());
+  if (headings.length !== 1 || !generalPass(h1, source.editionYear)) {
+    candidate.warnings.push("Linked Rock Imperium product is not the unique current general pass"); return candidate;
+  }
+  const forms = $("form#add-to-cart-or-refresh");
+  const form = forms.first();
+  let validAction = false;
+  try {
+    const action = new URL(form.attr("action") ?? "", product.url);
+    validAction = action.origin === "https://www.madnesslive.es" && !action.username && !action.password && !action.search && !action.hash
+      && /^\/(?:es\/carrito|en\/cart)$/.test(action.pathname) && form.attr("method")?.toLowerCase() === "post";
+  } catch { /* Unsupported purchase destination remains reviewable. */ }
+  const buttons = form.find("button[data-button-action='add-to-cart']").filter((_, element) => {
+    const button = $(element);
+    return button.attr("type")?.toLowerCase() === "submit" && !button.is("[disabled], [aria-disabled='true']")
+      && !button.parents("[disabled], [aria-disabled='true']").length
+      && /^(?:comprar(?: entradas?)?|buy(?: tickets?)?)$/i.test(text(button.text()));
+  });
+  const negativeStock = /\b(?:agotad[oa]s?|sin stock|fuera de stock|out of stock|sold\s*out|no disponible)\b/i;
+  const contradictory = negativeStock.test(text(form.text())) || negativeStock.test(text($("#product-availability").text()));
+  if (forms.length === 1 && validAction && buttons.length === 1 && !contradictory) {
+    add("ticketStatus", "available", product, h1 + ": enabled current general-pass purchase form and " + text(buttons.text()));
   } else {
-    candidate.warnings.push("Current general-pass purchase is disabled or availability is unclear");
+    candidate.warnings.push("Current general-pass purchase is hidden, disabled, ambiguous or contradicts availability");
   }
   // Unranked first-wave subjects are additive; never replace billing or remove absent acts.
   return candidate;

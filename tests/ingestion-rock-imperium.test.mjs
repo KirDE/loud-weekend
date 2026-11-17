@@ -195,3 +195,30 @@ test("English later announcement uses new subjects and blocks explicit withdrawa
   assert.deepEqual(extract(e).lineup, ["Helloween", "Children Of Bodom", "New Band", "Another Artist"]);
   e.documents[0].html += "<p>New Band will not perform.</p>"; assert.equal(extract(e).lineup, undefined);
 });
+
+test('only a unique visible current admission form with trusted action can establish availability',()=>{
+ for(const change of [
+  h=>'<div hidden>'+h+'</div>',
+  h=>h.replace('<form action=','<form style="display:none" action='),
+  h=>h.replace('<form action=','<form aria-disabled="true" action='),
+  h=>h.replace('https://www.madnesslive.es/es/carrito','https://evil.example/cart'),
+  h=>h.replace('https://www.madnesslive.es/es/carrito','https://user@www.madnesslive.es/es/carrito'),
+  h=>h.replace('https://www.madnesslive.es/es/carrito','https://www.madnesslive.es:8443/es/carrito'),
+  h=>h.replace('method="post"','method="get"'),
+  h=>h+h,
+  h=>h.replace('</form>','<p>Abono agotado</p></form>'),
+  h=>h+'<span id="product-availability">Fuera de stock</span>',
+ ]){
+  const e=envelope();e.documents[2].html=change(e.documents[2].html);
+  const c=extract(e);assert.equal(c.ticketStatus,undefined);assert(c.warnings.length);
+  const r=evaluateCandidate({slug:'rock-imperium',editionYear:2027,ticketStatus:'available',lineup:[],headliners:[]},c);
+  assert.equal(r.publishable,false);assert(!r.changes.some(change=>change.field==='ticketStatus'));
+ }
+ const e=envelope();e.documents.push({...e.documents[2]});assert.equal(extract(e).ticketStatus,undefined);
+});
+test('hidden controls and historical footer sellout copy do not create or negate live current stock',()=>{
+ const e=envelope();e.documents[2].html+='<footer>Rock Imperium 2026: Abono agotado</footer>';
+ assert.equal(extract(e).ticketStatus,'available');
+ const hidden=envelope();hidden.documents[2].html=hidden.documents[2].html.replace('type="submit"','hidden type="submit"');
+ assert.equal(extract(hidden).ticketStatus,undefined);
+});
