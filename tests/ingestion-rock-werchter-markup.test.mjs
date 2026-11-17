@@ -16,7 +16,7 @@ for (const name of ["home", "home-en"]) test(`real ${name} correction: dates, ex
   assert.deepEqual(candidate.headliners, ["Tame Impala"]);
   assert.deepEqual(candidate.lineup, ["SOMBR"]);
   assert.equal(candidate.status, "partial");
-  assert.equal(candidate.ticketStatus, "unavailable");
+  assert.equal(candidate.ticketStatus, "not_on_sale");
   assert.equal(candidate.ticketsUrl, undefined);
   assert.deepEqual(candidate.observedEditionYears, [2027]);
   assert.deepEqual(candidate.warnings, []);
@@ -26,7 +26,7 @@ test("existing production generic source consumes the verified fallback without 
   assert.deepEqual(candidate.lineup, ["SOMBR"]);
   assert.deepEqual(candidate.headliners, ["Tame Impala"]);
   assert.equal(candidate.startDate, "2027-07-01");
-  assert.equal(candidate.ticketStatus, "unavailable");
+  assert.equal(candidate.ticketStatus, "not_on_sale");
   assert.equal(candidate.ticketsUrl, undefined);
   assert.deepEqual(candidate.warnings, []);
 });
@@ -35,7 +35,7 @@ test("later official names are not hardcoded and rotating cards never remove ver
   const candidate = extract(html);
   assert.deepEqual(candidate.lineup, ["New Artist"]);
   assert.deepEqual(candidate.headliners, ["Next Headliner"]);
-  const current = { slug: source.festivalSlug, editionYear: 2027, startDate: "2027-07-01", endDate: "2027-07-04", status: "partial", ticketStatus: "unavailable", headliners: ["Tame Impala"], lineup: ["SOMBR", "Earlier Artist"] };
+  const current = { slug: source.festivalSlug, editionYear: 2027, startDate: "2027-07-01", endDate: "2027-07-04", status: "partial", ticketStatus: "not_on_sale", headliners: ["Tame Impala"], lineup: ["SOMBR", "Earlier Artist"] };
   const result = evaluateCandidate(current, candidate);
   assert.deepEqual(result.changes.map(c => c.kind), ["headliner_added", "artist_added"]);
   assert.equal(result.publishable, true);
@@ -56,10 +56,10 @@ test("a later edition/date/sale can be parsed without a document hash or fixed b
   const c = extract(html, "2027-10-10T12:00:00Z", { ...source, editionYear: 2028 });
   assert.equal(c.startDate, "2028-07-06");
   assert.equal(c.endDate, "2028-07-09");
-  assert.equal(c.ticketStatus, "unavailable");
+  assert.equal(c.ticketStatus, "not_on_sale");
 });
 test("corrected production facts are unchanged and cannot enqueue a publication", () => {
-  const current = { slug: source.festivalSlug, editionYear: 2027, startDate: "2027-07-01", endDate: "2027-07-04", status: "partial", ticketStatus: "unavailable", headliners: ["Tame Impala"], lineup: ["SOMBR"] };
+  const current = { slug: source.festivalSlug, editionYear: 2027, startDate: "2027-07-01", endDate: "2027-07-04", status: "partial", ticketStatus: "not_on_sale", headliners: ["Tame Impala"], lineup: ["SOMBR"] };
   const result = evaluateCandidate(current, extract(fixture("home")));
   assert.deepEqual(result.changes, []);
   assert.deepEqual(result.reviewReasons, []);
@@ -90,7 +90,7 @@ for (const lang of ['en', 'nl']) test(`November ${lang} homepage: header dates a
   assert.equal(c.status, 'partial');
   assert.deepEqual(c.warnings, []);
   assert.equal(c.ticketStatus, undefined);
-  const result = evaluateCandidate({slug:source.festivalSlug,editionYear:2027,startDate:'2027-07-01',endDate:'2027-07-04',status:'partial',ticketStatus:'unavailable',headliners:['Tame Impala'],lineup:['SOMBR','Earlier Artist']},c);
+  const result = evaluateCandidate({slug:source.festivalSlug,editionYear:2027,startDate:'2027-07-01',endDate:'2027-07-04',status:'partial',ticketStatus:'not_on_sale',headliners:['Tame Impala'],lineup:['SOMBR','Earlier Artist']},c);
   assert.equal(result.changes.filter(x=>x.kind==='artist_added').length, 6);
   assert.ok(!result.changes.some(x=>x.kind.includes('removed')));
 });

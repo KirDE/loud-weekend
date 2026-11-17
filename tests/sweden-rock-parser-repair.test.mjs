@@ -8,7 +8,7 @@ const now='2026-10-10T16:27:00.000Z';
 const fixtures=Object.fromEntries(['home','tickets'].map(name=>[name,readFileSync(new URL(`./fixtures/sweden-rock/${name}.html`,import.meta.url),'utf8')]));
 const parse=(html,override={},at=now)=>extractFestivalCandidate(html,{...source,...override},at);
 for(const name of ['home','tickets']) test(`actual corrected ${name}: official information URL and future sale, not Blind Bird sold-out`,()=>{
- const c=parse(fixtures[name]);assert.equal(c.ticketsUrl,'https://swedenrock.com/biljetter');assert.equal(c.ticketStatus,'unavailable');assert.deepEqual(c.warnings,[]);assert.deepEqual(c.observedEditionYears,[2027]);
+ const c=parse(fixtures[name]);assert.equal(c.ticketsUrl,'https://swedenrock.com/biljetter');assert.equal(c.ticketStatus,'not_on_sale');assert.deepEqual(c.warnings,[]);assert.deepEqual(c.observedEditionYears,[2027]);
  for(const field of ['lineup','headliners','startDate','endDate','status'])assert.equal(c[field],undefined);
  const current={slug:'sweden-rock',editionYear:2027,startDate:'2027-06-09',endDate:'2027-06-12',lineup:['Verified support'],headliners:['Verified headline'],status:'partial',ticketsUrl:c.ticketsUrl,ticketStatus:c.ticketStatus};
  const r=evaluateCandidate(current,c);assert.deepEqual(r.changes,[]);assert.deepEqual(r.reviewReasons,[]);
@@ -19,11 +19,11 @@ test('sponsor shop and language links cannot override official tickets',()=>{
 });
 test('future official sale edits and subsequent edition need no frozen hash or date',()=>{
  const changed=fixtures.home.replaceAll('2027','2028').replace('23 oktober','15 november');
- const c=parse(changed,{editionYear:2028},'2027-11-01T10:00:00.000Z');assert.equal(c.ticketStatus,'unavailable');assert.deepEqual(c.observedEditionYears,[2028]);assert.deepEqual(c.warnings,[]);
+ const c=parse(changed,{editionYear:2028},'2027-11-01T10:00:00.000Z');assert.equal(c.ticketStatus,'not_on_sale');assert.deepEqual(c.observedEditionYears,[2028]);assert.deepEqual(c.warnings,[]);
  assert.equal(parse(changed).ticketsUrl,undefined);assert.ok(parse(changed).warnings.length);
 });
 test('passed sale timestamp does not invent availability; Stockholm boundary is exact',()=>{
- assert.equal(parse(fixtures.tickets,{},'2026-10-23T08:59:00.000Z').ticketStatus,'unavailable');
+ assert.equal(parse(fixtures.tickets,{},'2026-10-23T08:59:00.000Z').ticketStatus,'not_on_sale');
  const c=parse(fixtures.tickets,{},'2026-10-23T09:00:00.000Z');assert.equal(c.ticketStatus,undefined);assert.ok(c.warnings.length);
 });
 test('later explicit current sales or sellout override old Blind Bird and ignore unrelated sections',()=>{

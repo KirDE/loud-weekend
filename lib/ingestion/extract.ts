@@ -1,3 +1,4 @@
+import { observeTicketSupplement, ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import {extractRoskildeCandidate} from "./adapters/roskilde.ts";
 import { extractRoadburnCandidate } from "./adapters/roadburn.ts";
 import { extractCopenhellCurrent } from "./adapters/copenhell-current.ts";
@@ -22,7 +23,7 @@ import {announcementCoverageWarning} from './announcement-watch.ts';
 
 const supportedFields: FieldEvidence["field"][] = ["startDate", "endDate", "city", "headliners", "lineup", "ticketsUrl", "status", "ticketStatus"];
 
-export function extractFestivalCandidate(html: string, source: FestivalSource, fetchedAt: string): FestivalCandidate {
+function extractCatalogueCandidate(html: string, source: FestivalSource, fetchedAt: string): FestivalCandidate {
   const candidate=extractConfiguredCandidate(html,source,fetchedAt);
   const warning=announcementCoverageWarning(html,source,candidate);
   return warning ? {...candidate,warnings:[...new Set([...candidate.warnings,warning])]} : candidate;
@@ -120,4 +121,30 @@ function extractConfiguredCandidate(html: string, source: FestivalSource, fetche
     merged.warnings = merged.warnings.filter(warning => warning !== "No JSON-LD Event was found");
   }
   return merged;
+}
+
+
+export function extractFestivalCandidate(html: string, source: FestivalSource, fetchedAt: string): FestivalCandidate {
+  if (!html.startsWith("{")) return extractCatalogueCandidate(html, source, fetchedAt);
+  let envelope: { kind?: string; body?: unknown; ticket?: { url?: unknown; html?: unknown } };
+  try { envelope = JSON.parse(html); } catch { return extractCatalogueCandidate(html, source, fetchedAt); }
+  if (envelope.kind !== TICKET_SUPPLEMENT) return extractCatalogueCandidate(html, source, fetchedAt);
+  if (!ticketSupplementUrl(source) || typeof envelope.body !== "string" || typeof envelope.ticket?.url !== "string" || typeof envelope.ticket?.html !== "string")
+    return { schemaVersion: INGESTION_SCHEMA_VERSION, festivalSlug: source.festivalSlug, sourceUrl: source.url, fetchedAt,
+      evidence: [], warnings: ["Invalid official ticket supplement"], observedEditionYears: [] };
+  const candidate = extractCatalogueCandidate(envelope.body, source, fetchedAt);
+  const ticket = observeTicketSupplement(envelope.ticket.html, source, envelope.ticket.url);
+  // A failed current ticket check must not publish an older stock assertion
+  // from another format as if the current inventory had been verified.
+  delete candidate.ticketStatus;
+  candidate.evidence = candidate.evidence.filter(evidence => evidence.field !== "ticketStatus");
+  if (ticket.warning) candidate.warnings.push(ticket.warning);
+  if (ticket.status) {
+    candidate.ticketStatus = ticket.status;
+    candidate.ticketsUrl = envelope.ticket.url;
+    candidate.observedEditionYears = [...new Set([...candidate.observedEditionYears, source.editionYear])];
+    candidate.evidence = candidate.evidence.filter(evidence => evidence.field !== "ticketsUrl");
+    for (const field of ["ticketStatus", "ticketsUrl"] as const) candidate.evidence.push({ field, sourceUrl: envelope.ticket.url, observedAt: fetchedAt, excerpt: ticket.excerpt });
+  }
+  return candidate;
 }

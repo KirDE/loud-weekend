@@ -135,7 +135,7 @@ test("headliner status repairs TBA with simultaneous billing or existing 30 acts
   const fresh = evaluateCandidate({ ...current, status: "tba" }, candidate);
   assert.equal(fresh.publishable, true);
   assert.deepEqual(fresh.changes.map(({ field }) => field).sort(), ["headliners", "status"]);
-  const production = { ...current, status: "tba", ticketStatus: "unavailable", lineup: canonicalArtists, headliners: ["AMON AMARTH"] };
+  const production = { ...current, status: "tba", ticketStatus: "sold_out", lineup: canonicalArtists, headliners: ["AMON AMARTH"] };
   const repair = evaluateCandidate(production, candidate);
   assert.equal(repair.publishable, true);
   assert.deepEqual(repair.changes, [{ kind: "status_changed", field: "status", before: "tba", after: "partial", reviewRequired: false }]);
@@ -190,11 +190,11 @@ test("marketplace hero parses corroborated evergreen dates and review-gated city
 test("dated soldout article emits typed unavailable ticketStatus through normal merger and evidence", () => {
   const candidate = extract("soldout");
   onlyFields("soldout", candidate, ["ticketStatus"]);
-  assert.equal(candidate.ticketStatus, "unavailable");
+  assert.equal(candidate.ticketStatus, "sold_out");
   const result = evaluateCandidate(current, candidate);
   assert.equal(result.publishable, true);
   assert.deepEqual(candidate.warnings, []);
-  assert.deepEqual(result.changes.map(({ kind, after }) => [kind, after]), [["ticket_status_changed", "unavailable"]]);
+  assert.deepEqual(result.changes.map(({ kind, after }) => [kind, after]), [["ticket_status_changed", "sold_out"]]);
   for (const [before, after] of [
     ['id="post-82346"', 'id="post-82347"'], ["2026-07-09T15:33:09+00:00", "2026-07-10T15:33:09+00:00"],
     ["DAS ROCKHARZ 2027 IST AUSVERKAUFT!", "DAS ROCKHARZ 2026 IST AUSVERKAUFT!"],
@@ -266,7 +266,7 @@ test("baseline artist/ticket sources are publishable; novel names and date/city 
 });
 
 const correctionHtml = await readFile(new URL("./fixtures/official-markup/rockharz-bands-correction-20261010.html", import.meta.url), "utf8");
-const corrected = { ...current, status: "partial", ticketStatus: "unavailable", headliners: ["Amon Amarth"],
+const corrected = { ...current, status: "partial", ticketStatus: "sold_out", headliners: ["Amon Amarth"],
   lineup: [...canonicalArtists, "Beast in Black", "Burning Witches", "Elvenking", "Fear Factory", "Jinjer", "Mixed Up Everything", "Motörizer", "Myrath", "Vulvarine"] };
 
 test("real October nine-act correction is quiet without demoting the verified headliner", () => {

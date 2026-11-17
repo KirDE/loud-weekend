@@ -51,7 +51,7 @@ export function extractSwedenRockCandidate(html: string, source: FestivalSource,
       const day = Number(sale[1]), hour = Number(sale[4]), minute = Number(sale[5]);
       const stamp = `${saleYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")} ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
       const validDay = day >= 1 && day <= new Date(Date.UTC(Number(saleYear), month, 0)).getUTCDate();
-      if (validDay && hour < 24 && minute < 60 && (sale[3] || Number(local.slice(0, 4)) < year) && local < stamp) add("ticketStatus", "unavailable", `${heading[0]} ${text}`);
+      if (validDay && hour < 24 && minute < 60 && (sale[3] || Number(local.slice(0, 4)) < year) && local < stamp) add("ticketStatus", "not_on_sale", `${heading[0]} ${text}`);
       // A scheduled date passing is not proof that tickets actually went on sale.
     }
   }

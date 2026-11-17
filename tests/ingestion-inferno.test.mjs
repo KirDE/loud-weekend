@@ -46,7 +46,7 @@ test('missing/disabled/untrusted/hidden purchase controls and stale prices do no
 });
 
 test('sold-out conference bundle does not override regular pass; sold-out regular pass does',()=>{
- assert.equal(parse(fixture.replace('4 Day Festival + 3 Day Conference','Sold Out: 4 Day Festival + 3 Day Conference')).ticketStatus,'available');assert.equal(parse(fixture.replace('3995,- NOK','3995,- NOK Sold Out')).ticketStatus,'unavailable');
+ assert.equal(parse(fixture.replace('4 Day Festival + 3 Day Conference','Sold Out: 4 Day Festival + 3 Day Conference')).ticketStatus,'available');assert.equal(parse(fixture.replace('3995,- NOK','3995,- NOK Sold Out')).ticketStatus,'sold_out');
 });
 
 test('invalid or conflicting pass dates fail closed',()=>{

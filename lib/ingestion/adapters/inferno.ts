@@ -67,7 +67,7 @@ export function extractInfernoCandidate(html: string, source: FestivalSource, fe
   if (ranges.length && ranges.every(r => r.start === ranges[0].start && r.end === ranges[0].end)) {
     add("startDate", ranges[0].start, ranges[0].excerpt); add("endDate", ranges[0].end, ranges[0].excerpt);
     if (ranges.some(r => r.available)) add("ticketStatus", "available", ranges.find(r => r.available)!.excerpt);
-    else if (ranges.every(r => r.soldOut)) add("ticketStatus", "unavailable", ranges[0].excerpt);
+    else if (ranges.every(r => r.soldOut)) add("ticketStatus", "sold_out", ranges[0].excerpt);
   } else if (ranges.length) candidate.warnings.push("Conflicting Inferno festival pass dates require review");
   for (const link of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
     try { const u = new URL(attr(link[1], "href") ?? "", source.url); if (origins.has(u.origin) && /^\/tickets\/?$/.test(u.pathname) && !u.search && !u.hash && /^Tickets$/i.test(text(link[2]))) { add("ticketsUrl", new URL("/tickets", source.url).href, text(link[0])); break; } } catch { /* ignore malformed links */ }
