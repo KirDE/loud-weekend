@@ -39,6 +39,8 @@ export function extractAlpenFlairCandidate(input: string, source: FestivalSource
   // visible current-edition festival ticket card. A sold-out early-bird tier
   // alone cannot establish a whole-festival sellout.
   const $ = load(home);
+  // DOM text() omits <br> separators; preserve visible word boundaries.
+  $("br").replaceWith(" ");
   $("nav, footer, [hidden], [inert], [aria-hidden='true']").remove();
   $("[style]").each((_, element) => {
     if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();

@@ -89,3 +89,11 @@ test('sold-out early-bird text is reviewable, not a fabricated festival sellout'
  assert.ok(c.warnings.some(w=>w.includes('whole-festival inventory requires review')));
  assert.equal(evaluateCandidate(current,c).publishable,false);
 });
+
+
+test('ticket description preserves visible line-break boundaries',()=>{
+ for (const separator of ['<br>', '<br/>', '<br class="ticket-break">', ' ']) {
+  const h=home.replace('können<br>JETZT','können'+separator+'JETZT');
+  assert.equal(parse(envelope(h)).ticketStatus,'available');
+ }
+});
