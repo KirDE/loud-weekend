@@ -597,6 +597,7 @@ test("mixed-apostrophe duplicate identity is rejected before any catalog write",
 });
 
 test('Provinssi shell imports official dates and 19 unranked acts without provider jobs; replay is idempotent',async()=>{
+ await db.festival.deleteMany({where:{slug:'provinssi'}}); // Local disposable DB only; make repeated suite runs independent.
  const f=await db.festival.create({data:{slug:'provinssi',name:'Synthetic Provinssi',country:'Finland',countryCode:'FI',officialUrl:'https://www.provinssi.fi/en/',genres:[]}});
  const shell=await db.festivalEdition.create({data:{festivalId:f.id,year:2027,status:'TBA',ticketStatus:'UNKNOWN',recordState:'CURRENT',completeness:'TBA',sourceUpdatedAt:new Date()}});
  const html=await readFile(new URL('./fixtures/official-markup/provinssi-excerpt.html',import.meta.url),'utf8');
