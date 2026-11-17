@@ -47,8 +47,20 @@ function detailName(html: string, year: number): string | undefined {
   const match = title.match(/^(.+?) au Heavy Week-End (20\d{2})$/i);
   const headings = [...document.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)].map(m => text(m[1]));
   if (!match || Number(match[2]) !== year || headings.length !== 1 || headings[0].toLowerCase() !== match[1].toLowerCase()) return undefined;
-  // Use explicit title/heading text, never URL slugs or logo filenames.
-  return headings[0];
+  // A short title can be a logo credit, while the primary biography explicitly
+  // identifies the performing collaboration. Only its first paragraph's first
+  // emphasized name followed by present-tense self-identification is evidence;
+  // historical credits, other artists and related-day cards are not billing.
+  const expanded = new Set<string>();
+  for (const block of document.matchAll(/<div\b[^>]*class=["'][^"']*\bw-richtext\b[^"']*["'][^>]*>\s*<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
+    const credit = block[1].match(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/i);
+    if (!credit || !/^est\b/i.test(text(block[1].slice(credit.index! + credit[0].length)))) continue;
+    const full = text(credit[2]).match(/^(.+?)\s+(?:ft\.?|feat\.?|featuring)\s+(.+)$/i);
+    if (full && full[1].toLowerCase() === headings[0].toLowerCase()) expanded.add(`${full[1]} featuring ${full[2]}`);
+  }
+  if (expanded.size > 1) return undefined;
+  // Use explicit current official text, never URL slugs or logo filenames.
+  return [...expanded][0] ?? headings[0];
 }
 
 // Read only explicit linked artist labels. Logo pixels, poster composition,
