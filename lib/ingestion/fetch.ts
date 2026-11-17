@@ -172,26 +172,32 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     if (initial.response.url && initial.response.url !== source.url) throw new Error("Impericon festival page redirected away from its trusted route");
     const home = await initial.response.text(), articles = [];
     let attempts = initial.attempts;
-    let news: string | undefined;
-    const newsUrl = impericonDynamicNewsUrl(home);
-    if (newsUrl) {
-      let listing: FetchAttempt;
-      try { listing = await fetchWithRetry(newsUrl, "error"); }
+    // Every dependent request must retain completed homepage/listing/article
+    // attempts when the next request throws, including same-article aliases.
+    const request = async (url: string, redirect: RequestRedirect) => {
+      let linked: FetchAttempt;
+      try { linked = await fetchWithRetry(url, redirect); }
       catch (error) {
         const failure = error instanceof Error ? error : new Error(String(error));
         throw Object.assign(failure, {attempts: attempts + Number((failure as Error & {attempts?: number}).attempts ?? 0)});
       }
-      attempts += listing.attempts;
+      attempts += linked.attempts;
+      return linked;
+    };
+    let news: string | undefined;
+    const newsUrl = impericonDynamicNewsUrl(home);
+    if (newsUrl) {
+      const listing = await request(newsUrl, "error");
       if (!listing.response.ok) return {response: listing.response, attempts};
       if (listing.response.url && listing.response.url !== newsUrl) throw new Error('Impericon dynamic news redirected away from its trusted route');
       news = await listing.response.text();
     }
     for (const url of discoverImpericonAnnouncements(home, source.editionYear, news)) {
-      let linked = await fetchWithRetry(url, "manual"); attempts += linked.attempts;
+      let linked = await request(url, "manual");
       if ([301,302,307,308].includes(linked.response.status)) {
         const target = impericonArticleUrl(new URL(linked.response.headers.get('location') ?? '', url).href, source.editionYear);
         if (!target || !sameImpericonArticle(url, target, source.editionYear)) throw new Error('Impericon article redirected outside its exact official identity');
-        linked = await fetchWithRetry(target, "error"); attempts += linked.attempts;
+        linked = await request(target, "error");
       }
       if (!linked.response.ok) return { response: linked.response, attempts };
       if (linked.response.url && !sameImpericonArticle(url, linked.response.url, source.editionYear)) throw new Error('Impericon article changed its official identity');

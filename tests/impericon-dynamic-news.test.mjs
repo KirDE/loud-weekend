@@ -43,3 +43,13 @@ test('dynamic network failures count homepage attempts plus exhausted listing re
  const e=fixture();let calls=0;
  await assert.rejects(fetchSource(source,{maxAttempts:3,sleep:async()=>{},fetchImpl:async(u,o)=>{calls++;if(u===IMPERICON_NEWS)throw new Error('network unavailable');return mock(e)(u,o);}}),error=>{assert.equal(calls,4);assert.equal(error.attempts,4);return true;});
 });
+
+test('article failures include homepage, dynamic listing, earlier articles and alias redirects',async()=>{
+ for(const dynamic of [true,false])for(const articleIndex of [0,1])for(const redirect of [false,true]){
+  const e=dynamic?fixture():impericonFixture();let calls=0;
+  const target=e.articles[articleIndex].url,alias=target.replace('/festival/','/magazine/');
+  const f=async(u,o)=>{calls++;if(u===target){if(redirect)return new Response('',{status:302,headers:{location:alias}});throw new Error('article unavailable');}if(u===alias)throw new Error('article unavailable');return mock(e)(u,o);};
+  const expected=1+Number(dynamic)+articleIndex+Number(redirect)+3;
+  await assert.rejects(fetchSource(source,{maxAttempts:3,sleep:async()=>{},fetchImpl:f}),error=>{assert.equal(calls,expected);assert.equal(error.attempts,expected);return true;});
+ }
+});
