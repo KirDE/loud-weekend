@@ -72,3 +72,40 @@ test('partial list shrinkage stays review-required and cannot overwrite independ
   assert.equal(d.publishable, false);
   assert.ok(d.reviewReasons.includes('Removals require confirmation'));
 });
+
+
+test('ticket inventory ignores archived sections, seating sellouts and the conditional price deadline',()=>{
+ const archived=html.match(/<section class="mor-content-section mor-price-section"[^]*?<\/section>/)[0].replaceAll('2027','2026').replaceAll('Koupit vstupenku ↗','Vyprodáno');
+ const seated=html.replace('Tribuna Platinum</h3>','Tribuna Platinum vyprodáno</h3>');
+ assert.equal(parse(seated+archived).ticketStatus,'available');
+ assert.deepEqual(parse(seated+archived).warnings,[]);
+});
+
+test('an explicit current standard-pass sellout is distinct from ambiguous unavailability',()=>{
+ const sold=html.replace('Na stání</h3>','Na stání vyprodáno</h3>').replace(/<a href="\/cs\/koncerty\/2027-masters-of-rock"[^]*?<\/a>/,'');
+ const c=parse(sold);assert.equal(c.ticketStatus,'sold_out');
+ assert.ok(c.evidence.some(e=>e.field==='ticketStatus' && e.sourceUrl===source.url && e.excerpt.includes('vyprodáno')));
+ assert.equal(evaluateCandidate(current,c).changes.find(e=>e.field==='ticketStatus').after,'sold_out');
+});
+
+test('contradictory current stock retains last verified availability for review',()=>{
+ const c=parse(html.replace('Na stání</h3>','Na stání vyprodáno</h3>'));
+ assert.equal(c.ticketStatus,undefined);
+ assert.ok(c.warnings.some(w=>w.includes('stock conflicts')));
+ assert.equal(evaluateCandidate(current,c).publishable,false);
+});
+
+test('hidden, stale, duplicate or foreign ticket inventory cannot establish current availability',()=>{
+ const section=html.match(/<section class="mor-content-section mor-price-section"[^]*?<\/section>/)[0];
+ const cases=[
+  html.replace('class="mor-content-section mor-price-section"','hidden class="mor-content-section mor-price-section"'),
+  html.replace('class="mor-price-card custom-inner-bg is-primary"','style="display:none" class="mor-price-card custom-inner-bg is-primary"'),
+  html.replace('class="mor-hero-side custom-inner-bg"','aria-hidden="true" class="mor-hero-side custom-inner-bg"'),
+  html.replace('Masters of Rock 2027\t','Masters of Rock 2026\t'),
+  html+section,
+  html.replaceAll('/cs/koncerty/2027-masters-of-rock','https://other.example/cs/koncerty/2027-masters-of-rock'),
+  html.replaceAll('/cs/koncerty/2027-masters-of-rock','https://user@www.mastersofrock.cz/cs/koncerty/2027-masters-of-rock'),
+ ];
+ for(const document of cases) assert.equal(parse(document).ticketStatus,undefined);
+ assert.equal(parse(html,{...source,url:'https://other.example/'}).ticketStatus,undefined);
+});
