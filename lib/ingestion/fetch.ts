@@ -2,7 +2,7 @@ import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters
 import { isDownloadSource, DOWNLOAD_ARTISTS, DOWNLOAD_DOCUMENTS } from "./adapters/download.ts";
 import { isHeavyHomepage, heavyMissingArtistUrls, HEAVY_DOCUMENTS } from "./adapters/heavy-weekend.ts";
 import {isRoskildeSource,fetchRoskildeDocuments} from "./adapters/roskilde.ts";
-import { isImpericonCurrentSource, discoverImpericonAnnouncements, sameImpericonArticle, impericonArticleUrl, IMPERICON_DOCUMENTS } from "./adapters/impericon-current.ts";
+import { isImpericonCurrentSource, impericonDynamicNewsUrl, discoverImpericonAnnouncements, sameImpericonArticle, impericonArticleUrl, IMPERICON_DOCUMENTS } from "./adapters/impericon-current.ts";
 import { isRoadburnSource, roadburnUrl, roadburnLinked, discoverRoadburnAnnouncements, roadburnDocuments, type RoadburnDocument } from "./adapters/roadburn.ts";
 import { isPolandrockSource, polandrockAnnouncementUrl } from "./adapters/polandrock.ts";
 import { handlesBrutalAssault, fetchBrutalAssaultDocuments } from "./adapters/brutal-assault.ts";
@@ -172,7 +172,15 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     if (initial.response.url && initial.response.url !== source.url) throw new Error("Impericon festival page redirected away from its trusted route");
     const home = await initial.response.text(), articles = [];
     let attempts = initial.attempts;
-    for (const url of discoverImpericonAnnouncements(home, source.editionYear)) {
+    let news: string | undefined;
+    const newsUrl = impericonDynamicNewsUrl(home);
+    if (newsUrl) {
+      const listing = await fetchWithRetry(newsUrl, "error"); attempts += listing.attempts;
+      if (!listing.response.ok) return {response: listing.response, attempts};
+      if (listing.response.url && listing.response.url !== newsUrl) throw new Error('Impericon dynamic news redirected away from its trusted route');
+      news = await listing.response.text();
+    }
+    for (const url of discoverImpericonAnnouncements(home, source.editionYear, news)) {
       let linked = await fetchWithRetry(url, "manual"); attempts += linked.attempts;
       if ([301,302,307,308].includes(linked.response.status)) {
         const target = impericonArticleUrl(new URL(linked.response.headers.get('location') ?? '', url).href, source.editionYear);
@@ -183,7 +191,7 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
       if (linked.response.url && !sameImpericonArticle(url, linked.response.url, source.editionYear)) throw new Error('Impericon article changed its official identity');
       articles.push({url, html: await linked.response.text()});
     }
-    return {response: new Response(JSON.stringify({kind: IMPERICON_DOCUMENTS, home, articles}), {headers: {'content-type': 'application/json'}}), attempts};
+    return {response: new Response(JSON.stringify({kind: IMPERICON_DOCUMENTS, home, ...(news !== undefined ? {news} : {}), articles}), {headers: {'content-type': 'application/json'}}), attempts};
   }
   if (initial.response.ok && isRoadburnSource(source) && !source.fetchUrl && !source.followLinkPattern) {
     if (initial.response.url && initial.response.url !== source.url) throw new Error("Roadburn homepage redirected away from its trusted route");

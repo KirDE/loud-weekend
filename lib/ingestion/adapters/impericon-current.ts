@@ -18,11 +18,24 @@ export function impericonArticleUrl(value: string, year: number) {
 export function sameImpericonArticle(a: string, b: string, year: number) {
   return Boolean(impericonArticleUrl(a, year) && impericonArticleUrl(b, year) && new URL(a).pathname.split('/').at(-1) === new URL(b).pathname.split('/').at(-1));
 }
-export function discoverImpericonAnnouncements(home: string, year: number) {
+export const IMPERICON_NEWS = 'https://www.impericon.com/blogs/magazine/tagged/impericonfestival?view=dynamic';
+// Recognize the fixed first-party loader as data; never execute page scripts or
+// follow arbitrary URLs supplied by them.
+export function impericonDynamicNewsUrl(home: string) {
+  return /<article-list\b[^>]*class=["'][^"']*\bloading\b[^"']*["']/i.test(home) &&
+    home.includes('fetch(`/blogs/magazine/tagged/impericonfestival?view=dynamic`)') ? IMPERICON_NEWS : undefined;
+}
+export function discoverImpericonAnnouncements(home: string, year: number, news?: string) {
   if (!closed(home)) throw new Error('Incomplete Impericon festival page');
   const canonicals = [...clean(home).matchAll(/<link\b[^>]*>/gi)].filter(m => attr(m[0], 'rel') === 'canonical');
   if (canonicals.length !== 1 || attr(canonicals[0][0], 'href') !== IMPERICON_HOME) throw new Error('Impericon festival page identity changed');
-  const listings = [...clean(home).matchAll(/<article-list\b[^>]*>([\s\S]*?)<\/article-list>/gi)];
+  const dynamic = impericonDynamicNewsUrl(home);
+  if (dynamic) {
+    if (!news || !closed(news)) throw new Error('Incomplete Impericon dynamic news');
+    const canonical = [...clean(news).matchAll(/<link\b[^>]*>/gi)].filter(m => attr(m[0], 'rel') === 'canonical');
+    if (canonical.length !== 1 || attr(canonical[0][0], 'href') !== IMPERICON_NEWS.split('?')[0]) throw new Error('Impericon dynamic news identity changed');
+  } else if (news !== undefined) throw new Error('Unexpected Impericon dynamic news');
+  const listings = [...clean(dynamic ? news! : home).matchAll(/<article-list\b[^>]*>([\s\S]*?)<\/article-list>/gi)];
   if (listings.length !== 1) throw new Error('Impericon official news listing is missing or ambiguous');
   const urls = new Set<string>();
   for (const a of listings[0][1].matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
@@ -155,7 +168,7 @@ export function impericonCurrent(raw: string, source: FestivalSource) {
   try {
     const env = JSON.parse(raw);
     if (env.kind !== IMPERICON_DOCUMENTS || typeof env.home !== 'string' || !Array.isArray(env.articles)) return;
-    const urls = discoverImpericonAnnouncements(env.home, source.editionYear);
+    const urls = discoverImpericonAnnouncements(env.home, source.editionYear, env.news);
     if (env.articles.length !== urls.length || !env.articles.every((d: any, i: number) => d.url === urls[i] && typeof d.html === 'string')) return;
     const tickets = [...clean(env.home).matchAll(/<span\b[^>]*class="[^"]*\bproduct-item-meta__title\b[^"]*"[^>]*>([\s\S]*?)<\/span>/gi)]
       .map(m => text(m[1])).filter(t => /\bWeekend Ticket\b/i.test(t));
