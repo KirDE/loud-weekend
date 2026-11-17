@@ -79,3 +79,32 @@ test('corrected catalog and verified later partial lineup remain unchanged with 
   assert.deepEqual(evaluateCandidate(current,result).reviewReasons,[]);
   assert.equal(evaluateCandidate(current,result).publishable,false);
 });
+
+test('stock proof ignores hidden payloads, footer cards and duplicate current admission products',async()=>{
+ const tickets=await fixture('tickets'),home=await fixture('home');
+ const card=tickets.match(/<li\b[^>]*class="ticket__excerpt ticket-2027-festivalpass"[^>]*>[\s\S]*?<\/section>\s*<\/li>/)[0];
+ for(const hidden of ['<div hidden>','<div aria-hidden="true">','<div style="display:none">','<template>','<footer>']){
+  const close=hidden==='<template>'?'</template>':hidden==='<footer>'?'</footer>':'</div>';
+  const c=parse(frequencyDocuments(home,hidden+tickets+close));assert.equal(c.ticketStatus,undefined);assert(c.warnings.length);
+ }
+ assert.equal(parse(frequencyDocuments(home,tickets+'<footer>'+card+'</footer>')).ticketStatus,'available');
+ const duplicate=parse(frequencyDocuments(home,tickets+card));assert.equal(duplicate.ticketStatus,undefined);assert(duplicate.warnings.length);
+});
+
+test('disabled or contradictory standard purchase controls cannot be published as available',async()=>{
+ const tickets=await fixture('tickets'),home=await fixture('home');
+ for(const changed of [
+  tickets.replace('class="button--oeticket button--offer"','disabled class="button--oeticket button--offer"'),
+  tickets.replace('class="ticket__offers"','aria-disabled="true" class="ticket__offers"'),
+  tickets.replace('https://www.oeticket.com/noapp/artist/','https://user@www.oeticket.com/noapp/artist/'),
+  tickets.replace('https://www.oeticket.com/noapp/artist/','https://www.oeticket.com:8443/noapp/artist/'),
+  tickets.replace('https://www.oeticket.com/noapp/artist/','https://www.oeticket.com/other/'),
+  tickets.replace('?affiliate=MT6&amp;utm_campaign=musicnet','?redirect=https://other.example&amp;utm_campaign=musicnet'),
+  tickets.replace('Jetzt verfügbar</h3>','Jetzt verfügbar</h3><p>Festivalpass ausverkauft</p>'),
+ ]){
+  const c=parse(frequencyDocuments(home,changed));assert.equal(c.ticketStatus,undefined);
+  assert(c.warnings.length);
+  const r=evaluateCandidate({slug:'frequency',editionYear:2027,ticketStatus:'available',lineup:[],headliners:[]},c);
+  assert.equal(r.publishable,false);assert(!r.changes.some(change=>change.field==='ticketStatus'));
+ }
+});
