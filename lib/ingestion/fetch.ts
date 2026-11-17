@@ -2,7 +2,7 @@ import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters
 import { isDownloadSource, DOWNLOAD_ARTISTS, DOWNLOAD_DOCUMENTS } from "./adapters/download.ts";
 import { isHeavyHomepage, heavyMissingArtistUrls, HEAVY_DOCUMENTS } from "./adapters/heavy-weekend.ts";
 import {isRoskildeSource,fetchRoskildeDocuments} from "./adapters/roskilde.ts";
-import { isImpericonCurrentSource, discoverImpericonAnnouncements, sameImpericonArticle, impericonArticleUrl, IMPERICON_DOCUMENTS } from "./adapters/impericon-current.ts";
+import { isImpericonCurrentSource, impericonDynamicNewsUrl, discoverImpericonAnnouncements, sameImpericonArticle, impericonArticleUrl, IMPERICON_DOCUMENTS } from "./adapters/impericon-current.ts";
 import { isRoadburnSource, roadburnUrl, roadburnLinked, discoverRoadburnAnnouncements, roadburnDocuments, type RoadburnDocument } from "./adapters/roadburn.ts";
 import { isPolandrockSource, polandrockAnnouncementUrl } from "./adapters/polandrock.ts";
 import { handlesBrutalAssault, fetchBrutalAssaultDocuments } from "./adapters/brutal-assault.ts";
@@ -172,18 +172,38 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     if (initial.response.url && initial.response.url !== source.url) throw new Error("Impericon festival page redirected away from its trusted route");
     const home = await initial.response.text(), articles = [];
     let attempts = initial.attempts;
-    for (const url of discoverImpericonAnnouncements(home, source.editionYear)) {
-      let linked = await fetchWithRetry(url, "manual"); attempts += linked.attempts;
+    // Every dependent request must retain completed homepage/listing/article
+    // attempts when the next request throws, including same-article aliases.
+    const request = async (url: string, redirect: RequestRedirect) => {
+      let linked: FetchAttempt;
+      try { linked = await fetchWithRetry(url, redirect); }
+      catch (error) {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        throw Object.assign(failure, {attempts: attempts + Number((failure as Error & {attempts?: number}).attempts ?? 0)});
+      }
+      attempts += linked.attempts;
+      return linked;
+    };
+    let news: string | undefined;
+    const newsUrl = impericonDynamicNewsUrl(home);
+    if (newsUrl) {
+      const listing = await request(newsUrl, "error");
+      if (!listing.response.ok) return {response: listing.response, attempts};
+      if (listing.response.url && listing.response.url !== newsUrl) throw new Error('Impericon dynamic news redirected away from its trusted route');
+      news = await listing.response.text();
+    }
+    for (const url of discoverImpericonAnnouncements(home, source.editionYear, news)) {
+      let linked = await request(url, "manual");
       if ([301,302,307,308].includes(linked.response.status)) {
         const target = impericonArticleUrl(new URL(linked.response.headers.get('location') ?? '', url).href, source.editionYear);
         if (!target || !sameImpericonArticle(url, target, source.editionYear)) throw new Error('Impericon article redirected outside its exact official identity');
-        linked = await fetchWithRetry(target, "error"); attempts += linked.attempts;
+        linked = await request(target, "error");
       }
       if (!linked.response.ok) return { response: linked.response, attempts };
       if (linked.response.url && !sameImpericonArticle(url, linked.response.url, source.editionYear)) throw new Error('Impericon article changed its official identity');
       articles.push({url, html: await linked.response.text()});
     }
-    return {response: new Response(JSON.stringify({kind: IMPERICON_DOCUMENTS, home, articles}), {headers: {'content-type': 'application/json'}}), attempts};
+    return {response: new Response(JSON.stringify({kind: IMPERICON_DOCUMENTS, home, ...(news !== undefined ? {news} : {}), articles}), {headers: {'content-type': 'application/json'}}), attempts};
   }
   if (initial.response.ok && isRoadburnSource(source) && !source.fetchUrl && !source.followLinkPattern) {
     if (initial.response.url && initial.response.url !== source.url) throw new Error("Roadburn homepage redirected away from its trusted route");
