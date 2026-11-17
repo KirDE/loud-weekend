@@ -67,3 +67,12 @@ test('historical introductory clauses do not override explicit current group ide
   const html=detail.replace(/<p>[\s\S]*?<\/p>/,`<p>${intro}<strong>SLASH FT MYLES KENNEDY AND THE CONSPIRATORS</strong> est un groupe de rock.</p>`);assert.ok(parse(html).lineup.includes('SLASH featuring MYLES KENNEDY AND THE CONSPIRATORS'));
  }
 });
+
+test('ordinary current group and project subjects retain explicit compound billing',()=>{
+ for(const subject of ['Le groupe ','Son groupe ','Le projet ','Ce projet ']){
+  const html=detail.replace(/<p>[\s\S]*?<\/p>/,`<p>${subject}<strong>SLASH FT MYLES KENNEDY AND THE CONSPIRATORS</strong> est une collaboration durable.</p>`);assert.ok(parse(html).lineup.includes('SLASH featuring MYLES KENNEDY AND THE CONSPIRATORS'));
+ }
+ for(const subject of ['Son ancien groupe ','Le projet historique ','Son ancien projet ']){
+  const html=detail.replace(/<p>[\s\S]*?<\/p>/,`<p>${subject}<strong>SLASH FT FERGIE</strong> est un duo de rock.</p>`);assert.ok(parse(html).lineup.includes('SLASH'));
+ }
+});

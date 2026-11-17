@@ -70,8 +70,9 @@ function detailName(html: string, year: number, label = ""): string | undefined 
     // Require a performing-group noun and exclude only an adjacent release
     // subject, not historical material mentioned in an introductory clause.
     const subject = before.split(/[,;:]/).at(-1)!.trim();
-    const releaseSubject = /^(?:(?:son|sa|ses|leur|leurs|cet|cette|ce|ces|le|la|les|un|une|des)\s+|l['’])?(?:(?:ancien(?:ne)?s?|historique)\s+)?(?:single|album|titre|morceau|chanson|projet|groupe)s?$/i.test(subject);
-    if (releaseSubject ||
+    const releaseSubject = /^(?:(?:son|sa|ses|leur|leurs|cet|cette|ce|ces|le|la|les|un|une|des)\s+|l['’])?(?:(?:ancien(?:ne)?s?|historique)\s+)?(?:single|album|titre|morceau|chanson)s?$/i.test(subject);
+    const historicalGroup = /^(?:(?:son|sa|ses|leur|leurs|cet|cette|ce|ces|le|la|les|un|une|des)\s+|l['’])?(?:(?:ancien(?:ne)?s?|historique)\s+(?:projet|groupe)s?|(?:projet|groupe)s?\s+(?:ancien(?:ne)?s?|historique))$/i.test(subject);
+    if (releaseSubject || historicalGroup ||
       !/^est\s+(?:sans aucun doute\s+)?(?:(?:un|une|le|la|l['’]un(?:e)?)(?:\s+des)?\s+)?(?:collaborations?|groupes?|formations?|duos?|trios?|quatuors?|quintettes?)\b/i.test(after)) continue;
     const full = text(credit[2]).match(/^(.+?)\s+(?:ft\.?|feat\.?|featuring)\s+(.+)$/i);
     if (full && full[1].toLowerCase() === headings[0].toLowerCase()) {
