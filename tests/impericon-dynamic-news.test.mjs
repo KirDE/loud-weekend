@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {impericonFixture,impericonCurrentSource as source} from './support/impericon-current.ts';
+import {impericonFixture,impericonCurrentSource as source,impericonTicketResponse} from './support/impericon-current.ts';
 import {IMPERICON_NEWS,discoverImpericonAnnouncements,impericonDynamicNewsUrl} from '../lib/ingestion/adapters/impericon-current.ts';
 import {fetchSource} from '../lib/ingestion/fetch.ts';
 import {extractFestivalCandidate} from '../lib/ingestion/extract.ts';
@@ -13,6 +13,7 @@ const fixture=()=>{
  return e;
 };
 const mock=e=>async (url,opts)=>{
+ const ticket=impericonTicketResponse(url);if(ticket)return ticket;
  if(url===source.url)return new Response(e.home);
  if(url===IMPERICON_NEWS){assert.equal(opts.redirect,'error');return new Response(e.news);}
  const a=e.articles.find(a=>a.url===url);assert.ok(a);return new Response(a.html);
@@ -20,7 +21,7 @@ const mock=e=>async (url,opts)=>{
 test('real skeleton loader fetches bounded first-party listing, preserving home dates and article checks',async()=>{
  const e=fixture();assert.equal(impericonDynamicNewsUrl(e.home),IMPERICON_NEWS);
  assert.throws(()=>discoverImpericonAnnouncements(e.home,2027),/Incomplete/);
- const r=await fetchSource(source,{fetchImpl:mock(e),maxAttempts:1});assert.equal(r.attempts,5);
+ const r=await fetchSource(source,{fetchImpl:mock(e),maxAttempts:1});assert.equal(r.attempts,6);
  const c=extractFestivalCandidate(await r.response.text(),source,'2026-11-17T17:00:00Z');assert.deepEqual(c.warnings,[]);assert.deepEqual(c.headliners,['Beartooth','Sample Artist']);assert.equal(c.startDate,'2027-06-25');
 });
 test('later dynamic articles are discovered rather than frozen to current URLs or artist names',async()=>{

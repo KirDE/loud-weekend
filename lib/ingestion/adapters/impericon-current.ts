@@ -1,3 +1,4 @@
+import { load } from "cheerio";
 import type { FestivalSource } from '../types.ts';
 export const IMPERICON_HOME = 'https://www.impericon.com/pages/festival';
 export const IMPERICON_DOCUMENTS = 'impericon-current-announcements-v1';
@@ -163,6 +164,63 @@ function parseArticle(doc: ImpericonDocument, year: number) {
   if (!found || !headliners.size && !lineup.size) throw new Error('Impericon announcement exposes no trustworthy artists');
   return { headliners: [...headliners], lineup: [...lineup], excerpt: canonical + '; ' + title + '; ' + [...headliners, ...lineup].join(', ') };
 }
+
+export type ImpericonTicketDocument = { url: string; product: unknown };
+export function impericonTicketProducts(home: string, year: number): { url: string; title: string; handle: string }[] {
+  const $ = load(home);
+  $("script, style, template, nav, header, footer, [hidden], [inert], [aria-hidden='true']").remove();
+  $("[style]").each((_, element) => {
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();
+  });
+  const products = new Map<string, { url: string; title: string; handle: string }>();
+  for (const element of $(".product-item-meta__title").toArray()) {
+    const node = $(element), title = node.text().replace(/\s+/g, " ").trim();
+    const date = title.match(/^(\d{1,2})\/(\d{1,2})\.(\d{2})\.(20\d{2}) (\d{1,2})\. Preisstufe - Weekend Ticket$/);
+    if (!date || Number(date[4]) !== year) continue;
+    const handle = date[1] + "-" + date[2] + "-" + date[3] + "-" + date[4] + "-" + date[5] + "-preisstufe-weekend-ticket";
+    const links = node.find("a[href]").add(node.closest("a[href]"));
+    const valid = links.filter((_, element) => {
+      const a = $(element);
+      if (a.is("[disabled], [aria-disabled='true']") || a.parents("[disabled], [aria-disabled='true']").length) return false;
+      try {
+        const u = new URL(a.attr("href") ?? "", IMPERICON_HOME);
+        return u.origin === "https://www.impericon.com" && !u.username && !u.password && !u.search && !u.hash
+          && u.pathname === "/products/" + handle;
+      } catch { return false; }
+    });
+    if (valid.length !== 1) throw Error("Impericon current weekend purchase control is missing or ambiguous");
+    const url = "https://www.impericon.com/products/" + handle + ".js";
+    if (products.has(url)) throw Error("Impericon current weekend product is duplicated");
+    products.set(url, { url, title, handle });
+  }
+  if (products.size > 4) throw Error("Impericon current weekend products exceed the reviewed bound");
+  return [...products.values()];
+}
+function impericonTicketStock(env: { home: string; ticketProducts?: ImpericonTicketDocument[] }, year: number) {
+  if (env.ticketProducts === undefined) return {}; // Legacy stored artist-only envelope.
+  const fail = () => ({ warning: "Impericon current weekend inventory requires review; no global stock inferred from a price tier" });
+  const products = impericonTicketProducts(env.home, year);
+  if (!products.length || !Array.isArray(env.ticketProducts) || env.ticketProducts.length !== products.length) return fail();
+  let available: { url: string; title: string } | undefined;
+  for (let i = 0; i < products.length; i++) {
+    const expected = products[i], doc = env.ticketProducts[i], p = doc?.product as Record<string, any> | undefined;
+    if (!doc || doc.url !== expected.url || !p || p.title !== expected.title || p.handle !== expected.handle
+      || p.url !== "/products/" + expected.handle || p.vendor !== "Impericon Festival" || p.type !== "Hardtickets"
+      || typeof p.available !== "boolean" || p.requires_selling_plan !== false
+      || !Number.isSafeInteger(p.price) || p.price <= 0 || !Array.isArray(p.variants) || p.variants.length !== 1) return fail();
+    const v = p.variants[0], q = v?.quantity_rule;
+    if (!v || v.title !== "Default Title" || v.name !== p.title || typeof v.available !== "boolean" || v.available !== p.available
+      || v.requires_selling_plan !== false || v.price !== p.price || !q || q.min !== 1 || q.increment !== 1
+      || !(q.max === null || Number.isSafeInteger(q.max) && q.max >= 1)) return fail();
+    if (p.available) available = { url: expected.url, title: expected.title };
+  }
+  // A sold-out price tier can be superseded by another tier. Only a current
+  // purchasable standard weekend admission establishes global availability.
+  if (!available) return fail();
+  return { ticketStatus: "available" as const, ticketsUrl: available.url.slice(0, -3),
+    ticketsExcerpt: available.title + "; official current Shopify product and standard variant available=true; " + available.url };
+}
+
 export function impericonCurrent(raw: string, source: FestivalSource) {
   if (!isImpericonCurrentSource(source)) return;
   try {
@@ -190,6 +248,7 @@ export function impericonCurrent(raw: string, source: FestivalSource) {
     if ((!headliners.size && !lineup.size) || headliners.size + lineup.size > 200) return;
     return { editionYear: source.editionYear, startDate, endDate, headliners: headliners.size ? [...headliners.values()] : undefined, lineup: lineup.size ? [...lineup.values()] : undefined,
       status: 'partial' as const, artistListMode: 'additive' as const, lineupScope: 'announcement' as const,
+      ...impericonTicketStock(env, source.editionYear),
       excerpt: `Impericon Festival ${source.editionYear}; ${startDate}–${endDate}; ${excerpts.join('; ')}` };
   } catch { return; }
 }
