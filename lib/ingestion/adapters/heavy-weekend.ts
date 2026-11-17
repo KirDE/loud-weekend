@@ -1,7 +1,12 @@
 import type { FestivalSource } from "../types.ts";
 
 const months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
-const text = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#160;/gi, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/\s+/g, " ").trim();
+const text = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/&(?:nbsp|amp|quot|apos|#x[\da-f]+|#\d+);/gi, entity => {
+  const named: Record<string, string> = {"&nbsp;": " ", "&amp;": "&", "&quot;": '"', "&apos;": "'"};
+  if (named[entity.toLowerCase()] !== undefined) return named[entity.toLowerCase()];
+  const point = entity[2].toLowerCase() === "x" ? parseInt(entity.slice(3, -1), 16) : Number(entity.slice(2, -1));
+  return point > 0 && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff) ? String.fromCodePoint(point) : entity;
+}).replace(/\s+/g, " ").trim();
 const attribute = (tag: string, key: string) => tag.match(new RegExp(`(?:^|\\s)${key}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, "i"))?.[2];
 
 export const HEAVY_DOCUMENTS = "heavy-weekend-linked-artists-v1";
@@ -51,16 +56,25 @@ function detailName(html: string, year: number): string | undefined {
   // identifies the performing collaboration. Only its first paragraph's first
   // emphasized name followed by present-tense self-identification is evidence;
   // historical credits, other artists and related-day cards are not billing.
-  const expanded = new Set<string>();
+  const expanded = new Map<string, string>();
   for (const block of document.matchAll(/<div\b[^>]*class=["'][^"']*\bw-richtext\b[^"']*["'][^>]*>\s*<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
     const credit = block[1].match(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/i);
-    if (!credit || !/^est\b/i.test(text(block[1].slice(credit.index! + credit[0].length)))) continue;
+    if (!credit) continue;
+    const before = text(block[1].slice(0, credit.index!));
+    const after = text(block[1].slice(credit.index! + credit[0].length));
+    // A present-tense release statement ("est sorti") is not identification.
+    // Require a performing-group noun and exclude a historical/release subject.
+    if (/\b(?:ancien(?:ne)?s?|historique|single|titre|morceau|chanson)\b|\b(?:son|leur|cet|ce|le|un)\s+album\b/i.test(before) ||
+      !/^est\s+(?:sans aucun doute\s+)?(?:(?:un|une|le|la|l['’]un(?:e)?)(?:\s+des)?\s+)?(?:collaborations?|groupes?|formations?|duos?|trios?|quatuors?|quintettes?)\b/i.test(after)) continue;
     const full = text(credit[2]).match(/^(.+?)\s+(?:ft\.?|feat\.?|featuring)\s+(.+)$/i);
-    if (full && full[1].toLowerCase() === headings[0].toLowerCase()) expanded.add(`${full[1]} featuring ${full[2]}`);
+    if (full && full[1].toLowerCase() === headings[0].toLowerCase()) {
+      const name = `${full[1]} featuring ${full[2]}`;
+      if (!expanded.has(name.toLowerCase())) expanded.set(name.toLowerCase(), name);
+    }
   }
   if (expanded.size > 1) return undefined;
   // Use explicit current official text, never URL slugs or logo filenames.
-  return [...expanded][0] ?? headings[0];
+  return [...expanded.values()][0] ?? headings[0];
 }
 
 // Read only explicit linked artist labels. Logo pixels, poster composition,

@@ -20,3 +20,17 @@ test('wrong edition and conflicting primary self-identifications fail closed',()
  assert.deepEqual(parse(detail.replace('2027','2026')).evidence,[]);
  const conflicting=detail+detail.slice(detail.indexOf('<div')).replace('MYLES KENNEDY','Another Singer');assert.deepEqual(parse(conflicting).evidence,[]);
 });
+
+test('numeric HTML entities in current collaboration credits decode before name validation',()=>{
+ for(const encoded of ['O&#x27;Brother','O&#39;Brother','O&#00039;Brother']){
+  const c=parse(detail.replaceAll('MYLES KENNEDY AND THE CONSPIRATORS',encoded));assert.ok(c.lineup.includes("SLASH featuring O'Brother"));assert.deepEqual(c.warnings,[]);
+ }
+});
+test('equivalent responsive credits ignore casing while retaining the first official spelling',()=>{
+ const repeated=detail+detail.slice(detail.indexOf('<div')).replace('MYLES KENNEDY AND THE CONSPIRATORS','Myles Kennedy And The Conspirators');
+ assert.ok(parse(repeated).lineup.includes('SLASH featuring MYLES KENNEDY AND THE CONSPIRATORS'));assert.deepEqual(parse(repeated).warnings,[]);
+});
+test('present-tense release and historical project statements are not current performing billing',()=>{
+ const release=(before,after)=>detail.replace(/<p>[\s\S]*?<\/p>/,`<p>${before}<strong>SLASH FT FERGIE</strong>${after}</p>`);
+ for(const [before,after] of [['Son ancien single ',' est sorti en 2010.'],['Le titre ',' est disponible sur son ancien album.'],['Son album ',' est une collaboration historique.'],['Son ancien projet ',' est un groupe des années 1990.']])assert.ok(parse(release(before,after)).lineup.includes('SLASH'));
+});
