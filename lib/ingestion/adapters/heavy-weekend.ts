@@ -5,7 +5,9 @@ const text = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/&(?:nbsp|a
   const named: Record<string, string> = {"&nbsp;": " ", "&amp;": "&", "&quot;": '"', "&apos;": "'"};
   if (named[entity.toLowerCase()] !== undefined) return named[entity.toLowerCase()];
   const point = entity[2].toLowerCase() === "x" ? parseInt(entity.slice(3, -1), 16) : Number(entity.slice(2, -1));
-  return point > 0 && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff) ? String.fromCodePoint(point) : entity;
+  if (!(point > 0 && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff))) return entity;
+  const decoded = String.fromCodePoint(point);
+  return /[\p{Cc}\p{Cf}\p{Cs}\p{Cn}]/u.test(decoded) ? entity : decoded;
 }).replace(/\s+/g, " ").trim();
 const attribute = (tag: string, key: string) => tag.match(new RegExp(`(?:^|\\s)${key}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, "i"))?.[2];
 
@@ -70,8 +72,8 @@ function detailName(html: string, year: number, label = ""): string | undefined 
     // Require a performing-group noun and exclude only an adjacent release
     // subject, not historical material mentioned in an introductory clause.
     const subject = before.split(/[,;:]/).at(-1)!.trim();
-    const releaseSubject = /^(?:(?:son|sa|ses|leur|leurs|cet|cette|ce|ces|le|la|les|un|une|des)\s+|l['’])?(?:(?:ancien(?:ne)?s?|historique)\s+)?(?:single|album|titre|morceau|chanson)s?$/i.test(subject);
-    const historicalGroup = /^(?:(?:son|sa|ses|leur|leurs|cet|cette|ce|ces|le|la|les|un|une|des)\s+|l['’])?(?:(?:ancien(?:ne)?s?|historique)\s+(?:projet|groupe)s?|(?:projet|groupe)s?\s+(?:ancien(?:ne)?s?|historique))$/i.test(subject);
+    const releaseSubject = /^(?:(?:(?:son|sa|ses|leur|leurs|cet|cette|ce|ces|le|la|les|un|une|des)\s+|l['’])(?:(?!(?:projets?|groupes?)\b)[^\s,;:]+\s+)*|(?:(?:ancien(?:ne)?s?|historique)\s+)?)(?:singles?|albums?|titres?|morceaux?|chansons?)(?:\s+[^,;:]*)?$/i.test(subject);
+    const historicalGroup = /^(?:(?:son|sa|ses|leur|leurs|cet|cette|ce|ces|le|la|les|un|une|des)\s+|l['’])?(?:(?:ancien(?:ne)?s?|historique)\s+(?:projet|groupe)s?|(?:projet|groupe)s?\s+(?:ancien(?:ne)?s?|historique))(?:\s+[^,;:]*)?$/i.test(subject);
     if (releaseSubject || historicalGroup ||
       !/^est\s+(?:sans aucun doute\s+)?(?:(?:un|une|le|la|l['’]un(?:e)?)(?:\s+des)?\s+)?(?:collaborations?|groupes?|formations?|duos?|trios?|quatuors?|quintettes?)\b/i.test(after)) continue;
     const full = text(credit[2]).match(/^(.+?)\s+(?:ft\.?|feat\.?|featuring)\s+(.+)$/i);
@@ -129,7 +131,7 @@ export function heavyWeekEnd(input: string, source: FestivalSource) {
     const doc = documents.find(d => d.url === target.href);
     const name = doc ? (detailName(doc.html, year, label) ?? "") : label;
     // An unlabeled/image-only new card must retain review, not silently vanish.
-    if (!name || name.length > 100 || /[<>]|&[a-z#\d]+;|\b(?:coming soon|tickets?|20\d{2})\b/i.test(name)) return undefined;
+    if (!name || name.length > 100 || /[\p{Cc}\p{Cf}\p{Cs}\p{Cn}]/u.test(name) || /[<>]|&[a-z#\d]+;|\b(?:coming soon|tickets?|20\d{2})\b/i.test(name)) return undefined;
     if (lineup.some(old => old.toLowerCase() === name.toLowerCase())) continue;
     lineup.push(name); evidence.push(`${target.href}: ${name}`);
   }

@@ -83,3 +83,12 @@ test('detail response body failures retain all completed header-level request at
   await assert.rejects(fetchSource(source,{maxAttempts:1,fetchImpl:async url=>{calls++;if(url===source.url)return new Response(base.home);if(url===base.documents[index].url)return new Response(new ReadableStream({start(controller){controller.error(new Error('detail body unavailable'));}}));return new Response(base.documents.find(d=>d.url===url).html);}}),error=>{assert.equal(calls,2+index);assert.equal(error.attempts,2+index);return true;});
  }
 });
+
+test('qualified release subjects cannot turn song or album credits into performer identities',()=>{
+ for(const subject of ['Son ancien single intitulé ','Le titre de ','Son album intitulé ','Le morceau de ','Ses morceaux intitulés ','Son nouvel album ','Le dernier single intitulé ']){
+  const html=detail.replace(/<p>[\s\S]*?<\/p>/,`<p>${subject}<strong>SLASH FT FERGIE</strong> est une collaboration historique.</p>`);assert.ok(parse(html).lineup.includes('SLASH'));
+ }
+});
+test('control, format and noncharacter numeric entities cannot become artist identities',()=>{
+ for(const entity of ['&#1;','&#x7f;','&#x85;','&#x202e;','&#x2066;','&#xfdd0;','&#x10ffff;'])assert.deepEqual(parse(detail.replaceAll('MYLES KENNEDY AND THE CONSPIRATORS','BAD'+entity+'NAME')).evidence,[]);
+});
