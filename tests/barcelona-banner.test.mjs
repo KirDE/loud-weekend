@@ -58,3 +58,31 @@ test('live English banner postposes now and preserves verified catalogue facts',
     assert.equal(parse(live.replace('tickets on sale now', notice)).ticketStatus, undefined);
   }
 });
+
+test('hidden payloads and footer banners cannot prove current stock or conflict with the visible edition', () => {
+  for (const before of ['<script>', '<template>', '<div hidden>', '<div aria-hidden="true">', '<div style="display:none">', '<footer>']) {
+    const close=before.startsWith('<script')?'</script>':before.startsWith('<template')?'</template>':before.startsWith('<footer')?'</footer>':'</div>';
+    assert.equal(parse(before+html+close).ticketStatus,undefined);
+    assert.equal(parse(html+before+'<h2 class="par-2">9 - 10 julio 2026</h2><h2 class="par-3">Tickets sold out</h2>'+close).ticketStatus,'available');
+  }
+});
+
+test('an enabled official ticket control must corroborate the current onsale banner', () => {
+  for (const document of [
+    html.replace('/tickets"', 'https://www.barcelonarockfest.com.evil.example/tickets"'),
+    html.replace('/tickets"', 'https://user@www.barcelonarockfest.com/tickets"'),
+    html.replace('/tickets"', '/tickets?year=2026"'),
+    html.replace('/tickets"', '/tickets#archive"'),
+    html.replace('<a href=', '<a aria-disabled="true" href='),
+    html.replace('<a href=', '<a disabled href='),
+    html.replace('<a href=', '<a hidden href='),
+    html.replace('<a href=', '<div aria-disabled="true"><a href=')+'</div>',
+    html.replace('class="nav-ticket-text">TICKETS','class="nav-ticket-text">Camping'),
+  ]) assert.equal(parse(document).ticketStatus,undefined);
+});
+
+test('source identity excludes archive routes, userinfo, ports and query overrides', () => {
+  for (const url of ['https://www.barcelonarockfest.com/archive','https://user@www.barcelonarockfest.com/','https://www.barcelonarockfest.com:8443/','https://www.barcelonarockfest.com/?year=2026']) {
+    assert.equal(parse(html,{...source,url}).ticketStatus,undefined);
+  }
+});
