@@ -55,3 +55,37 @@ test('explicit fetch configuration does not add automatic discovery',async()=>{l
 test('unverified current announcement discovery and conflicting article date stay reviewable',()=>{
  const c=parse(home);assert.ok(c.warnings.some(w=>w.includes('link could not be verified')));const a=article.replace('26.06.2027','26.06.2026');const r=parse(envelope(home,a));assert.equal(r.lineup,undefined);assert.ok(r.warnings.some(w=>w.includes('dates differ')));
 });
+
+
+test('current stock requires one visible festival product, not copied footer or duplicate tier cards',()=>{
+ const card=home.match(/<div class="uk-card uk-card-primary[^]*?<\/div><hr>/)[0].replace(/<hr>$/,'');
+ const hidden=home.replace('class="uk-card uk-card-primary uk-card-small uk-card-body"','hidden class="uk-card uk-card-primary uk-card-small uk-card-body"');
+ assert.equal(parse(envelope(hidden)).ticketStatus,undefined);
+ assert.equal(parse(envelope(home+'<footer>'+card+'</footer>')).ticketStatus,'available');
+ const c=parse(envelope(home+card));assert.equal(c.ticketStatus,undefined);
+ assert.ok(c.warnings.some(w=>w.includes('ticket card is missing or ambiguous')));
+ assert.equal(evaluateCandidate(current,c).publishable,false);
+});
+
+test('shop control identity is parsed as a URL, never accepted from a matching prefix',()=>{
+ for(const h of [
+  home.replace('https://shop.alpen-flair.com/listing.html?id=375','https://shop.alpen-flair.com/listing.html?id=375&redirect=elsewhere'),
+  home.replace('https://shop.alpen-flair.com/listing.html?id=375','https://user@shop.alpen-flair.com/listing.html?id=375'),
+  home.replace('https://shop.alpen-flair.com/listing.html?id=375','https://shop.alpen-flair.com:8443/listing.html?id=375'),
+  home.replace('https://shop.alpen-flair.com/listing.html?id=375','https://shop.alpen-flair.com/listing.html?id=375#archive'),
+ ]) { const c=parse(envelope(h));assert.equal(c.ticketStatus,undefined);assert.equal(c.ticketsUrl,undefined);assert.ok(c.warnings.length); }
+});
+
+test('ticket art cannot be supplied by a foreign origin or an archived edition',()=>{
+ for(const h of [
+  home.replace('/templates/yootheme/cache/cf/AF2027_Festival_Ticket-cf25c788.jpeg','https://other.example/AF2027_Festival_Ticket-cf25c788.jpeg'),
+  home.replaceAll('AF2027_Festival_Ticket','AF2026_Festival_Ticket'),
+ ]) assert.equal(parse(envelope(h)).ticketStatus,undefined);
+});
+
+test('sold-out early-bird text is reviewable, not a fabricated festival sellout',()=>{
+ const c=parse(envelope(home.replace('VVK ist gestartet!','Frühbucher ausverkauft')));
+ assert.equal(c.ticketStatus,undefined);
+ assert.ok(c.warnings.some(w=>w.includes('whole-festival inventory requires review')));
+ assert.equal(evaluateCandidate(current,c).publishable,false);
+});
