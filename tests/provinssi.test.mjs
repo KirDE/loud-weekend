@@ -17,3 +17,10 @@ test('Provinssi corroborated changed dates remain reviewable, additive replay pr
  assert.deepEqual(evaluateCandidate(current,c).changes,[]);
  const later=evaluateCandidate(current,parse(html.replace('1.-3.7.2027','8.-10.7.2027')));assert.ok(later.reviewReasons.length>0);assert.ok(!later.changes.some(c=>c.kind.endsWith('_removed')));
 });
+
+test('Provinssi preserves the observed ticket href and accepts escaped ampersands in artist names',()=>{
+ const c=parse(html.replace('>JVG</h3>','>Artist &amp; Artist</h3>'));
+ assert.ok(c.lineup.includes('Artist & Artist'));
+ assert.equal(c.ticketsUrl,'https://provinssi.fi/en/tickets-2027');
+ assert.deepEqual(parse(html.replace('href="https://provinssi.fi/en/tickets-2027"','href="https://evil.test/tickets"')).evidence,[]);
+});

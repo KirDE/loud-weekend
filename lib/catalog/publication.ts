@@ -1,3 +1,4 @@
+import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { isDownloadAnnouncement } from "../ingestion/adapters/download.ts";
@@ -302,12 +303,25 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
       isDownloadAnnouncement(candidate.normalized as unknown as FestivalCandidate, applied.edition.year);
     if ((downloadLineup || input.result.changes.some(c => c.field === "completeness")) && !verifiedDownloadAnnouncement)
       throw new Error("Download publication requires verified official announcement evidence");
-    const provinssiLineup = input.result.festivalSlug === 'provinssi' && input.result.changes.some(c => c.kind === 'artist_added');
+    const provinssiPublication = input.result.festivalSlug === 'provinssi';
+    const verifiedProvinssiAnnouncement = provinssiPublication && candidate.festivalSlug === 'provinssi' &&
+      candidate.attempt.requestedUrl === PROVINSSI_HOME && input.result.sourceUrl === PROVINSSI_HOME &&
+      isProvinssiAnnouncement(input.result.candidate, applied.edition.year) &&
+      isProvinssiAnnouncement(candidate.normalized as unknown as FestivalCandidate, applied.edition.year) &&
+      input.result.changes.every(({field,kind}) => ['startDate','endDate','city','lineup','ticketsUrl','status'].includes(field) &&
+        (field !== 'lineup' || kind === 'artist_added') &&
+        candidate.evidence.some(e => e.field === field && e.sourceUrl === PROVINSSI_HOME &&
+          same(e.observedValue, (input.result.candidate as unknown as Record<string,unknown>)[field]))) &&
+      ['startDate','endDate','city','lineup','ticketsUrl','status'].every(field =>
+        same((candidate.normalized as Record<string,unknown>)[field], (input.result.candidate as unknown as Record<string,unknown>)[field]));
+    if (provinssiPublication && !verifiedProvinssiAnnouncement)
+      throw new Error('Provinssi publication requires matching persisted official addition evidence');
+    const provinssiLineup = verifiedProvinssiAnnouncement && input.result.changes.some(c => c.kind === 'artist_added');
     if((graspopLineup || verifiedDownloadAnnouncement || provinssiLineup) && applied.edition.completeness==='TBA') {
       await db.festivalEdition.update({where:{id:applied.edition.id},data:{completeness:'PARTIAL'}});
       if (!applied.changedFields.includes('completeness')) applied.changedFields.push('completeness');
     }
-    const playlistRefreshDeferral = input.result.festivalSlug === 'provinssi' || idaysLineup || graspopLineup || (downloadLineup && verifiedDownloadAnnouncement) ? {
+    const playlistRefreshDeferral = verifiedProvinssiAnnouncement || idaysLineup || graspopLineup || (downloadLineup && verifiedDownloadAnnouncement) ? {
       policy: "explicit-refresh-only", reason: `Verified ${input.result.festivalSlug==='provinssi'?'Provinssi':downloadLineup?'Download':graspopLineup?'Graspop':'I-Days'} catalog additions do not authorize provider activity`,
     } : undefined;
     const publication = await createPublication(db, {

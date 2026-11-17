@@ -1,4 +1,4 @@
-import type { FestivalSource } from '../types.ts';
+import type { FestivalCandidate, FestivalSource } from '../types.ts';
 export const PROVINSSI_HOME = 'https://www.provinssi.fi/en/';
 const text = (s: string) => s.replace(/<[^>]*>/g, ' ').replace(/&amp;/gi, '&').replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n))).replace(/\s+/g, ' ').trim();
 export function provinssi(document: string, source: FestivalSource) {
@@ -19,12 +19,24 @@ export function provinssi(document: string, source: FestivalSource) {
     const href=card[1].match(/\bhref="([^"]+)"/)?.[1];
     if (!href || !/^https:\/\/www\.provinssi\.fi\/en\/artists\/[a-z0-9-]+\/$/.test(href)) return undefined;
     const name=text(card[2].match(/<h3 class="artist-card__title">([\s\S]*?)<\/h3>/)?.[1]??'');
-    if (!name || name.length>100 || /[<>&]|\b(?:TBA|20\d{2})\b/i.test(name) || lineup.some(n=>n.toLowerCase()===name.toLowerCase())) return undefined;
+    if (!name || name.length>100 || /[<>]|\b(?:TBA|20\d{2})\b/i.test(name) || lineup.some(n=>n.toLowerCase()===name.toLowerCase())) return undefined;
     lineup.push(name);
   }
-  if (!lineup.length || !html.includes('href="https://provinssi.fi/en/tickets-2027"')) return undefined;
+  const ticketsUrl = [...html.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)].map(m => m[1]).find(href => href === 'https://provinssi.fi/en/tickets-2027');
+  if (!lineup.length || !ticketsUrl) return undefined;
   return {editionYear:2027,startDate,endDate,city:'Seinäjoki',lineup,status:'partial' as const,
     artistListMode:'additive' as const,lineupScope:'announcement' as const,
-    ticketsUrl:'https://www.provinssi.fi/en/tickets-2027/',
+    ticketsUrl,
     excerpt:`${date[0]}; Törnävänsaari in Seinäjoki; ${lineup.join('; ')}`};
+}
+
+export function isProvinssiAnnouncement(candidate: FestivalCandidate, year: number) {
+  return !!candidate && year === 2027 && candidate.festivalSlug === 'provinssi' &&
+    candidate.sourceUrl === PROVINSSI_HOME && candidate.artistListMode === 'additive' &&
+    candidate.lineupScope === 'announcement' && candidate.status === 'partial' &&
+    Array.isArray(candidate.observedEditionYears) && candidate.observedEditionYears.length === 1 &&
+    candidate.observedEditionYears[0] === year && candidate.headliners === undefined &&
+    Array.isArray(candidate.lineup) && candidate.lineup.length > 0 &&
+    Array.isArray(candidate.evidence) && ['startDate','endDate','city','lineup','ticketsUrl','status'].every(field =>
+      candidate.evidence.some(e => e?.field === field && e.sourceUrl === PROVINSSI_HOME));
 }

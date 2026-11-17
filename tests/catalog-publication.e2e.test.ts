@@ -611,3 +611,29 @@ test('Provinssi shell imports official dates and 19 unranked acts without provid
  assert.equal((await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}))?.id,pub.id);assert.equal(await db.catalogPlaylistRefresh.count(),jobs);
  const after=(await readCatalog({database:db})).festivals.find(f=>f.slug==='provinssi')!;assert.deepEqual(evaluateCandidate(after,c).changes,[]);
 });
+
+test('Provinssi provenance drift rolls back catalogue, completeness and provider writes',async()=>{
+ const html=await readFile(new URL('./fixtures/official-markup/provinssi-excerpt.html',import.meta.url),'utf8');
+ for (const drift of ['url','edition','mode','evidence','persisted-mode','persisted-value','requested-url','removal']) {
+  const c=extractFestivalCandidate(html,parserSource('provinssi',{url:'https://www.provinssi.fi/en/'}),new Date().toISOString());
+  c.lineup!.push(`Synthetic Provinssi ${drift} ${suffix}`);
+  const current=(await readCatalog({database:db})).festivals.find(f=>f.slug==='provinssi')!;
+  const value=evaluateCandidate(current,c);
+  if(drift==='url') {value.sourceUrl=c.sourceUrl='https://untrusted.example/';c.evidence.forEach(e=>e.sourceUrl=c.sourceUrl);}
+  if(drift==='edition') c.observedEditionYears=[2026];
+  if(drift==='mode') delete c.artistListMode;
+  if(drift==='evidence') c.evidence=[];
+  if(drift==='removal') value.changes[0].kind='artist_removed';
+  const attempt=await persist(value);
+  if(drift==='persisted-mode'||drift==='persisted-value') {
+   const normalized=JSON.parse(JSON.stringify(c));
+   if(drift==='persisted-mode') delete normalized.artistListMode; else normalized.lineup=['Unverified artist'];
+   await db.ingestionCandidate.update({where:{attemptId:attempt.id},data:{normalized}});
+  }
+  if(drift==='requested-url') await db.ingestionAttempt.update({where:{id:attempt.id},data:{requestedUrl:'https://untrusted.example/'}});
+  const counts=()=>Promise.all([db.lineupEntry.count(),db.catalogPublication.count(),db.catalogPlaylistRefresh.count(),db.festivalEdition.findMany({where:{festival:{slug:'provinssi'}}})]);
+  const before=await counts();
+  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/Provinssi publication requires|Candidate edition 2026/);
+  assert.deepEqual(await counts(),before);
+ }
+});
