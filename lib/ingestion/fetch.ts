@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters/full-rewind.ts';
 import { isDownloadSource, DOWNLOAD_ARTISTS, DOWNLOAD_DOCUMENTS } from "./adapters/download.ts";
-import { isHeavyHomepage, heavyMissingArtistUrls, HEAVY_DOCUMENTS } from "./adapters/heavy-weekend.ts";
+import { isHeavyHomepage, heavyMissingArtistUrls, heavyReviewedLogoUrl, HEAVY_DOCUMENTS } from "./adapters/heavy-weekend.ts";
 import {isRoskildeSource,fetchRoskildeDocuments} from "./adapters/roskilde.ts";
 import { isImpericonCurrentSource, impericonDynamicNewsUrl, discoverImpericonAnnouncements, sameImpericonArticle, impericonArticleUrl, IMPERICON_DOCUMENTS } from "./adapters/impericon-current.ts";
 import { isRoadburnSource, roadburnUrl, roadburnLinked, discoverRoadburnAnnouncements, roadburnDocuments, type RoadburnDocument } from "./adapters/roadburn.ts";
@@ -106,7 +107,31 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
         attempts += detail.attempts;
         if (!detail.response.ok) return {response: detail.response, attempts};
         if (detail.response.url && detail.response.url !== url) throw new Error("Heavy Week-End artist detail changed its trusted identity");
-        documents.push({url, html: await detail.response.text()});
+        const html = await detail.response.text();
+        const logoUrl = heavyReviewedLogoUrl(url, source.editionYear);
+        let logo: {url: string; sha256: string} | undefined;
+        if (logoUrl) {
+          let asset: FetchAttempt;
+          try { asset = await fetchWithRetry(logoUrl, "error"); }
+          catch (error) { attempts += Number((error as Error & {attempts?: number})?.attempts ?? 0); throw error; }
+          attempts += asset.attempts;
+          if (!asset.response.ok) return {response: asset.response, attempts};
+          if (asset.response.url && asset.response.url !== logoUrl) throw new Error("Heavy reviewed logo redirected");
+          // Read a bounded body: a changed/oversized asset must retain review.
+          const reader = asset.response.body?.getReader();
+          if (!reader) throw new Error("Heavy reviewed logo is empty");
+          const hash = createHash("sha256"); let size = 0;
+          try {
+            for (;;) {
+              const {done, value} = await reader.read(); if (done) break;
+              size += value.byteLength;
+              if (size > 256_000) throw new Error("Heavy reviewed logo exceeds size limit");
+              hash.update(value);
+            }
+          } finally { await reader.cancel(); }
+          logo = {url: logoUrl, sha256: hash.digest("hex")};
+        }
+        documents.push({url, html, ...(logo ? {logo} : {})});
       }
       return {response: new Response(JSON.stringify({kind: HEAVY_DOCUMENTS, home, documents}), {headers: {"content-type": "application/json"}}), attempts};
     } catch (error) {
