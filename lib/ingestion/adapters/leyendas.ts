@@ -1,3 +1,4 @@
+import { load } from "cheerio";
 import type { FestivalSource } from '../types.ts';
 
 export const LEYENDAS_ORIGIN = 'https://www.leyendasdelrockfestival.com';
@@ -70,20 +71,39 @@ export function leyendas(html: string, source: FestivalSource) {
     excerpts.push(post.url + ': ' + heading);
   }
   if (links.slice(0, 8).some(url => !data.posts.some(p => p.url === url))) warnings.push('Leyendas current-edition article was not fetched');
-  const ticketHtml = clean(data.tickets), ticketTitle = text(ticketHtml.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? '');
+  const $tickets = load(data.tickets);
+  $tickets("script, style, template, noscript, nav, header, footer, [hidden], [inert], [aria-hidden='true']").remove();
+  $tickets("[style]").each((_, element) => {
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($tickets(element).attr("style") ?? "")) $tickets(element).remove();
+  });
+  $tickets("br").replaceWith(" ");
+  const ticketTitle = text($tickets("title").text());
   let ticketsUrl: string | undefined, ticketStatus: 'available' | undefined, ticketsExcerpt: string | undefined;
   if (edition(ticketTitle, source.editionYear)) {
-    // Scope stock to the general festival pass. Camping, pool, shop and stale
-    // anniversary homepage copy cannot establish available admission tickets.
-    const pass = ticketHtml.match(/<h2\b[^>]*>\s*ABONO LEYENDAS DEL ROCK\s*<\/h2>([\s\S]*?)(?=<h2\b|$)/i)?.[1] ?? '';
-    const canBuy = [...pass.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)].some(m => {
-      if (text(m[2]) !== 'COMPRAR ABONO' || /\bdisabled\b|aria-disabled=["']true/i.test(m[1])) return false;
-      try { const u = new URL(attr(m[1], 'href') ?? ''); return u.origin === 'https://www.enterticket.es' && /^\/eventos\/leyendas-del-rock-\d+$/.test(u.pathname) && !u.search && !u.hash && !u.username && !u.password; } catch { return false; }
-    });
-    if (canBuy && /Ya se pueden adquirir los abonos para la [IVXLCDM]+ edici[oó]n de Leyendas del Rock/i.test(text(pass)) && !/agotad|sold out|cancelad|no disponibles/i.test(text(pass))) {
-      ticketsUrl = LEYENDAS_ORIGIN + '/tickets/'; ticketStatus = 'available'; ticketsExcerpt = ticketTitle + '; ' + text(pass).slice(0, 350);
+    // Only one current ordinary-pass section, never hidden copies, campsite
+    // products, a stale anniversary banner or disabled purchase controls.
+    const headings = $tickets("h2").filter((_, element) => /^ABONO LEYENDAS DEL ROCK$/i.test(text($tickets(element).text())));
+    if (headings.length === 1) {
+      const section = headings.first().nextUntil("h2");
+      const prose = section.map((_, element) => text($tickets(element).text())).get().join(" ");
+      const buy = section.find("a[href]").add(section.filter("a[href]")).filter((_, element) => {
+        const link = $tickets(element);
+        if (text(link.text()) !== "COMPRAR ABONO" || link.is("[disabled], [aria-disabled='true']")
+          || link.parents("[disabled], [aria-disabled='true']").length) return false;
+        try {
+          const target = new URL(link.attr("href") ?? "");
+          return target.origin === "https://www.enterticket.es" && /^\/eventos\/leyendas-del-rock-\d+$/.test(target.pathname)
+            && !target.search && !target.hash && !target.username && !target.password;
+        } catch { return false; }
+      });
+      if (buy.length === 1 && /Ya se pueden adquirir los abonos para la [IVXLCDM]+ edici[oó]n de Leyendas del Rock/i.test(prose)
+        && !/agotad|sold out|cancelad|no disponibles/i.test(prose)) {
+        ticketsUrl = LEYENDAS_ORIGIN + '/tickets/'; ticketStatus = 'available';
+        ticketsExcerpt = ticketTitle + '; ' + prose.slice(0,250) + '; enabled official COMPRAR ABONO: ' + buy.attr("href");
+      }
     }
   }
+  if (!ticketStatus) warnings.push("Leyendas current ordinary admission stock requires review; no festival sellout inferred");
   const unique = (names: string[]) => [...new Map(names.map(name => [name.toLocaleLowerCase(), name])).values()];
   const top = unique(headliners), support = unique(lineup).filter(name => !top.some(h => h.toLocaleLowerCase() === name.toLocaleLowerCase()));
   if (top.length || support.length) warnings.push(LEYENDAS_ARTIST_REVIEW);

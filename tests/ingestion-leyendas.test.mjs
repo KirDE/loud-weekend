@@ -50,3 +50,27 @@ test('HTTP200 verification challenges are errors, not empty announcements',async
 test('missing official routes fail safely and manual strategy does not activate discovery',async()=>{const d=copy();d.home='<title>Leyendas del Rock 2027</title>';await assert.rejects(fetchSource(source,{fetchImpl:fetchFixture(d).fetchImpl,maxAttempts:1}),/links are missing/);const f=fetchFixture();await fetchSource({...source,strategies:['manual_review']},{fetchImpl:f.fetchImpl,maxAttempts:1});assert.equal(f.calls.length,1);});
 
 test('incomplete HTTP200 news template cannot silently ignore future lineup updates',async()=>{const d=copy();d.news='<html>Broken template</html>';assert.equal(parse(d).lineup,undefined);await assert.rejects(fetchSource(source,{fetchImpl:fetchFixture(d).fetchImpl,maxAttempts:1}),/index markup is missing/);});
+
+test('only visible unique ordinary-pass sections and enabled controls establish stock',()=>{
+ for(const mutate of [
+  d=>{d.tickets='<div hidden>'+d.tickets+'</div>';},
+  d=>{d.tickets=d.tickets.replace('<h2 style=','<h2 hidden style=');},
+  d=>{d.tickets=d.tickets.replace('class="vc_btn3-container','aria-disabled="true" class="vc_btn3-container');},
+  d=>{d.tickets=d.tickets.replace('href="https://www.enterticket.es','href="https://user@www.enterticket.es');},
+  d=>{d.tickets=d.tickets.replace('www.enterticket.es/eventos','www.enterticket.es:8443/eventos');},
+  d=>{d.tickets+='<h2>ABONO LEYENDAS DEL ROCK</h2><p>Another admission product</p>';},
+  d=>{d.tickets=d.tickets.replace('COMPRAR ABONO</a>','COMPRAR ABONO</a><a href="https://www.enterticket.es/eventos/leyendas-del-rock-273483">COMPRAR ABONO</a>');},
+ ]){
+  const d=copy();mutate(d);const c=parse(d);assert.equal(c.ticketStatus,undefined);
+  assert(c.warnings.some(w=>w.includes('ordinary admission stock requires review')));
+  assert.equal(evaluateCandidate(current,c).publishable,false);
+  assert(!evaluateCandidate(current,c).changes.some(change=>change.field==='ticketStatus'));
+ }
+});
+test('footer copies and other product sellouts cannot override the current ordinary pass',()=>{
+ const d=copy();d.tickets+='<h2>CAMPING</h2><p>Agotado</p><footer><h2>ABONO LEYENDAS DEL ROCK</h2><p>Abonos agotados en 2026</p></footer>';
+ assert.equal(parse(d).ticketStatus,'available');
+ const hidden=copy();hidden.tickets+='<div style="display:none"><h2>ABONO LEYENDAS DEL ROCK</h2><p>Abonos agotados</p></div>';
+ assert.equal(parse(hidden).ticketStatus,'available');
+ assert.deepEqual(evaluateCandidate(current,parse(d)).changes,[]);
+});
