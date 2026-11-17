@@ -37,7 +37,14 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
   const [comparisonStatus, setComparisonStatus] = useState("");
   const displayNames = useMemo(() => new Intl.DisplayNames([locale], { type: "region" }), [locale]);
   const countries = useMemo(() => Array.from(new Set(festivals.map((item) => item.countryCode))).sort((a, b) => (displayNames.of(a) || a).localeCompare(displayNames.of(b) || b, locale)), [festivals, displayNames, locale]);
-  const months = useMemo(() => availableFestivalMonths(festivals), [festivals]);
+  const months = useMemo(() => {
+    const available = availableFestivalMonths(festivals);
+    // Keep a restored choice visible on country/month subsets with no matching
+    // event, so the controlled select never disguises an active month filter.
+    return /^(0[1-9]|1[0-2])$/.test(month)
+      ? [...new Set([...available, Number(month)])].sort((a, b) => a - b)
+      : available;
+  }, [festivals, month]);
   const genres = useMemo(() => festivalGenres(festivals), [festivals]);
   const originCoordinates = origins[origin]?.coordinates;
   const visible = useMemo(() => festivals.filter((item) => {
