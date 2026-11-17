@@ -106,3 +106,11 @@ test('all historical performing-group subjects reject past credits while current
   }
  }
 });
+
+test('EP and other recording-release subjects never become performing collaborations',()=>{
+ for(const noun of ['EP','EPs','disque','disques','opus','maxi','maxis','mixtape','mixtapes','LP','compilation','enregistrement','bande-son']){
+  for(const subject of ['Son ancien '+noun+' ','Le '+noun+' intitulé ','Son nouveau '+noun+' de ']){
+   const html=detail.replace(/<p>[\s\S]*?<\/p>/,`<p>${subject}<strong>SLASH FT FERGIE</strong> est une collaboration historique.</p>`);assert.ok(parse(html).lineup.includes('SLASH'),subject);
+  }
+ }
+});

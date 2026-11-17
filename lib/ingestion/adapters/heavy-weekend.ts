@@ -73,7 +73,7 @@ function detailName(html: string, year: number, label = ""): string | undefined 
     // Require a performing-group noun and exclude only an adjacent release
     // subject, not historical material mentioned in an introductory clause.
     const subject = before.split(/[,;:]/).at(-1)!.trim();
-    const releaseSubject = /^(?:(?:(?:son|sa|ses|leur|leurs|cet|cette|ce|ces|le|la|les|un|une|des)\s+|l['’])(?:(?!(?:projets?|groupes?|collaborations?|formations?|duos?|trios?|quatuors?|quintettes?)\b)[^\s,;:]+\s+)*|(?:(?:ancien(?:ne)?s?|historique)\s+)?)(?:singles?|albums?|titres?|morceaux?|chansons?)(?:\s+[^,;:]*)?$/i.test(subject);
+    const releaseSubject = /^(?:(?:(?:son|sa|ses|leur|leurs|cet|cette|ce|ces|le|la|les|un|une|des)\s+|l['’])(?:(?!(?:projets?|groupes?|collaborations?|formations?|duos?|trios?|quatuors?|quintettes?)\b)[^\s,;:]+\s+)*|(?:(?:ancien(?:ne)?s?|historique)\s+)?)(?:singles?|albums?|titres?|morceaux?|chansons?|eps?|lps?|disques?|opus|maxis?|mixtapes?|compilations?|enregistrements?|bandes?-sons?)(?:\s+[^,;:]*)?$/i.test(subject);
     const historicalGroup = new RegExp(`^(?:(?:son|sa|ses|leur|leurs|cet|cette|ce|ces|le|la|les|un|une|des)\\s+|l['’])?(?:(?:ancien(?:ne)?s?|historique)\\s+(?:projets?|${groupNouns})|(?:projets?|${groupNouns})\\s+(?:ancien(?:ne)?s?|historique))(?:\\s+[^,;:]*)?$`, "i").test(subject);
     if (releaseSubject || historicalGroup ||
       !new RegExp(`^est\\s+(?:sans aucun doute\\s+)?(?:(?:un|une|le|la|l['’]un(?:e)?)(?:\\s+des)?\\s+)?(?:${groupNouns})\\b`, "i").test(after)) continue;
