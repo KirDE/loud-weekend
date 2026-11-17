@@ -1,6 +1,10 @@
 import type { FestivalCandidate, FestivalSource } from '../types.ts';
 export const PROVINSSI_HOME = 'https://www.provinssi.fi/en/';
-const text = (s: string) => s.replace(/<[^>]*>/g, ' ').replace(/&amp;/gi, '&').replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n))).replace(/\s+/g, ' ').trim();
+const text = (s: string) => s.replace(/<[^>]*>/g, ' ').replace(/&(#x[0-9a-f]+|#\d+|amp|quot|apos|nbsp);/gi, (entity, code: string) => {
+  if (!code.startsWith('#')) return ({amp:'&',quot:'"',apos:"'",nbsp:' '} as Record<string,string>)[code.toLowerCase()];
+  const point = code[1].toLowerCase() === 'x' ? parseInt(code.slice(2),16) : Number(code.slice(1));
+  return point > 0 && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff) ? String.fromCodePoint(point) : entity;
+}).replace(/\s+/g, ' ').trim();
 export function provinssi(document: string, source: FestivalSource) {
   if (source.url !== PROVINSSI_HOME || source.editionYear !== 2027) return undefined;
   const html = document.replace(/<!--[\s\S]*?-->/g, '').replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
@@ -19,7 +23,7 @@ export function provinssi(document: string, source: FestivalSource) {
     const href=card[1].match(/\bhref="([^"]+)"/)?.[1];
     if (!href || !/^https:\/\/www\.provinssi\.fi\/en\/artists\/[a-z0-9-]+\/$/.test(href)) return undefined;
     const name=text(card[2].match(/<h3 class="artist-card__title">([\s\S]*?)<\/h3>/)?.[1]??'');
-    if (!name || name.length>100 || /[<>]|\b(?:TBA|20\d{2})\b/i.test(name) || lineup.some(n=>n.toLowerCase()===name.toLowerCase())) return undefined;
+    if (!name || name.length>100 || /[<>]|&(?:#[^;\s]+|[a-z][a-z0-9]+);|\b(?:TBA|20\d{2})\b/i.test(name) || lineup.some(n=>n.toLowerCase()===name.toLowerCase())) return undefined;
     lineup.push(name);
   }
   const ticketsUrl = [...html.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)].map(m => m[1]).find(href => href === 'https://provinssi.fi/en/tickets-2027');

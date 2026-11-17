@@ -24,3 +24,18 @@ test('Provinssi preserves the observed ticket href and accepts escaped ampersand
  assert.equal(c.ticketsUrl,'https://provinssi.fi/en/tickets-2027');
  assert.deepEqual(parse(html.replace('href="https://provinssi.fi/en/tickets-2027"','href="https://evil.test/tickets"')).evidence,[]);
 });
+
+test('Provinssi decodes decimal and hexadecimal entities without publishing unknown or invalid entity text',()=>{
+ for(const entity of ['&amp;','&#38;','&#x26;','&#X26;']) assert.ok(parse(html.replace('>JVG</h3>',`>Artist ${entity} Artist</h3>`)).lineup.includes('Artist & Artist'));
+ assert.ok(parse(html.replace('>JVG</h3>','>Artist &#x1f3b8;</h3>')).lineup.includes('Artist 🎸'));
+ for(const entity of ['&#x110000;','&#xD800;','&#99999999;','&unknown;']) assert.deepEqual(parse(html.replace('>JVG</h3>',`>Artist ${entity}</h3>`)).evidence,[]);
+});
+test('Provinssi additive roster cannot enter admin replacement, including stale approvals',async()=>{
+ const {assertAdminArtistReviewAllowed}=await import('../lib/catalog/admin-artist-review.ts');
+ const {publishAdminFestivalChange}=await import('../lib/catalog/publication.ts');
+ for(const field of ['lineup','headliners']) {
+  assert.throws(()=>assertAdminArtistReviewAllowed('provinssi',[field]),/protected ingestion review/);
+  await assert.rejects(publishAdminFestivalChange({}, {change:{id:'stale-provinssi',resourceKey:'provinssi',field,beforeValue:['Saved Artist'],afterValue:['New Artist'],sourceEvidence:[],parserRunId:'run'},actorLabel:'test'}),/protected ingestion review/);
+ }
+ assert.doesNotThrow(()=>assertAdminArtistReviewAllowed('provinssi',['startDate','endDate']));
+});
