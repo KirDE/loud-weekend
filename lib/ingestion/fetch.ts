@@ -96,7 +96,13 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     let attempts = initial.attempts;
     const documents = [];
     for (const url of urls) {
-      const detail = await fetchWithRetry(url, "error"); attempts += detail.attempts;
+      let detail: FetchAttempt;
+      try { detail = await fetchWithRetry(url, "error"); }
+      catch (error) {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        throw Object.assign(failure, {attempts: attempts + Number((failure as Error & {attempts?: number}).attempts ?? 0)});
+      }
+      attempts += detail.attempts;
       if (!detail.response.ok) return {response: detail.response, attempts};
       if (detail.response.url && detail.response.url !== url) throw new Error("Heavy Week-End artist detail changed its trusted identity");
       documents.push({url, html: await detail.response.text()});

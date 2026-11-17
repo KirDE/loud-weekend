@@ -56,3 +56,8 @@ test('labeled cards cannot override stale or mismatching detail identities and r
  }
  assert.throws(()=>heavyMissingArtistUrls(Array.from({length:21},(_,i)=>`<a href="/line-up/act-${i}"><img alt="Labeled Act ${i}"></a>`).join(''),true),/limit/);
 });
+
+test('detail transport failures retain preceding homepage and detail request attempts',async()=>{
+ const {fetchSource}=await import('../lib/ingestion/fetch.ts');let calls=0;
+ await assert.rejects(fetchSource(source,{maxAttempts:3,sleep:async()=>{},fetchImpl:async url=>{calls++;if(url===source.url)return new Response(base.home);if(url===base.documents[1].url)throw new Error('detail unavailable');return new Response(base.documents.find(d=>d.url===url).html);}}),error=>{assert.equal(calls,5);assert.equal(error.attempts,5);return true;});
+});
