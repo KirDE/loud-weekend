@@ -92,3 +92,17 @@ test('qualified release subjects cannot turn song or album credits into performe
 test('control, format and noncharacter numeric entities cannot become artist identities',()=>{
  for(const entity of ['&#1;','&#x7f;','&#x85;','&#x202e;','&#x2066;','&#xfdd0;','&#x10ffff;'])assert.deepEqual(parse(detail.replaceAll('MYLES KENNEDY AND THE CONSPIRATORS','BAD'+entity+'NAME')).evidence,[]);
 });
+
+test('private-use numeric and literal characters cannot become artist identities',()=>{
+ for(const value of ['&#xE000;','&#57344;','&#xF0000;','&#x100000;',String.fromCodePoint(0xe000),String.fromCodePoint(0xf0000),String.fromCodePoint(0x100000)])assert.deepEqual(parse(detail.replaceAll('MYLES KENNEDY AND THE CONSPIRATORS','BAD'+value+'NAME')).evidence,[]);
+});
+test('all historical performing-group subjects reject past credits while current subjects remain valid',()=>{
+ for(const noun of ['projet','groupe','collaboration','formation','duo','trio','quatuor','quintette']){
+  for(const subject of ['Son ancien '+noun+' ','Son ancienne '+noun+' ','Le '+noun+' historique ']){
+   const html=detail.replace(/<p>[\s\S]*?<\/p>/,`<p>${subject}<strong>SLASH FT FERGIE</strong> est une collaboration historique.</p>`);assert.ok(parse(html).lineup.includes('SLASH'),subject);
+  }
+  for(const subject of ['Le '+noun+' ','Son '+noun+' ']){
+   const html=detail.replace(/<p>[\s\S]*?<\/p>/,`<p>${subject}<strong>SLASH FT MYLES KENNEDY AND THE CONSPIRATORS</strong> est un groupe de rock.</p>`);assert.ok(parse(html).lineup.includes('SLASH featuring MYLES KENNEDY AND THE CONSPIRATORS'),subject);
+  }
+ }
+});
