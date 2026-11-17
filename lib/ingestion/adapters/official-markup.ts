@@ -1,3 +1,4 @@
+import {provinssi} from './provinssi.ts';
 import {fullRewind} from './full-rewind.ts';
 import { download } from "./download.ts";
 import {vainstream, rockTheLakes} from "./onboarding-official.ts";
@@ -460,6 +461,7 @@ function tolminator(html: string): AdapterResult | undefined {
 
 const adapters: Record<string, (html: string, source: FestivalSource, fetchedAt: string) => AdapterResult | undefined> = {
   download,
+  provinssi,
   "firenze-rocks": firenzeRocks,
   "rock-werchter": rockWerchter,
   "2000trees": trees,
