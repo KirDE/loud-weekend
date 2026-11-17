@@ -103,7 +103,7 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     }
     return {response: new Response(JSON.stringify({kind: HEAVY_DOCUMENTS, home, documents}), {headers: {"content-type": "application/json"}}), attempts};
   }
-  if (["vainstream", "rock-the-lakes"].includes(source.festivalSlug) && source.strategies.includes("official_markup")) {
+  if (["vainstream", "rock-the-lakes", "provinssi"].includes(source.festivalSlug) && source.strategies.includes("official_markup")) {
     if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url))
       throw new Error("Official artist listing changed its configured identity");
     return initial;

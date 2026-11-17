@@ -302,12 +302,13 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
       isDownloadAnnouncement(candidate.normalized as unknown as FestivalCandidate, applied.edition.year);
     if ((downloadLineup || input.result.changes.some(c => c.field === "completeness")) && !verifiedDownloadAnnouncement)
       throw new Error("Download publication requires verified official announcement evidence");
-    if((graspopLineup || verifiedDownloadAnnouncement) && applied.edition.completeness==='TBA') {
+    const provinssiLineup = input.result.festivalSlug === 'provinssi' && input.result.changes.some(c => c.kind === 'artist_added');
+    if((graspopLineup || verifiedDownloadAnnouncement || provinssiLineup) && applied.edition.completeness==='TBA') {
       await db.festivalEdition.update({where:{id:applied.edition.id},data:{completeness:'PARTIAL'}});
       if (!applied.changedFields.includes('completeness')) applied.changedFields.push('completeness');
     }
-    const playlistRefreshDeferral = idaysLineup || graspopLineup || (downloadLineup && verifiedDownloadAnnouncement) ? {
-      policy: "explicit-refresh-only", reason: `Verified ${downloadLineup?'Download':graspopLineup?'Graspop':'I-Days'} catalog additions do not authorize provider activity`,
+    const playlistRefreshDeferral = input.result.festivalSlug === 'provinssi' || idaysLineup || graspopLineup || (downloadLineup && verifiedDownloadAnnouncement) ? {
+      policy: "explicit-refresh-only", reason: `Verified ${input.result.festivalSlug==='provinssi'?'Provinssi':downloadLineup?'Download':graspopLineup?'Graspop':'I-Days'} catalog additions do not authorize provider activity`,
     } : undefined;
     const publication = await createPublication(db, {
       source: CatalogPublicationSource.INGESTION, sourceId, festivalSlug: input.result.festivalSlug,

@@ -595,3 +595,18 @@ test("mixed-apostrophe duplicate identity is rejected before any catalog write",
   assert.deepEqual(await counts(),before);
   assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}})).reviewState,"PENDING");
 });
+
+test('Provinssi shell imports official dates and 19 unranked acts without provider jobs; replay is idempotent',async()=>{
+ const f=await db.festival.create({data:{slug:'provinssi',name:'Synthetic Provinssi',country:'Finland',countryCode:'FI',officialUrl:'https://www.provinssi.fi/en/',genres:[]}});
+ const shell=await db.festivalEdition.create({data:{festivalId:f.id,year:2027,status:'TBA',ticketStatus:'UNKNOWN',recordState:'CURRENT',completeness:'TBA',sourceUpdatedAt:new Date()}});
+ const html=await readFile(new URL('./fixtures/official-markup/provinssi-excerpt.html',import.meta.url),'utf8');
+ const c=extractFestivalCandidate(html,parserSource('provinssi',{url:'https://www.provinssi.fi/en/'}),new Date().toISOString());
+ const current=(await readCatalog({database:db})).festivals.find(f=>f.slug==='provinssi')!;
+ const value=evaluateCandidate(current,c);assert.equal(value.publishable,true);assert.deepEqual(value.reviewReasons,[]);
+ const attempt=await persist(value),jobs=await db.catalogPlaylistRefresh.count();
+ const pub=await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix});assert.ok(pub);assert.equal(pub.playlistRefreshRequested,false);
+ const ed=await db.festivalEdition.findUniqueOrThrow({where:{id:shell.id},include:{lineup:true}});
+ assert.equal(ed.startDate?.toISOString().slice(0,10),'2027-07-01');assert.equal(ed.endDate?.toISOString().slice(0,10),'2027-07-03');assert.equal(ed.lineup.length,19);assert.ok(ed.lineup.every(l=>l.billing==='LINEUP'));assert.equal(ed.status,'PARTIAL');assert.equal(ed.completeness,'PARTIAL');assert.equal(await db.catalogPlaylistRefresh.count(),jobs);
+ assert.equal((await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}))?.id,pub.id);assert.equal(await db.catalogPlaylistRefresh.count(),jobs);
+ const after=(await readCatalog({database:db})).festivals.find(f=>f.slug==='provinssi')!;assert.deepEqual(evaluateCandidate(after,c).changes,[]);
+});
