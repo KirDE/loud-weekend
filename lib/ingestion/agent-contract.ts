@@ -47,7 +47,7 @@ export const factsSchema = z
     city: name.optional(),
     status: z.enum(["confirmed", "partial", "tba"]).optional(),
     ticketStatus: z
-      .enum(["available", "low", "unavailable", "unknown"])
+      .enum(["available", "low", "not_on_sale", "sold_out", "sales_ended", "unavailable", "unknown"])
       .optional(),
     ticketsUrl: z.string().url().max(2048).optional(),
     headliners: z.array(name).max(300).optional(),
