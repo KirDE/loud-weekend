@@ -88,3 +88,12 @@ test('hidden, duplicate and disabled ordinary admission controls never establish
  const data=clone();data.documents.push({...data.documents.find(d=>d.url.endsWith('/billetter/'))});
  assert.equal(extract(data).ticketStatus,undefined);
 });
+
+test('ordinary admission sellout wording in any element contradicts a lingering purchase link',()=>{
+ for(const notice of ['<div>Udsolgt</div>','<span>4-dagsbilletter er udsolgt</span>','<p>All ordinary four-day tickets sold out</p>','<strong>Alle 4-dagsbilletter er udsolgte</strong>']){
+  const data=clone(),ticket=data.documents.find(d=>d.url.endsWith('/billetter/'));
+  ticket.html=ticket.html.replace('Køb nu</a>','Køb nu</a>'+notice);
+  const c=extract(data);assert.equal(c.ticketStatus,undefined);assert(c.warnings.some(w=>w.includes('four-day ticket stock requires review')));
+  assert.equal(evaluateCandidate(current,c).publishable,false);
+ }
+});

@@ -135,8 +135,13 @@ export function extractCopenhellCurrent(html: string, source: FestivalSource, fe
               && u.searchParams.get("brand") === "copenhelldk";
           } catch { return false; }
         });
-        const selloutBadge = card.find("span").filter((_, e) => /^(?:Udsolgt|Sold Out)$/i.test(plain($(e).text())));
-        if (heading.length === 1 && verifiedDates && purchase.length === 1 && !selloutBadge.length) {
+        const ordinary = card.clone();
+        // Only the known standalone RIP upgrade badge is outside ordinary
+        // admission scope. Every other visible sellout assertion in the card
+        // contradicts a lingering Buy control, regardless of tag or phrasing.
+        ordinary.find("span").filter((_, e) => /^R\.I\.P\.\s+(?:tilgængelig|udsolgte?)$/i.test(plain($(e).text()))).remove();
+        const sold = /\b(?:udsolgte?|sold\s*out)\b/i.test(plain(ordinary.text()));
+        if (heading.length === 1 && verifiedDates && purchase.length === 1 && !sold) {
           c.ticketsUrl = tickets.url; c.ticketStatus = 'available';
           const excerpt = 'COPENHELL ' + year + '; ordinary 4-DAGSBILLET ' + dates[0]![0] + '; enabled official Ticketmaster Køb nu control';
           evidence('ticketsUrl', tickets, excerpt); evidence('ticketStatus', tickets, excerpt);
