@@ -49,7 +49,7 @@ export function extractPaleoCandidate(html: string, source: FestivalSource, fetc
     if (!opening || !ticketsUrl) continue;
     const month = months.findIndex(m => m.split("|").includes(opening[1].toLowerCase())) + 1;
     const year = Number(opening[2]);
-    if (month && year >= range.year - 1 && year <= range.year && Date.parse(fetchedAt) < Date.UTC(year, month - 1, 1)) add("ticketStatus", "unavailable", value, ticketsUrl);
+    if (month && year >= range.year - 1 && year <= range.year && Date.parse(fetchedAt) < Date.UTC(year, month - 1, 1)) add("ticketStatus", "not_on_sale", value, ticketsUrl);
   }
   return candidate;
 }

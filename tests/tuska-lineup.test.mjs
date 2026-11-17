@@ -104,7 +104,7 @@ test("Tuska current sold-out declaration overrides stale buy links", async () =>
   const home = await fixture("home-en");
   const html = (await fixture("tickets-en")).replace("All tickets for Tuska 2027 are now on sale!", "Tuska 2027 is sold out!");
   const candidate = extractFestivalCandidate(JSON.stringify({kind: TUSKA_DOCUMENTS, home, tickets: {url: tuskaTicketsUrl(home, source("en")), html}}), source("en"), observedAt);
-  assert.equal(candidate.ticketStatus, "unavailable");
+  assert.equal(candidate.ticketStatus, "sold_out");
   assert.deepEqual(candidate.warnings, []);
 });
 

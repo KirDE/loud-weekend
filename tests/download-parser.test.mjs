@@ -5,6 +5,7 @@ import {extractFestivalCandidate} from '../lib/ingestion/extract.ts';
 import {evaluateCandidate} from '../lib/ingestion/policy.ts';
 import {fetchSource} from '../lib/ingestion/fetch.ts';
 const bundle=JSON.parse(readFileSync(new URL('./fixtures/download-announcement.json',import.meta.url)));
+const ticketFixture=readFileSync(new URL('./fixtures/ticket-status/download-regular-admission.html',import.meta.url),'utf8');
 const source={festivalSlug:'download',url:'https://downloadfestival.co.uk/',editionYear:2027,strategies:['official_markup'],enabled:true,refreshPolicy:'daily'};
 const parse=(b=bundle,s=source)=>extractFestivalCandidate(JSON.stringify(b),s,'2026-11-12T21:28:00Z');
 const saved={slug:'download',editionYear:2027,startDate:'2027-06-09',endDate:'2027-06-13',headliners:[],lineup:[],status:'tba',ticketStatus:'unknown'};
@@ -21,8 +22,8 @@ test('later artists/editions work while missing cards never remove saved acts',(
 test('wrong edition, incomplete listing, missing billing or untrusted artist links fail closed',()=>{
  for(const mutate of [b=>b.artists=b.artists.replaceAll('2027','2026'),b=>b.artists=b.artists.replaceAll('</nav>',''),b=>b.home=b.home.replace('are your #DLXXIV headliners','are performing'),b=>b.artists=b.artists.replace('https://downloadfestival.co.uk/artists-a-z/blink-182/','https://evil.invalid/artists-a-z/blink-182/'),b=>b.artists=b.artists.replaceAll('>blink-182<','>Other Act<')]){const b=structuredClone(bundle);mutate(b);assert.deepEqual(parse(b).evidence,[]);}
 });
-test('two-document transport propagates HTTP failures and rejects identity changes',async()=>{
- for(const status of [200,403]){const calls=[];const r=await fetchSource(source,{maxAttempts:1,fetchImpl:async(u,o)=>{calls.push(u);if(u===source.url)return new Response(bundle.home);assert.equal(u,source.url+'artists-a-z/');assert.equal(o.redirect,'error');return new Response(bundle.artists,{status});}});assert.equal(r.response.status,status);assert.equal(calls.length,2);assert.equal(r.attempts,2);if(status===200)assert.equal(parse(JSON.parse(await r.response.text())).lineup.length,97);}
+test('three-document transport propagates HTTP failures and rejects identity changes',async()=>{
+ for(const status of [200,403]){const calls=[];const r=await fetchSource(source,{maxAttempts:1,fetchImpl:async(u,o)=>{calls.push(u);if(u===source.url)return new Response(bundle.home);if(u===source.url+'tickets/')return new Response(ticketFixture,{headers:{'content-type':'text/html'}});assert.equal(u,source.url+'artists-a-z/');assert.equal(o.redirect,'error');return new Response(bundle.artists,{status});}});assert.equal(r.response.status,status);assert.equal(calls.length,status===200?3:2);assert.equal(r.attempts,status===200?3:2);if(status===200)assert.equal(parse(JSON.parse(await r.response.text())).lineup.length,97);}
  await assert.rejects(fetchSource({...source,fetchUrl:'https://evil.invalid/'},{fetchImpl:async()=>new Response(bundle.home)}),/identity changed/);
 });
 
@@ -76,7 +77,7 @@ test('Download body stream errors preserve all completed request attempts',async
 
 test('Download bundle retains the validated final homepage URL',async()=>{
  let calls=0;
- const result=await fetchSource(source,{fetchImpl:async()=>new Response(++calls===1?bundle.home:bundle.artists)});
+ const result=await fetchSource(source,{fetchImpl:async()=>new Response(++calls===1?bundle.home:calls===2?bundle.artists:ticketFixture,{headers:{'content-type':'text/html'}})});
  assert.equal(result.response.url,source.url);
  assert.equal(parse(JSON.parse(await result.response.text())).lineup.length,97);
 });

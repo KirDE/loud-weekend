@@ -75,7 +75,7 @@ export function extractLeedsCandidate(html: string, source: FestivalSource, fetc
     } catch { /* malformed link is not evidence */ }
   }
   const cards = [...html.matchAll(/<div\b[^>]*class=["']tickets_card["'][^>]*>/gi)];
-  const statuses: ("available" | "unavailable" | "unknown")[] = [];
+  const statuses: ("available" | "sold_out" | "unknown")[] = [];
   let purchaseExcerpt = "";
   for (let i = 0; i < cards.length; i++) {
     const card = divBlock(html, cards[i].index!);
@@ -89,11 +89,11 @@ export function extractLeedsCandidate(html: string, source: FestivalSource, fetc
       if (!/^Buy$/i.test(text(link[2])) || /\sdisabled(?:\s|=|$)/i.test(link[1]) || attr(link[1], "aria-disabled") === "true") return false;
       try { const url = new URL(attr(link[1], "href") ?? ""); return url.origin === "https://www.ticketmaster.co.uk" && /^\/event\/[A-Za-z0-9]+\/?$/.test(url.pathname); } catch { return false; }
     });
-    const state = soldOut ? "unavailable" : purchase && /£\s*\d+(?:\.\d{2})?/.test(body) ? "available" : "unknown";
+    const state = soldOut ? "sold_out" : purchase && /£\s*\d+(?:\.\d{2})?/.test(body) ? "available" : "unknown";
     statuses.push(state);
     if (state === "available" || !purchaseExcerpt) purchaseExcerpt = `${name}; ${description}; ${state === "available" ? "priced Buy control" : state}`;
   }
-  const status = statuses.includes("available") ? "available" : statuses.length && statuses.every((s) => s === "unavailable") ? "unavailable" : undefined;
+  const status = statuses.includes("available") ? "available" : statuses.length && statuses.every((s) => s === "sold_out") ? "sold_out" : undefined;
   if (status) add("ticketStatus", status, purchaseExcerpt, "https://www.leedsfestival.com/tickets");
   // No lineup/status output: archived 2026 news is not a 2027 announcement.
   return candidate;

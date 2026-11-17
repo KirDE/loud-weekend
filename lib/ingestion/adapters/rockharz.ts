@@ -228,6 +228,6 @@ export function rockharz(html: string, source: FestivalSource) {
   const sentence = "Es ist vollbracht! Alle zur Verfügung stehenden Festivaltickets für das ROCKHARZ 2027 sind vergriffen!";
   const statements = content ? blocks(content, "div")?.filter((b) => !/<[^>]*>/.test(b.content) && plain(b.content).includes("Festivaltickets")) : undefined;
   if (statements?.length !== 1 || plain(statements[0].content) !== sentence) return undefined;
-  return { editionYear: 2027, ticketStatus: "unavailable" as FestivalCandidate["ticketStatus"],
+  return { editionYear: 2027, ticketStatus: "sold_out" as FestivalCandidate["ticketStatus"],
     excerpt: `DAS ROCKHARZ 2027 IST AUSVERKAUFT!; ${published}; ${sentence}` };
 }

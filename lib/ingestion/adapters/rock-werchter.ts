@@ -76,7 +76,7 @@ export function rockWerchter(html: string, source: FestivalSource, fetchedAt: st
     // Before the announced sale day: unavailable. After it: do not invent
     // availability from a stale FAQ; wait for explicit purchase evidence.
     if (saleMonth && saleDate.getUTCMonth() === saleMonth - 1 && fetchedAt.slice(0, 10) < saleDate.toISOString().slice(0, 10)) {
-      result.ticketStatus = "unavailable";
+      result.ticketStatus = "not_on_sale";
       excerpts.push(sale[0]);
     }
   }

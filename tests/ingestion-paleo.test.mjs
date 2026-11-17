@@ -9,14 +9,14 @@ const fixtures = ['en','fr'].map(lang => readFileSync(new URL(`./fixtures/paleo-
 const source = {festivalSlug:'paleo',url:'https://yeah.paleo.ch/',strategies:['json_ld_event','html_fallback'],editionYear:2027,enabled:true,refreshPolicy:'every_3_days'};
 const at = '2026-10-10T22:08:00Z';
 const parse = (html,s=source,date=at) => extractFestivalCandidate(html,s,date);
-const current = {slug:'paleo',editionYear:2027,startDate:'2027-07-19',endDate:'2027-07-25',ticketsUrl:'https://yeah.paleo.ch/en/tickets',ticketStatus:'unavailable',status:'tba',lineup:[],headliners:[]};
+const current = {slug:'paleo',editionYear:2027,startDate:'2027-07-19',endDate:'2027-07-25',ticketsUrl:'https://yeah.paleo.ch/en/tickets',ticketStatus:'not_on_sale',status:'tba',lineup:[],headliners:[]};
 
 test('actual corrected Paléo announcement in both official locales, not archived programme or artist wishes', () => {
- for(const fixture of fixtures){const c=parse(fixture);assert.equal(c.startDate,current.startDate);assert.equal(c.endDate,current.endDate);assert.equal(c.ticketsUrl,current.ticketsUrl);assert.equal(c.ticketStatus,'unavailable');assert.deepEqual(c.observedEditionYears,[2027]);assert.deepEqual(c.warnings,[]);for(const field of ['lineup','headliners','status'])assert.equal(c[field],undefined);const result=evaluateCandidate(current,c);assert.deepEqual(result.changes,[]);assert.deepEqual(result.reviewReasons,[]);}
+ for(const fixture of fixtures){const c=parse(fixture);assert.equal(c.startDate,current.startDate);assert.equal(c.endDate,current.endDate);assert.equal(c.ticketsUrl,current.ticketsUrl);assert.equal(c.ticketStatus,'not_on_sale');assert.deepEqual(c.observedEditionYears,[2027]);assert.deepEqual(c.warnings,[]);for(const field of ['lineup','headliners','status'])assert.equal(c[field],undefined);const result=evaluateCandidate(current,c);assert.deepEqual(result.changes,[]);assert.deepEqual(result.reviewReasons,[]);}
 });
 
 test('later official dates and edition remain dynamic without a bill or content-hash allowlist',()=>{
- const c=parse(fixtures[0].replaceAll('2027','2028').replaceAll('2026','2027').replace('19 to 25 July','18 to 24 June'),{...source,editionYear:2028},'2027-10-01T00:00:00Z');assert.equal(c.startDate,'2028-06-18');assert.equal(c.endDate,'2028-06-24');assert.equal(c.ticketStatus,'unavailable');
+ const c=parse(fixtures[0].replaceAll('2027','2028').replaceAll('2026','2027').replace('19 to 25 July','18 to 24 June'),{...source,editionYear:2028},'2027-10-01T00:00:00Z');assert.equal(c.startDate,'2028-06-18');assert.equal(c.endDate,'2028-06-24');assert.equal(c.ticketStatus,'not_on_sale');
 });
 
 test('future opening copy no longer establishes unavailability once the announced month begins',()=>{

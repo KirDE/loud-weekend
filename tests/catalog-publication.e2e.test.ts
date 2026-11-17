@@ -263,7 +263,7 @@ test("guarded Rockharz sources UPDATE existing 2027 rows, queue verified lineup 
   }
   assert.equal((await db.festival.findUniqueOrThrow({ where: { slug: "rockharz" } })).id, festival.id);
   assert.equal(await db.festivalEdition.count({ where: { festivalId: festival.id, year: 2027 } }), 1);
-  assert.equal((await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } })).ticketStatus, "UNAVAILABLE");
+  assert.equal((await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } })).ticketStatus, "SOLD_OUT");
   const lineup = await db.lineupEntry.findMany({ where: { editionId: edition.id }, include: { artist: true } });
   assert.equal(lineup.filter((e) => e.billing === "LINEUP").length, 29);
   assert.deepEqual(lineup.filter((e) => e.billing === "HEADLINER").map((e) => e.artist.name), ["AMON AMARTH"]);
@@ -275,12 +275,12 @@ test("Rockharz status-only repair after 30 acts preserves artists/tickets and ne
   await db.festivalEdition.update({ where: { id: edition.id }, data: { status: "TBA" } });
   const entries = await db.lineupEntry.findMany({ where: { editionId: edition.id }, include: { artist: true }, orderBy: { id: "asc" } });
   assert.equal(entries.length, 30);
-  assert.equal(edition.ticketStatus, "UNAVAILABLE");
+  assert.equal(edition.ticketStatus, "SOLD_OUT");
   const url = "https://www.rockharz-festival.com/headliner-alarm";
   const html = await readFile(new URL("./fixtures/official-markup/rockharz-headliner-2027.html", import.meta.url), "utf8");
   const candidate = extractFestivalCandidate(html, parserSource("rockharz", { url }), new Date().toISOString());
   const current = { ...catalogSeed.festivals[0], slug: "rockharz", editionYear: 2027, status: "tba" as const,
-    ticketStatus: "unavailable" as const, headliners: ["AMON AMARTH"], lineup: entries.filter((e) => e.billing === "LINEUP").map((e) => e.artist.name) };
+    ticketStatus: "sold_out" as const, headliners: ["AMON AMARTH"], lineup: entries.filter((e) => e.billing === "LINEUP").map((e) => e.artist.name) };
   const value = evaluateCandidate(current, candidate);
   assert.equal(value.publishable, true);
   assert.deepEqual(value.changes.map((c) => c.field), ["status"]);
@@ -292,7 +292,7 @@ test("Rockharz status-only repair after 30 acts preserves artists/tickets and ne
   assert.equal(publication.playlistRefreshRequested, false);
   const updated = await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } });
   assert.equal(updated.status, "PARTIAL");
-  assert.equal(updated.ticketStatus, "UNAVAILABLE");
+  assert.equal(updated.ticketStatus, "SOLD_OUT");
   assert.deepEqual(await db.lineupEntry.findMany({ where: { editionId: edition.id }, include: { artist: true }, orderBy: { id: "asc" } }), entries);
   const stored = await db.ingestionCandidate.findUniqueOrThrow({ where: { attemptId: attempt.id } });
   assert.equal(stored.reviewState, "PUBLISHED");
@@ -667,4 +667,31 @@ test("explicit ticket states survive reviewed publication and canonical public r
   } finally {
     await db.festivalEdition.update({ where: { id: edition.id }, data: { ticketStatus: edition.ticketStatus, sourceUpdatedAt: edition.sourceUpdatedAt } });
   }
+});
+
+test("Wacken ticket supplement publishes verified inventory with durable ticket-page evidence", async () => {
+  const { TICKET_SUPPLEMENT } = await import("../lib/ingestion/ticket-supplements.ts");
+  const ticketUrl = "https://www.wacken.com/de/tickets-shop/ticket-uebersicht-2027/";
+  const source = { festivalSlug: "wacken-open-air", url: "https://www.wacken.com/", editionYear: 2027, strategies: ["json_ld_event", "html_fallback"] as any, enabled: true, refreshPolicy: "daily" as const };
+  const wacken = await db.festival.upsert({ where: { slug: source.festivalSlug }, create: { slug: source.festivalSlug, name: "Synthetic Wacken", country: "Testland", countryCode: "DE", officialUrl: source.url, genres: [] }, update: {} });
+  const edition = await db.festivalEdition.upsert({ where: { festivalId_year: { festivalId: wacken.id, year: 2027 } },
+    create: { festivalId: wacken.id, year: 2027, status: "PARTIAL", ticketStatus: "UNKNOWN", recordState: "CURRENT", completeness: "PARTIAL", sourceUpdatedAt: new Date("2026-01-01") },
+    update: { ticketStatus: "UNKNOWN", ticketsUrl: null } });
+  const html = await readFile(new URL("./fixtures/ticket-status/wacken-standard-pass.html", import.meta.url), "utf8");
+  const candidate = extractFestivalCandidate(JSON.stringify({ kind: TICKET_SUPPLEMENT, body: `<a href="${ticketUrl}">Tickets</a>`, ticket: { url: ticketUrl, html } }), source, new Date().toISOString());
+  const current = { ...catalogSeed.festivals[0], slug: source.festivalSlug, ticketStatus: "unknown" as const, ticketsUrl: undefined, headliners: [], lineup: [] };
+  const value = evaluateCandidate(current, candidate);
+  assert.equal(value.publishable, true);
+  const attempt = await persist(value);
+  const publication = await publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix });
+  assert.ok(publication);
+  assert.equal(publication.playlistRefreshRequested, false);
+  assert.equal((await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } })).ticketStatus, "AVAILABLE");
+  const item = (await readCatalog({ database: db })).festivals.find(item => item.slug === source.festivalSlug)!;
+  assert.equal(item.ticketStatus, "available");
+  assert.equal(item.ticketsUrl, ticketUrl);
+  const evidence = await db.ingestionEvidence.findMany({ where: { candidate: { attemptId: attempt.id }, field: "ticketStatus" } });
+  assert.ok(evidence.some(row => row.sourceUrl === ticketUrl));
+  const replay = await publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix });
+  assert.equal(replay?.id, publication.id);
 });
