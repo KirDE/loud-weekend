@@ -38,3 +38,8 @@ test('wrong canonical, incomplete/ambiguous listing, foreign link and wrong edit
 test('page script URLs are not executed or treated as arbitrary fetch instructions',()=>{
  const e=fixture();assert.equal(impericonDynamicNewsUrl(e.home.replace('fetch(`/blogs','fetch(`https://evil.example/blogs')),undefined);
 });
+
+test('dynamic network failures count homepage attempts plus exhausted listing retries',async()=>{
+ const e=fixture();let calls=0;
+ await assert.rejects(fetchSource(source,{maxAttempts:3,sleep:async()=>{},fetchImpl:async(u,o)=>{calls++;if(u===IMPERICON_NEWS)throw new Error('network unavailable');return mock(e)(u,o);}}),error=>{assert.equal(calls,4);assert.equal(error.attempts,4);return true;});
+});

@@ -175,7 +175,13 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     let news: string | undefined;
     const newsUrl = impericonDynamicNewsUrl(home);
     if (newsUrl) {
-      const listing = await fetchWithRetry(newsUrl, "error"); attempts += listing.attempts;
+      let listing: FetchAttempt;
+      try { listing = await fetchWithRetry(newsUrl, "error"); }
+      catch (error) {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        throw Object.assign(failure, {attempts: attempts + Number((failure as Error & {attempts?: number}).attempts ?? 0)});
+      }
+      attempts += listing.attempts;
       if (!listing.response.ok) return {response: listing.response, attempts};
       if (listing.response.url && listing.response.url !== newsUrl) throw new Error('Impericon dynamic news redirected away from its trusted route');
       news = await listing.response.text();
