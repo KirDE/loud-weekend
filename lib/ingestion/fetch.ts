@@ -92,7 +92,7 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
   }
   if (initial.response.ok && isHeavyHomepage(source)) {
     if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url)) throw new Error("Heavy Week-End homepage changed its configured identity");
-    const home = await initial.response.text(), urls = heavyMissingArtistUrls(home);
+    const home = await initial.response.text(), urls = heavyMissingArtistUrls(home, true);
     let attempts = initial.attempts;
     const documents = [];
     for (const url of urls) {

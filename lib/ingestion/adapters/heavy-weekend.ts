@@ -36,17 +36,17 @@ function cardName(body: string): string {
   const logo = image && attribute(image, "src")?.startsWith("https://cdn.prod.website-files.com/") ? attribute(image, "alt") : undefined;
   return text(heading ?? logo ?? "");
 }
-export function heavyMissingArtistUrls(home: string): string[] {
+export function heavyMissingArtistUrls(home: string, includeLabeled = false): string[] {
   const urls = new Set<string>();
   for (const link of artistLinks(home)) {
     const url = artistUrl(link[1]);
     if (!url) throw new Error("Heavy Week-End artist link changed its trusted identity");
-    if (!cardName(link[2])) urls.add(url);
+    if (includeLabeled || !cardName(link[2])) urls.add(url);
   }
   if (urls.size > 20) throw new Error("Heavy Week-End artist detail limit exceeded");
   return [...urls];
 }
-function detailName(html: string, year: number): string | undefined {
+function detailName(html: string, year: number, label = ""): string | undefined {
   const document = clean(html);
   const title = text(document.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
   const match = title.match(/^(.+?) au Heavy Week-End (20\d{2})$/i);
@@ -57,11 +57,15 @@ function detailName(html: string, year: number): string | undefined {
   // emphasized name followed by present-tense self-identification is evidence;
   // historical credits, other artists and related-day cards are not billing.
   const expanded = new Map<string, string>();
-  for (const block of document.matchAll(/<div\b[^>]*class=["'][^"']*\bw-richtext\b[^"']*["'][^>]*>\s*<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
-    const credit = block[1].match(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/i);
+  for (const block of document.matchAll(/<div\b([^>]*)>\s*<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
+    // This observed Webflow class identifies the primary artist biography;
+    // generic related/archive rich-text blocks must never supply billing.
+    const classes = (attribute(block[1], "class") ?? "").split(/\s+/);
+    if (!classes.includes("rich-text-block-7") || !classes.includes("w-richtext")) continue;
+    const credit = block[2].match(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/i);
     if (!credit) continue;
-    const before = text(block[1].slice(0, credit.index!));
-    const after = text(block[1].slice(credit.index! + credit[0].length));
+    const before = text(block[2].slice(0, credit.index!));
+    const after = text(block[2].slice(credit.index! + credit[0].length));
     // A present-tense release statement ("est sorti") is not identification.
     // Require a performing-group noun and exclude a historical/release subject.
     if (/\b(?:ancien(?:ne)?s?|historique|single|titre|morceau|chanson)\b|\b(?:son|leur|cet|ce|le|un)\s+album\b/i.test(before) ||
@@ -74,7 +78,10 @@ function detailName(html: string, year: number): string | undefined {
   }
   if (expanded.size > 1) return undefined;
   // Use explicit current official text, never URL slugs or logo filenames.
-  return [...expanded.values()][0] ?? headings[0];
+  const name = [...expanded.values()][0] ?? headings[0];
+  const identity = (s: string) => s.toLowerCase().replace(/\b(?:ft|feat)\.?(?=\s)/g, "featuring");
+  if (label && identity(label) !== identity(headings[0]) && identity(label) !== identity(name)) return undefined;
+  return name;
 }
 
 // Read only explicit linked artist labels. Logo pixels, poster composition,
@@ -86,8 +93,8 @@ export function heavyWeekEnd(input: string, source: FestivalSource) {
       const data = JSON.parse(input);
       if (data.kind !== HEAVY_DOCUMENTS || typeof data.home !== "string" || !Array.isArray(data.documents) || data.documents.length > 20 || data.documents.some((d: HeavyDocument) => !d || typeof d.url !== "string" || typeof d.html !== "string")) return undefined;
       html = data.home; documents = data.documents;
-      const urls = heavyMissingArtistUrls(html);
-      if (documents.some(d => !urls.includes(d.url)) || new Set(documents.map(d => d.url)).size !== documents.length) return undefined;
+      const urls = heavyMissingArtistUrls(html, true);
+      if (documents.length !== urls.length || documents.some(d => !urls.includes(d.url)) || new Set(documents.map(d => d.url)).size !== documents.length) return undefined;
     } catch { return undefined; }
   }
   let page: URL;
@@ -116,7 +123,7 @@ export function heavyWeekEnd(input: string, source: FestivalSource) {
     if (target.origin !== page.origin || target.username || target.password || target.search || target.hash) return undefined;
     const label = cardName(link[2]);
     const doc = documents.find(d => d.url === target.href);
-    const name = label || (doc && detailName(doc.html, year)) || "";
+    const name = doc ? (detailName(doc.html, year, label) ?? "") : label;
     // An unlabeled/image-only new card must retain review, not silently vanish.
     if (!name || name.length > 100 || /[<>]|&[a-z#\d]+;|\b(?:coming soon|tickets?|20\d{2})\b/i.test(name)) return undefined;
     if (lineup.some(old => old.toLowerCase() === name.toLowerCase())) continue;

@@ -34,3 +34,25 @@ test('present-tense release and historical project statements are not current pe
  const release=(before,after)=>detail.replace(/<p>[\s\S]*?<\/p>/,`<p>${before}<strong>SLASH FT FERGIE</strong>${after}</p>`);
  for(const [before,after] of [['Son ancien single ',' est sorti en 2010.'],['Le titre ',' est disponible sur son ancien album.'],['Son album ',' est une collaboration historique.'],['Son ancien projet ',' est un groupe des années 1990.']])assert.ok(parse(release(before,after)).lineup.includes('SLASH'));
 });
+
+test('labeled homepage cards still fetch and prefer the verified full detail identity',async()=>{
+ const {fetchSource}=await import('../lib/ingestion/fetch.ts');
+ const e=structuredClone(base);e.documents.find(d=>d.url.endsWith('/slash')).html=detail;
+ e.home=e.home.replace(/(href="\/line-up\/slash"[^>]*>[\s\S]*?alt=")"/,'$1SLASH"');assert.ok(e.home.includes('alt="SLASH"'));
+ const calls=[];const r=await fetchSource(source,{maxAttempts:1,fetchImpl:async url=>{calls.push(url);return new Response(url===source.url?e.home:e.documents.find(d=>d.url===url).html);}});
+ const c=extractFestivalCandidate(await r.response.text(),source,'2026-11-17T20:00:00Z');assert.ok(c.lineup.includes('SLASH featuring MYLES KENNEDY AND THE CONSPIRATORS'));assert.ok(!c.lineup.includes('SLASH'));assert.ok(calls.includes(source.url+'line-up/slash'));
+});
+test('unrelated or archived rich-text blocks cannot supply or conflict with primary billing',()=>{
+ const related='<div class="w-richtext"><p><strong>SLASH FT FERGIE</strong> est un duo.</p></div>';
+ assert.ok(parse(detail+related).lineup.includes('SLASH featuring MYLES KENNEDY AND THE CONSPIRATORS'));
+ assert.ok(parse(related+detail).lineup.includes('SLASH featuring MYLES KENNEDY AND THE CONSPIRATORS'));
+ assert.ok(parse(detail.replace('rich-text-block-7','old-biography')+related).lineup.includes('SLASH'));
+});
+
+test('labeled cards cannot override stale or mismatching detail identities and remain bounded',async()=>{
+ const {heavyMissingArtistUrls}=await import('../lib/ingestion/adapters/heavy-weekend.ts');
+ for(const [label,html] of [['Other Act',detail],['SLASH',detail.replace('2027','2026')]]){
+  const e=structuredClone(base);e.home=e.home.replace(/(href="\/line-up\/slash"[^>]*>[\s\S]*?alt=")"/,'$1'+label+'"');e.documents.find(d=>d.url.endsWith('/slash')).html=html;assert.deepEqual(extractFestivalCandidate(JSON.stringify(e),source,'2026-11-17T20:00:00Z').evidence,[]);
+ }
+ assert.throws(()=>heavyMissingArtistUrls(Array.from({length:21},(_,i)=>`<a href="/line-up/act-${i}"><img alt="Labeled Act ${i}"></a>`).join(''),true),/limit/);
+});
