@@ -76,3 +76,10 @@ test('ordinary current group and project subjects retain explicit compound billi
   const html=detail.replace(/<p>[\s\S]*?<\/p>/,`<p>${subject}<strong>SLASH FT FERGIE</strong> est un duo de rock.</p>`);assert.ok(parse(html).lineup.includes('SLASH'));
  }
 });
+
+test('detail response body failures retain all completed header-level request attempts',async()=>{
+ const {fetchSource}=await import('../lib/ingestion/fetch.ts');
+ for(const index of [0,1]){let calls=0;
+  await assert.rejects(fetchSource(source,{maxAttempts:1,fetchImpl:async url=>{calls++;if(url===source.url)return new Response(base.home);if(url===base.documents[index].url)return new Response(new ReadableStream({start(controller){controller.error(new Error('detail body unavailable'));}}));return new Response(base.documents.find(d=>d.url===url).html);}}),error=>{assert.equal(calls,2+index);assert.equal(error.attempts,2+index);return true;});
+ }
+});

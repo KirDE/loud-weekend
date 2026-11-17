@@ -91,23 +91,30 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     }
   }
   if (initial.response.ok && isHeavyHomepage(source)) {
-    if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url)) throw new Error("Heavy Week-End homepage changed its configured identity");
-    const home = await initial.response.text(), urls = heavyMissingArtistUrls(home, true);
     let attempts = initial.attempts;
-    const documents = [];
-    for (const url of urls) {
-      let detail: FetchAttempt;
-      try { detail = await fetchWithRetry(url, "error"); }
-      catch (error) {
-        const failure = error instanceof Error ? error : new Error(String(error));
-        throw Object.assign(failure, {attempts: attempts + Number((failure as Error & {attempts?: number}).attempts ?? 0)});
+    try {
+      if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url)) throw new Error("Heavy Week-End homepage changed its configured identity");
+      const home = await initial.response.text(), urls = heavyMissingArtistUrls(home, true);
+      const documents = [];
+      for (const url of urls) {
+        let detail: FetchAttempt;
+        try { detail = await fetchWithRetry(url, "error"); }
+        catch (error) {
+          attempts += Number((error as Error & {attempts?: number})?.attempts ?? 0);
+          throw error;
+        }
+        attempts += detail.attempts;
+        if (!detail.response.ok) return {response: detail.response, attempts};
+        if (detail.response.url && detail.response.url !== url) throw new Error("Heavy Week-End artist detail changed its trusted identity");
+        documents.push({url, html: await detail.response.text()});
       }
-      attempts += detail.attempts;
-      if (!detail.response.ok) return {response: detail.response, attempts};
-      if (detail.response.url && detail.response.url !== url) throw new Error("Heavy Week-End artist detail changed its trusted identity");
-      documents.push({url, html: await detail.response.text()});
+      return {response: new Response(JSON.stringify({kind: HEAVY_DOCUMENTS, home, documents}), {headers: {"content-type": "application/json"}}), attempts};
+    } catch (error) {
+      // Headers already count as a request even when identity checks or body
+      // consumption subsequently fail; never discard earlier detail attempts.
+      const failure = error instanceof Error ? error : new Error(String(error));
+      throw Object.assign(failure, {attempts});
     }
-    return {response: new Response(JSON.stringify({kind: HEAVY_DOCUMENTS, home, documents}), {headers: {"content-type": "application/json"}}), attempts};
   }
   if (["vainstream", "rock-the-lakes", "provinssi"].includes(source.festivalSlug) && source.strategies.includes("official_markup")) {
     if (source.fetchUrl || source.followLinkPattern || (initial.response.url && initial.response.url !== source.url))
