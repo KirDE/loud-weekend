@@ -1,3 +1,4 @@
+import { load } from "cheerio";
 import type { FestivalCandidate, FestivalSource } from "../types.ts";
 
 const months: Record<string, number> = {
@@ -12,7 +13,21 @@ const months: Record<string, number> = {
 // The current homepage has explicit date/sales headings, not Event JSON-LD.
 // Do not infer duration from the evergreen FAQ or dates from last year's images.
 export function applyBarcelonaBanner(html: string, source: FestivalSource, candidate: FestivalCandidate): void {
-  if (source.festivalSlug !== "barcelona-rock-fest" || new URL(source.url).hostname !== "www.barcelonarockfest.com") return;
+  if (source.festivalSlug !== "barcelona-rock-fest") return;
+  try {
+    const url = new URL(source.url);
+    if (url.origin !== "https://www.barcelonarockfest.com" || url.username || url.password || url.search || url.hash
+      || !/^\/(?:en\/?|es\/?|ca\/?)?$/.test(url.pathname)) return;
+  } catch { return; }
+  // Only visible official banner/controls can establish a current sale.
+  // Ignore hydration payloads, hidden translations and archival/footer copy.
+  const $ = load(html);
+  $("script, style, template, noscript, footer, [hidden], [inert], [aria-hidden='true']").remove();
+  $("[style]").each((_, element) => {
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();
+  });
+  $("br").replaceWith(" ");
+  html = $.html();
   const headings = [...html.matchAll(/<h2\b[^>]*class=["'][^"']*\bpar-([23])\b[^"']*["'][^>]*>([\s\S]*?)<\/h2>/gi)]
     .map(match => ({ role: match[1], text: match[2].replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/gi, " ").replace(/\s+/g, " ").trim(), excerpt: match[0].slice(0, 500) }));
   const dates = headings.filter(h => h.role === "2");
@@ -59,7 +74,17 @@ export function applyBarcelonaBanner(html: string, source: FestivalSource, candi
     candidate.artistListMode = "additive";
   }
   const sales = headings.filter(h => h.role === "3");
-  if (sales.length === 1 && /^(?:tickets? ya a la venta|tickets? (?:are )?(?:now on sale|on sale(?: now)?)|entrades ja a la venda)$/i.test(sales[0].text)) {
+  const purchase = $("a[href]").filter((_, element) => {
+    const link = $(element);
+    if (link.is("[disabled], [aria-disabled='true']") || link.parents("[disabled], [aria-disabled='true']").length
+      || !/^(?:tickets?|entradas?|entrades)$/i.test(link.text().replace(/\s+/g, " ").trim())) return false;
+    try {
+      const target = new URL(link.attr("href") ?? "", source.url);
+      return target.origin === "https://www.barcelonarockfest.com" && !target.username && !target.password
+        && !target.search && !target.hash && /^\/(?:en\/|es\/|ca\/)?tickets\/?$/.test(target.pathname);
+    } catch { return false; }
+  });
+  if (purchase.length > 0 && sales.length === 1 && /^(?:tickets? ya a la venta|tickets? (?:are )?(?:now on sale|on sale(?: now)?)|entrades ja a la venda)$/i.test(sales[0].text)) {
     add("ticketStatus", "available", sales[0].excerpt);
   }
 }
