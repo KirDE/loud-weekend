@@ -27,7 +27,7 @@ export function observeIdaysTicketStock(html: string, year: number): { status?: 
   });
   $("br").replaceWith(" ");
   const sections = $("section[id]");
-  const copy = (selection: typeof sections) => {
+  const copy = (selection: ReturnType<typeof $>) => {
     const node = selection.clone(); node.find("*").prepend(" ").append(" ");
     return text(node.text());
   };
