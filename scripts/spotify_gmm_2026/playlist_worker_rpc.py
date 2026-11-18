@@ -10,6 +10,9 @@ MAX_INPUT_BYTES = 8 * 1024 * 1024
 
 
 def execute(operation, value):
+    if operation == 'select-user-tracks':
+        from selection_tracks import select_selection_tracks
+        return select_selection_tracks(value)
     if operation == 'discover-spotify':
         # Set before import: the planner must not load or create report/cache files.
         os.environ['FESTIVAL_WORKER_STDIO'] = '1'
@@ -52,6 +55,9 @@ if __name__ == '__main__':
     try:
         main()
     except Exception as error:
+        if len(sys.argv) == 2 and sys.argv[1] == 'select-user-tracks':
+            sys.stderr.write('selection_track_policy_failed\n')
+            sys.exit(1)
         from apply_playlist_plan import SpotifyReadbackMismatch
         if isinstance(error, SpotifyReadbackMismatch):
             sys.stderr.write('spotify_readback_mismatch\n')

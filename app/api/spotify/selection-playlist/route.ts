@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { error, requireUser } from "@/lib/api";
 import { spotifyAccessToken } from "@/lib/spotify";
 import { createSelectionPlaylist } from "@/lib/selection-playlist";
+import { selectionArtists } from "@/lib/catalog/selection-artists";
 import { rejectUntrustedOrigin } from "@/lib/request-origin";
 
 const payload = z.object({
@@ -20,8 +21,9 @@ export async function POST(request: Request) {
   const connection = await db.spotifyConnection.findUnique({ where: { userId: user.id } });
   if (!connection) return error("Connect Spotify before creating a playlist.", 409);
   try {
+    const canonicalArtists = await selectionArtists(db, parsed.data.artists);
     const token = await spotifyAccessToken(connection.encryptedRefreshToken);
-    return Response.json(await createSelectionPlaylist({ token, spotifyUserId: connection.spotifyUserId, ...parsed.data }));
+    return Response.json(await createSelectionPlaylist({ token, spotifyUserId: connection.spotifyUserId, ...parsed.data, canonicalArtists }));
   } catch (cause) {
     console.error("selection_playlist_failed", { userId: user.id, message: cause instanceof Error ? cause.message : "unknown" });
     return error("Spotify could not create the playlist. Your selection is still saved; retry or export the fallback list.", 502);
