@@ -27,7 +27,7 @@ for(const [locale,t] of Object.entries(copy))test(locale+" imported Spotify coll
   docs.collections={...previous,revision:previous.revision+1,payload:{...previous.payload,spotify:imported}};
   return route.fulfill({json:{document:docs.collections}});
  });
- await page.addInitScript(()=>localStorage.setItem("festival-radar-planner-v1",JSON.stringify({favoriteFestivals:[],favoriteArtists:[],attendance:{},playlistFestivals:["wacken-open-air"],savedFilters:{query:"",country:"all",announcedOnly:false,month:"all",ticketsOnly:false}})));
+ await page.addInitScript(()=>{if(!localStorage.getItem("festival-radar-planner-v1"))localStorage.setItem("festival-radar-planner-v1",JSON.stringify({favoriteFestivals:[],favoriteArtists:[],attendance:{},playlistFestivals:["wacken-open-air"],savedFilters:{query:"",country:"all",announcedOnly:false,month:"all",ticketsOnly:false}}));});
  await page.goto("/"+locale+"/planner/");
  const panel=page.locator(".accountSync"),link=panel.getByRole("link",{name:"Synthetic retained playlist"});
  await panel.getByRole("button",{name:t.import,exact:true}).click();
@@ -45,6 +45,12 @@ for(const [locale,t] of Object.entries(copy))test(locale+" imported Spotify coll
  await expect(panel.getByRole("alert")).toContainText(t.conflict);
  await panel.getByRole("button",{name:t.keep,exact:true}).click();await expect(panel.getByRole("alert")).toHaveCount(0);
  expect(docs.collections.payload.spotify).toEqual(imported);
+ const unsynced=await page.evaluate(()=>{
+  const key="festival-radar-planner-v1",state=JSON.parse(localStorage.getItem(key));
+  Object.assign(state,{favoriteFestivals:["synthetic-local-only"],favoriteArtists:["Synthetic local artist"],attendance:{"synthetic-local-only":"maybe"},savedFilters:{...state.savedFilters,query:"unsynchronized filter"}});
+  localStorage.setItem(key,JSON.stringify(state));return state;
+ });
+ await page.reload();await expect(link).toBeVisible();
  importRevisionConflict=true;await panel.getByRole("button",{name:t.import,exact:true}).click();
  await expect(panel.getByRole("alert")).toContainText(t.conflict);
  expect(docs.collections.payload.playlistFestivals).toEqual(["reading"]);
@@ -54,6 +60,9 @@ for(const [locale,t] of Object.entries(copy))test(locale+" imported Spotify coll
  const useRemote={en:"Use other device",de:"Anderes Gerät verwenden",ru:"Взять данные другого устройства"}[locale];
  await panel.getByRole("button",{name:useRemote,exact:true}).click();await expect(panel.getByRole("alert")).toHaveCount(0);
  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem("festival-radar-planner-v1")).playlistFestivals)).toEqual(["reading"]);
+ const retained=await page.evaluate(()=>JSON.parse(localStorage.getItem("festival-radar-planner-v1")));
+ for(const field of ["favoriteFestivals","favoriteArtists","attendance","savedFilters"])expect(retained[field]).toEqual(unsynced[field]);
+
  failImport=true;await panel.getByRole("button",{name:t.import,exact:true}).click();await expect(panel).toHaveAttribute("aria-busy","false");
  await expect(link).toBeVisible();await expect(panel.locator("time")).toHaveAttribute("datetime",imported.syncedAt);
 });
