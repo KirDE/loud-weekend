@@ -119,7 +119,7 @@ jobs:
           node-version-file: '.node-version'
       - name: Run full browser suite in the prebuilt Playwright image
         env:
-          PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:6e3fb709361521eb27161606e6da6d2674e5e89fa16516cb37d6fdd91372273d
+          PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
         run: |
           node_root="$(dirname "$(dirname "$(command -v node)")")"
           # Host networking keeps the isolated Postgres service at loopback,
@@ -127,7 +127,7 @@ jobs:
           docker run --rm --init --ipc=host --network=host \
             -v "$GITHUB_WORKSPACE:/work" -w /work \
             -v "$node_root:/node-runtime:ro" \
-            -e CI=true -e PLAYWRIGHT_IMAGE_VERSION=1.65.0 \
+            -e CI=true -e PLAYWRIGHT_IMAGE_VERSION=1.65.1 \
             -e DATABASE_URL=postgresql://festival:festival@127.0.0.1:5432/festival_integration \
             "$PLAYWRIGHT_IMAGE" bash scripts/ci-browser-tests.sh
 
