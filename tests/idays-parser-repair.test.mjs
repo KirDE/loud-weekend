@@ -104,3 +104,13 @@ test('later official ticket year stays source-bound without a frozen vendor/even
  const c=extractFestivalCandidate(await r.response.text(),later,'2027-10-10T17:10:00Z');
  assert.equal(c.ticketStatus,'available');assert.deepEqual(c.observedEditionYears,[2028]);
 });
+
+test('Ticketmaster ancillary-only controls cannot borrow ordinary concert admission wording',()=>{
+ const intro="<section id=\"13-giugno\"><p>L'acquisto del biglietto garantisce l'accesso al festival per l'intera giornata.</p></section>";
+ const card=path=>intro+'<section><li><a href="https://www.ticketmaster.it/biglietti/'+path+'-13-06-2027/event/abc">Acquista</a></li></section>';
+ assert.equal(parse(card("blink-182"),{url:current.ticketsUrl}).ticketStatus,"available");
+ for(const product of ["vip","parking","merch","offsale"]){
+  const c=parse(card("blink-182-"+product),{url:current.ticketsUrl});
+  assert.equal(c.ticketStatus,undefined);assert(c.warnings.some(w=>/review required/.test(w)));
+ }
+});
