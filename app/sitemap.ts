@@ -1,5 +1,6 @@
+import { availableFestivalMonths } from "@/lib/festival-dates";
 import type { MetadataRoute } from "next";
-import { festivalMonth, supportedLanguages } from "@/lib/catalog/public";
+import { supportedLanguages } from "@/lib/catalog/public";
 import { getCatalog } from "@/lib/catalog/repository";
 import { CATALOG_UPDATED_AT, SITE_ORIGIN } from "@/lib/seo";
 
@@ -9,7 +10,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const { festivals, artists, editions } = await getCatalog();
   const editionYears = [...new Set(editions.map(({ editionYear }) => editionYear))];
   const countries = [...new Set(festivals.map((item) => item.countryCode.toLowerCase()))];
-  const months = [...new Set(festivals.map(festivalMonth).filter((value): value is string => Boolean(value)))];
+  const months = availableFestivalMonths(festivals).map(month => String(month).padStart(2, "0"));
   return [
     { url: `${SITE_ORIGIN}/`, lastModified: CATALOG_UPDATED_AT, changeFrequency: "daily", priority: 1 },
     ...festivals.map(({ slug, updatedAt }) => ({ url: `${SITE_ORIGIN}/festivals/${slug}/`, lastModified: updatedAt, changeFrequency: "daily" as const, priority: .8 })),
