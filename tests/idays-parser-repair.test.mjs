@@ -85,9 +85,9 @@ test('hidden, disabled, userinfo and nonstandard-port controls are not actual cu
  ])assert.equal(parse(changed,{url:current.ticketsUrl}).ticketStatus,undefined);
 });
 test('a concert admission statement cannot borrow unrelated vendor buttons or next concert controls',()=>{
- const h='<section id="13-giugno"><p>L\\\'acquisto del biglietto garantisce l\\\'accesso al festival per l\\\'intera giornata.</p></section>'+
- '<section id="19-giugno"><a href="https://www.ticketmaster.it/biglietti/example-13-06-2027/event/abc">Acquista</a></section>';
- assert.equal(parse(h,{url:current.ticketsUrl}).ticketStatus,undefined);
+ const intro="<section id=\"13-giugno\"><p>L'acquisto del biglietto garantisce l'accesso al festival per l'intera giornata.</p></section>",button="<a href=\"https://www.ticketmaster.it/biglietti/example-13-06-2027/event/abc\">Acquista</a>";
+ assert.equal(parse(intro+'<section>'+button+'</section>',{url:current.ticketsUrl}).ticketStatus,'available');
+ assert.equal(parse(intro+'<section id="19-giugno">'+button+'</section>',{url:current.ticketsUrl}).ticketStatus,undefined);
 });
 test('live ticket source failures and manual/explicit source overrides do not become healthy empty stock checks',async()=>{
  for(const status of [403,404,429,503]){
