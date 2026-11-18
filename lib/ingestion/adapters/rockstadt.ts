@@ -1,3 +1,4 @@
+import { load } from "cheerio";
 import type { FestivalSource } from "../types.ts";
 
 const url = "https://bilete.rockstadtextremefest.ro/bilete-rockstadt-fest-2027-129242/";
@@ -88,26 +89,41 @@ export function rockstadt(html: string, source: FestivalSource) {
 
   // An enabled festival-admission tariff in this event's own live order form
   // proves sales, unlike historical offer JSON-LD, prices or a generic button.
-  const widget = div(box, tag => hasClass(tag, "order-form-widget") && hasClass(tag, "can-book") &&
-    attr(tag, "data-return-url") === url && attr(tag, "data-is-order-form-widget") === "true");
-  const forms = widget ? [...widget.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)] : [];
-  const form = forms.length === 1 && attr(forms[0][1], "data-is-order-form") === "true" &&
-    attr(forms[0][1], "action") === "https://bilete.rockstadtextremefest.ro/widgetOrderForm/bookEvent/" &&
-    attr(forms[0][1], "method")?.toLowerCase() === "post" && attr(forms[0][1], "data-disable-submit") === "0" ? forms[0][2] : undefined;
-  const admission = form ? [...form.matchAll(/<div\b[^<>]*>/gi)].find(match => attr(match[0], "data-is-tariff") === "1" &&
-    /^(?:Abonament\b.*Acces General|TEENS Full Access\b)/i.test(attr(match[0], "data-tariff-name") ?? "") &&
-    Number(attr(match[0], "data-tariff-sell-price")) > 0 && attr(match[0], "data-tariff-sell-currency") === "RON" &&
-    !/\b(?:sold-out|disabled|unavailable)\b/i.test(attr(match[0], "class") ?? ""))?.[0] : undefined;
-  const tariffId = admission && attr(admission, "data-tariff-id");
-  const quantity = form && tariffId && [...form.matchAll(/<input\b[^>]*>/gi)].some(match =>
-    attr(match[0], "data-tariff-id") === tariffId && attr(match[0], "data-is-ticket-nr") === "1" &&
-    Number(attr(match[0], "data-max-nr-tickets")) > 0 && !/\sdisabled(?:\s|=|>)/i.test(match[0]));
-  const submit = form && [...form.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/gi)].some(match =>
-    attr(match[1], "data-is-order-form-submit") === "true" && attr(match[1], "type") === "submit" &&
-    !/\sdisabled(?:\s|=|$)/i.test(match[1]) && text(match[2]) === "Comandă bilete");
-  const sale = Boolean(quantity && submit);
+  const $ = load(box);
+  $("script, style, template, noscript, nav, footer, [hidden], [inert], [aria-hidden='true'], [disabled], [aria-disabled='true']").remove();
+  $("[style]").each((_, element) => {
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();
+  });
+  const widgets = $(".order-form-widget.can-book").filter((_, element) => {
+    const w = $(element);
+    return w.attr("data-return-url") === url && w.attr("data-is-order-form-widget") === "true"
+      && !w.is(".disabled, .sold-out, .unavailable") && !w.parents(".disabled, .sold-out, .unavailable").length;
+  });
+  const forms = widgets.length === 1 ? widgets.find("form") : $("");
+  const form = forms.first();
+  const formReady = forms.length === 1 && form.attr("data-is-order-form") === "true"
+    && form.attr("action") === "https://bilete.rockstadtextremefest.ro/widgetOrderForm/bookEvent/"
+    && form.attr("method")?.toLowerCase() === "post" && form.attr("data-disable-submit") === "0"
+    && !form.is(".disabled, .sold-out, .unavailable");
+  const admission = formReady && form.find("div[data-is-tariff='1']").toArray().some(element => {
+    const tariff = $(element), id = tariff.attr("data-tariff-id") ?? "", price = Number(tariff.attr("data-tariff-sell-price"));
+    // Teen-only/restricted passes are not evidence of purchasable ordinary
+    // adult entry. Parking, merch and sibling tariff quantities are excluded.
+    if (!/^\d+$/.test(id) || !/^Abonament\b.*Acces General/i.test(tariff.attr("data-tariff-name") ?? "")
+      || !Number.isFinite(price) || price <= 0 || tariff.attr("data-tariff-sell-currency") !== "RON"
+      || tariff.is(".sold-out, .disabled, .unavailable") || tariff.parents(".sold-out, .disabled, .unavailable").length) return false;
+    return tariff.find("input[data-is-ticket-nr='1']").toArray().some(element => {
+      const input = $(element), max = Number(input.attr("data-max-nr-tickets"));
+      return input.attr("data-tariff-id") === id && Number.isSafeInteger(max) && max > 0;
+    });
+  });
+  const submit = formReady && form.find("button[data-is-order-form-submit='true']").filter((_, element) => {
+    const button = $(element);
+    return button.attr("type") === "submit" && text(button.text()) === "Comandă bilete";
+  }).length === 1;
+  const sale = Boolean(admission && submit);
   return { editionYear: 2027, startDate: "2027-07-26", endDate: "2027-07-30", city: "Ghimbav (Brașov)", lineup: names,
     artistListMode: "additive" as const, status: "partial" as const,
-    ...(sale ? { ticketsUrl: url, ticketStatus: "available" as const } : {}),
+    ...(sale ? { ticketsUrl: url, ticketStatus: "available" as const } : { warning: "Rockstadt current ordinary admission inventory requires review; no global sellout inferred" }),
     excerpt: `${title}; 26-30 iulie '27; Ghimbav (Brașov); First confirmed names: ${names.join(", ")}${sale ? "; live festival admission tariff, selectable quantity; Comandă bilete" : ""}` };
 }
