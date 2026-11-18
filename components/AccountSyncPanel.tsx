@@ -73,7 +73,9 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
         const latest=await fetch("/api/sync/collections",{cache:"no-store"});
         if(!latest.ok)throw new Error(t.failed);
         const document=(await latest.json()).document;
-        if(document){readCollections(document.payload);setDocs(value=>({...value,collections:document}));}
+        if(!document)throw new Error(t.failed);
+        readCollections(document.payload);
+        setConflict({kind:"collections",local:selection,remote:document});
         setStatus(t.conflict);return;
       }
       const body=await response.json();

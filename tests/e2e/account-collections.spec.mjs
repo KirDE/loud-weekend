@@ -7,7 +7,7 @@ const copy={
 for(const [locale,t] of Object.entries(copy))test(locale+" imported Spotify collections survive ordinary/merge sync, reload, second device and conflict UI",async({page,context})=>{
  const imported={syncedAt:"2026-11-17T22:00:00.000Z",playlists:[{id:"abc",name:"Synthetic retained playlist",url:"https://open.spotify.com/playlist/abc",image:null,owner:"Synthetic provider",trackCount:3}]};
  const docs={collections:{id:"collection",revision:1,updatedAt:imported.syncedAt,payload:{schemaVersion:1,playlistFestivals:["graspop"],spotify:null}}};
- let failImport=false,conflictNext=false;
+ let failImport=false,conflictNext=false,importRevisionConflict=false;
  await context.route("**/api/auth/me**",route=>route.fulfill({json:{user:{id:"synthetic-user",email:"browser-collections@example.test",emailVerified:true,role:"USER"}}}));
  await context.route("**/api/sync/**",async route=>{
   const req=route.request(),kind=new URL(req.url()).pathname.split("/").filter(Boolean).at(-1);
@@ -22,6 +22,7 @@ for(const [locale,t] of Object.entries(copy))test(locale+" imported Spotify coll
  await context.route("**/api/spotify/sync**",async route=>{
   const previous=docs.collections;
   if(failImport)return route.fulfill({status:502,json:{error:"Synthetic upstream failure"}});
+  if(importRevisionConflict){importRevisionConflict=false;docs.collections={...previous,revision:previous.revision+1,payload:{...previous.payload,playlistFestivals:["reading"]}};return route.fulfill({status:409,json:{error:"concurrent device write"}});}
   if(route.request().postDataJSON().revision!==previous.revision)return route.fulfill({status:409,json:{error:"conflict"}});
   docs.collections={...previous,revision:previous.revision+1,payload:{...previous.payload,spotify:imported}};
   return route.fulfill({json:{document:docs.collections}});
@@ -44,6 +45,15 @@ for(const [locale,t] of Object.entries(copy))test(locale+" imported Spotify coll
  await expect(panel.getByRole("alert")).toContainText(t.conflict);
  await panel.getByRole("button",{name:t.keep,exact:true}).click();await expect(panel.getByRole("alert")).toHaveCount(0);
  expect(docs.collections.payload.spotify).toEqual(imported);
+ importRevisionConflict=true;await panel.getByRole("button",{name:t.import,exact:true}).click();
+ await expect(panel.getByRole("alert")).toContainText(t.conflict);
+ expect(docs.collections.payload.playlistFestivals).toEqual(["reading"]);
+ await panel.getByRole("button",{name:t.sync,exact:true}).click();
+ await expect(panel.getByRole("alert")).toContainText(t.conflict);
+ expect(docs.collections.payload.playlistFestivals).toEqual(["reading"]);
+ const useRemote={en:"Use other device",de:"Anderes Gerät verwenden",ru:"Взять данные другого устройства"}[locale];
+ await panel.getByRole("button",{name:useRemote,exact:true}).click();await expect(panel.getByRole("alert")).toHaveCount(0);
+ await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem("festival-radar-planner-v1")).playlistFestivals)).toEqual(["reading"]);
  failImport=true;await panel.getByRole("button",{name:t.import,exact:true}).click();await expect(panel).toHaveAttribute("aria-busy","false");
  await expect(link).toBeVisible();await expect(panel.locator("time")).toHaveAttribute("datetime",imported.syncedAt);
 });
