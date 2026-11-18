@@ -29,7 +29,7 @@ export type Festival = {
   status: "confirmed" | "partial" | "tba";
   editionYear?: number;
   completeness?: "complete" | "partial" | "tba";
-  ticketStatus: "available" | "low" | "unavailable" | "unknown";
+  ticketStatus: "available" | "low" | "not_on_sale" | "sold_out" | "sales_ended" | "unavailable" | "unknown";
   updatedAt: string;
   genres: string[];
   coordinates?: { latitude: number; longitude: number };

@@ -24,7 +24,7 @@ test("sitemap uses content timestamps rather than future event dates", () => {
 test("MusicEvent omits unknown facts and maps verified ticket state", () => {
   assert.match(seoSource, /item\.startDate \? \{ startDate/);
   assert.match(seoSource, /item\.ticketStatus === "available"/);
-  assert.match(seoSource, /item\.ticketStatus === "unavailable"/);
+  assert.match(seoSource, /item\.ticketStatus === "sold_out"/);
   assert.match(seoSource, /https:\/\/schema\.org\/SoldOut/);
   assert.match(seoSource, /item\.ticketsUrl && availability/);
 });

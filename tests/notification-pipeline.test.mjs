@@ -12,7 +12,7 @@ test("publication maps every supported event type to stable edition-aware keys",
     { kind: "date_changed", field: "startDate", before: "2027-01-01", after: "2027-01-02", reviewRequired: false },
     { kind: "ticket_status_changed", field: "ticketStatus", before: "unknown", after: "available", reviewRequired: false },
     { kind: "ticket_status_changed", field: "ticketStatus", before: "available", after: "low", reviewRequired: false },
-    { kind: "ticket_status_changed", field: "ticketStatus", before: "low", after: "unavailable", reviewRequired: false },
+    { kind: "ticket_status_changed", field: "ticketStatus", before: "low", after: "sold_out", reviewRequired: false },
     { kind: "timetable_published", field: "timetable", after: "42", reviewRequired: false },
   ];
   const first = notificationEventsForChanges(festival, changes, "2026-08-29T19:15:00.000Z");
@@ -40,4 +40,18 @@ test("digest schedule is daily 08:00 UTC and weekly Monday 08:00 UTC", () => {
   assert.equal(nextDigest("DAILY", new Date("2026-08-29T09:00:00Z")).toISOString(), "2026-08-30T08:00:00.000Z");
   assert.equal(nextDigest("WEEKLY", new Date("2026-08-29T09:00:00Z")).toISOString(), "2026-08-31T08:00:00.000Z");
   assert.equal(nextDigest("WEEKLY", new Date("2026-08-31T09:00:00Z")).toISOString(), "2026-09-07T08:00:00.000Z");
+});
+
+
+test("only explicit sellouts create sold-out notifications", () => {
+  const festival = { slug: "ticket-fixture", name: "Synthetic ticket fixture", editionYear: 2027 };
+  for (const status of ["unknown", "unavailable", "not_on_sale", "sales_ended"]) {
+    assert.deepEqual(notificationEventsForChanges(festival, [{ kind: "ticket_status_changed", field: "ticketStatus", before: "available", after: status, reviewRequired: false }], "2026-11-17T00:00:00Z"), []);
+  }
+  const changes = [{ kind: "ticket_status_changed", field: "ticketStatus", before: "low", after: "sold_out", reviewRequired: false }];
+  const first = notificationEventsForChanges(festival, changes, "2026-11-17T00:00:00Z");
+  assert.equal(first.length, 1);
+  assert.equal(first[0].type, "TICKETS_SOLD_OUT");
+  assert.equal(first[0].payload.change.after, "sold_out");
+  assert.deepEqual(first.map(event => event.dedupeKey), notificationEventsForChanges(festival, changes, "2026-11-18T00:00:00Z").map(event => event.dedupeKey));
 });
