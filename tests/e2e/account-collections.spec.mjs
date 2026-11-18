@@ -38,7 +38,7 @@ for(const [locale,t] of Object.entries(copy))test(locale+" imported Spotify coll
  await panel.getByRole("button",{name:t.merge,exact:true}).click();await expect(panel).toHaveAttribute("aria-busy","false");await expect(link).toBeVisible();
  await page.reload();await expect(link).toBeVisible();await expect(panel.locator("time")).toHaveAttribute("datetime",imported.syncedAt);
  await panel.getByRole("button",{name:t.remote,exact:true}).click();await expect(panel).toHaveAttribute("aria-busy","false");
- await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem("festival-radar-planner-v1")).playlistFestivals)).toEqual(["graspop","wacken-open-air"]);
+ await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem("festival-radar-planner-v1")).playlistFestivals.sort())).toEqual(["graspop","wacken-open-air"]);
  const other=await context.newPage();await other.goto("/"+locale+"/planner/");await expect(other.locator(".accountSync").getByRole("link",{name:"Synthetic retained playlist"})).toBeVisible();await other.close();
  conflictNext=true;await panel.getByRole("button",{name:t.sync,exact:true}).click();
  await expect(panel.getByRole("alert")).toContainText(t.conflict);
