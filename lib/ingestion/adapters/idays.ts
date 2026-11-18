@@ -49,6 +49,7 @@ export function observeIdaysTicketStock(html: string, year: number): { status?: 
       try {
         const target = new URL(link.attr("href") ?? "");
         if (target.protocol !== "https:" || target.username || target.password || target.port || target.search || target.hash) continue;
+        if (/merch|parking|vip|offsale/i.test(target.pathname)) continue;
         const day = date[1].padStart(2,"0"), month = months[date[2]];
         const ticketmaster = target.hostname === "www.ticketmaster.it"
           && new RegExp("^/biglietti/[a-z0-9-]*" + day + "-" + month + "-" + year + "/event/[a-z0-9]+$","i").test(target.pathname);
