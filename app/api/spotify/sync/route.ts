@@ -54,7 +54,8 @@ export async function POST(request:Request) {
     if(!updated.count)throw new ImportConflict();
     id=previous.id;
    } else id=(await tx.syncDocument.create({data:{userId:user.id,kind:SyncKind.COLLECTIONS,payload}})).id;
-   await tx.spotifyConnection.update({where:{id:connection.id},data:{lastSyncedAt:new Date(syncedAt)}});
+   const linked=await tx.spotifyConnection.updateMany({where:{id:connection.id,spotifyUserId:connection.spotifyUserId,updatedAt:connection.updatedAt},data:{lastSyncedAt:new Date(syncedAt)}});
+   if(!linked.count)throw new ImportConflict();
    return tx.syncDocument.findUniqueOrThrow({where:{id}});
   });
   return Response.json({document});

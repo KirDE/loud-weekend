@@ -294,6 +294,20 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
   assert.equal((await racingImport).status,409);
   assert.deepEqual((await (await anonymous.json("/api/sync/collections")).json()).document,document);
   assert.equal((await db.spotifyConnection.findUniqueOrThrow({where:{userId:firstUser.id}})).lastSyncedAt.toISOString(),lastSuccessful);
+  // Reconnecting a different provider identity while old pages are in flight cannot publish them.
+  let releaseReconnect;playlistGate=new Promise(resolve=>{releaseReconnect=resolve;});
+  let enteredReconnect;const reconnectGated=new Promise(resolve=>{enteredReconnect=resolve;});onPlaylistGate=enteredReconnect;
+  const oldIdentityImport=anonymous.json("/api/spotify/sync","POST",{revision:document.revision});
+  try {
+   let gateTimer;
+   try {await Promise.race([reconnectGated,new Promise((_,reject)=>{gateTimer=setTimeout(()=>reject(new Error("Reconnect fixture was not reached")),15000);})]);}
+   finally {clearTimeout(gateTimer);}
+   await db.spotifyConnection.update({where:{userId:firstUser.id},data:{spotifyUserId:"synthetic-other-provider"}});
+  }finally{releaseReconnect();onPlaylistGate=null;}
+  assert.equal((await oldIdentityImport).status,409);
+  assert.deepEqual((await (await anonymous.json("/api/sync/collections")).json()).document,document);
+  assert.equal((await db.spotifyConnection.findUniqueOrThrow({where:{userId:firstUser.id}})).lastSyncedAt.toISOString(),lastSuccessful);
+  await db.spotifyConnection.update({where:{userId:firstUser.id},data:{spotifyUserId:connection.spotifyUserId}});
   // Legacy provider-only records survive the next ordinary selection write.
   await db.syncDocument.update({where:{id:document.id},data:{payload:{source:"spotify",...imported},revision:{increment:1}}});
   const legacy=(await (await anonymous.json("/api/sync/collections")).json()).document;
