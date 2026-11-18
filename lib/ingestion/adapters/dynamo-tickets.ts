@@ -62,11 +62,15 @@ export async function discoverDynamoTickets(html: string, fetchPage: (url: strin
   }
   return html + `<script type="application/json" id="${bundleId}">${JSON.stringify(documents).replace(/</g, "\\u003c")}</script>`;
 }
-export function extractDynamoTickets(html: string, startDate: string, endDate: string, fetchedAt: string): {ticketsUrl?: string; ticketStatus?: "available"; ticketsExcerpt?: string} {
+export function extractDynamoTickets(html: string, startDate: string, endDate: string, fetchedAt: string): {ticketsUrl?: string; ticketStatus?: "available"; ticketsExcerpt?: string; warning?: string} {
+  const unverified = () => ({ warning: "Dynamo current ordinary weekend inventory requires review; no festival sellout inferred from closed, stale or restricted tiers" });
   try {
     const json = html.match(new RegExp(`<script type="application/json" id="${bundleId}">([\\s\\S]*?)<\\/script>`, "i"))?.[1];
-    const docs: TicketDocument[] = JSON.parse(json ?? "[]");
-    if (!Array.isArray(docs) || docs.length > 4) return {};
+    // A legacy stored artist-only document made no live stock attempt. Active
+    // fetches always append this envelope, even if discovery yielded no sale.
+    if (json === undefined) return {};
+    const docs: TicketDocument[] = JSON.parse(json);
+    if (!Array.isArray(docs) || !docs.length || docs.length > 4) return unverified();
     for (const doc of docs) {
       const date = text(doc.body).match(/Three days of Dynamo Metalfest\. August (\d{1,2}), (\d{1,2}) & (\d{1,2}), (20\d{2})\./i);
       if (!date || `${date[4]}-08-${date[1].padStart(2,"0")}` !== startDate || `${date[4]}-08-${date[3].padStart(2,"0")}` !== endDate || Number(date[2]) !== Number(date[1])+1) continue;
@@ -81,6 +85,6 @@ export function extractDynamoTickets(html: string, startDate: string, endDate: s
         doc.items.some(i => i.product === p.url && i.soldOut === false && (i.max === null || (Number.isInteger(i.max) && i.max > 0)) && Array.isArray(i.combo) && !i.combo.length));
       if (available) return {ticketsUrl: doc.url, ticketStatus: "available", ticketsExcerpt: `Official ${date[4]} purchase announcement corroborated by current published shop and selectable adult weekend admission at ${doc.generated}; closed loyalty/future tiers are not festival sellout. ${doc.shopUrl}`};
     }
-  } catch { /* No trustworthy live sale means no new ticket fact. */ }
-  return {};
+  } catch { return unverified(); }
+  return unverified();
 }

@@ -43,7 +43,7 @@ test('later official sale ID and regular tier, not frozen hash or early-bird lis
 });
 test('wrong edition/date/city/event/shop, stale shop, unpublished sale, closed/restricted/merch tiers preserve ticket facts',async()=>{
   const mutations=[d=>d.article=article.replaceAll('2027','2026'),d=>d.article=article.replace('13, 14 &amp; 15','20, 21 &amp; 22'),d=>d.storefront._embedded['shop:event'].title.en='Dynamo Metalfest 2026',d=>d.storefront._embedded['shop:event'].location.city='Other City',d=>d.storefront._embedded['shop:event']._links.self.href+='wrong',d=>d.storefront._embedded['shop:event']._links['shop:ticketshop'].href+='wrong',d=>d.storefront.generated_on='2026-08-13T20:27:13Z',d=>d.sale.state='Draft',d=>d.sale.end_date='2026-09-01T00:00:00Z',d=>d.storefront.is_sold_out=true,d=>d.storefront._embedded['shop:product'].forEach(p=>p.type='merchandise'),d=>d.storefront._embedded['shop:product'].forEach(p=>p.requires_membership=true),d=>d.storefront.categories[0].categories[0].items.forEach(i=>i.max_quantity=0),d=>d.storefront.categories[0].categories[0].items.forEach(i=>i.is_sold_out=true)];
-  for(const mutate of mutations){const c=await candidate(mock(mutate));assert.deepEqual(ticketFacts(c),[undefined,undefined]);assert.deepEqual(c.lineup,current.lineup);assert.equal(c.status,'partial');}
+  for(const mutate of mutations){const c=await candidate(mock(mutate));assert.deepEqual(ticketFacts(c),[undefined,undefined]);assert.deepEqual(c.lineup,current.lineup);assert.equal(c.status,'partial');assert.ok(c.warnings.some(w=>w.includes('ordinary weekend inventory requires review')));assert.equal(evaluateCandidate(current,c).publishable,false);}
 });
 test('403, missing canonical, redirect and malformed live data do not turn into successful inventory',async()=>{
   for(const target of [ticketUrl,captured.sale._links.self.href,'storefront']){const m=mock();await assert.rejects(fetchSource(source,{maxAttempts:1,fetchImpl:(u,o)=>u===target||(target==='storefront'&&u.includes('/storefront?'))?Promise.resolve(new Response('blocked',{status:403})):m.fetchImpl(u,o)}),/HTTP 403/);}
@@ -58,4 +58,19 @@ test('SEO heading support does not trust unrelated artist identity or title',asy
 });
 test('serialized ingestion envelope never contains shop JWT, price or tracker fields',async()=>{
  const m=mock();const fetched=await fetchSource(source,{fetchImpl:m.fetchImpl,maxAttempts:1});const body=await fetched.response.text();assert.ok(!body.includes('anonymous-test-only'));assert.ok(!body.includes('jwt_token'));assert.ok(!body.includes('tracking_tags'));assert.ok(!body.includes('price_breakdown'));
+});
+
+test('an attempted but empty or malformed live stock workflow cannot report healthy unchanged inventory',()=>{
+ const id='festival-radar-dynamo-tickets';
+ for(const body of ['[]','{}','null','not JSON']){
+  const html='<script type="application/json" id="'+id+'">'+body+'</script>';
+  const facts=extractDynamoTickets(html,'2027-08-13','2027-08-15',at);
+  assert.equal(facts.ticketStatus,undefined);assert.ok(facts.warning?.includes('inventory requires review'));
+ }
+ assert.deepEqual(extractDynamoTickets(article,'2027-08-13','2027-08-15',at),{},'legacy article alone makes no new stock claim');
+});
+test('no eligible current source article is explicit missing evidence, not a successful stock check',async()=>{
+ const c=await candidate(mock(d=>d.article=article.replace('rel="canonical"','rel="alternate"')));
+ assert.equal(c.ticketStatus,undefined);assert.ok(c.warnings.some(w=>w.includes('inventory requires review')));
+ const r=evaluateCandidate(current,c);assert.equal(r.publishable,false);assert(!r.changes.some(change=>change.field==='ticketStatus'));
 });
