@@ -261,6 +261,7 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
   failPlaylists = true;
   assert.equal((await anonymous.json("/api/spotify/sync", "POST")).status, 502);
   // Actual authenticated route -> canonical DB resolver -> real pure-policy RPC.
+  {
   const suffix=Date.now().toString(),name="Synthetic Selection Route "+suffix,alias="Synthetic Route Alias "+suffix;
   const identity=createHash("sha256").update("selection-"+suffix).digest("hex").slice(0,22);
   const created=[];
@@ -280,5 +281,7 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
     assert.equal(rejected.status,502);
     assert.deepEqual({reads:selectionReads,writes:selectionWrites.length},before);
   } finally {selectionIdentity=null;await db.artist.deleteMany({where:{id:{in:created}}});}
+
+  }
 
 });
