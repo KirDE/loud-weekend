@@ -17,9 +17,10 @@ async function artist(name:string,verified=false,alias:string[]=[]){
 test.after(async()=>{await db.operationalState.deleteMany({where:{key:{in:keys}}});await db.artist.deleteMany({where:{id:{in:created}}});await db.$disconnect();});
 test("canonical DB identity/verified link and alias drive selection without fuzzy provider search",async()=>{
  const name="Synthetic Selection "+suffix,alias="Synthetic Alias "+suffix,row=await artist(name,true,[alias]);
- const resolved=await selectionArtists(db,[alias]);assert.equal(resolved[0].spotifyId,row.providerId);assert.equal(resolved[0].name,name);
+ const requested=[alias,alias,alias.toLowerCase(),name];
+ const resolved=await selectionArtists(db,requested);assert.equal(resolved.length,2);assert.equal(resolved[0].spotifyId,row.providerId);assert.equal(resolved[0].name,name);
  const trackId=providerId(),calls:{url:string;method?:string}[]=[];
- const value=await createSelectionPlaylist({token:"synthetic",spotifyUserId:"synthetic",artists:[alias],festivals:["Synthetic"],canonicalArtists:resolved,
+ const value=await createSelectionPlaylist({token:"synthetic",spotifyUserId:"synthetic",artists:requested,festivals:["Synthetic"],canonicalArtists:resolved,
  request:async(url,init)=>{
   calls.push({url,method:init?.method});
   if(url.includes("/artists/"+row.providerId+"/top-tracks"))return Response.json({tracks:[{id:trackId,uri:"spotify:track:"+trackId,name:"Synthetic verified song",duration_ms:180000,artists:[{id:row.providerId,name}],popularity:1}]});

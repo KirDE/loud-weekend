@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { error, requireUser } from "@/lib/api";
-import { spotifyAccessToken } from "@/lib/spotify";
+import { spotifyAccessToken, spotifyEndpoints } from "@/lib/spotify";
 import { createSelectionPlaylist } from "@/lib/selection-playlist";
 import { selectionArtists } from "@/lib/catalog/selection-artists";
 import { rejectUntrustedOrigin } from "@/lib/request-origin";
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   try {
     const canonicalArtists = await selectionArtists(db, parsed.data.artists);
     const token = await spotifyAccessToken(connection.encryptedRefreshToken);
-    return Response.json(await createSelectionPlaylist({ token, spotifyUserId: connection.spotifyUserId, ...parsed.data, canonicalArtists }));
+    return Response.json(await createSelectionPlaylist({ token, spotifyUserId: connection.spotifyUserId, ...parsed.data, canonicalArtists, request: (url, init) => { const target = new URL(url); if (target.origin !== "https://api.spotify.com") throw new Error("Unexpected Spotify endpoint"); return fetch(spotifyEndpoints().api + target.pathname + target.search, init); } }));
   } catch (cause) {
     console.error("selection_playlist_failed", { userId: user.id, message: cause instanceof Error ? cause.message : "unknown" });
     return error("Spotify could not create the playlist. Your selection is still saved; retry or export the fallback list.", 502);
