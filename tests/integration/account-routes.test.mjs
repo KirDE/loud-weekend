@@ -22,6 +22,9 @@ const db = createPrismaClient();
 let app;
 let mock;
 let failPlaylists = false;
+let selectionIdentity = null;
+let selectionReads = 0;
+const selectionWrites = [];
 
 class Client {
   cookies = new Map();
@@ -138,6 +141,15 @@ test.before(async () => {
       response.end(JSON.stringify({ items: [item(page2 ? "two" : "one")], next: page2 ? null : `${mockUrl}/v1/me/playlists?limit=50&offset=1` }));
       return;
     }
+    if(selectionIdentity && request.url?.startsWith("/v1/artists/"+selectionIdentity.id+"/top-tracks")) {
+      selectionReads++;
+      response.end(JSON.stringify({tracks:[{id:"T".repeat(22),uri:"spotify:track:"+"T".repeat(22),name:"Synthetic verified studio song",duration_ms:180000,popularity:1,artists:[{id:selectionIdentity.id,name:selectionIdentity.name}]}]}));return;
+    }
+    if(selectionIdentity && request.method==="POST" && (request.url?.startsWith("/v1/users/")||request.url?.startsWith("/v1/playlists/"))) {
+      let body="";for await(const chunk of request)body+=chunk;
+      selectionWrites.push({path:request.url,body:JSON.parse(body)});
+      response.end(JSON.stringify(request.url.startsWith("/v1/users/")?{id:"P".repeat(22),external_urls:{spotify:"https://open.spotify.com/playlist/"+"P".repeat(22)}}:{snapshot_id:"synthetic"}));return;
+    }
     response.statusCode = 404;
     response.end(JSON.stringify({ error: "not found" }));
   }).listen(mockPort, "127.0.0.1");
@@ -248,4 +260,28 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
   assert.deepEqual(syncBody.document.payload.playlists.map((playlist) => playlist.id), ["one", "two"]);
   failPlaylists = true;
   assert.equal((await anonymous.json("/api/spotify/sync", "POST")).status, 502);
+  // Actual authenticated route -> canonical DB resolver -> real pure-policy RPC.
+  {
+  const suffix=Date.now().toString(),name="Synthetic Selection Route "+suffix,alias="Synthetic Route Alias "+suffix;
+  const identity=createHash("sha256").update("selection-"+suffix).digest("hex").slice(0,22);
+  const created=[];
+  try {
+    const row=await db.artist.create({data:{slug:"selection-route-"+suffix,name,aliases:[alias],genres:[],identityState:"LINKED",topTracks:[],recentSetlists:[],freshness:{},
+      identities:{create:{provider:"spotify",externalId:identity}},links:{create:{label:"Spotify",source:"spotify",url:"https://open.spotify.com/artist/"+identity,verified:true}}}});
+    created.push(row.id);selectionIdentity={id:identity,name};
+    const result=await anonymous.json("/api/spotify/selection-playlist","POST",{artists:[name,name,name.toLowerCase(),alias,alias],festivals:["Synthetic"]});
+    assert.equal(result.status,200);const selected=await result.json();
+    assert.equal(selected.artistCount,1);assert.equal(selected.trackCount,1);assert.deepEqual(selected.unresolved,[]);
+    assert.equal(selectionReads,1);assert.equal(selectionWrites.length,2);
+    assert.deepEqual(selectionWrites[1].body,{uris:["spotify:track:"+"T".repeat(22)]});
+    const shared="Synthetic Ambiguous Route "+suffix;
+    for(const extra of ["one","two"]){const a=await db.artist.create({data:{slug:"selection-route-"+extra+"-"+suffix,name:"Synthetic Other "+extra+" "+suffix,aliases:[shared],genres:[],identityState:"UNRESOLVED",topTracks:[],recentSetlists:[],freshness:{}}});created.push(a.id);}
+    const before={reads:selectionReads,writes:selectionWrites.length};
+    const rejected=await anonymous.json("/api/spotify/selection-playlist","POST",{artists:[shared,shared],festivals:["Synthetic"]});
+    assert.equal(rejected.status,502);
+    assert.deepEqual({reads:selectionReads,writes:selectionWrites.length},before);
+  } finally {selectionIdentity=null;await db.artist.deleteMany({where:{id:{in:created}}});}
+
+  }
+
 });
