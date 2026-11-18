@@ -209,3 +209,28 @@ test("corrected checks are quiet, preserve later lineup and billing, while new n
   assert.equal(wrongEdition.publishable, false);
   assert.ok(wrongEdition.reviewReasons.length);
 });
+
+test('hidden, ARIA-disabled and restricted admission cannot reopen ordinary ticket availability',()=>{
+ for(const [before,after] of [
+  ['class="order-form-widget can-book"','hidden class="order-form-widget can-book"'],
+  ['class="order-form-widget can-book"','aria-disabled="true" class="order-form-widget can-book"'],
+  ['class="order-form-widget can-book"','style="display:none" class="order-form-widget can-book"'],
+  ['data-is-order-form="true"','aria-disabled="true" data-is-order-form="true"'],
+  ['data-is-order-form-submit="true"','aria-disabled="true" data-is-order-form-submit="true"'],
+  ['data-is-ticket-nr="1"','hidden data-is-ticket-nr="1"'],
+  ['data-tariff-name="Abonament - Acces General"','data-tariff-name="TEENS Full Access - restricted age"'],
+  ['data-max-nr-tickets="20"','data-max-nr-tickets="Infinity"'],
+  ['data-max-nr-tickets="20"','data-max-nr-tickets="0.5"'],
+ ]){
+  const c=extract(fixture.replace(before,after));assert.equal(c.ticketStatus,undefined);assert.deepEqual(c.lineup,artists);
+  assert(c.warnings.some(w=>w.includes('ordinary admission inventory requires review')));
+  const saved={...current,lineup:artists,ticketStatus:'available',ticketsUrl:url};
+  assert.equal(evaluateCandidate(saved,c).publishable,false);
+  assert(!evaluateCandidate(saved,c).changes.some(change=>change.field==='ticketStatus'));
+ }
+});
+test('a matching quantity outside the ordinary tariff cannot supply inventory proof',()=>{
+ const original=fixture.match(/<input data-tariff-id="351669"[^>]*>/)[0];
+ const h=fixture.replace(original,'').replace('</form>',original+'</form>');
+ const c=extract(h);assert.equal(c.ticketStatus,undefined);assert(c.warnings.some(w=>w.includes('inventory requires review')));
+});
