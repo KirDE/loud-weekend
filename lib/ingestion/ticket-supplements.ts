@@ -1,3 +1,4 @@
+import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
 
@@ -13,6 +14,8 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
   if (source.festivalSlug === "full-rewind" && url.href === "https://full-rewind.de/" && source.strategies.includes("official_markup")
     && Number.isInteger(source.editionYear) && source.editionYear >= 2027 && source.editionYear <= 2100)
     return "https://full-rewind.de/products/full-rewind-weekend-ticket-" + source.editionYear + ".js";
+  if (source.festivalSlug === "idays" && url.hostname === "www.idays.it" && ["/", "/line-up"].includes(url.pathname)
+    && source.strategies.includes("html_fallback")) return "https://www.idays.it/tickets";
   if (source.festivalSlug === "download" && url.hostname === "downloadfestival.co.uk" && url.pathname === "/")
     return "https://downloadfestival.co.uk/tickets/";
   if (source.festivalSlug === "wacken-open-air" && url.hostname === "www.wacken.com" && url.pathname === "/")
@@ -26,6 +29,7 @@ export function isTicketSupplementUrl(source: FestivalSource, actual: string): b
 export function observeTicketSupplement(html: string, source: FestivalSource, url: string, dates?: Pick<FestivalCandidate, "startDate" | "endDate">): TicketObservation {
   const fail = (reason: string): TicketObservation => ({ excerpt: "", warning: `Official ${source.festivalSlug} ticket source requires review: ${reason}` });
   if (!isTicketSupplementUrl(source, url) || html.length > 2_000_000) return fail("source identity or size changed");
+  if (source.festivalSlug === "idays") return observeIdaysTicketStock(html, source.editionYear);
   if (source.festivalSlug === "full-rewind") {
     const year = source.editionYear;
     try {
