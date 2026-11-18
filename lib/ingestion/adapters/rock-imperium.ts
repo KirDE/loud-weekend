@@ -182,7 +182,7 @@ export function extractRockImperiumCandidate(input: string, source: FestivalSour
   try {
     const action = new URL(form.attr("action") ?? "", product.url);
     validAction = action.origin === "https://www.madnesslive.es" && !action.username && !action.password && !action.search && !action.hash
-      && /^\/(?:es\/carrito|en\/cart)$/.test(action.pathname) && form.attr("method")?.toLowerCase() === "post";
+      && /^\/(?:es\/carrito|en\/(?:cart|carrito))$/.test(action.pathname) && form.attr("method")?.toLowerCase() === "post";
   } catch { /* Unsupported purchase destination remains reviewable. */ }
   const buttons = form.find("button[data-button-action='add-to-cart']").filter((_, element) => {
     const button = $(element);

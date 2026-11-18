@@ -222,3 +222,10 @@ test('hidden controls and historical footer sellout copy do not create or negate
  const hidden=envelope();hidden.documents[2].html=hidden.documents[2].html.replace('type="submit"','hidden type="submit"');
  assert.equal(extract(hidden).ticketStatus,undefined);
 });
+
+test('reviewed English cart path aliases both preserve the current ordinary pass',()=>{
+ for(const action of ['https://www.madnesslive.es/en/carrito','https://www.madnesslive.es/en/cart']){
+  const e=envelope();e.documents[2].html=e.documents[2].html.replace('https://www.madnesslive.es/es/carrito',action);
+  assert.equal(extract(e).ticketStatus,'available');
+ }
+});
