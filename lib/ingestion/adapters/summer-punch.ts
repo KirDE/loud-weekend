@@ -29,11 +29,11 @@ export function summerPunch(input: string, source: FestivalSource) {
     const aria = attr(link[1], 'aria-label');
     let name = text(link[2]);
     if (aria) {
-      const day = aria.match(/^(.+), (?:MON|TUE|WED|THU|FRI|SAT|SUN) (\d{2})\.06$/);
-      if (!day || Number(day[2]) < first || Number(day[2]) > last) return undefined;
+      const day = aria.match(/^(.+), (MON|TUE|WED|THU|FRI|SAT|SUN) (\d{2})\.06$/);
+      if (!day || Number(day[3]) < first || Number(day[3]) > last || ["SUN","MON","TUE","WED","THU","FRI","SAT"][new Date(Date.UTC(year,5,Number(day[3]))).getUTCDay()] !== day[2]) return undefined;
       name = day[1];
     }
-    if (!name || name.length > 100 || /[<>&]|\p{C}|\b(?:tba|20\d{2})\b/iu.test(name) || lineup.some(n => identity(n) === identity(name))) return undefined;
+    if (!name || name.length > 100 || /[<>]|&(?:#[^;\s]+|[a-z][a-z0-9]+);|\p{C}|\b(?:tba|20\d{2})\b/iu.test(name) || lineup.some(n => identity(n) === identity(name))) return undefined;
     lineup.push(name);
   }
   const names = announcement[4].split(', ').map(identity);

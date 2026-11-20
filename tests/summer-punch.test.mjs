@@ -27,8 +27,31 @@ test('later current-edition artist is extracted dynamically and requires protect
  const r=evaluateCandidate(current,parse(h));assert.ok(r.candidate.lineup.includes('New Artist'));assert.ok(r.changes.some(d=>d.kind==='artist_added'&&d.after==='New Artist'&&d.reviewRequired));assert.ok(r.reviewReasons.length);assert.ok(!r.changes.some(d=>d.kind.endsWith('_removed')));
 });
 test('future corroborated edition works, changed date is reviewed, scripts and biography do not name artists',()=>{
- assert.equal(parse(html.replaceAll('2027','2028'),{editionYear:2028}).lineup.length,16);
+ assert.equal(parse(html.replaceAll('2027','2028').replaceAll('THU 17.06','SAT 17.06').replaceAll('FRI 18.06','SUN 18.06'),{editionYear:2028}).lineup.length,16);
  const changed=parse(html.replaceAll('17-19','18-20').replaceAll('THU 17.06','FRI 18.06'));
  assert.equal(changed.startDate,'2027-06-18');assert.ok(evaluateCandidate(current,changed).reviewReasons.length);
  assert.deepEqual(parse(html+'<script><a href="/lineup/fake">Fake</a></script><p>Biography with Guest Artist</p>').lineup,c.lineup);
+});
+
+test('stale artist weekdays fail after edition advances and legitimate ampersands are accepted',()=>{
+ assert.equal(parse(html.replaceAll('2027','2028'),{editionYear:2028}).lineup,undefined);
+ assert.ok(parse(html.replaceAll('Beartooth','Artist &amp; Artist')).lineup.includes('Artist & Artist'));
+ assert.equal(parse(html.replaceAll('Beartooth','Artist &unknown; Artist')).lineup,undefined);
+});
+test('Summer Punch additive roster cannot be replaced by the admin path, including stale approval',async()=>{
+ const {assertAdminArtistReviewAllowed}=await import('../lib/catalog/admin-artist-review.ts');
+ const {publishAdminFestivalChange}=await import('../lib/catalog/publication.ts');
+ for(const field of ['lineup','headliners']){
+  assert.throws(()=>assertAdminArtistReviewAllowed('summer-punch',[field]),/protected ingestion review/);
+  await assert.rejects(publishAdminFestivalChange({}, {change:{id:'stale-summer-punch',resourceKey:'summer-punch',field,beforeValue:['Saved Artist'],afterValue:['New Artist'],sourceEvidence:[],parserRunId:'run'},actorLabel:'test'}),/protected ingestion review/);
+ }
+ assert.doesNotThrow(()=>assertAdminArtistReviewAllowed('summer-punch',['startDate']));
+});
+test('fetch rejects foreign/same-origin redirects, missing response identity and acquisition overrides',async()=>{
+ const {fetchSource}=await import('../lib/ingestion/fetch.ts');
+ const reply=url=>{const r=new Response(html,{status:200});if(url)Object.defineProperty(r,'url',{value:url});return r;};
+ for(const url of ['https://evil.test/','https://summerpunchfestival.pl/archive',''])await assert.rejects(fetchSource(source,{fetchImpl:async()=>reply(url),maxAttempts:1}),/trusted identity/);
+ for(const extra of [{fetchUrl:'https://evil.test/'},{followLinkPattern:'.*'}])await assert.rejects(fetchSource({...source,...extra},{fetchImpl:async()=>reply(source.url),maxAttempts:1}),/trusted identity/);
+ const accepted=await fetchSource(source,{fetchImpl:async()=>reply(source.url),maxAttempts:1});assert.equal(accepted.response.url,source.url);
+ const failure=new Response('',{status:503});const result=await fetchSource(source,{fetchImpl:async()=>failure,maxAttempts:1});assert.equal(result.response.status,503);
 });

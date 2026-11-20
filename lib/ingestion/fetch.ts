@@ -73,6 +73,8 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
   if (isRoskildeSource(source) && !options.fetchImpl) return fetchRoskildeDocuments(source.editionYear);
 
   let initial = await fetchWithRetry(source.fetchUrl ?? source.url);
+  if (source.festivalSlug === "summer-punch" && (source.url !== "https://summerpunchfestival.pl/" || source.fetchUrl || source.followLinkPattern || (initial.response.ok && initial.response.url !== source.url)))
+    throw Object.assign(new Error("Summer Punch homepage changed its trusted identity"), { attempts: initial.attempts });
   if (initial.response.ok && isDownloadSource(source)) {
     let attempts = initial.attempts;
     try {
