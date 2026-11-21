@@ -135,7 +135,8 @@ exclusive creation avoids overwriting a previous claim.
    drift and moved announcements; use the existing project worktree/isolated PR,
    exact-head checks, reviewed merge/deploy, then validated source binding. Do not
    activate an untested adapter or blindly clear failures. This user explicitly
-   authorized autonomous import-conflict fixes, not provider playlist writes.
+   authorized autonomous import-conflict fixes. Existing rosters still require an
+   explicit playlist refresh; initial onboarding follows the bounded policy below.
 5. If a resolve is stale/busy, release only its own capability; re-read current
    source/edition and decide again. Serialization/transport failure is retryable;
    replay the identical decision safely rather than creating a second publication.
@@ -203,3 +204,24 @@ from repair completion. Failed/deprecated sources retain their scheduler backoff
 
 `repair_configure` retains its deployed adapter-only activation contract
 (`expectedParserKey`, `followLinkPattern`) and preserves the existing source URL.
+
+## First-lineup onboarding and provider hand-off
+
+A protected publication of the first nonempty, announced roster now atomically
+creates one native playlist refresh job for a genuinely new CURRENT edition.
+It requires no existing lineup rows (including cancelled entries), no provider
+bindings and no prior lineup-changing publication for that edition year. TBA
+rosters and Full Rewind remain excluded. Later conflict resolutions do not
+authorize refreshing existing playlists. Scalar-only updates enqueue nothing.
+
+The publication evidence and apply audit record `initial-lineup-generation`;
+`providerJobs` reports the durable job count, not completed provider playlists.
+The existing native Spotify/YouTube workers own processing and retain their
+quota, retry, ownership and supersession protections. No provider calls occur
+in the publication transaction. Identical decisions replay the stored receipt;
+no-op rechecks do not create new jobs. A queue failure rolls back the roster,
+provenance and publication together.
+
+Onboarding acceptance must verify BOTH catalogue publication and its durable
+provider hand-off (or record a concrete exclusion). A published website alone
+is not proof of complete festival onboarding or of provider completion.
