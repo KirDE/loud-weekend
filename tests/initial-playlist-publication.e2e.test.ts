@@ -6,12 +6,15 @@ import { inspectSource, claimAgentIssue, resolveAgentIssue } from '../lib/ingest
 import { publishAgentFestivalResolution } from '../lib/catalog/publication.ts';
 import { requireLocalDisposableDatabase } from './support/disposable-db.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
-test.after(() => db.$disconnect());
+const festivalIds: string[] = [];
+test.after(async () => {
+  await db.festival.deleteMany({where:{id:{in:festivalIds}}});
+  await db.$disconnect();
+});
 async function shell(slug = `first-lineup-${randomUUID()}`) {
   const festival = await db.festival.upsert({where:{slug},update:{},create:{slug, name:'Initial roster test', country:'Poland', countryCode:'PL', city:'Warsaw', officialUrl:'https://festival.example.test/', genres:[]}});
-  const prior = await db.festivalEdition.findFirst({where:{festivalId:festival.id},orderBy:{year:'desc'}});
-  await db.festivalEdition.updateMany({where:{festivalId:festival.id,recordState:'CURRENT'},data:{recordState:'ARCHIVED'}});
-  return db.festivalEdition.create({data:{festivalId:festival.id,year:prior ? prior.year + 1 : 2027,status:'TBA',ticketStatus:'UNKNOWN',recordState:'CURRENT',completeness:'TBA',sourceUpdatedAt:new Date()},include:{festival:true}});
+  festivalIds.push(festival.id);
+  return db.festivalEdition.create({data:{festivalId:festival.id,year:2027,status:'TBA',ticketStatus:'UNKNOWN',recordState:'CURRENT',completeness:'TBA',sourceUpdatedAt:new Date()},include:{festival:true}});
 }
 function input(edition: Awaited<ReturnType<typeof shell>>) {
   return {editionId:edition.id,festivalSlug:edition.festival.slug,sourceId:`reviewed:${randomUUID()}`,reason:'Verified official first roster',facts:{headliners:[] as string[],lineup:['First Roster Artist'],status:'partial' as 'partial'|'tba'},observedAt:new Date(),evidence:['headliners','lineup','status'].map(field=>({field,url:'https://festival.example.test/',checkedAt:new Date().toISOString(),contentHash:'a'.repeat(64),excerpt:'Verified official roster'}))};
