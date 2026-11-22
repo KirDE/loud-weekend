@@ -166,12 +166,12 @@ test("automatic ingestion and ordinary admin edits cannot reinstate a cancelled 
       actorLabel: "test reviewer",
     }));
     await assert.rejects(edit([cancelled.artist.name]), /Cancellation requires separate explicit review/);
-    const before = await db.lineupEntry.findMany({
-      where: { editionId: cancelled.editionId, billing: "LINEUP", status: "ANNOUNCED" },
-      include: { artist: true }, orderBy: { position: "asc" },
-    });
+    // Build the edit from the same catalogue roster the Admin Console loads.
+    const before = (await readCatalog({ database: db })).festivals.find((item) => item.slug === "synthetic-fest");
+    assert.ok(before);
+    assert.ok(!before.lineup.includes(cancelled.artist.name));
     const name = `Synthetic Reviewed Replacement ${suffix}`;
-    assert.ok(await edit([...before.map((row) => row.artist.name), name]));
+    assert.ok(await edit([...before.lineup, name]));
     const inserted = await db.artist.findFirstOrThrow({ where: { name } });
     createdArtists.push(inserted.slug);
     const retained = await db.lineupEntry.findUniqueOrThrow({ where: { id: cancelled.id } });
