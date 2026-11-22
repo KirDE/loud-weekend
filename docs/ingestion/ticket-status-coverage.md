@@ -1,5 +1,9 @@
 # Festival ticket-status rollout (#434)
 
+For the separately dated 60-source progress ledger, see
+[ticket-status-progress-20261122.md](ticket-status-progress-20261122.md).
+The 18/59 follow-up below remains a historical observation at its stated timestamp.
+
 This is a **work-in-progress** source-by-source rollout, dependent on #480's
 status model. It does not close #434. The public current-edition catalogue had
 59 festivals when enumerated on 2026-11-17; README's older count of 50 is not the
