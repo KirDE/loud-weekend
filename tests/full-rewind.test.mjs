@@ -50,3 +50,18 @@ test('admin whole-field artist replacement is refused, including stale approvals
   assert.doesNotThrow(() => assertAdminArtistReviewAllowed('full-rewind', ['startDate', 'endDate']));
   assert.doesNotThrow(() => assertAdminArtistReviewAllowed('other-festival', ['lineup', 'headliners']));
 });
+
+// Official card Full-Rewind_Bands_Pro-Pain.jpg spells PRO-PAIN. Treating every
+// filename hyphen as a word separator produces an unresolved catalog identity.
+test('new official Pro-Pain card retains its punctuation and replays as the saved identity',()=>{
+ const card=bands.match(/<img\b[^>]*alt="Full-Rewind_Bands_AILD"[^>]*>/)[0];
+ const updated=bands.replace('</main>',card.replaceAll('AILD','Pro-Pain')+'</main>');
+ const c=extract(home,updated);assert.equal(c.lineup.length,17);
+ assert(c.lineup.includes('Pro-Pain'));assert(!c.lineup.includes('Pro Pain'));
+ assert(c.lineup.includes('As I Lay Dying'));assert(c.lineup.includes('Legion of the Damned'));
+ const saved={...current,status:'partial',startDate:c.startDate,endDate:c.endDate,ticketsUrl:c.ticketsUrl,lineup:c.lineup};
+ const replay=evaluateCandidate(saved,c);assert.deepEqual(replay.changes,[]);assert.deepEqual(replay.reviewReasons,[]);
+ const later=extract(home,updated.replace('</main>',card.replaceAll('AILD','Future-Artist')+'</main>'));
+ assert(later.lineup.includes('Future Artist'));assert(later.lineup.includes('Pro-Pain'));
+ assert(evaluateCandidate(saved,later).reviewReasons.some(r=>r.includes('Full Rewind')));
+});
