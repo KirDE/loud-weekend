@@ -80,7 +80,6 @@ export function FestivalDetail({
         <FavoriteButton kind="festival" value={item.slug} />
         <select
           aria-label={t("attendanceFor", { festival: item.name })}
-          disabled={hiatus}
           value={planner.attendance[item.slug] || ""}
           onChange={(event) =>
             planner.setAttendance(
@@ -90,9 +89,9 @@ export function FestivalDetail({
           }
         >
           <option value="">{t("setAttendance")}</option>
-          <option value="going">{t("going")}</option>
-          <option value="maybe">{t("maybe")}</option>
-          <option value="not-going">{t("notGoing")}</option>
+          <option value="going" disabled={hiatus}>{t("going")}</option>
+          <option value="maybe" disabled={hiatus}>{t("maybe")}</option>
+          <option value="not-going" disabled={hiatus}>{t("notGoing")}</option>
         </select>
         <Link href="/planner/">{t("openPlan")}</Link>
       </section>

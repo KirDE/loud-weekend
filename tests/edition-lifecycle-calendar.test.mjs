@@ -95,8 +95,9 @@ for(const locale of ['en','de','ru']) {
     assert.match(html,/Rock en Seine/);
     assert.ok(html.includes(language.translate(locale,'editionHiatus')));
     assert.doesNotMatch(html,/2027-08-25|data:text\/calendar/);
-    assert.match(html,/<select disabled=""/);
-    assert.match(html,/<option value="going" selected=""/);
+    assert.doesNotMatch(html,/<select[^>]*disabled=""/);
+    assert.match(html,/<option value=""[^>]*>/);
+    assert.match(html,/<option value="going" disabled="" selected=""/);
     const mixed=readyPlanner([paused,active],locale);
     assert.doesNotMatch(payload(mixed),/Rock en Seine|20270825/);
     assert.match(payload(mixed),/Other Event/);

@@ -103,7 +103,6 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
                     </span>
                   </div>
                   <select
-                    disabled={editionOnHiatus(f)}
                     value={p.attendance[f.slug] || ""}
                     aria-label={`${t.attendance} ${f.name}`}
                     onChange={(e) =>
@@ -114,9 +113,9 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
                     }
                   >
                     <option value="">{t.noStatus}</option>
-                    <option value="going">{t.going}</option>
-                    <option value="maybe">{t.maybe}</option>
-                    <option value="not-going">{t.notGoing}</option>
+                    <option value="going" disabled={editionOnHiatus(f)}>{t.going}</option>
+                    <option value="maybe" disabled={editionOnHiatus(f)}>{t.maybe}</option>
+                    <option value="not-going" disabled={editionOnHiatus(f)}>{t.notGoing}</option>
                   </select>
                 </article>
               ))}

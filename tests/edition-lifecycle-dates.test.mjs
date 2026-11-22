@@ -84,7 +84,8 @@ for(const locale of ['en','de','ru']) {
     assert.match(html,/dateTime="2026-11-22T18:56:40.000Z"/);
     assert.match(html,/href="https:\/\/www.rockenseine.com\/"/);
     assert.doesNotMatch(html,/2027-08-25|2027-09-01|lineupSection|confirmedLineup|Sample Artist/);
-    assert.match(html,/<select[^>]*disabled=""/);
+    assert.doesNotMatch(html,/<select[^>]*disabled=""/);
+    assert.match(html,/<option value="going" disabled=""/);
     assert.doesNotMatch(html,/reviewer|contentHash|approvedAt|audit/);
     assert.equal(render(locale,h(EditionLifecycleNotice,{item:active})),'');
     const normal=render(locale,h(FestivalDetail,props({...paused,editionLifecycle:undefined})));

@@ -55,7 +55,7 @@ test('actual reviewer approval→catalogue EN/DE/RU desktop and mobile, offline 
     }
   }
   // Retained saved selection must not export or submit the paused roster.
-  await page.addInitScript(() => localStorage.setItem('festival-radar-planner-v1', JSON.stringify({ favoriteFestivals: ['rock-en-seine'], favoriteArtists: [], attendance: {}, playlistFestivals: ['rock-en-seine', 'synthetic-fest'] })));
+  await page.addInitScript(() => localStorage.setItem('festival-radar-planner-v1', JSON.stringify({ favoriteFestivals: [], favoriteArtists: [], attendance: { 'rock-en-seine': 'going' }, playlistFestivals: ['rock-en-seine', 'synthetic-fest'] })));
   let submitted;
   await page.route('**/api/spotify/selection-playlist', async route => {
     submitted = route.request().postDataJSON();
@@ -70,6 +70,19 @@ test('actual reviewer approval→catalogue EN/DE/RU desktop and mobile, offline 
   expect(submitted.artists).not.toContain('Paused Browser Artist');
   expect(submitted.artists).toContain('Sample Artist');
   expect(submitted.festivals).not.toContain('Rock en Seine');
+  const attendance = page.locator('.planList select');
+  await expect(attendance).toHaveValue('going');
+  await expect(attendance).toBeEnabled();
+  await expect(attendance.locator('option[value="going"]')).toBeDisabled();
+  await attendance.selectOption('');
+  await expect(page.locator('.planList article')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('festival-radar-planner-v1')).attendance['rock-en-seine'])).toBeUndefined();
+  await page.goto('/en/festivals/rock-en-seine/');
+  const detailAttendance = page.locator('.localActions select');
+  await expect(detailAttendance).toHaveValue('going');
+  await expect(detailAttendance).toBeEnabled();
+  await detailAttendance.selectOption('');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('festival-radar-planner-v1')).attendance['rock-en-seine'])).toBeUndefined();
   const offline = await page.request.get('/api/offline/catalog');
   expect(offline.status()).toBe(200);
   expect((await offline.json()).festivals.some(f => f.slug === 'rock-en-seine')).toBe(false);
