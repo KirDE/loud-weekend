@@ -22,7 +22,7 @@ type Database = PrismaClient | Prisma.TransactionClient;
 type CatalogChange = { field: string; before?: unknown; after?: unknown };
 
 const festivalStatuses = { confirmed: FestivalStatus.CONFIRMED, partial: FestivalStatus.PARTIAL, tba: FestivalStatus.TBA } as const;
-const ticketStatuses = { available: TicketStatus.AVAILABLE, low: TicketStatus.LOW, not_on_sale: TicketStatus.NOT_ON_SALE, sold_out: TicketStatus.SOLD_OUT, sales_ended: TicketStatus.SALES_ENDED, unavailable: TicketStatus.UNAVAILABLE, unknown: TicketStatus.UNKNOWN } as const;
+const ticketStatuses = { available: TicketStatus.AVAILABLE, low: TicketStatus.LOW, not_on_sale: TicketStatus.NOT_ON_SALE, sold_out: TicketStatus.SOLD_OUT, sales_ended: TicketStatus.SALES_ENDED, free: TicketStatus.FREE, unavailable: TicketStatus.UNAVAILABLE, unknown: TicketStatus.UNKNOWN } as const;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 const dateOnly = (value: unknown) => typeof value === "string" && value ? new Date(`${value}T00:00:00.000Z`) : null;
 const isoDate = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;

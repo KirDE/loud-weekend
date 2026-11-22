@@ -51,3 +51,24 @@ test("missing links and legacy unavailable never invent sold-out or actionable o
   }
   assert.equal(factsSchema.safeParse({ ticketStatus: "maybe_sold_out" }).success, false);
 });
+
+
+test("unticketed admission is explicit across ingestion, EN/DE/RU, filters and SEO", () => {
+  for (const ticketsUrl of [undefined, "https://festival.example.test/camping"]) {
+    const item = { ...festival, ticketStatus: "free", ticketsUrl };
+    assert.equal(factsSchema.parse({ ticketStatus: "free" }).ticketStatus, "free");
+    assert.deepEqual(ticketPresentation(item), { status: "free", href: item.officialUrl, label: "ticketsFree" });
+    assert.equal(hasAvailableTickets(item), false); // The filter is paid ticket inventory, not admission.
+    assert.equal(festivalMusicEvent(item).isAccessibleForFree, true);
+    assert.equal(festivalMusicEvent(item).offers, undefined);
+    for (const language of ["en", "de", "ru"]) {
+      const html = renderToStaticMarkup(h(LanguageProvider, { initialLanguage: language }, h(LocalPlannerProvider, null, h(FestivalDetail, { item, festivals: [item], artistSlugs: {} }))));
+      assert.ok(html.includes('data-ticket-status="free"'));
+      assert.ok(html.includes(translate(language, "ticketsFree")));
+      assert.ok(!html.includes(translate(language, "officialTickets")));
+      assert.ok(!html.includes(translate(language, "ticketsInfo")));
+      assert.ok(!html.includes("https://festival.example.test/camping"));
+    }
+  }
+  assert.equal(festivalMusicEvent(festival).isAccessibleForFree, undefined);
+});

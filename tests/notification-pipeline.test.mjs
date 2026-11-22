@@ -45,7 +45,7 @@ test("digest schedule is daily 08:00 UTC and weekly Monday 08:00 UTC", () => {
 
 test("only explicit sellouts create sold-out notifications", () => {
   const festival = { slug: "ticket-fixture", name: "Synthetic ticket fixture", editionYear: 2027 };
-  for (const status of ["unknown", "unavailable", "not_on_sale", "sales_ended"]) {
+  for (const status of ["unknown", "unavailable", "not_on_sale", "sales_ended", "free"]) {
     assert.deepEqual(notificationEventsForChanges(festival, [{ kind: "ticket_status_changed", field: "ticketStatus", before: "available", after: status, reviewRequired: false }], "2026-11-17T00:00:00Z"), []);
   }
   const changes = [{ kind: "ticket_status_changed", field: "ticketStatus", before: "low", after: "sold_out", reviewRequired: false }];
@@ -54,4 +54,16 @@ test("only explicit sellouts create sold-out notifications", () => {
   assert.equal(first[0].type, "TICKETS_SOLD_OUT");
   assert.equal(first[0].payload.change.after, "sold_out");
   assert.deepEqual(first.map(event => event.dedupeKey), notificationEventsForChanges(festival, changes, "2026-11-18T00:00:00Z").map(event => event.dedupeKey));
+});
+
+
+test("free admission and ancillary URL changes never announce ticket sales", () => {
+  const changes = [{ kind: "tickets_changed", field: "ticketsUrl", after: "https://example.test/camping", reviewRequired: false }];
+  const at = "2026-11-22T15:00:00Z";
+  assert.deepEqual(notificationEventsForChanges({ ...festival, ticketStatus: "free" }, changes, at), []);
+  assert.deepEqual(notificationEventsForChanges(festival, [...changes, { kind: "ticket_status_changed", field: "ticketStatus", after: "free", reviewRequired: false }], at), []);
+  const paid = {kind: "ticket_status_changed", field: "ticketStatus", before: "free", after: "available", reviewRequired: false};
+  assert.deepEqual(notificationEventsForChanges({ ...festival, ticketStatus: "free" }, [paid], at).map(e => e.type), ["TICKETS_ON_SALE"]);
+  const artist = {kind: "artist_added", field: "lineup", after: "Synthetic Band", reviewRequired: false};
+  assert.deepEqual(notificationEventsForChanges({ ...festival, ticketStatus: "free" }, [...changes, artist], at).map(e => e.type), ["ARTIST_ADDED"]);
 });
