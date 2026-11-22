@@ -66,10 +66,10 @@ export function diffFestival(current: Festival, candidate: FestivalCandidate): F
   }
   // New Summer Punch artists require protected review, without provider work.
   // An unchanged additive replay must not generate another review.
-  if (candidate.festivalSlug === "summer-punch") for (const change of changes) {
+  if (["summer-punch", "area53"].includes(candidate.festivalSlug)) for (const change of changes) {
     if (change.kind === "artist_added" || change.kind === "headliner_added") {
       change.reviewRequired = true;
-      change.reason = "Summer Punch additions require protected ingestion review";
+      change.reason = `${candidate.festivalSlug === "area53" ? "Area 53" : "Summer Punch"} additions require protected ingestion review`;
     }
   }
   operationalChanges(changes, current, candidate);

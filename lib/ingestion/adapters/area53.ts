@@ -1,0 +1,26 @@
+import type { FestivalSource } from '../types.ts';
+
+// Visible card headings are authoritative; the first card has a stale image alt.
+// The per-card image directory binds each booking to the requested edition.
+export function area53(input: string, source: FestivalSource) {
+  if (source.url !== 'https://area53festival.at/de/') return undefined;
+  const html = input.replace(/<!--[\s\S]*?-->/g, '').replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+  if (!new RegExp(`Tickets\\s+${source.editionYear}\\s*<`).test(html)) return undefined;
+  const section = html.match(/<div\b[^>]*id="Bands"[^>]*>([\s\S]*?)<div\b[^>]*id="news"[^>]*>/i)?.[1];
+  if (!section || !/<hr\b/.test(section)) return undefined;
+  const lineup: string[] = [];
+  for (const card of section.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
+    if (!/\bhref="https:\/\/area53festival\.at\/tickets"/.test(card[1])) return undefined;
+    const heading = card[2].match(/<h2\b[^>]*class="[^"]*\bel-title\b[^"]*"[^>]*>([^<]+)<\/h2>/i)?.[1];
+    const image = card[2].match(/<img\b[^>]*\bsrc="([^ "]+)"/i)?.[1];
+    if (!heading || !image?.startsWith(`/images/${source.editionYear}/`)) return undefined;
+    const name = heading.replace(/&amp;/g, '&').trim();
+    if (!name || name.length > 100 || /[<>]|&(?:#|[a-z]+;)|\p{C}|\b(?:tba|20\d{2})\b/iu.test(name) || lineup.some(n => n.toLowerCase() === name.toLowerCase())) return undefined;
+    lineup.push(name);
+  }
+  if (!lineup.length || (section.match(/<h2\b/gi)?.length ?? 0) !== lineup.length) return undefined;
+  return { editionYear: source.editionYear, lineup, status: 'partial' as const,
+    artistListMode: 'additive' as const, lineupScope: 'announcement' as const,
+    ticketsUrl: 'https://area53festival.at/de/tickets',
+    excerpt: `Area 53 ${source.editionYear}: ${lineup.join(', ')}` };
+}
