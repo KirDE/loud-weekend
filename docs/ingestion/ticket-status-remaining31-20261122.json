@@ -1,0 +1,494 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-11-22T12:32:00Z",
+  "scope": "The 31 without verified source proposals at the start of message460, excluding already proposed Motocultor. Offline/transport audit, not production stock or acceptance.",
+  "counts": {
+    "startingRemaining": 31,
+    "newSourceProposalsPendingGates": 4,
+    "stillWithoutVerifiedImplementation": 27
+  },
+  "results": [
+    {
+      "slug": "2000trees",
+      "state": "proposal_pending_external_gates",
+      "reason": "Four-source proposal: exact official Ticket Tailor scheduled event and ordinary InStock offers plus enabled control; primary parser and canonical DB tests.",
+      "observations": [
+        {
+          "url": "https://2000trees.co.uk/",
+          "observedAt": "2026-11-22T10:42:13.643282+00:00",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "slug": "alcatraz",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official page/embed readable; Weeztix shop is client-only and stock contract remains unverified. No queue/reservation requests.",
+      "observations": [
+        {
+          "url": "https://www.alcatraz.be/en/tickets",
+          "observedAt": "2026-11-22T10:42:13.643791+00:00",
+          "status": 200
+        },
+        {
+          "requested": "https://www.alcatraz.be/",
+          "finalUrl": "https://www.alcatraz.be/en/",
+          "at": "2026-11-22T12:29:55.552647+00:00",
+          "status": 200,
+          "bytes": 28692
+        }
+      ]
+    },
+    {
+      "slug": "bloodstock",
+      "state": "blocked_unverified_inventory",
+      "reason": "Homepage marketing is not current purchase inventory.",
+      "observations": [
+        {
+          "url": "https://www.bloodstock.uk.com/",
+          "observedAt": "2026-11-22T10:42:13.644111+00:00",
+          "status": 403,
+          "error": "HTTP error; no inventory conclusion"
+        }
+      ]
+    },
+    {
+      "slug": "eurockeennes",
+      "state": "proposal_pending_external_gates",
+      "reason": "Four-source proposal: explicit current ordinary four-day Disponible card plus Weezevent widget; primary parser and canonical DB tests. Prior raw audit response was gzip, now decoded correctly.",
+      "observations": [
+        {
+          "url": "https://www.eurockeennes.fr/achat/",
+          "observedAt": "2026-11-22T10:42:13.691196+00:00",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "slug": "firenze-rocks",
+      "state": "blocked_unverified_inventory",
+      "reason": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof.",
+      "observations": [
+        {
+          "url": "https://www.firenzerocks.it/",
+          "observedAt": "2026-11-22T10:42:13.794490+00:00",
+          "status": 403,
+          "error": "HTTP error; no inventory conclusion"
+        }
+      ]
+    },
+    {
+      "slug": "full-force",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official page remains archived 2024; no current-edition ordinary ticket evidence.",
+      "observations": [
+        {
+          "url": "https://full-force.de/",
+          "observedAt": "2026-11-22T10:42:13.888116+00:00",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "slug": "graspop",
+      "state": "blocked_unverified_inventory",
+      "reason": "Current regular priced Ticketmaster links present, but direct event GET403. Dated opening copy/price alone is not current stock; VIP waiting lists are not global sellout.",
+      "observations": [
+        {
+          "url": "https://www.graspop.be/",
+          "observedAt": "2026-11-22T10:42:13.893674+00:00",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "slug": "greenfield",
+      "state": "blocked_unverified_inventory",
+      "reason": "Homepage accessible, links ticket page403 and older on-sale news; no verified current ordinary inventory.",
+      "observations": [
+        {
+          "requested": "https://greenfieldfestival.ch/",
+          "finalUrl": "https://greenfieldfestival.ch/",
+          "at": "2026-11-22T12:29:55.553325+00:00",
+          "status": 200,
+          "bytes": 197411
+        }
+      ]
+    },
+    {
+      "slug": "heavy-weekend",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official current Standard price cards and Weezevent widget accessible; widget is client-only. No explicit live stock assertion verified; buy/price alone not promoted to availability.",
+      "observations": [
+        {
+          "url": "https://widget.weezevent.com/ticket/734dcd1a-6e7c-4465-b353-3bd5dcddd20b?locale=fr-fr",
+          "observedAt": "2026-11-22T10:42:13.979149+00:00",
+          "status": 200
+        },
+        {
+          "requested": "https://www.heavyweekend.live/",
+          "finalUrl": "https://www.heavyweekend.live/",
+          "at": "2026-11-22T12:29:55.553663+00:00",
+          "status": 200,
+          "bytes": 74065
+        }
+      ]
+    },
+    {
+      "slug": "hellfest",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official current four-day sellout coexists with future day-pass sale and resale. Global enum cannot faithfully flatten this; tier-model #446 dependency.",
+      "observations": [
+        {
+          "url": "https://tickets.hellfest.fr/en/index.html",
+          "observedAt": "2026-11-22T10:42:14.037745+00:00",
+          "status": 200
+        },
+        {
+          "requested": "https://hellfest.fr/",
+          "finalUrl": "https://hellfest.fr/",
+          "at": "2026-11-22T12:29:55.647458+00:00",
+          "status": 200,
+          "bytes": 128284
+        }
+      ]
+    },
+    {
+      "slug": "hurricane",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official homepage current festival sale/price confirmed, but shop inventory endpoint timed out earlier; banner/price alone is insufficient.",
+      "observations": [
+        {
+          "requested": "https://hurricane.de/",
+          "finalUrl": "https://hurricane.de/",
+          "at": "2026-11-22T12:29:55.740530+00:00",
+          "status": 200,
+          "bytes": 116645
+        }
+      ]
+    },
+    {
+      "slug": "jera-on-air",
+      "state": "proposal_pending_external_gates",
+      "reason": "Four-source proposal: official linked Impericon weekend product JSON, actual available product/variant, primary parser and canonical DB tests.",
+      "observations": [
+        {
+          "url": "https://www.jeraonair.nl/en/tickets/",
+          "observedAt": "2026-11-22T10:42:14.038976+00:00",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "slug": "mad-cool",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official page remains past-edition recap; no current-edition ticket inventory.",
+      "observations": [
+        {
+          "url": "https://madcoolfestival.es/",
+          "observedAt": "2026-11-22T10:42:14.052723+00:00",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "slug": "mera-luna",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official current homepage links the same timed-out external shop; no ordinary product stock verified.",
+      "observations": [
+        {
+          "url": "https://www.ticket-onlineshop.com/ols/meraluna/de",
+          "observedAt": "2026-11-22T10:42:14.184679+00:00",
+          "error": "TimeoutError"
+        },
+        {
+          "requested": "https://meraluna.de/",
+          "finalUrl": "https://meraluna.de/",
+          "at": "2026-11-22T12:29:55.792784+00:00",
+          "status": 200,
+          "bytes": 110830
+        }
+      ]
+    },
+    {
+      "slug": "midgardsblot",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official homepage200 only a 683-byte client shell; Ticketmaster403, no verified current ordinary stock.",
+      "observations": [
+        {
+          "url": "https://www.ticketmaster.no/artist/midgardsblot-tickets/1197464",
+          "observedAt": "2026-11-22T10:42:14.294726+00:00",
+          "status": 403,
+          "error": "HTTP error; no inventory conclusion"
+        },
+        {
+          "requested": "https://midgardsblot.no/",
+          "finalUrl": "https://midgardsblot.no/",
+          "at": "2026-11-22T12:29:55.806386+00:00",
+          "status": 200,
+          "bytes": 683
+        }
+      ]
+    },
+    {
+      "slug": "pinkpop",
+      "state": "proposal_pending_external_gates",
+      "reason": "Four-source proposal: current explicit ordinary availability plus regular weekend price/description/verified control; primary parser and canonical DB tests.",
+      "observations": [
+        {
+          "url": "https://www.pinkpop.nl/",
+          "observedAt": "2026-11-22T10:42:14.456411+00:00",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "slug": "pistoia-blues",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official page presents 2026 programme; no current 2027 ticket inventory.",
+      "observations": [
+        {
+          "url": "https://pistoiablues.com/",
+          "observedAt": "2026-11-22T10:42:14.458119+00:00",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "slug": "polandrock",
+      "state": "blocked_unverified_inventory",
+      "reason": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof.",
+      "observations": [
+        {
+          "url": "https://polandrockfestival.pl/",
+          "observedAt": "2026-11-22T10:42:15.231452+00:00",
+          "status": 403,
+          "error": "HTTP error; no inventory conclusion"
+        }
+      ]
+    },
+    {
+      "slug": "provinssi",
+      "state": "blocked_unverified_inventory",
+      "reason": "Current official on-sale copy links Paylogic /offsale. Inventory not verified; do not trust copy over inactive gateway.",
+      "observations": [
+        {
+          "url": "https://provinssi.fi/en/tickets-2027",
+          "observedAt": "2026-11-22T10:42:15.252049+00:00",
+          "status": 200
+        },
+        {
+          "requested": "https://www.provinssi.fi/en/",
+          "finalUrl": "https://www.provinssi.fi/en/",
+          "at": "2026-11-22T12:29:55.857420+00:00",
+          "status": 200,
+          "bytes": 130458
+        }
+      ]
+    },
+    {
+      "slug": "resurrection-fest",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official current ordinary four-day gateway reached200 but only a client app shell, no stock; original /entradas403.",
+      "observations": [
+        {
+          "url": "https://www.resurrectionfest.es/entradas/",
+          "observedAt": "2026-11-22T10:42:15.792589+00:00",
+          "status": 403,
+          "error": "HTTP error; no inventory conclusion"
+        },
+        {
+          "requested": "https://www.resurrectionfest.es/",
+          "finalUrl": "https://www.resurrectionfest.es/",
+          "at": "2026-11-22T12:29:55.929355+00:00",
+          "status": 200,
+          "bytes": 297701
+        }
+      ]
+    },
+    {
+      "slug": "roadburn",
+      "state": "blocked_unverified_inventory",
+      "reason": "Current and archived sale copy coexist, both pointing to /offsale. No verified stock or global sellout.",
+      "observations": [
+        {
+          "url": "https://roadburn.com/tickets/",
+          "observedAt": "2026-11-22T10:42:16.379733+00:00",
+          "status": 200
+        },
+        {
+          "requested": "https://roadburn.com/",
+          "finalUrl": "https://roadburn.com/",
+          "at": "2026-11-22T12:29:55.933376+00:00",
+          "status": 200,
+          "bytes": 168285
+        }
+      ]
+    },
+    {
+      "slug": "rock-en-seine",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official homepage explicitly archived 2026; previous shop403. Do not publish current inventory from archive.",
+      "observations": [
+        {
+          "url": "https://www.rockenseine.com/boutique-en-ligne/",
+          "observedAt": "2026-11-22T10:42:16.519974+00:00",
+          "status": 403,
+          "error": "HTTP error; no inventory conclusion"
+        },
+        {
+          "requested": "https://www.rockenseine.com/",
+          "finalUrl": "https://www.rockenseine.com/",
+          "at": "2026-11-22T12:29:55.969748+00:00",
+          "status": 200,
+          "bytes": 45745
+        }
+      ]
+    },
+    {
+      "slug": "rock-for-people",
+      "state": "blocked_unverified_inventory",
+      "reason": "Current homepage regular four-day card and partial capacity sold copy confirmed; ticket page403; 50% sold is not low/global sellout or independent stock.",
+      "observations": [
+        {
+          "requested": "https://rockforpeople.cz/",
+          "finalUrl": "https://rockforpeople.cz/",
+          "at": "2026-11-22T12:29:56.027442+00:00",
+          "status": 200,
+          "bytes": 96953
+        }
+      ]
+    },
+    {
+      "slug": "rock-in-roma",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official current homepage readable; Ticketone inventory destination timed out, no verified ticket product stock.",
+      "observations": [
+        {
+          "url": "https://www.ticketone.it/artist/rock-in-roma/",
+          "observedAt": "2026-11-22T10:42:16.659536+00:00",
+          "error": "TimeoutError"
+        },
+        {
+          "requested": "https://rockinroma.com/",
+          "finalUrl": "https://rockinroma.com/",
+          "at": "2026-11-22T12:29:56.068400+00:00",
+          "status": 200,
+          "bytes": 144610
+        }
+      ]
+    },
+    {
+      "slug": "rock-the-lakes",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official current three-day and VIP priced controls link distinct Ticketcorner events; previous event timeout, no actual current stock verified.",
+      "observations": [
+        {
+          "url": "https://www.ticketcorner.ch/fr/event/rock-the-lakes-2027-rock-the-lakes-22018634/",
+          "observedAt": "2026-11-22T10:42:17.621366+00:00",
+          "error": "TimeoutError"
+        },
+        {
+          "requested": "https://www.rockthelakes.ch/",
+          "finalUrl": "https://www.rockthelakes.ch/",
+          "at": "2026-11-22T12:29:56.251414+00:00",
+          "status": 200,
+          "bytes": 72146
+        }
+      ]
+    },
+    {
+      "slug": "roskilde",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official homepage current news says Wednesday soldout and other options remain; ticket page403, no source-specific ordinary stock/product schema verified.",
+      "observations": [
+        {
+          "url": "https://www.roskilde-festival.dk/billetter",
+          "observedAt": "2026-11-22T10:42:29.241669+00:00",
+          "status": 403,
+          "error": "HTTP error; no inventory conclusion"
+        },
+        {
+          "requested": "https://www.roskilde-festival.dk/",
+          "finalUrl": "https://www.roskilde-festival.dk/",
+          "at": "2026-11-22T12:29:56.270095+00:00",
+          "status": 200,
+          "bytes": 102868
+        }
+      ]
+    },
+    {
+      "slug": "southside",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official homepage current festival sale/price confirmed, but shop inventory endpoint timed out earlier; camping/VIP controls excluded.",
+      "observations": [
+        {
+          "requested": "https://southside.de/",
+          "finalUrl": "https://southside.de/",
+          "at": "2026-11-22T12:29:56.308681+00:00",
+          "status": 200,
+          "bytes": 120438
+        }
+      ]
+    },
+    {
+      "slug": "summer-punch",
+      "state": "blocked_unverified_inventory",
+      "reason": "New Summer Punch path from #504; no source-specific ticket inventory proposal has been verified.",
+      "observations": [
+        {
+          "url": "https://summerpunchfestival.pl/",
+          "observedAt": "2026-11-22T10:42:29.400120+00:00",
+          "status": 403,
+          "error": "HTTP error; no inventory conclusion"
+        }
+      ]
+    },
+    {
+      "slug": "tolminator",
+      "state": "blocked_unverified_inventory",
+      "reason": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof.",
+      "observations": [
+        {
+          "url": "https://tolminator.mojekarte.si/en/all.html",
+          "observedAt": "2026-11-22T10:42:29.275201+00:00",
+          "status": 403,
+          "error": "HTTP error; no inventory conclusion"
+        },
+        {
+          "requested": "https://tolminator.com/en/",
+          "at": "2026-11-22T12:29:56.372387+00:00",
+          "status": null,
+          "error": "TimeoutError"
+        }
+      ]
+    },
+    {
+      "slug": "tons-of-rock",
+      "state": "blocked_unverified_inventory",
+      "reason": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof.",
+      "observations": [
+        {
+          "url": "https://www.tonsofrock.no/",
+          "observedAt": "2026-11-22T10:42:29.307858+00:00",
+          "status": 403,
+          "error": "HTTP error; no inventory conclusion"
+        }
+      ]
+    },
+    {
+      "slug": "vainstream",
+      "state": "blocked_unverified_inventory",
+      "reason": "Official current page distinguishes sold-out La Familia from priced Regular Festival ticket; regular product GET/category403, so stock unverified.",
+      "observations": [
+        {
+          "requested": "https://vainstream.com/",
+          "finalUrl": "https://vainstream.com/",
+          "at": "2026-11-22T12:29:56.797881+00:00",
+          "status": 200,
+          "bytes": 170440
+        }
+      ]
+    }
+  ]
+}

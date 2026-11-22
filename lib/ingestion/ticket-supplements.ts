@@ -1,3 +1,4 @@
+import { remainingTicketUrl, observeRemainingTicket, JERA_STOCK } from "./remaining-ticket-stock.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
 
@@ -8,12 +9,20 @@ export type TicketObservation = { status?: TicketState; excerpt: string; warning
 /** Reviewed source routes, not URLs supplied by arbitrary markup or API clients. */
 export function ticketSupplementUrl(source: FestivalSource): string | undefined {
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review")) return;
+  const remaining = remainingTicketUrl(source);
+  if (remaining) return remaining;
   let url: URL; try { url = new URL(source.url); } catch { return; }
   if (url.protocol !== "https:" || url.username || url.password || url.port || url.search || url.hash) return;
   if (source.festivalSlug === "download" && url.hostname === "downloadfestival.co.uk" && url.pathname === "/")
     return "https://downloadfestival.co.uk/tickets/";
   if (source.festivalSlug === "wacken-open-air" && url.hostname === "www.wacken.com" && url.pathname === "/")
     return `https://www.wacken.com/de/tickets-shop/ticket-uebersicht-${source.editionYear}/`;
+}
+
+/** The public purchase gateway can differ from the machine evidence URL. */
+export function ticketSupplementPurchaseUrl(source: FestivalSource): string | undefined {
+  const stock = ticketSupplementUrl(source);
+  return stock === JERA_STOCK ? "https://www.impericon.com/nl/collections/jera-on-air-tickets" : stock;
 }
 
 export function isTicketSupplementUrl(source: FestivalSource, actual: string): boolean {
@@ -23,6 +32,8 @@ export function isTicketSupplementUrl(source: FestivalSource, actual: string): b
 export function observeTicketSupplement(html: string, source: FestivalSource, url: string): TicketObservation {
   const fail = (reason: string): TicketObservation => ({ excerpt: "", warning: `Official ${source.festivalSlug} ticket source requires review: ${reason}` });
   if (!isTicketSupplementUrl(source, url) || html.length > 2_000_000) return fail("source identity or size changed");
+  const remaining = observeRemainingTicket(html, source, url);
+  if (remaining) return remaining;
   const $ = load(html);
   const declaredEvents: Array<{ name?: unknown; startDate?: unknown; endDate?: unknown; eventStatus?: unknown }> = [];
   if (source.festivalSlug === "download") $("script[type='application/ld+json']").each((_, element) => {
