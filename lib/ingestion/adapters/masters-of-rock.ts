@@ -92,7 +92,7 @@ export function extractMastersOfRockCandidate(html: string, source: FestivalSour
   const soldOut = /\b(?:vyprodáno|sold\s*out)\b/iu.test(text($.html(card)));
   const buy = card.find("a[href]").filter((_, element) => {
     const link = $(element);
-    if (link.is("[disabled], [aria-disabled='true']") || link.parents("[disabled], [aria-disabled='true']").length
+    if (link.is("[disabled], [aria-disabled='true'], .disabled") || link.parents("[disabled], [aria-disabled='true'], .disabled").length
       || !/koupit\s+vstupenku/iu.test(text(link.text()))) return false;
     try {
       const target = new URL(link.attr("href") ?? "", source.url);
@@ -100,13 +100,14 @@ export function extractMastersOfRockCandidate(html: string, source: FestivalSour
         && target.pathname === `/cs/koncerty/${year}-masters-of-rock` && !target.search && !target.hash;
     } catch { return false; }
   });
-  if (soldOut && buy.length) {
+  const destinations = new Set(buy.toArray().map(element => new URL($(element).attr("href")!, source.url).href));
+  if (soldOut && destinations.size) {
     candidate.warnings.push("Masters of Rock standard-pass stock conflicts with an enabled purchase control");
   } else if (soldOut) {
     add("ticketStatus", "sold_out", $.html(card));
-  } else if (buy.length === 1 && /^\d[\d\s]*Kč$/u.test(text(card.find(".mor-price").text()))) {
+  } else if (destinations.size === 1 && /^\d[\d\s]*Kč$/u.test(text(card.find(".mor-price").text()))) {
     add("ticketStatus", "available", $.html(card));
-  } else if (buy.length > 1) {
+  } else if (destinations.size > 1) {
     candidate.warnings.push("Masters of Rock standard-pass purchase destination is ambiguous");
   }
   return candidate;

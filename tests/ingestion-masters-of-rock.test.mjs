@@ -127,3 +127,23 @@ test('minified sellout labels remain distinct from available and contradictory s
  assert.equal(parse(sold).ticketStatus,'sold_out');
  assert.equal(evaluateCandidate(current,parse(contradictory)).publishable,false);
 });
+
+test('class-disabled link and ancestor cannot establish stock; identical CTAs are not ambiguous',()=>{
+ const anchor=html.match(/<a href="\/cs\/koncerty\/2027-masters-of-rock"[^]*?<\/a>/)[0];
+ for(const disabled of [anchor.replace('btn btn-primary','btn btn-primary disabled'), '<div class="disabled">'+anchor+'</div>']) {
+  const c=parse(html.replace(anchor,disabled));assert.equal(c.ticketStatus,undefined);
+ }
+ const duplicate=parse(html.replace(anchor,anchor+anchor.replace('href="/cs/', 'href="https://www.mastersofrock.cz/cs/')));
+ assert.equal(duplicate.ticketStatus,'available');assert.deepEqual(duplicate.warnings,[]);
+});
+
+test('current scoped card overrides generic Event stock including disabled and contradictory controls',()=>{
+ const event='<script type="application/ld+json">'+JSON.stringify({'@context':'https://schema.org','@type':'Event',name:'Masters of Rock 2027',startDate:'2027-07-08',endDate:'2027-07-11',offers:{'@type':'Offer',availability:'https://schema.org/InStock',url:'https://www.mastersofrock.cz/cs/masters-of-rock-vstupenky'}})+'</script>';
+ const anchor=html.match(/<a href="\/cs\/koncerty\/2027-masters-of-rock"[^]*?<\/a>/)[0];
+ const sold=html.replace('Na stání</h3>','Na stání vyprodáno</h3>').replace(anchor,'');
+ const c=parse(event+sold);assert.equal(c.ticketStatus,'sold_out');
+ assert.ok(c.evidence.find(e=>e.field==='ticketStatus').excerpt.includes('vyprodáno'));
+ const conflict=parse(event+html.replace('Na stání</h3>','Na stání vyprodáno</h3>'));
+ assert.equal(conflict.ticketStatus,undefined);assert.equal(evaluateCandidate(current,conflict).publishable,false);
+ assert.equal(parse(event+html.replace(anchor,anchor.replace('btn btn-primary','btn btn-primary disabled'))).ticketStatus,undefined);
+});

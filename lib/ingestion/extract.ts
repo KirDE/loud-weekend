@@ -80,6 +80,10 @@ function extractConfiguredCandidate(html: string, source: FestivalSource, fetche
   // Its trusted fallback owns this existing source, not generic Event guesses.
   if (source.festivalSlug === "alcatraz" && source.strategies.includes("html_fallback"))
     return extractHtmlFallbackCandidate(html, source, fetchedAt);
+  // Masters current scoped full-pass DOM owns stock, including absence/conflict.
+  // A generic stale JSON-LD offer must not restore an unavailable card.
+  if (source.festivalSlug === "masters-of-rock" && source.strategies.includes("html_fallback"))
+    return extractHtmlFallbackCandidate(html, source, fetchedAt);
   const candidates = source.strategies.flatMap((strategy) => {
     if (strategy === "json_ld_event") return [extractJsonLdCandidate(html, source, fetchedAt)];
     if (strategy === "html_fallback") return [extractHtmlFallbackCandidate(html, source, fetchedAt)];
