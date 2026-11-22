@@ -77,3 +77,20 @@ test('protected source apply persists truthful provider receipt and audit, repla
   assert.equal((audit.metadata as any).providerPolicy,'initial-lineup-generation');
   assert.equal((audit.afterValue as any).providerJobs,1);
 });
+
+test('Area 53 protected first publication and replay remain provider-free',async()=>{
+  const edition=await shell('area53'),value=input(edition);
+  const source=await db.festivalSource.create({data:{festivalId:edition.festivalId,festivalSlug:'area53',editionId:edition.id,editionYear:2027,url:'https://area53festival.at/de/',strategies:['manual_review'],parserKey:'manual_review',refreshPolicy:'daily',manualReviewReason:'Official first roster requires review'}});
+  const issue=await inspectSource(db,source.id);
+  assert.ok(issue);
+  const claim=await claimAgentIssue(db,source.id,issue.issueId);
+  const request={...claim,decision:{action:'apply',reason:value.reason,facts:value.facts,evidence:value.evidence}};
+  const receipt=await resolveAgentIssue(db,request);
+  assert.equal(receipt.providerJobs,0);
+  assert.deepEqual(await resolveAgentIssue(db,request),receipt);
+  assert.equal(await db.catalogPlaylistRefresh.count({where:{publicationId:receipt.publicationId!}}),0);
+  const publication=await db.catalogPublication.findUniqueOrThrow({where:{id:String(receipt.publicationId)}});
+  assert.equal((publication.evidence as any).providerPolicy,'explicit-refresh-only');
+  const audit=await db.adminAuditEntry.findFirstOrThrow({where:{action:'ingestion.agent.apply',resourceKey:'area53'}});
+  assert.equal((audit.afterValue as any).providerJobs,0);
+});

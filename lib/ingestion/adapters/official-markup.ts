@@ -1,3 +1,4 @@
+import {area53} from "./area53.ts";
 import {summerPunch} from "./summer-punch.ts";
 import {provinssi} from './provinssi.ts';
 import {fullRewind} from './full-rewind.ts';
@@ -486,6 +487,7 @@ const adapters: Record<string, (html: string, source: FestivalSource, fetchedAt:
   "heavy-weekend": heavyWeekEnd,
   vainstream,
   "summer-punch": summerPunch,
+  "area53": area53,
   "rock-the-lakes": rockTheLakes,
   "rock-im-park": ringAndPark,
   "southside": fkpLineup,

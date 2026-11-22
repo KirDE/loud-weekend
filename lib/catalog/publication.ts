@@ -479,7 +479,7 @@ export async function publishAgentFestivalResolution(
     edition.lineup.length === 0 &&
     ((input.facts.headliners?.length ?? 0) + (input.facts.lineup?.length ?? 0) > 0) &&
     (input.facts.status ? input.facts.status !== "tba" : edition.status !== "TBA") &&
-    input.festivalSlug !== "full-rewind" &&
+    !["full-rewind", "area53"].includes(input.festivalSlug) &&
     await db.festivalPlaylist.count({ where: { editionId: edition.id } }) === 0 &&
     await db.catalogPublication.count({ where: {
       festivalSlug: input.festivalSlug, editionYear: edition.year, lineupChanged: true,
