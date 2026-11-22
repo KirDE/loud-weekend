@@ -7,6 +7,7 @@ import { PlannerReset } from "./PlannerReset";
 import { AccountSyncPanel } from "./AccountSyncPanel";
 import { FestivalViews } from "./FestivalViews";
 import { calendarEligible, calendarFile } from "@/lib/planning";
+import { announcedArtists } from "@/lib/festival-lineup";
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { useLanguage, translate, type Language } from "./LanguageProvider";
 
@@ -46,7 +47,7 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
     p.playlistFestivals.includes(f.slug),
   );
   const artists = Array.from(
-    new Set(selected.flatMap((f) => [...f.headliners, ...f.lineup])),
+    new Set(selected.flatMap(announcedArtists)),
   ).sort();
   const dated = planned
     .filter(calendarEligible)
@@ -54,7 +55,7 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
   async function createPlaylist() {
     setPlaylist({ status: "creating", message: t.creating });
     try {
-      const response = await fetch("/api/spotify/selection-playlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ artists, festivals: selected.map((festival) => festival.name) }) });
+      const response = await fetch("/api/spotify/selection-playlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ artists, festivals: selected.filter(festival => !editionOnHiatus(festival)).map((festival) => festival.name) }) });
       const result = await response.json() as { error?: string; playlistUrl?: string; trackCount?: number; unresolved?: string[] };
       if (!response.ok || !result.playlistUrl) throw new Error(t.playlistFailed);
       setPlaylist({ status: "created", url: result.playlistUrl, message: t.playlistCreated(result.trackCount || 0, result.unresolved?.length || 0) });

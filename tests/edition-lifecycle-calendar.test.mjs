@@ -6,6 +6,7 @@ import { transform } from 'esbuild';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as planning from '../lib/planning.ts';
+import * as lineup from '../lib/festival-lineup.ts';
 import * as lifecycle from '../lib/edition-lifecycle.ts';
 import * as language from '../components/LanguageProvider.tsx';
 import { LocalPlannerProvider } from '../components/LocalPlanner.tsx';
@@ -56,10 +57,10 @@ const {code}=await transform(await readFile(new URL('../components/PlannerPage.t
   {loader:'tsx',jsx:'automatic',format:'cjs',target:'es2022'});
 function readyPlanner(items, locale) {
   const preferences={ready:true,favoriteFestivals:[paused.slug,active.slug],attendance:{[paused.slug]:'going'},
-    playlistFestivals:[],favoriteArtists:[],setAttendance(){throw new Error('Rendering must not rewrite attendance');}};
+    playlistFestivals:items.map(f=>f.slug),favoriteArtists:[],setAttendance(){throw new Error('Rendering must not rewrite attendance');}};
   const before=structuredClone({...preferences,setAttendance:undefined});
   const deps={react:require('react'),'react/jsx-runtime':require('react/jsx-runtime'),
-    'next/link':require('next/link'), '@/lib/planning':planning,'@/lib/edition-lifecycle':lifecycle,
+    'next/link':require('next/link'), '@/lib/planning':planning,'@/lib/festival-lineup':lineup, '@/lib/edition-lifecycle':lifecycle,
     './LanguageProvider':language,'./LocalPlanner':{useLocalPlanner:()=>preferences},
     './PlannerReset':{PlannerReset:()=>null},'./AccountSyncPanel':{AccountSyncPanel:()=>null},
     './FestivalViews':{FestivalViews:()=>null}};
@@ -101,3 +102,15 @@ for(const locale of ['en','de','ru']) {
     assert.match(payload(mixed),/Other Event/);
   });
 }
+
+for (const locale of ['en', 'de', 'ru']) test(`review regression: planner playlist excludes paused rosters but preserves selection in ${locale}`, () => {
+  const stale = { ...paused, headliners: ['Paused Only Headliner'], lineup: ['Paused Only Support'] };
+  const empty = readyPlanner([stale], locale);
+  assert.doesNotMatch(empty, /data:text\/plain|Paused Only|selection-playlist/);
+  assert.match(empty, /type="checkbox" checked=""/);
+  const mixed = readyPlanner([stale, active], locale);
+  const exported = decodeURIComponent(mixed.match(/href="data:text\/plain;charset=utf-8,([^"]+)"/)[1]);
+  assert.equal(exported, 'Sample Artist');
+  assert.doesNotMatch(mixed, /Paused Only/);
+  assert.equal((mixed.match(/type="checkbox" checked=""/g) || []).length, 2);
+});
