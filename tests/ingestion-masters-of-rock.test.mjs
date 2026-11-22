@@ -118,3 +118,12 @@ test('minified element boundaries preserve a valid standard four-day pass',()=>{
  const noDuration=minified.replace(currentCard,currentCard.replace('4 dny','1 den')+'<small>4 dny archived promotion</small>');
  assert.equal(parse(noDuration).ticketStatus,undefined);
 });
+
+test('minified sellout labels remain distinct from available and contradictory stock',()=>{
+ const contradictory=html.replace('Na stání</h3>','Na stání vyprodáno</h3>').replace(/>\s+</g,'><');
+ const blocked=parse(contradictory);assert.equal(blocked.ticketStatus,undefined);
+ assert.ok(blocked.warnings.some(w=>w.includes('stock conflicts')));
+ const sold=contradictory.replace(/<a href="\/cs\/koncerty\/2027-masters-of-rock"[^]*?<\/a>/,'');
+ assert.equal(parse(sold).ticketStatus,'sold_out');
+ assert.equal(evaluateCandidate(current,parse(contradictory)).publishable,false);
+});

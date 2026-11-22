@@ -89,7 +89,7 @@ export function extractMastersOfRockCandidate(html: string, source: FestivalSour
     return candidate;
   }
   const card = cards.first();
-  const soldOut = /\b(?:vyprodáno|sold\s*out)\b/iu.test(text(card.text()));
+  const soldOut = /\b(?:vyprodáno|sold\s*out)\b/iu.test(text($.html(card)));
   const buy = card.find("a[href]").filter((_, element) => {
     const link = $(element);
     if (link.is("[disabled], [aria-disabled='true']") || link.parents("[disabled], [aria-disabled='true']").length
