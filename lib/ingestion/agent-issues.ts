@@ -557,7 +557,7 @@ export async function resolveAgentIssue(
         question: d.question ?? null,
         publicationId: publication?.id ?? null,
         parserRepairId,
-        providerJobs: 0,
+        providerJobs: publication?.playlistRefreshRequested ? 1 : 0,
         at: now.toISOString(),
       };
       await tx.operationalState.update({
@@ -600,7 +600,7 @@ export async function resolveAgentIssue(
           metadata: {
             issueId: i.issueId,
             reason: d.reason,
-            providerPolicy: "explicit-refresh-only",
+            providerPolicy: publication?.playlistRefreshRequested ? "initial-lineup-generation" : "explicit-refresh-only",
           },
         },
       });
