@@ -193,6 +193,7 @@ model User {
   reviewedSubmissions       FestivalSubmission[]       @relation("SubmissionReviewer")
   submissionAuditEntries    FestivalSubmissionAudit[]
   emailVerificationTokens   EmailVerificationToken[]
+  lifecycleDecisions        EditionLifecycleReviewDecision[]
   passkeys                  Passkey[]
 }
 
@@ -588,6 +589,7 @@ model AdminAuditEntry {
   detail       Json?
   createdAt    DateTime           @default(now())
   actor        User?              @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  lifecycleDecision EditionLifecycleReviewDecision?
 
   @@index([createdAt])
   @@index([resourceKind, resourceKey, createdAt])
@@ -918,5 +920,20 @@ model EditionLifecycleProposalSnapshot {
   createdAt     DateTime @default(now())
   edition       FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
 
+  decision      EditionLifecycleReviewDecision?
+
   @@unique([editionId, observedAt])
+}
+
+model EditionLifecycleReviewDecision {
+  id          String @id @default(cuid())
+  snapshotId  String @unique
+  contentHash String @db.Char(64)
+  decision    String
+  actorId     String
+  auditId     String @unique
+  createdAt   DateTime @default(now())
+  snapshot    EditionLifecycleProposalSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  actor       User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  audit       AdminAuditEntry @relation(fields: [auditId], references: [id], onDelete: Restrict)
 }

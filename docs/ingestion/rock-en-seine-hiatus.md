@@ -43,9 +43,9 @@ healthy fallback. Current edition/source drift fails closed. This is an
 application append-only service, not a database immutability/access-control claim.
 
 `readPendingRockEnSeineHiatus` is an INTERNAL reviewer read, not an authenticated
-HTTP endpoint or public catalogue projection. It always returns `pending`;
-`eligibleForReview` becomes false outside24h/60s-future bounds. No approval is
-inferred, including from the absence of evidence. Neither service modifies
+HTTP endpoint or public catalogue projection. It returns `pending` until an exact-revision audited decision exists;
+`eligibleForReview` is false for decided evidence or outside24h/60s-future bounds.
+No approval is inferred, including from the absence of evidence. Neither service modifies
 FestivalEdition fields, stock/source health, publications, notifications or
 provider jobs, nor creates2028 editions. All synthetic SQL tests run only on an
 own isolated disposable database; no production migration was applied.
@@ -55,3 +55,32 @@ explicit edition lifecycle semantics and approved-only public EN/DE/RU read/UI,
 bounded native collector/invocation, replay/rollback and browser checks, focused
 PR/full Quality/exact-head Codex review. Pending snapshots alone do not complete
 the source and must never be presented as a cancellation/stock publication.
+
+## Internal audited decision prerequisite
+
+`decideRockEnSeineHiatus` is an internal service, NOT an HTTP endpoint or public
+publication. Its future caller must authenticate a session, validate origin and
+pass the session actor only. No body-supplied actor may be forwarded. Within one
+transaction the service rechecks persisted ADMIN/EDITOR role and ADMIN_EMAILS
+allowlist under a shared user-row lock, locks the edition, validates source/target
+and persisted proof, then requires the exact snapshot SHA256 and latest fresh
+observation. Superseded, expired, wrong-hash or already-conflicting decisions fail.
+Same-actor same-decision replay is idempotent but still requires current authority.
+
+An additive decision table stores approve/reject, exact revision, actor and linked
+existing immutable AdminAuditEntry. The decision and audit commit atomically.
+Reviewer readback/replay validates the audit's actor/action/target/source/time/hash
+and edition against the snapshot; corruption fails closed. Decision service is
+append-only, not a claim of database-level decision immutability. The existing
+audit cannot be updated/deleted; audit actors must be retained. A newer pending
+or rejected snapshot does not inherit an earlier approval. An internal approved
+state is NOT a published hiatus and still does not change edition dates, tickets,
+health, providers or notifications, nor create2028 editions.
+
+Tests include concurrent replay, rejected conflicting decisions, revoked role and
+allowlist, wrong revision, expiry/supersession, persisted proof/decision tampering,
+and an actual disposable-DB trigger fault proving rollback of the audit when the
+decision insert fails. The synthetic audit actor is retained (demoted to USER)
+because deleting immutable audit history to clean tests would be incorrect.
+Still pending: protected session/origin HTTP API, reviewer UI, explicit approved-only
+public lifecycle semantics/read/UI, native bounded collector/CLI, browser and PR gates.

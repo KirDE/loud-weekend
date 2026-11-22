@@ -60,13 +60,76 @@ export async function stageRockEnSeineHiatus(db: PrismaClient, input: {
   });
 }
 
-/** REVIEWER-only pending read. Not an approved/public lifecycle. Expired evidence
- * remains visible as historical evidence, explicitly ineligible for review. */
+/** INTERNAL reviewer read, not a public lifecycle. Reports an audited decision
+ * when present; historical or already-decided evidence is ineligible for review. */
 export async function readPendingRockEnSeineHiatus(db: PrismaClient, editionId: string) {
   const row = await db.editionLifecycleProposalSnapshot.findFirst({ where: { editionId }, orderBy: { observedAt: "desc" },
     include: { edition: { include: { festival: true } } } });
   if (!row) return null;
   validateTarget(row.edition);
-  return { id: row.id, contentHash: row.contentHash, reviewState: "pending" as const,
-    eligibleForReview: fresh(row.observedAt), proposal: validateSnapshot(row) };
+  const proposal = validateSnapshot(row);
+  const decision = await db.editionLifecycleReviewDecision.findUnique({ where: { snapshotId: row.id }, include: { audit: true } });
+  if (decision) validateDecision(row, decision);
+  return { id: row.id, contentHash: row.contentHash,
+    reviewState: decision ? (decision.decision === "approve" ? "approved" : "rejected") : "pending",
+    eligibleForReview: !decision && fresh(row.observedAt), proposal };
+
+}
+
+type Decision = Prisma.EditionLifecycleReviewDecisionGetPayload<{ include: { audit: true } }>;
+function validateDecision(row: Snapshot, value: Decision) {
+  const audit = value.audit;
+  const action = value.decision === "approve" ? "EDITION_LIFECYCLE_APPROVED" : "EDITION_LIFECYCLE_REJECTED";
+  if (!["approve", "reject"].includes(value.decision) || value.snapshotId !== row.id || value.contentHash !== row.contentHash
+    || audit.actorId !== value.actorId || audit.actorLabel !== value.actorId || audit.action !== action
+    || audit.resourceKind !== "FESTIVAL" || audit.resourceKey !== "rock-en-seine" || audit.target !== row.id
+    || !auditEvidenceSchema.safeParse(audit.evidence).success
+    || Object.entries(evidence(row)).some(([key, v]) => (audit.evidence as Record<string, unknown>)[key] !== v)) {
+    throw new Error("Persisted lifecycle decision audit mismatch");
+  }
+}
+const auditEvidenceSchema = z.object({ contentHash: z.string(), sourceUrl: z.string(), observedAt: z.string(), editionId: z.string() }).strict();
+function evidence(row: Snapshot) {
+  return { contentHash: row.contentHash, sourceUrl: row.sourceUrl, observedAt: row.observedAt.toISOString(), editionId: row.editionId };
+}
+
+/** INTERNAL boundary, not an authenticated endpoint. actorId MUST come from a
+ * validated session, never the request body. Rechecks role/allowlist under lock.
+ * Decision+immutable admin audit commit atomically; no catalogue or public write. */
+export async function decideRockEnSeineHiatus(db: PrismaClient, input: {
+  snapshotId: string; expectedContentHash: string; decision: "approve" | "reject"; actorId: string;
+}) {
+  if (!["approve", "reject"].includes(input.decision) || !/^[a-f0-9]{64}$/.test(input.expectedContentHash)) {
+    throw new Error("Invalid lifecycle decision or revision");
+  }
+  return db.$transaction(async tx => {
+    // Shared lock prevents concurrent role revocation from crossing this decision.
+    await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${input.actorId} FOR SHARE`;
+    const actor = await tx.user.findUnique({ where: { id: input.actorId } });
+    const allowed = (process.env.ADMIN_EMAILS ?? "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (!actor || !["ADMIN", "EDITOR"].includes(actor.role) || !allowed.includes(actor.email.toLowerCase())) {
+      throw new Error("Authorized lifecycle reviewer required");
+    }
+    const initial = await tx.editionLifecycleProposalSnapshot.findUniqueOrThrow({ where: { id: input.snapshotId } });
+    await tx.$queryRaw`SELECT "id" FROM "FestivalEdition" WHERE "id" = ${initial.editionId} FOR UPDATE`;
+    const row = await tx.editionLifecycleProposalSnapshot.findUniqueOrThrow({ where: { id: input.snapshotId }, include: { edition: { include: { festival: true } } } });
+    validateTarget(row.edition); validateSnapshot(row);
+    if (row.contentHash !== input.expectedContentHash) throw new Error("Lifecycle revision conflict");
+    const prior = await tx.editionLifecycleReviewDecision.findUnique({ where: { snapshotId: row.id }, include: { audit: true } });
+    if (prior) {
+      validateDecision(row, prior);
+      if (prior.decision === input.decision && prior.actorId === actor.id) return prior;
+      throw new Error("Lifecycle snapshot already decided");
+    }
+    const latest = await tx.editionLifecycleProposalSnapshot.findFirstOrThrow({ where: { editionId: row.editionId }, orderBy: { observedAt: "desc" } });
+    if (latest.id !== row.id || !fresh(row.observedAt)) throw new Error("Superseded or expired lifecycle proposal");
+    const audit = await tx.adminAuditEntry.create({ data: {
+      actorId: actor.id, actorLabel: actor.id,
+      action: input.decision === "approve" ? "EDITION_LIFECYCLE_APPROVED" : "EDITION_LIFECYCLE_REJECTED",
+      resourceKind: "FESTIVAL", resourceKey: "rock-en-seine", target: row.id, evidence: evidence(row),
+    } });
+    return tx.editionLifecycleReviewDecision.create({ data: {
+      snapshotId: row.id, contentHash: row.contentHash, decision: input.decision, actorId: actor.id, auditId: audit.id,
+    }, include: { audit: true } });
+  });
 }
