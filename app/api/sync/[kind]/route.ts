@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { error, requireUser } from "@/lib/api";
 import { rejectUntrustedOrigin } from "@/lib/request-origin";
+import { collectionsForSelection } from "@/lib/collections";
 
 const kinds: Record<string, SyncKind> = {
   favorites: SyncKind.FAVORITES, collections: SyncKind.COLLECTIONS,
@@ -29,15 +30,25 @@ export async function PUT(request: Request, context: { params: Promise<{ kind: s
   const parsed = input.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return error("Payload and revision are required.");
   const existing = await db.syncDocument.findUnique({ where: { userId_kind: { userId: user.id, kind } } });
-  if (!existing) {
-    if (parsed.data.revision !== 0) return error("Sync conflict. Fetch the latest document.", 409);
-    const document = await db.syncDocument.create({ data: { userId: user.id, kind, payload: parsed.data.payload as Prisma.InputJsonValue } });
-    return Response.json({ document }, { status: 201 });
+  if ((existing?.revision ?? 0) !== parsed.data.revision) return error("Sync conflict. Fetch the latest document.", 409);
+  let payload: Prisma.InputJsonValue;
+  try {
+    payload = (kind === SyncKind.COLLECTIONS ? collectionsForSelection(existing?.payload, parsed.data.payload) : parsed.data.payload) as Prisma.InputJsonValue;
+  } catch { return error("Unsupported collections document. Nothing was overwritten.", 400); }
+  try {
+    const document = await db.$transaction(async tx => {
+      if (!existing) return tx.syncDocument.create({ data: { userId: user.id, kind, payload } });
+      const updated = await tx.syncDocument.updateMany({
+        where: { id: existing.id, revision: parsed.data.revision },
+        data: { payload, revision: { increment: 1 } },
+      });
+      if (!updated.count) return null;
+      return tx.syncDocument.findUniqueOrThrow({ where: { id: existing.id } });
+    });
+    if (!document) return error("Sync conflict. Fetch the latest document.", 409);
+    return Response.json({ document }, {status: existing ? 200 : 201});
+  } catch (cause) {
+    if (cause instanceof Prisma.PrismaClientKnownRequestError && cause.code === "P2002") return error("Sync conflict. Fetch the latest document.", 409);
+    throw cause;
   }
-  const updated = await db.syncDocument.updateMany({
-    where: { id: existing.id, revision: parsed.data.revision },
-    data: { payload: parsed.data.payload as Prisma.InputJsonValue, revision: { increment: 1 } },
-  });
-  if (!updated.count) return error("Sync conflict. Fetch the latest document.", 409);
-  return Response.json({ document: await db.syncDocument.findUniqueOrThrow({ where: { id: existing.id } }) });
 }

@@ -11,7 +11,7 @@ import test from "node:test";
 import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 import { seedCatalog } from "./support/seed-catalog.ts";
-import { publishIngestionResult } from "../lib/catalog/publication.ts";
+import { publishAdminFestivalChange, publishIngestionResult } from "../lib/catalog/publication.ts";
 import { catalogSeed } from "./support/catalog.ts";
 import { createIngestionRun, persistAttempt } from "../lib/ingestion/repository.ts";
 import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
@@ -636,4 +636,35 @@ test('Provinssi provenance drift rolls back catalogue, completeness and provider
   await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/Provinssi publication requires|Candidate edition 2026/);
   assert.deepEqual(await counts(),before);
  }
+});
+
+
+test("explicit ticket states survive reviewed publication and canonical public readback", async () => {
+  const { ticketPresentation } = await import("../lib/tickets.ts");
+  const { festivalMusicEvent } = await import("../lib/seo.ts");
+  const edition = await db.festivalEdition.findFirstOrThrow({ where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" } });
+  let previous = edition.ticketStatus.toLowerCase();
+  try {
+    for (const status of ["not_on_sale", "available", "low", "sold_out", "sales_ended", "unavailable", "unknown"] as const) {
+      const publication = await db.$transaction(tx => publishAdminFestivalChange(tx, {
+        actorLabel: "synthetic-ticket-review",
+        change: { id: `ticket-${suffix}-${status}`, resourceKey: "synthetic-fest", field: "ticketStatus", beforeValue: previous, afterValue: status,
+          sourceEvidence: { url: "https://festival.example.test/tickets", note: `Synthetic reviewed ${status} fixture` }, parserRunId: null },
+      }));
+      assert.ok(publication);
+      assert.equal(publication.playlistRefreshRequested, false);
+      const { festivals } = await readCatalog({ database: db });
+      const item = festivals.find(item => item.slug === "synthetic-fest")!;
+      assert.equal(item.ticketStatus, status);
+      const linked = { ...item, ticketsUrl: "https://festival.example.test/tickets" };
+      assert.equal(ticketPresentation(linked).status, status);
+      assert.equal(festivalMusicEvent(linked).offers?.availability === "https://schema.org/SoldOut", status === "sold_out");
+      const stored = await db.catalogPublication.findUniqueOrThrow({ where: { id: publication.id } });
+      assert.deepEqual(stored.fields, ["ticketStatus"]);
+      assert.equal((stored.evidence as any).sourceEvidence.url, linked.ticketsUrl);
+      previous = status;
+    }
+  } finally {
+    await db.festivalEdition.update({ where: { id: edition.id }, data: { ticketStatus: edition.ticketStatus, sourceUpdatedAt: edition.sourceUpdatedAt } });
+  }
 });

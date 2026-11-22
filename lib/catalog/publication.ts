@@ -21,7 +21,7 @@ type Database = PrismaClient | Prisma.TransactionClient;
 type CatalogChange = { field: string; before?: unknown; after?: unknown };
 
 const festivalStatuses = { confirmed: FestivalStatus.CONFIRMED, partial: FestivalStatus.PARTIAL, tba: FestivalStatus.TBA } as const;
-const ticketStatuses = { available: TicketStatus.AVAILABLE, low: TicketStatus.LOW, unavailable: TicketStatus.UNAVAILABLE, unknown: TicketStatus.UNKNOWN } as const;
+const ticketStatuses = { available: TicketStatus.AVAILABLE, low: TicketStatus.LOW, not_on_sale: TicketStatus.NOT_ON_SALE, sold_out: TicketStatus.SOLD_OUT, sales_ended: TicketStatus.SALES_ENDED, unavailable: TicketStatus.UNAVAILABLE, unknown: TicketStatus.UNKNOWN } as const;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 const dateOnly = (value: unknown) => typeof value === "string" && value ? new Date(`${value}T00:00:00.000Z`) : null;
 const isoDate = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
@@ -408,6 +408,17 @@ export async function publishAgentFestivalResolution(
     (dateStart && dateEnd && dateStart > dateEnd)
   )
     throw new Error("Reviewed dates mismatch");
+  // Only a genuinely new edition's first reviewed roster enters the native
+  // provider queue. Existing/cancelled rosters and prior generations stay gated.
+  const initialPlaylistGeneration =
+    edition.lineup.length === 0 &&
+    ((input.facts.headliners?.length ?? 0) + (input.facts.lineup?.length ?? 0) > 0) &&
+    (input.facts.status ? input.facts.status !== "tba" : edition.status !== "TBA") &&
+    input.festivalSlug !== "full-rewind" &&
+    await db.festivalPlaylist.count({ where: { editionId: edition.id } }) === 0 &&
+    await db.catalogPublication.count({ where: {
+      festivalSlug: input.festivalSlug, editionYear: edition.year, lineupChanged: true,
+    } }) === 0;
   const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
   if (
@@ -522,11 +533,12 @@ export async function publishAgentFestivalResolution(
       reason: input.reason,
       officialEvidence: input.evidence,
       reviewPolicy: "openclaw-import-conflicts-v1",
+      providerPolicy: initialPlaylistGeneration ? "initial-lineup-generation" : "explicit-refresh-only",
     },
-    playlistRefreshDeferral: {
+    playlistRefreshDeferral: initialPlaylistGeneration ? undefined : {
       policy: "explicit-refresh-only",
       reason:
-        "Import conflict resolution is not a request to create or refresh provider playlists",
+        "Import conflict resolution is not a request to refresh existing provider playlists",
     },
   });
 }

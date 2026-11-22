@@ -12,7 +12,9 @@ export function festivalMusicEvent(item: Festival) {
   const hasVerifiedDates = Boolean(item.startDate);
   const availability = item.ticketStatus === "available"
     ? "https://schema.org/InStock"
-    : item.ticketStatus === "unavailable"
+    : item.ticketStatus === "low"
+      ? "https://schema.org/LimitedAvailability"
+      : item.ticketStatus === "sold_out"
       ? "https://schema.org/SoldOut"
       : undefined;
 

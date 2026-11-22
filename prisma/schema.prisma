@@ -123,6 +123,9 @@ enum FestivalStatus {
 enum TicketStatus {
   AVAILABLE
   LOW
+  NOT_ON_SALE
+  SOLD_OUT
+  SALES_ENDED
   UNAVAILABLE
   UNKNOWN
 }

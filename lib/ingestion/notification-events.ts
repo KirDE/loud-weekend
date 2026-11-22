@@ -20,7 +20,7 @@ const eventType = (change: FestivalChange): NotificationEventType | undefined =>
   if (change.kind === "timetable_published") return "TIMETABLE_PUBLISHED";
   if (change.kind === "ticket_status_changed") {
     if (change.after === "available") return "TICKETS_ON_SALE";
-    if (change.after === "unavailable") return "TICKETS_SOLD_OUT";
+    if (change.after === "sold_out") return "TICKETS_SOLD_OUT";
   }
   if (change.kind === "tickets_changed") return "TICKETS_ON_SALE";
 };
