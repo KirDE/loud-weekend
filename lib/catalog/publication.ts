@@ -1,3 +1,4 @@
+import { ticketSupplementUrl } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
@@ -252,6 +253,33 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     if (!same(expected, persisted)) throw new Error("Persisted ingestion diff does not match publication request");
     const expectedYear = input.result.candidate.observedEditionYears.length === 1 ? input.result.candidate.observedEditionYears[0] : candidate.sourceYear ?? undefined;
     if (!expectedYear && input.result.changes.some(({ field }) => field === "lineup" || field === "headliners")) throw new Error("Cannot publish a lineup without one verified edition year");
+    // Secondary ticket observations are publishable only with the same exact
+    // source, edition, value and durable evidence that passed the producer.
+    // Do not extend the separate Impericon/I-Days publication paths here (#497).
+    const observed = input.result.candidate;
+    const stored = candidate.normalized as unknown as FestivalCandidate;
+    if (observed.ticketSupplement || stored.ticketSupplement) {
+      const ticketUrl = ticketSupplementUrl({ festivalSlug: input.result.festivalSlug,
+        url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
+        strategies: ["html_fallback"], refreshPolicy: "daily", enabled: true });
+      const provenance = { sourceUrl: input.result.sourceUrl, ticketUrl, editionYear: expectedYear };
+      const valid = ticketUrl && same(observed.ticketSupplement, provenance) && same(stored.ticketSupplement, provenance) && candidate.festivalSlug === input.result.festivalSlug &&
+        candidate.attempt.requestedUrl === input.result.sourceUrl &&
+        observed.sourceUrl === input.result.sourceUrl && stored.sourceUrl === observed.sourceUrl &&
+        stored.festivalSlug === observed.festivalSlug && observed.festivalSlug === candidate.festivalSlug &&
+        same(observed.observedEditionYears, [expectedYear]) && same(stored.observedEditionYears, [expectedYear]) &&
+        observed.ticketsUrl === ticketUrl && stored.ticketsUrl === ticketUrl &&
+        same(stored.ticketStatus, observed.ticketStatus) &&
+        ["ticketStatus", "ticketsUrl"].every(field => {
+          const value = observed[field as "ticketStatus" | "ticketsUrl"];
+          return observed.evidence.some(e => e.field === field && e.sourceUrl === ticketUrl && e.excerpt?.trim() &&
+            candidate.evidence.some(saved => saved.field === field && saved.sourceUrl === ticketUrl &&
+              same(saved.observedValue, value) && saved.excerpt === e.excerpt &&
+              saved.observedAt.toISOString() === new Date(e.observedAt).toISOString()));
+        }) && input.result.changes.filter(c => ["ticketStatus", "ticketsUrl"].includes(c.field))
+          .every(c => same(c.after, observed[c.field as "ticketStatus" | "ticketsUrl"]));
+      if (!valid) throw new Error("Ticket supplement publication requires matching persisted official ticket evidence");
+    }
     const applied = await applyFestivalChanges(db, { festivalSlug: input.result.festivalSlug, expectedYear, changes: input.result.changes, strictBefore: true, observedAt: new Date(input.result.fetchedAt) });
     // Rockharz 2027 publications retain exact edition/source/field and persisted
     // evidence guards. Verified lineup changes use the normal provider queue.

@@ -42,7 +42,7 @@ function ticketFacts(document: {url: string; html: string} | undefined, source: 
       ![`Liput vuoden ${source.editionYear} Tuskaan`, `Tickets to Tuska ${source.editionYear}`].includes(title)) return fail();
   const ticketsUrl = document.url;
   if ([`Tuska ${source.editionYear} is sold out!`, `Tuska ${source.editionYear} on loppuunmyyty!`].includes(lead))
-    return {ticketsUrl, ticketStatus: "unavailable" as const, ticketsExcerpt: lead};
+    return {ticketsUrl, ticketStatus: "sold_out" as const, ticketsExcerpt: lead};
   if (![ `Kaikki lipputyypit vuoden ${source.editionYear} Tuskaan ovat nyt myynnissä!`, `All tickets for Tuska ${source.editionYear} are now on sale!` ].includes(lead)) return fail();
   const weekend = [...section.matchAll(/<article\b[^>]*>([\s\S]*?)<\/article>/gi)]
     .find(m => /^(?:3 PÄIVÄÄ|3 DAYS)$/i.test(text(m[1].match(/<h3\b[^>]*>([\s\S]*?)<\/h3>/i)?.[1] ?? "")))?.[1];

@@ -55,3 +55,15 @@ test("missing or malformed JSON-LD returns a reviewable candidate", () => {
   assert.deepEqual(malformed.evidence, []);
   assert.deepEqual(malformed.warnings, ["No JSON-LD Event was found"]);
 });
+
+for (const [states, expected] of [
+  [["SoldOut"], "sold_out"], [["OutOfStock"], "unavailable"], [["LimitedAvailability"], "low"],
+  [["InStock", "SoldOut"], "available"], [["LimitedAvailability", "SoldOut"], "low"],
+  [["SoldOut", null], undefined], [["NotSoldOut"], undefined], [["SoldOut", "OutOfStock"], "unavailable"],
+]) test(`JSON-LD ticket availability ${JSON.stringify(states)} remains ${expected}`, () => {
+  const offers = states.map(state => ({ "@type": "Offer", url: "https://tickets.example/fest", ...(state ? { availability: `https://schema.org/${state}` } : {}) }));
+  const html = `<script type="application/ld+json">${JSON.stringify({ "@type": "MusicEvent", name: "Example Fest", startDate: "2027-07-01", offers })}</script>`;
+  const candidate = extractJsonLdCandidate(html, source, "2026-11-17T00:00:00Z");
+  assert.equal(candidate.ticketStatus, expected);
+  if (expected) assert.ok(candidate.evidence.some(e => e.field === "ticketStatus" && e.sourceUrl === source.url));
+});

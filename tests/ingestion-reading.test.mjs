@@ -38,7 +38,7 @@ test("homepage sales CTA and archive news do not invent live inventory or curren
 
 test("sold-out weekend products, not stale Buy controls, establish unavailability", () => {
   const candidate = parse(fixture.replaceAll("1st release", "Sold Out"));
-  assert.equal(candidate.ticketStatus, "unavailable");
+  assert.equal(candidate.ticketStatus, "sold_out");
 });
 
 test("sold-out accessory or early-entry package does not override available regular passes", () => {
