@@ -579,7 +579,7 @@ export async function publishAgentFestivalResolution(
     const entries = finalLineup.complete
       ? await db.lineupEntry.findMany({
         where: { editionId: edition.id },
-        select: { id: true, artistId: true, billing: true, status: true },
+        select: { artistId: true, billing: true, status: true },
       })
       : [];
     if (finalLineup.complete && !entries.some((entry) => entry.status === "ANNOUNCED"))

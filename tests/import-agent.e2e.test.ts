@@ -874,7 +874,17 @@ test("only an explicitly reviewed edition and roster can show a final lineup", a
     ?.provenance.some((p) => p.field === "finalLineup"));
   assert.ok(snapshot.editions.filter((e) => e.editionYear !== c.current.year).every((e) => !e.finalLineup));
 
-  const entry = await db.lineupEntry.findFirstOrThrow({ where: { editionId } });
+  // A display-order edit can recreate entries with new row IDs. The same
+  // artists, billing and announcement states still match the review.
+  const before = await db.lineupEntry.findFirstOrThrow({ where: { editionId } });
+  const entry = await db.$transaction(async (tx) => {
+    await tx.lineupEntry.delete({ where: { id: before.id } });
+    const { id: _previousId, ...data } = before;
+    return tx.lineupEntry.create({ data: { ...data, position: before.position + 100 } });
+  });
+  assert.notEqual(entry.id, before.id);
+  assert.equal((await current()).finalLineup, true);
+
   await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "CANCELLED" } });
   const after = await current();
   assert.equal(after.finalLineup, undefined);
