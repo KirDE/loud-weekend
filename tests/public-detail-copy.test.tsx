@@ -181,7 +181,7 @@ for (const language of ["en", "de", "ru"] as const) {
     const before = structuredClone(appearances);
     const html = renderToStaticMarkup(
       <LanguageProvider initialLanguage={language}><LocalPlannerProvider>
-        <ArtistDetail artist={artist} appearances={appearances} />
+        <ArtistDetail artist={artist} appearances={appearances} legacyFavoriteNames={[artist.name]} />
       </LocalPlannerProvider></LanguageProvider>,
     );
     assert.deepEqual([...html.matchAll(/href="\/festivals\/([^/"\s]+)\/?"/g)].map(match => match[1]), ["early-a", "early-b", "late", "unknown"]);

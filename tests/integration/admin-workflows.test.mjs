@@ -1,3 +1,4 @@
+import { readCatalog } from "../../lib/catalog/repository.ts";
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 import { createPrismaClient } from '../../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
@@ -132,6 +133,15 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
 
   const artistSlug = "integration-headliner";
   const originalArtist = await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } });
+  const editionId = publishedHeadliners[0].editionId;
+  for (const [start, artistId] of [["12:00", originalArtist.id], ["18:00", null]]) {
+    const slot = { editionId, date: new Date("2027-07-28T00:00:00Z"), stage: "Integration Stage", start, artistName: originalArtist.name };
+    await db.timetablePerformance.upsert({
+      where: { editionId_date_stage_start_artistName: slot },
+      create: { ...slot, artistId },
+      update: { artistId },
+    });
+  }
   const artistName = "Integration Headliner Revised";
   const officialSite = "https://artist.example.test/";
   const artistResponse = await admin.json("/api/admin", "POST", {
@@ -161,6 +171,12 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.ok(canonicalArtist.aliases.includes(originalArtist.name));
   assert.equal(canonicalArtist.links[0].url, officialSite);
   assert.equal(canonicalArtist.provenance[0].url, officialSite);
+  const publishedCatalog = await readCatalog({ database: db });
+  const scheduled = publishedCatalog.festivals.find(({ slug }) => slug === "wacken-open-air").timetable
+    .filter(({ stage }) => stage === "Integration Stage");
+  assert.deepEqual(scheduled.map(({ artist }) => artist), [artistName, artistName]);
+  assert.equal(await db.timetablePerformance.count({ where: { editionId, artistName: originalArtist.name, stage: "Integration Stage" } }), 2);
+
   const publicArtist = await anonymous.json(`/artists/${artistSlug}/`);
   assert.equal(publicArtist.status, 200);
   const artistHtml = await publicArtist.text();

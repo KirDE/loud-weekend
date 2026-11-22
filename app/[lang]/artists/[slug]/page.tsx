@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { Language } from "@/components/LanguageProvider";
+import { legacyFavoriteNames } from "@/lib/favorite-artist";
 import { ArtistDetail } from "@/components/ArtistDetail";
 import { supportedLanguages } from "@/lib/catalog/public";
 import { getCatalog } from "@/lib/catalog/repository";
@@ -34,5 +35,5 @@ export default async function LocalizedArtistPage({ params }: { params: Promise<
   const artist = artists.find((item) => item.slug === slug);
   if (!artist) notFound();
   const appearances = festivals.filter((festival) => [...festival.headliners, ...festival.lineup].includes(artist.name));
-  return <ArtistDetail artist={artist} appearances={appearances} />;
+  return <ArtistDetail artist={artist} appearances={appearances} legacyFavoriteNames={legacyFavoriteNames(artist, artists)} />;
 }

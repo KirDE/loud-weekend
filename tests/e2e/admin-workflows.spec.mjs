@@ -129,6 +129,33 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   }
 });
 
+test("artist favorites survive canonical renames and legacy names can be removed", async ({ page }) => {
+  const original = await db.artist.findUniqueOrThrow({ where: { slug: "sample-artist" } });
+  await page.addInitScript((name) => {
+    const key = "festival-radar-planner-v1";
+    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ favoriteArtists: [name] }));
+  }, original.name);
+  const renamed = "Sample Artist Reviewed";
+  await db.artist.update({ where: { id: original.id }, data: { name: renamed, aliases: [...original.aliases, original.name] } });
+  try {
+    await page.goto("/artists/sample-artist/");
+    await expect(page.getByRole("heading", { name: renamed })).toBeVisible();
+    const favorite = page.locator(".favoriteButton");
+    await expect(favorite).toHaveAttribute("aria-pressed", "true");
+    await favorite.click();
+    await expect(favorite).toHaveAttribute("aria-pressed", "false");
+    await favorite.click();
+    await expect(favorite).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(() => page.evaluate(() =>
+      JSON.parse(localStorage.getItem("festival-radar-planner-v1")).favoriteArtists
+    )).toEqual(["artist:sample-artist"]);
+    await page.goto("/planner/");
+    await expect(page.getByText(renamed, { exact: true })).toBeVisible();
+  } finally {
+    await db.artist.update({ where: { id: original.id }, data: { name: original.name, aliases: original.aliases } });
+  }
+});
+
 test("editor identity is rendered truthfully", async ({ page }) => {
   expect((await page.request.post("/api/auth/register", { data: { email: "browser-editor@example.test", password: "correct horse battery staple" } })).status()).toBe(201);
   await db.user.update({ where: { email: "browser-editor@example.test" }, data: { role: "EDITOR" } });
