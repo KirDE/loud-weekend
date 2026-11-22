@@ -4,7 +4,7 @@ import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters
 import { isDownloadSource, DOWNLOAD_ARTISTS, DOWNLOAD_DOCUMENTS } from "./adapters/download.ts";
 import { isHeavyHomepage, heavyMissingArtistUrls, heavyReviewedLogoUrl, HEAVY_DOCUMENTS } from "./adapters/heavy-weekend.ts";
 import {isRoskildeSource,fetchRoskildeDocuments} from "./adapters/roskilde.ts";
-import { isImpericonCurrentSource, impericonDynamicNewsUrl, discoverImpericonAnnouncements, sameImpericonArticle, impericonArticleUrl, IMPERICON_DOCUMENTS } from "./adapters/impericon-current.ts";
+import { isImpericonCurrentSource, impericonTicketProducts, impericonDynamicNewsUrl, discoverImpericonAnnouncements, sameImpericonArticle, impericonArticleUrl, IMPERICON_DOCUMENTS } from "./adapters/impericon-current.ts";
 import { isRoadburnSource, roadburnUrl, roadburnLinked, discoverRoadburnAnnouncements, roadburnDocuments, type RoadburnDocument } from "./adapters/roadburn.ts";
 import { isPolandrockSource, polandrockAnnouncementUrl } from "./adapters/polandrock.ts";
 import { handlesBrutalAssault, fetchBrutalAssaultDocuments } from "./adapters/brutal-assault.ts";
@@ -244,7 +244,20 @@ async function fetchSourceWithoutTicketSupplement(source: FestivalSource, option
       if (linked.response.url && !sameImpericonArticle(url, linked.response.url, source.editionYear)) throw new Error('Impericon article changed its official identity');
       articles.push({url, html: await linked.response.text()});
     }
-    return {response: new Response(JSON.stringify({kind: IMPERICON_DOCUMENTS, home, ...(news !== undefined ? {news} : {}), articles}), {headers: {'content-type': 'application/json'}}), attempts};
+    const ticketProducts = [];
+    let products: ReturnType<typeof impericonTicketProducts>;
+    try { products = impericonTicketProducts(home, source.editionYear); }
+    catch (error) { throw Object.assign(error instanceof Error ? error : new Error(String(error)), { attempts }); }
+    for (const product of products) {
+      const linked = await request(product.url, "error");
+      if (!linked.response.ok) return { response: linked.response, attempts };
+      if (linked.response.url && linked.response.url !== product.url) throw Object.assign(new Error("Impericon public ticket product identity changed"), { attempts });
+      if (!/^(?:application\/json|text\/javascript|application\/javascript)\b/i.test(linked.response.headers.get("content-type") ?? ""))
+        throw Object.assign(new Error("Impericon public ticket product returned a non-JSON document"), { attempts });
+      try { ticketProducts.push({ url: product.url, product: JSON.parse(await boundedTicketText(linked.response)) }); }
+      catch (error) { throw Object.assign(error instanceof Error ? error : new Error(String(error)), { attempts }); }
+    }
+    return {response: new Response(JSON.stringify({kind: IMPERICON_DOCUMENTS, home, ...(news !== undefined ? {news} : {}), articles, ticketProducts}), {headers: {'content-type': 'application/json'}}), attempts};
   }
   if (initial.response.ok && isRoadburnSource(source) && !source.fetchUrl && !source.followLinkPattern) {
     if (initial.response.url && initial.response.url !== source.url) throw new Error("Roadburn homepage redirected away from its trusted route");
@@ -542,7 +555,10 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     if (!ticket.response.ok) return { response: ticket.response, attempts };
     if (ticket.response.url && ticket.response.url !== ticketUrl) throw new Error("Official ticket destination changed identity");
     const type = ticket.response.headers.get("content-type") ?? "";
-    if (!/^text\/html\b|^application\/xhtml\+xml\b/i.test(type)) throw new Error("Official ticket destination returned a non-HTML document");
+    const supportedType = source.festivalSlug === "full-rewind"
+      ? /^(?:application\/json|text\/javascript|application\/javascript)\b/i.test(type)
+      : /^text\/html\b|^application\/xhtml\+xml\b/i.test(type);
+    if (!supportedType) throw new Error(source.festivalSlug === "full-rewind" ? "Official ticket destination returned a non-JSON document" : "Official ticket destination returned a non-HTML document");
     const html = await boundedTicketText(ticket.response);
     const response = new Response(JSON.stringify({ kind: TICKET_SUPPLEMENT, body, ticket: { url: ticketUrl, html } }), { headers: { "content-type": "application/json" } });
     Object.defineProperty(response, "url", { value: source.url });
