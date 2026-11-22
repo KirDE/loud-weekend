@@ -5,7 +5,7 @@ import type { FestivalSource, FestivalCandidate } from "./types.ts";
 
 export const TICKET_SUPPLEMENT = "official-ticket-supplement-v1";
 type TicketState = NonNullable<FestivalCandidate["ticketStatus"]>;
-export type TicketObservation = { status?: TicketState; excerpt: string; warning?: string; ticketsUrl?: string };
+export type TicketObservation = { status?: TicketState; excerpt: string; warning?: string; ticketsUrl?: string; scope?: { namespace: string; productId: string } };
 
 /** Reviewed source routes, not URLs supplied by arbitrary markup or API clients. */
 export function ticketSupplementUrl(source: FestivalSource): string | undefined {

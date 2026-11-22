@@ -5,7 +5,7 @@ import {evaluateCandidate} from '../lib/ingestion/policy.ts';
 import {fetchSource} from '../lib/ingestion/fetch.ts';
 import {extractFestivalCandidate} from '../lib/ingestion/extract.ts';
 import {ticketSupplementUrl,ticketSupplementPurchaseUrl} from '../lib/ingestion/ticket-supplements.ts';
-import {observeResurrectionStock,RESURRECTION_CONFIG,RESURRECTION_SHOP,RESURRECTION_PRODUCTS,RESURRECTION_PURCHASE,RESURRECTION_DOCUMENTS} from '../lib/ingestion/resurrection-ticket-stock.ts';
+import {observeResurrectionStock,RESURRECTION_CONFIG,RESURRECTION_SHOP,RESURRECTION_PRODUCTS,RESURRECTION_PURCHASE,RESURRECTION_DOCUMENTS,RESURRECTION_NAMESPACE,RESURRECTION_PRODUCT_ID} from '../lib/ingestion/resurrection-ticket-stock.ts';
 import {parserSource} from './support/parser-source.ts';
 const fixture=name=>readFileSync(new URL('./fixtures/ticket-status/'+name,import.meta.url),'utf8');
 const home=fixture('resurrection-primary.html'),config=JSON.parse(fixture('resurrection-public-config.json')),shop=JSON.parse(fixture('resurrection-public-shop.json')),products=JSON.parse(fixture('resurrection-public-products.json'));
@@ -21,6 +21,7 @@ for(const[name,change]of[
  ['foreign config document',p=>p.configUrl='https://foreign.test/config'],
  ['archived event',p=>p.config.data.shopSale.title='Resurrection Fest 2026'],
  ['foreign namespace',p=>p.config.data.shopSale.namespace='another_2027_event'],
+ ['same-year but different public sale namespace',p=>p.config.data.shopSale.namespace=RESURRECTION_NAMESPACE+'Other'],
  ['login restricted',p=>p.config.data.shopSale.requireLogin=true],
  ['premium restricted',p=>p.config.data.shopSale.requirePremiumMembership=true],
  ['unknown shop mode',p=>p.config.data.shopSale.shopMode='wishlist'],
@@ -55,7 +56,7 @@ async function pipeline(p=payload(),options={}){
 }
 test('Resurrection: GET-only current public config+shop+products produce durable stock and a human purchase URL',async()=>{
  const{result,calls}=await pipeline();assert.equal(result.attempts,4);assert.deepEqual(calls,[source.url,RESURRECTION_CONFIG,RESURRECTION_SHOP,RESURRECTION_PRODUCTS]);
- const c=extractFestivalCandidate(await result.response.text(),source,'2026-11-22T12:38:00Z');assert.equal(c.ticketStatus,'available');assert.equal(c.ticketsUrl,RESURRECTION_PURCHASE);assert.deepEqual(c.warnings,['Resurrection festival lineup image requires review: no individual performer markup']);
+ const c=extractFestivalCandidate(await result.response.text(),source,'2026-11-22T12:38:00Z');assert.equal(c.ticketStatus,'available');assert.equal(c.ticketsUrl,RESURRECTION_PURCHASE);assert.deepEqual(c.ticketSupplement.scope,{namespace:RESURRECTION_NAMESPACE,productId:RESURRECTION_PRODUCT_ID});assert.deepEqual(c.warnings,['Resurrection festival lineup image requires review: no individual performer markup']);
  assert.ok(c.evidence.filter(e=>e.field==='ticketStatus'||e.field==='ticketsUrl').every(e=>e.sourceUrl===RESURRECTION_PRODUCTS));
 });
 for(const endpoint of [RESURRECTION_CONFIG,RESURRECTION_SHOP,RESURRECTION_PRODUCTS])test('Resurrection: HTTP/media/redirect failure at '+endpoint,async()=>{
@@ -73,7 +74,7 @@ test('Resurrection: image-only artist review is retained and waived only for pro
  assert.equal(evaluateCandidate(current,c).publishable,true);
  for(const change of [
   {lineup:['Unexpected Artist']}, {headliners:['Unexpected Artist']}, {sourceUrl:'https://foreign.test/'},
-  {observedEditionYears:[2026]}, {ticketSupplement:undefined}, {warnings:[...c.warnings,'Source identity changed']},
+  {observedEditionYears:[2026]}, {ticketSupplement:undefined}, {ticketSupplement:{...c.ticketSupplement,scope:undefined}}, {ticketSupplement:{...c.ticketSupplement,scope:{...c.ticketSupplement.scope,namespace:'other-sale'}}}, {warnings:[...c.warnings,'Source identity changed']},
   {startDate:'2027-06-29'},
  ])assert.equal(evaluateCandidate(current,{...c,...change}).publishable,false,JSON.stringify(change));
 });

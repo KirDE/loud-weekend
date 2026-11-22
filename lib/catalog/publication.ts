@@ -1,4 +1,5 @@
-import { RESURRECTION_ARTIST_REVIEW, isResurrectionTicketOnly } from "../ingestion/resurrection-ticket-stock.ts";
+import { isDeepStrictEqual } from "node:util";
+import { RESURRECTION_ARTIST_REVIEW, RESURRECTION_NAMESPACE, RESURRECTION_PRODUCT_ID, isResurrectionTicketOnly } from "../ingestion/resurrection-ticket-stock.ts";
 import { ticketSupplementUrl, ticketSupplementPurchaseUrl } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
@@ -265,8 +266,9 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
         strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true };
       const ticketUrl = ticketSupplementUrl(registeredSource);
       const purchaseUrl = ticketSupplementPurchaseUrl(registeredSource);
-      const provenance = { sourceUrl: input.result.sourceUrl, ticketUrl, editionYear: expectedYear };
-      const valid = ticketUrl && same(observed.ticketSupplement, provenance) && same(stored.ticketSupplement, provenance) && candidate.festivalSlug === input.result.festivalSlug &&
+      const provenance = { sourceUrl: input.result.sourceUrl, ticketUrl, editionYear: expectedYear,
+        ...(registeredSource.festivalSlug === "resurrection-fest" ? { scope: { namespace: RESURRECTION_NAMESPACE, productId: RESURRECTION_PRODUCT_ID } } : {}) };
+      const valid = ticketUrl && isDeepStrictEqual(observed.ticketSupplement, provenance) && isDeepStrictEqual(stored.ticketSupplement, provenance) && candidate.festivalSlug === input.result.festivalSlug &&
         candidate.attempt.requestedUrl === input.result.sourceUrl &&
         observed.sourceUrl === input.result.sourceUrl && stored.sourceUrl === observed.sourceUrl &&
         stored.festivalSlug === observed.festivalSlug && observed.festivalSlug === candidate.festivalSlug &&

@@ -141,7 +141,7 @@ export function extractFestivalCandidate(html: string, source: FestivalSource, f
   candidate.evidence = candidate.evidence.filter(evidence => evidence.field !== "ticketStatus");
   if (ticket.warning) candidate.warnings.push(ticket.warning);
   if (ticket.status) {
-    candidate.ticketSupplement = { sourceUrl: source.url, ticketUrl: envelope.ticket.url, editionYear: source.editionYear };
+    candidate.ticketSupplement = { sourceUrl: source.url, ticketUrl: envelope.ticket.url, editionYear: source.editionYear, ...(ticket.scope ? { scope: ticket.scope } : {}) };
     candidate.ticketStatus = ticket.status;
     candidate.ticketsUrl = ticketSupplementPurchaseUrl(source);
     candidate.observedEditionYears = [...new Set([...candidate.observedEditionYears, source.editionYear])];

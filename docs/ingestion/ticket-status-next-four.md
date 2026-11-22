@@ -20,6 +20,12 @@ identity and edition warnings are not removed by a successful stock check.
 
 | Resurrection Fest | Official frontend public config/shop/products GETs: exact 2027 sale, open ordinary non-queued non-login shop, regular four-day product ID/name/category and adequate stock, explicit soldOut/almostSoldOut. Guest, Early Bird, PANDEMONIUM, upgrade, closed/queued shops do not establish ordinary availability. | Official four-day shop route |
 
+The exact reviewed Resurrection namespace and ordinary product ID are persisted
+in normalized ticket provenance and its evidence excerpt. The canonical publisher
+reconstructs and validates this scope in both request and stored candidate; the
+generic products API URL alone cannot identify a festival or authorize stock.
+Missing/changed scope is rejected even with forged policy approval.
+
 The Resurrection namespace is public sale routing from the official frontend's
 public content API, not a customer token. No shopping session/init, queue, cart,
 order or reservation endpoint is called. Its stockAvailable is capped purchase

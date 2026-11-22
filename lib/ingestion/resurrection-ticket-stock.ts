@@ -8,7 +8,9 @@ export const RESURRECTION_SHOP = "https://oss-shopping-api.superstruct.services/
 export const RESURRECTION_PRODUCTS = "https://oss-shopping-api.superstruct.services/api/v2/products?lang=en";
 export const RESURRECTION_PURCHASE = "https://tickets.resurrectionfest.es/es/resurrection-fest-2027/4-day-tickets";
 export const RESURRECTION_DOCUMENTS = "resurrection-public-stock-v1";
-export const isResurrectionNamespace = (value: unknown): value is string => typeof value === "string" && /^resurrectionfest_2027_[A-Za-z0-9_-]{1,80}$/.test(value);
+export const RESURRECTION_NAMESPACE = "resurrectionfest_2027_BL_JbWdUTvcUz";
+export const RESURRECTION_PRODUCT_ID = "bleep_ZVcvxdk1Tyyc5xa8vL_bwQ";
+export const isResurrectionNamespace = (value: unknown): value is string => value === RESURRECTION_NAMESPACE;
 
 export function observeResurrectionStock(body: string): TicketObservation {
   const fail = (reason: string): TicketObservation => ({ excerpt: "", warning: `Official resurrection-fest ticket source requires review: ${reason}` });
@@ -23,10 +25,10 @@ export function observeResurrectionStock(body: string): TicketObservation {
     || shop.paymentQueueEnabled !== false || shop.currency !== "EUR") return fail("ordinary shop closed, queued, read-only or changed");
   const products = data.products?.data;
   if (!Array.isArray(products) || products.length > 300) return fail("public product schema changed");
-  const ordinary = products.filter(p => p?.id === "bleep_ZVcvxdk1Tyyc5xa8vL_bwQ" || p?.name === "4 Day Ticket / Abono 4 días");
+  const ordinary = products.filter(p => p?.id === RESURRECTION_PRODUCT_ID || p?.name === "4 Day Ticket / Abono 4 días");
   if (ordinary.length !== 1) return fail("ordinary four-day admission missing or ambiguous");
   const p = ordinary[0];
-  if (p.id !== "bleep_ZVcvxdk1Tyyc5xa8vL_bwQ" || p.name !== "4 Day Ticket / Abono 4 días" || p.type !== "ticket"
+  if (p.id !== RESURRECTION_PRODUCT_ID || p.name !== "4 Day Ticket / Abono 4 días" || p.type !== "ticket"
     || p.claimFlow !== "regular" || p.isUpgrade !== false || p.restrictsToDay !== ""
     || !Array.isArray(p.categories) || p.categories.length !== 1 || p.categories[0]?.en !== "ENTRANCE TICKETS"
     || typeof p.price !== "number" || !Number.isFinite(p.price) || p.price <= 0
@@ -34,8 +36,8 @@ export function observeResurrectionStock(body: string): TicketObservation {
     || !Number.isSafeInteger(p.stockAvailable) || !Number.isSafeInteger(p.minQuantity) || !Number.isSafeInteger(p.maxQuantity)
     || p.minQuantity < 1 || p.maxQuantity < p.minQuantity || p.stockAvailable < p.minQuantity || p.soldOut)
     return fail("ordinary admission eligibility/stock unavailable or contradictory; no global sellout inferred");
-  return { status: p.almostSoldOut ? "low" : "available",
-    excerpt: `Resurrection Fest 2027; ordinary four-day admission; EUR ${p.price}; open non-queued public shop; soldOut=false; almostSoldOut=${p.almostSoldOut}; stockAvailable covers minimum purchase (not total capacity)` };
+  return { status: p.almostSoldOut ? "low" : "available", scope: { namespace: RESURRECTION_NAMESPACE, productId: RESURRECTION_PRODUCT_ID },
+    excerpt: `Resurrection Fest 2027; ordinary four-day admission; EUR ${p.price}; open non-queued public shop; soldOut=false; almostSoldOut=${p.almostSoldOut}; stockAvailable covers minimum purchase (not total capacity); namespace=${RESURRECTION_NAMESPACE}; product=${RESURRECTION_PRODUCT_ID}` };
 }
 
 export const RESURRECTION_ARTIST_REVIEW = "Resurrection festival lineup image requires review: no individual performer markup";
@@ -47,6 +49,7 @@ export function isResurrectionTicketOnly(candidate: FestivalCandidate, changes: 
     && candidate.lineup === undefined && candidate.headliners === undefined
     && changes.every(c => ["ticketStatus", "ticketsUrl"].includes(c.field))
     && candidate.ticketSupplement?.sourceUrl === candidate.sourceUrl && candidate.ticketSupplement.ticketUrl === RESURRECTION_PRODUCTS
+    && candidate.ticketSupplement.scope?.namespace === RESURRECTION_NAMESPACE && candidate.ticketSupplement.scope.productId === RESURRECTION_PRODUCT_ID
     && candidate.ticketSupplement.editionYear === year && candidate.ticketsUrl === RESURRECTION_PURCHASE
     && ["available", "low"].includes(candidate.ticketStatus ?? "");
 }
