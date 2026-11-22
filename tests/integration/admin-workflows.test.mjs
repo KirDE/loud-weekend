@@ -16,16 +16,20 @@ const sourceOrigin = "http://127.0.0.1:3250";
 const requests = [];
 const ticketsUrl = "https://tickets.example.test/integration";
 let primaryFails = false;
+let originalStartDate = "2027-07-28";
+const correctedStartDate = "2027-07-29";
 const sourceServer = createServer((request, response) => {
   requests.push(request.url);
-  if (request.url === "/second" || (request.url === "/primary" && primaryFails)) {
+  if (request.url === "/failing" || primaryFails) {
     response.writeHead(503, { "retry-after": "0" });
     response.end("unavailable");
     return;
   }
-  assert.equal(request.url, "/primary");
+  assert.ok(request.url === "/primary" || request.url === "/dates");
+  const startDate = request.url === "/dates" ? correctedStartDate : originalStartDate;
+  const availability = request.url === "/primary" ? ' ,"availability":"https://schema.org/SoldOut"' : "";
   response.setHeader("content-type", "text/html");
-  response.end(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicEvent","name":"Wacken Open Air","startDate":"2027-07-28","endDate":"2027-07-31","location":{"@type":"Place","address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${ticketsUrl}","availability":"https://schema.org/SoldOut"}}</script>`);
+  response.end(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicEvent","name":"Wacken Open Air","startDate":"${startDate}","endDate":"2027-07-31","location":{"@type":"Place","address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${ticketsUrl}"${availability}}}</script>`);
 });
 
 class Client {
@@ -72,7 +76,8 @@ test.before(async () => {
     parserKey: "json_ld_event+html_fallback", cadenceSeconds: 86400, configurationBackfilledAt: new Date() };
   await db.festivalSource.createMany({ data: [
     { ...configured, url: sourceOrigin + "/primary" },
-    { ...configured, url: sourceOrigin + "/second" },
+    { ...configured, url: sourceOrigin + "/dates" },
+    { ...configured, url: sourceOrigin + "/failing" },
     { ...configured, url: sourceOrigin + "/disabled", enabled: false },
     { ...configured, url: sourceOrigin + "/archived", editionId: archive.id, editionYear: 2026 },
   ] });
@@ -179,11 +184,18 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   const successfulRun = await refresh.json();
   assert.equal(successfulRun.editionYear, 2027);
   assert.equal(successfulRun.status, "PARTIAL");
-  assert.equal(successfulRun.checked, 1);
+  assert.equal(successfulRun.checked, 2);
   assert.equal(successfulRun.failed, 1);
-  assert.equal(successfulRun.queued, 1);
-  assert.deepEqual([...new Set(requests)].sort(), ["/primary", "/second"]);
-  const [ticketChange] = await db.adminChange.findMany({ where: { parserRunId: successfulRun.id } });
+  assert.equal(successfulRun.queued, 2);
+  assert.deepEqual([...new Set(requests)].sort(), ["/dates", "/failing", "/primary"]);
+  const observations = await db.adminChange.findMany({
+    where: { resourceKey: "wacken-open-air", parserRunId: { not: null } },
+  });
+  const ticketChange = observations.find(({ field }) => field === "ticketStatus");
+  const datesChange = observations.find(({ field }) => field === "startDate");
+  assert.ok(ticketChange && datesChange);
+  assert.notEqual(ticketChange.parserRunId, datesChange.parserRunId);
+  assert.equal(ticketChange.sourceEvidence.refreshId, datesChange.sourceEvidence.refreshId);
   assert.equal(ticketChange.field, "ticketStatus");
   assert.equal(ticketChange.beforeValue, "unknown");
   assert.equal(ticketChange.afterValue, "sold_out");
@@ -200,13 +212,13 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     return event.offers?.availability;
   }
   assert.equal(await publicAvailability(), undefined);
-  const attempts = requests.filter((path) => path === "/second").length;
+  const attempts = requests.filter((path) => path === "/failing").length;
   const replay = await admin.json(`${refreshPath}?year=2027`, "POST");
   assert.equal(replay.status, 201);
   const repeated = await replay.json();
   assert.equal(repeated.skipped, 1);
   assert.equal(repeated.queued, 0);
-  assert.equal(requests.filter((path) => path === "/second").length, attempts);
+  assert.equal(requests.filter((path) => path === "/failing").length, attempts);
 
   const approvePath = `/api/admin/changes/${ticketChange.id}`;
   assert.equal((await admin.json(approvePath, "POST", { decision: "approve" })).status, 200);
@@ -216,6 +228,9 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.deepEqual(publication.fields, ["ticketStatus"]);
   assert.equal(publication.editionYear, 2027);
   assert.equal(await db.catalogPlaylistRefresh.count({ where: { publicationId: publication.id } }), 0);
+  const approveDates = await admin.json(`/api/admin/changes/${datesChange.id}`, "POST", { decision: "approve" });
+  assert.equal(approveDates.status, 200);
+  originalStartDate = correctedStartDate;
   const afterApproval = await admin.json(`${refreshPath}?year=2027`, "POST");
   assert.equal(afterApproval.status, 201);
   assert.equal((await afterApproval.json()).queued, 0);

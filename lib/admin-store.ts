@@ -122,9 +122,14 @@ export async function decideChange(id: string, decision: "approve" | "reject", a
       await tx.adminResourceState.upsert({ where: { resourceKind_resourceKey: { resourceKind: change.resourceKind, resourceKey: change.resourceKey } }, create: { resourceKind: change.resourceKind, resourceKey: change.resourceKey, revision: currentRevision + 1, values: json({ ...existing, [change.field]: change.afterValue }) }, update: { revision: { increment: 1 }, values: json({ ...existing, [change.field]: change.afterValue }) } });
       if (change.draftId) await tx.adminChange.updateMany({ where: { draftId: change.draftId, status: AdminChangeStatus.PENDING, NOT: { id } }, data: { baseRevision: currentRevision + 1 } });
     }
-    if (decision === "approve" && change.parserRunId && !change.draftId) {
+    const refresh = change.parserRunId ? change.sourceEvidence as { kind?: string; refreshId?: string } | null : null;
+    if (decision === "approve" && refresh && refresh.kind === "scoped-refresh" && refresh.refreshId) {
       await tx.adminChange.updateMany({
-        where: { parserRunId: change.parserRunId, status: AdminChangeStatus.PENDING, baseRevision: currentRevision },
+        where: {
+          resourceKind: change.resourceKind, resourceKey: change.resourceKey, status: AdminChangeStatus.PENDING,
+          baseRevision: currentRevision, field: { not: change.field },
+          sourceEvidence: { path: ["refreshId"], equals: refresh.refreshId },
+        },
         data: { baseRevision: currentRevision + 1 },
       });
     }
@@ -144,7 +149,7 @@ export class FestivalRefreshError extends Error {
 
 type RefreshActor = { id: string; email: string };
 
-async function refreshSource(sourceId: string, editionId: string, festival: Festival, actor: RefreshActor,
+async function refreshSource(refreshId: string, sourceId: string, editionId: string, festival: Festival, actor: RefreshActor,
     aliases: Awaited<ReturnType<typeof readAliases>>) {
   const owner = randomUUID();
   const [claim] = await claimDueSources(db, {
@@ -196,7 +201,7 @@ async function refreshSource(sourceId: string, editionId: string, festival: Fest
       if (afterValue === undefined) return [];
       return [{
         field, beforeValue: festival[field] === undefined ? Prisma.JsonNull : json(festival[field]), afterValue: json(afterValue), confidence: 90,
-        sourceEvidence: json({ kind: "scoped-refresh", editionId, editionYear: active.editionYear, evidence }),
+        sourceEvidence: json({ kind: "scoped-refresh", refreshId, editionId, editionYear: active.editionYear, evidence }),
       }];
     });
     assertAdminArtistReviewAllowed(festival.slug, proposals.map(({ field }) => field));
@@ -272,8 +277,9 @@ export async function refreshFestival(slug: string, actor: RefreshActor, edition
   const [catalog, aliases] = await Promise.all([readCatalog(), readAliases()]);
   const festival = catalog.festivals.find((item) => item.slug === slug && item.editionYear === edition.year);
   if (!festival) throw new FestivalRefreshError("The festival edition changed during refresh.", 409);
+  const refreshId = randomUUID();
   const results = [];
-  for (const { id } of sources) results.push(await refreshSource(id, edition.id, festival, actor, aliases));
+  for (const { id } of sources) results.push(await refreshSource(refreshId, id, edition.id, festival, actor, aliases));
   const checked = results.filter((result) => result.status === "checked");
   const failed = results.filter((result) => result.status === "failed");
   const skipped = results.length - checked.length - failed.length;
