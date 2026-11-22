@@ -31,7 +31,7 @@ export function fullRewind(document: string, source: FestivalSource) {
   const ticketsUrl = `${FULL_REWIND_HOME}collections/tickets-${source.editionYear}`;
   if (!home.includes(`/collections/tickets-${source.editionYear}`) && !bundle.home.includes(`href="/collections/tickets-${source.editionYear}"`)) return undefined;
   const names: string[] = [];
-  const verifiedLabels: Record<string,string> = {AILD:'As I Lay Dying',LOD:'Legion of the Damned','Booze-_-Glory':'Booze & Glory'};
+  const verifiedLabels: Record<string,string> = {'Pro-Pain':'Pro-Pain',AILD:'As I Lay Dying',LOD:'Legion of the Damned','Booze-_-Glory':'Booze & Glory'};
   for (const match of bands.replace(/<!--[\s\S]*?-->/g, '').replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '').matchAll(/<img\b[^>]*>/gi)) {
     const alt = attr(match[0], 'alt') ?? '';
     if (!alt.startsWith('Full-Rewind_Bands_')) continue;

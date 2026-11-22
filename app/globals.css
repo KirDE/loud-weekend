@@ -1424,3 +1424,8 @@ a:focus-visible, select:focus-visible, summary:focus-visible {
 .festivalCard:is(:hover, :focus-within), .actionGrid > a:is(:hover, :focus-visible) { --muted: #55564d; }
 
 :where(button) { color: inherit; }
+
+.plannerResetDialog { max-width: min(36rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; padding: 1.5rem; background: var(--surface, #181b20); color: var(--ink); border: 1px solid var(--line, #555); border-radius: 12px; }
+.plannerResetDialog::backdrop { background: rgb(0 0 0 / 65%); }
+.plannerResetDialog .playlistActions { margin-top: 1rem; flex-wrap: wrap; }
+.plannerReset [role="status"] { max-width: 28rem; }
