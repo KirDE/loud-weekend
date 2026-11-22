@@ -1,3 +1,4 @@
+import { load } from "cheerio";
 import type { FestivalCandidate, FestivalSource, FieldEvidence } from "../types.ts";
 import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 
@@ -17,6 +18,55 @@ const text = (value: string) => decode(value.replace(/<[^>]+>/g, " ")).replace(/
 const attr = (tag: string, name: string) => decode(tag.match(new RegExp(`\\b${name}=["']([^"']*)["']`, "i"))?.[1] ?? "");
 const validName = (value: string) => value.length > 0 && value.length <= 100 && /^[\p{L}\p{N}][\p{L}\p{N}\p{M} &'’.,:!+?()/\-]*$/u.test(value) && !/\b(?:and more|biglietti|tickets|headliners|special guests|20\d{2})\b/i.test(value);
 
+
+export function observeIdaysTicketStock(html: string, year: number): { status?: "available"; excerpt: string; warning?: string } {
+  const $ = load(html);
+  $("script, style, template, noscript, nav, header, footer, [hidden], [inert], [aria-hidden='true']").remove();
+  $("[style]").each((_, element) => {
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();
+  });
+  $("br").replaceWith(" ");
+  const sections = $("section[id]");
+  const copy = (selection: ReturnType<typeof $>) => {
+    const node = selection.clone(); node.find("*").prepend(" ").append(" ");
+    return text(node.text());
+  };
+  const months: Record<string,string> = {gennaio:"01",febbraio:"02",marzo:"03",aprile:"04",maggio:"05",giugno:"06",luglio:"07",agosto:"08",settembre:"09",ottobre:"10",novembre:"11",dicembre:"12"};
+  for (const element of sections.toArray()) {
+    const intro = $(element), label = copy($(element)), id = intro.attr("id") ?? "";
+    const date = id.match(/^(\d{1,2})-([a-z]+)$/);
+    if (!date || !Object.hasOwn(months, date[2]) || !/l'acquisto del biglietto garantisce l'accesso al festival per l'intera giornata/i.test(label)) continue;
+    const ordinaryCopy = label.replace(/Per questo show\s+i posti riservati nell'area dedicata alle persone con disabilità sono terminati\./gi," ");
+    if (/\b(?:sold\s*out|esaurit[oi]|terminati|non (?:sono )?disponibili)\b/i.test(ordinaryCopy)) continue;
+    // Actual source structure: dated concert intro, then its adjacent vendor
+    // section. Never combine another concert's admission statement and CTA.
+    const vendors = intro.next("section");
+    if (!vendors.length || vendors.attr("id")) continue;
+    for (const anchor of vendors.find("a[href]").toArray()) {
+      const link = $(anchor);
+      if (text(link.text()) !== "Acquista" || link.is("[disabled], [aria-disabled='true'], .Mui-disabled, .disabled")
+        || link.parents("[disabled], [aria-disabled='true'], .Mui-disabled, .disabled").length) continue;
+      try {
+        const target = new URL(link.attr("href") ?? "");
+        if (target.protocol !== "https:" || target.username || target.password || target.port || target.search || target.hash) continue;
+        if (/merch|parking|vip|offsale/i.test(target.pathname)) continue;
+        const day = date[1].padStart(2,"0"), month = months[date[2]];
+        const ticketmaster = target.hostname === "www.ticketmaster.it"
+          && new RegExp("^/biglietti/[a-z0-9-]*" + day + "-" + month + "-" + year + "/event/[a-z0-9]+$","i").test(target.pathname);
+        const viva = target.hostname === "www.vivaticket.com"
+          && /^\/it\/ticket\/[a-z0-9-]+\/\d+$/i.test(target.pathname)
+          && target.pathname.includes("-i-days-milano-" + year + "/")
+          && !/merch|parking|vip|offsale/i.test(target.pathname);
+        if (!ticketmaster && !viva) continue;
+        const card = link.closest("li");
+        if (card.length && /\b(?:sold\s*out|esaurit[oi]|non disponibile)\b/i.test(copy(card))) continue;
+        return { status:"available", excerpt:"I-Days " + year + "; ordinary festival-day admission " + id + "; enabled official Acquista: " + target.href };
+      } catch { /* Foreign or malformed controls are not stock proof. */ }
+    }
+  }
+  return {excerpt:"",warning:"I-Days review required: no verified visible current-edition general-admission purchase control"};
+}
+
 // The reviewed homepage hierarchy corresponds to the official /line-up
 // HEADLINERS and SPECIAL GUESTS groups. Never extract navigation/biography
 // prose, infer continuous dates from isolated concerts, or call a ticket CTA
@@ -26,21 +76,15 @@ export function extractIdaysCandidate(html: string, source: FestivalSource, fetc
   const fail = (reason: string) => { candidate.warnings.push(`I-Days review required: ${reason}`); return candidate; };
   let url: URL;
   try { url = new URL(source.url); } catch { return fail("invalid source URL"); }
-  if (source.festivalSlug !== "idays" || url.origin !== "https://www.idays.it" || !["/", "/line-up", "/tickets"].includes(url.pathname) || url.search || url.hash) return fail("unrecognized official source");
+  if (source.festivalSlug !== "idays" || url.origin !== "https://www.idays.it" || !["/", "/line-up", "/tickets"].includes(url.pathname) || url.search || url.hash || url.username || url.password) return fail("unrecognized official source");
   const visible = html.replace(/<!--[\s\S]*?-->|<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "");
   const sections = [...visible.matchAll(/<section\b[^>]*>[\s\S]*?<\/section>/gi)].map(m => m[0]);
   const add = (field: FieldEvidence["field"], value: string | string[], excerpt: string) => { Object.assign(candidate, { [field]: value }); candidate.evidence.push({ field, sourceUrl: source.url, observedAt: fetchedAt, excerpt: excerpt.slice(0, 1800) }); };
   if (url.pathname === "/tickets") {
-    // Require festival-day admission wording and current-edition, live
-    // purchase links. A disability-area exhaustion is not general sell-out.
-    if (!/l'acquisto del biglietto garantisce l'accesso al festival per l'intera giornata/i.test(text(visible))) return fail("no festival admission evidence");
-    const purchases = [...visible.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)].filter(m => {
-      if (text(m[0]) !== "Acquista" || /aria-disabled=["']true|\bdisabled\b/i.test(m[0])) return false;
-      try { const target = new URL(attr(m[0], "href")); return target.protocol === "https:" && ["www.ticketmaster.it", "www.vivaticket.com"].includes(target.hostname) && new RegExp(`(?:^|[^0-9])${source.editionYear}(?:[^0-9]|$)`).test(target.pathname) && !/merch|parking|vip|offsale/i.test(target.pathname); } catch { return false; }
-    });
-    if (!purchases.length) return fail("no current-edition general-admission purchase link");
-    add("ticketsUrl", "https://www.idays.it/tickets", purchases[0][0]);
-    add("ticketStatus", "available", purchases[0][0]);
+    const observation = observeIdaysTicketStock(html, source.editionYear);
+    if (!observation.status) return fail(observation.warning ?? "unverified festival-day inventory");
+    add("ticketsUrl", "https://www.idays.it/tickets", observation.excerpt);
+    add("ticketStatus", observation.status, observation.excerpt);
     candidate.observedEditionYears = [source.editionYear];
     return candidate;
   }
