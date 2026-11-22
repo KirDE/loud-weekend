@@ -122,13 +122,19 @@ export async function decideChange(id: string, decision: "approve" | "reject", a
       await tx.adminResourceState.upsert({ where: { resourceKind_resourceKey: { resourceKind: change.resourceKind, resourceKey: change.resourceKey } }, create: { resourceKind: change.resourceKind, resourceKey: change.resourceKey, revision: currentRevision + 1, values: json({ ...existing, [change.field]: change.afterValue }) }, update: { revision: { increment: 1 }, values: json({ ...existing, [change.field]: change.afterValue }) } });
       if (change.draftId) await tx.adminChange.updateMany({ where: { draftId: change.draftId, status: AdminChangeStatus.PENDING, NOT: { id } }, data: { baseRevision: currentRevision + 1 } });
     }
-    const refresh = change.parserRunId ? change.sourceEvidence as { kind?: string; refreshId?: string } | null : null;
-    if (decision === "approve" && refresh && refresh.kind === "scoped-refresh" && refresh.refreshId) {
+    const refresh = change.parserRunId ? change.sourceEvidence as { kind?: string; editionId?: string } | null : null;
+    // Proposals at the same revision and edition can share a review even if
+    // re-observed on different runs. Canonical publication still checks each before-value.
+    if (decision === "approve" && refresh && refresh.kind === "scoped-refresh" && refresh.editionId && catalogPublication) {
       await tx.adminChange.updateMany({
         where: {
           resourceKind: change.resourceKind, resourceKey: change.resourceKey, status: AdminChangeStatus.PENDING,
           baseRevision: currentRevision, field: { not: change.field },
-          sourceEvidence: { path: ["refreshId"], equals: refresh.refreshId },
+          parserRunId: { not: null },
+          AND: [
+            { sourceEvidence: { path: ["kind"], equals: "scoped-refresh" } },
+            { sourceEvidence: { path: ["editionId"], equals: refresh.editionId } },
+          ],
         },
         data: { baseRevision: currentRevision + 1 },
       });
@@ -222,7 +228,11 @@ async function refreshSource(refreshId: string, sourceId: string, editionId: str
         const duplicate = await tx.adminChange.findFirst({ where: {
           resourceKind, resourceKey, field: proposal.field, baseRevision, status: "PENDING",
           beforeValue: { equals: proposal.beforeValue }, afterValue: { equals: proposal.afterValue },
-          sourceEvidence: { path: ["editionId"], equals: editionId },
+          parserRunId: { not: null },
+          AND: [
+            { sourceEvidence: { path: ["kind"], equals: "scoped-refresh" } },
+            { sourceEvidence: { path: ["editionId"], equals: editionId } },
+          ],
         } });
         if (duplicate) continue;
         await tx.adminChange.create({ data: { ...proposal, resourceKind, resourceKey, baseRevision, parserRunId: run.id } });

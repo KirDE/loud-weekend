@@ -17,6 +17,7 @@ const requests = [];
 const ticketsUrl = "https://tickets.example.test/integration";
 let primaryFails = false;
 let originalStartDate = "2027-07-28";
+let datesChanged = false;
 const correctedStartDate = "2027-07-29";
 const sourceServer = createServer((request, response) => {
   requests.push(request.url);
@@ -26,7 +27,7 @@ const sourceServer = createServer((request, response) => {
     return;
   }
   assert.ok(request.url === "/primary" || request.url === "/dates");
-  const startDate = request.url === "/dates" ? correctedStartDate : originalStartDate;
+  const startDate = request.url === "/dates" && datesChanged ? correctedStartDate : originalStartDate;
   const availability = request.url === "/primary" ? ' ,"availability":"https://schema.org/SoldOut"' : "";
   response.setHeader("content-type", "text/html");
   response.end(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicEvent","name":"Wacken Open Air","startDate":"${startDate}","endDate":"2027-07-31","location":{"@type":"Place","address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${ticketsUrl}"${availability}}}</script>`);
@@ -186,16 +187,21 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal(successfulRun.status, "PARTIAL");
   assert.equal(successfulRun.checked, 2);
   assert.equal(successfulRun.failed, 1);
-  assert.equal(successfulRun.queued, 2);
+  assert.equal(successfulRun.queued, 1);
   assert.deepEqual([...new Set(requests)].sort(), ["/dates", "/failing", "/primary"]);
+  datesChanged = true;
+  const followup = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(followup.status, 201);
+  assert.equal((await followup.json()).queued, 1);
   const observations = await db.adminChange.findMany({
     where: { resourceKey: "wacken-open-air", parserRunId: { not: null } },
   });
   const ticketChange = observations.find(({ field }) => field === "ticketStatus");
   const datesChange = observations.find(({ field }) => field === "startDate");
+  assert.equal(observations.length, 2);
   assert.ok(ticketChange && datesChange);
   assert.notEqual(ticketChange.parserRunId, datesChange.parserRunId);
-  assert.equal(ticketChange.sourceEvidence.refreshId, datesChange.sourceEvidence.refreshId);
+  assert.notEqual(ticketChange.sourceEvidence.refreshId, datesChange.sourceEvidence.refreshId);
   assert.equal(ticketChange.field, "ticketStatus");
   assert.equal(ticketChange.beforeValue, "unknown");
   assert.equal(ticketChange.afterValue, "sold_out");
