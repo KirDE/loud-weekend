@@ -1,3 +1,4 @@
+import { SUMMER_STOCK, fetchSummerStock } from "./summer-ticket-stock.ts";
 import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters/full-rewind.ts';
@@ -549,6 +550,13 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
     // source overrides or authorization headers on a public ticket destination.
+    if (ticketUrl === SUMMER_STOCK) {
+      const stock = await fetchSummerStock(options.fetchImpl);
+      attempts += stock.attempts;
+      const response = new Response(JSON.stringify({kind:TICKET_SUPPLEMENT,body,ticket:{url:ticketUrl,html:stock.html}}),{headers:{"content-type":"application/json"}});
+      Object.defineProperty(response,"url",{value:source.url});
+      return{response,attempts};
+    }
     const ticket = await fetchSourceWithoutTicketSupplement({ ...source, url: ticketUrl, headers: undefined,
       fetchUrl: undefined, followLinkPattern: undefined, strategies: ["html_fallback"] }, options);
     attempts += ticket.attempts;

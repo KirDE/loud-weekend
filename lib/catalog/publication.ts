@@ -1,4 +1,5 @@
-import { ticketSupplementUrl, ticketSupplementPurchaseUrl } from "../ingestion/ticket-supplements.ts";
+import { isDeepStrictEqual } from "node:util";
+import { ticketSupplementUrl, ticketSupplementPurchaseUrl, ticketSupplementScope } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
@@ -258,14 +259,18 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     // Do not extend the separate Impericon/I-Days publication paths here (#497).
     const observed = input.result.candidate;
     const stored = candidate.normalized as unknown as FestivalCandidate;
-    if (observed.ticketSupplement || stored.ticketSupplement) {
+    // Summer's shared POST proof must not be bypassed by stripping both markers,
+    // including ticket-URL-only updates approved by an untrusted caller.
+    const summerTicketChange = input.result.festivalSlug === "summer-punch" && input.result.changes.some(c => ["ticketStatus", "ticketsUrl"].includes(c.field));
+    if (observed.ticketSupplement || stored.ticketSupplement || summerTicketChange) {
       const registeredSource = { festivalSlug: input.result.festivalSlug,
         url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
         strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true };
       const ticketUrl = ticketSupplementUrl(registeredSource);
       const purchaseUrl = ticketSupplementPurchaseUrl(registeredSource);
-      const provenance = { sourceUrl: input.result.sourceUrl, ticketUrl, editionYear: expectedYear };
-      const valid = ticketUrl && same(observed.ticketSupplement, provenance) && same(stored.ticketSupplement, provenance) && candidate.festivalSlug === input.result.festivalSlug &&
+      const scope = ticketSupplementScope(registeredSource);
+      const provenance = { sourceUrl: input.result.sourceUrl, ticketUrl, editionYear: expectedYear, ...(scope ? {scope} : {}) };
+      const valid = ticketUrl && isDeepStrictEqual(observed.ticketSupplement, provenance) && isDeepStrictEqual(stored.ticketSupplement, provenance) && candidate.festivalSlug === input.result.festivalSlug &&
         candidate.attempt.requestedUrl === input.result.sourceUrl &&
         observed.sourceUrl === input.result.sourceUrl && stored.sourceUrl === observed.sourceUrl &&
         stored.festivalSlug === observed.festivalSlug && observed.festivalSlug === candidate.festivalSlug &&

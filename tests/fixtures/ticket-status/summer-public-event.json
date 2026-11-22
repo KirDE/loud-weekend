@@ -1,0 +1,65 @@
+{
+  "t": 0,
+  "err": null,
+  "acte": true,
+  "wts": 0,
+  "hb": false,
+  "e": {
+    "id": "602356450160803841",
+    "t": "Summer Punch Festival 2027 - Karnet 3 dniowy",
+    "sd": "2027-06-17T16:00:00",
+    "ed": "2027-06-19T23:59:00",
+    "ssd": "2026-09-29T10:00:00",
+    "sed": "2027-06-19T23:59:00",
+    "cu": 95,
+    "hrs": false,
+    "tt": [
+      {
+        "id": 140247050,
+        "pid": 0,
+        "n": "KARNET 3 DNIOWY",
+        "sc": 1,
+        "k": 1,
+        "v": 7,
+        "na": 0.0,
+        "ga": 0.0,
+        "pwsc": 0.0,
+        "scv": 0.0,
+        "hl": false,
+        "po": 0,
+        "ldmp": 0.0,
+        "ip": false,
+        "gfpwsc": null,
+        "ida": false
+      }
+    ],
+    "pz": [
+      {
+        "id": 140247054,
+        "n": "ROUND #1",
+        "tt": [
+          {
+            "id": 140247050,
+            "pid": 19941643,
+            "n": "KARNET 3 DNIOWY",
+            "sc": 1,
+            "k": 1,
+            "v": 7,
+            "na": 749.07,
+            "ga": 809.0,
+            "pwsc": 869.9,
+            "scv": 60.9,
+            "hl": true,
+            "po": 0,
+            "ldmp": 869.9,
+            "ip": false,
+            "gfpwsc": null,
+            "ida": false
+          }
+        ]
+      }
+    ],
+    "ap": []
+  },
+  "dk": "65537-65538-65538"
+}

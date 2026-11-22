@@ -1,3 +1,4 @@
+import {summerStockResponse} from "./support/summer-stock-fixture.ts";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -52,6 +53,6 @@ test('fetch rejects foreign/same-origin redirects, missing response identity and
  const reply=url=>{const r=new Response(html,{status:200});if(url)Object.defineProperty(r,'url',{value:url});return r;};
  for(const url of ['https://evil.test/','https://summerpunchfestival.pl/archive',''])await assert.rejects(fetchSource(source,{fetchImpl:async()=>reply(url),maxAttempts:1}),/trusted identity/);
  for(const extra of [{fetchUrl:'https://evil.test/'},{followLinkPattern:'.*'}])await assert.rejects(fetchSource({...source,...extra},{fetchImpl:async()=>reply(source.url),maxAttempts:1}),/trusted identity/);
- const accepted=await fetchSource(source,{fetchImpl:async()=>reply(source.url),maxAttempts:1});assert.equal(accepted.response.url,source.url);
+ const accepted=await fetchSource(source,{fetchImpl:async url=>summerStockResponse(url)??reply(source.url),maxAttempts:1});assert.equal(accepted.response.url,source.url);
  const failure=new Response('',{status:503});const result=await fetchSource(source,{fetchImpl:async()=>failure,maxAttempts:1});assert.equal(result.response.status,503);
 });
