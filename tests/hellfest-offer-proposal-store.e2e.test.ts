@@ -266,3 +266,40 @@ test('actual HTTP handlers: session-derived review through durable DB audit and 
     if (oldApp === undefined) delete process.env.APP_URL; else process.env.APP_URL = oldApp;
   }
 });
+
+test('operator command stages exact target only, preview and failures leave last approval untouched', async () => {
+  // @ts-expect-error Actual JavaScript CLI module, no test-only alternate command implementation.
+  const { runCollection } = await import('../scripts/collect-hellfest-offers.mjs');
+  const args = ['--year=2027', '--stage-pending', `--edition-id=${editionId}`];
+  const response = (body = html, status = 200) => {
+    const r = new Response(body, { status, headers: { 'content-type': 'text/html' } });
+    Object.defineProperty(r, 'url', { value: 'https://hellfest.fr/' });
+    return r;
+  };
+  const before = await db.festivalEdition.findUnique({ where: { id: editionId } });
+  const { readApprovedHellfestOffers } = await import('../lib/ingestion/ticket-offer-proposal-store.ts');
+  const approved = await readApprovedHellfestOffers(db, editionId);
+  const counts = await Promise.all([db.catalogPublication.count(), db.catalogPlaylistRefresh.count(), db.ingestionNotificationOutbox.count(), db.ingestionSourceState.count(), db.ticketOfferReviewDecision.count()]);
+  const count = await db.ticketOfferProposalSnapshot.count();
+  const preview = await runCollection(['--year=2027'], { db, fetchImpl: async () => response() });
+  assert.equal(preview.mode, 'preview');
+  assert.equal(await db.ticketOfferProposalSnapshot.count(), count);
+  // Ensure a strictly newer observation than the preceding HTTP-route test.
+  const latest = await db.ticketOfferProposalSnapshot.findFirstOrThrow({ where: { editionId }, orderBy: { observedAt: 'desc' } });
+  const realNow = Date.now;
+  try {
+    Date.now = () => latest.observedAt.getTime() + 1000;
+    const result = await runCollection(args, { db, fetchImpl: async () => response() });
+    assert.equal(result.mode, 'staged_for_review');
+    assert.equal((await readPendingHellfestOffers(db, editionId))!.id, result.snapshotId);
+    assert.equal((await readPendingHellfestOffers(db, editionId))!.reviewState, 'pending');
+    assert.equal(await db.ticketOfferProposalSnapshot.count(), count + 1);
+    for (const fetchImpl of [async () => response(html, 403), async () => response('broken schema'), async () => response(html.replaceAll('2027', '2026'))]) {
+      await assert.rejects(runCollection(args, { db, fetchImpl }));
+    }
+    assert.equal(await db.ticketOfferProposalSnapshot.count(), count + 1);
+    assert.equal((await readApprovedHellfestOffers(db, editionId))!.id, approved!.id);
+    assert.deepEqual(await db.festivalEdition.findUnique({ where: { id: editionId } }), before);
+    assert.deepEqual(await Promise.all([db.catalogPublication.count(), db.catalogPlaylistRefresh.count(), db.ingestionNotificationOutbox.count(), db.ingestionSourceState.count(), db.ticketOfferReviewDecision.count()]), counts);
+  } finally { Date.now = realNow; }
+});

@@ -236,3 +236,37 @@ actual HTTP handler and catalog regression suites also pass with the shared
 schema. Outstanding: explicit collector invocation, browser/mobile verification,
 focused PR/full CI/exact-head Codex review. Hellfest remains unfinished; no
 production migrations, writes, scheduler or deployment were performed.
+
+## Explicit operator collection command (local checkpoint)
+
+The collector now has an operator entry point, not a new worker or scheduler:
+
+```sh
+npm run tickets:collect-hellfest -- --help
+npm run tickets:collect-hellfest -- --year=2027
+# Only against an explicitly selected database with migrations already applied:
+npm run tickets:collect-hellfest -- --year=2027 --stage-pending --edition-id=EXISTING_ID
+```
+
+Default preview makes one bounded official public GET, validates both tiers and
+prints only the minimized structured proposal. It neither imports/creates a DB
+client nor needs DATABASE_URL. Staging requires explicit DATABASE_URL, both flags
+and a matching existing CURRENT Hellfest edition/year/official URL. The target
+is checked before fetching and rechecked under the store's lock. The command
+never creates an edition, applies migrations, configures sources, approves data,
+updates global status, sends notifications or schedules itself. Production
+invocation is NOT authorized by this implementation checkpoint.
+
+Unknown/duplicate options, arbitrary source/HTML/time/actor overrides and approval
+flags are rejected. Failure returns a nonzero status and a generic redacted error,
+not raw response bodies or driver/connection details. The staging result identifies
+the exact snapshot/hash for the authenticated reviewer queue; it is not a public
+publication acknowledgement. The default CLI completed a live HTTP200 preview
+with both tiers and zero warnings; no DB configuration was supplied.
+
+Tests exercise actual CLI help/argument/missing-DB paths in child processes,
+preview with a DB access tripwire, pre-fetch target validation, strict source
+failures and command→synthetic DB pending readback. Preview/failures preserve all
+snapshots, last approval, global edition, decisions, health and outbox/provider
+counts. The command does not replace human review. Remaining readiness gates:
+actual browser/mobile verification, focused PR, full CI and exact-head Codex review.
