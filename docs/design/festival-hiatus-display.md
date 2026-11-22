@@ -1,6 +1,6 @@
 # Display festival editions on hiatus — #523
 
-Extracted from #522 at Kirill’s request. This is the preserved implementation for separate architectural review, NOT a ready/accepted design. Depends on the parser-only #522. General model/storage/review/catalogue/UI changes and parser-to-model integration belong here.
+Generic edition-hiatus support, separated from the source-specific parser in #522. General model/storage/review/catalogue/UI changes and parser-to-model integration belong here.
 
 The following source-specific integration notes are retained as historical implementation context, not generic hardcoded UI requirements. Generic layers must work for a different festival/edition without brand/year/source branches. No merge/deploy or production writes.
 
