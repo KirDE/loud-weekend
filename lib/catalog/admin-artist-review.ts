@@ -1,7 +1,7 @@
-/** Full Rewind and Provinssi cards are additive, not a replacement roster. The protected
+/** Full Rewind, Provinssi and Summer Punch cards are additive, not a replacement roster. The protected
  * ingestion review preserves saved artists/billing and defers provider work;
  * whole-field admin changes cannot express that contract, including stale ones. */
 export function assertAdminArtistReviewAllowed(slug: string, fields: readonly string[]) {
-  if (["full-rewind", "provinssi"].includes(slug) && fields.some(field => field === "lineup" || field === "headliners"))
-    throw new Error(`${slug === "provinssi" ? "Provinssi" : "Full Rewind"} artist changes require protected ingestion review; admin replacement is not supported`);
+  if (["full-rewind", "provinssi", "summer-punch"].includes(slug) && fields.some(field => field === "lineup" || field === "headliners"))
+    throw new Error(`${slug === "summer-punch" ? "Summer Punch" : slug === "provinssi" ? "Provinssi" : "Full Rewind"} artist changes require protected ingestion review; admin replacement is not supported`);
 }

@@ -1,0 +1,1827 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-11-18T00:49:48Z",
+  "scope": "59 public current-edition catalogue paths; proposed PR work, not production configuration or acceptance",
+  "mainObserved": {
+    "sha": "23b79c46d8c9ac2599b84b40b3ff0e8622587759",
+    "change": "Maintainer merged #479; this agent performed no merge/deploy."
+  },
+  "counts": {
+    "cataloguePaths": 59,
+    "pathsWithProposals": 26,
+    "currentParserHeadsVerified": 25,
+    "currentParserHeadsRevalidating": 1,
+    "noVerifiedProposal": 33,
+    "productionAcceptedByThisAgent": 0
+  },
+  "foundation": {
+    "pr": 480,
+    "head": "f80e2948f5780fe8fdfcbcb3e51a17789b84e618",
+    "state": "model_only_unmerged",
+    "sourceRollout": 482,
+    "publicationFollowup": 497,
+    "idaysIntegration": 498
+  },
+  "semantics": [
+    "HTTP observations are transport evidence only, with their original timestamps retained.",
+    "Verified states describe exercised parser semantics, never current live stock.",
+    "Clean review and Quality are necessary but do not waive maintainer acceptance, deployment, or source-specific canonical tests.",
+    "Initial 13/59 file in #482 and dated 18/59 snapshot #489 are historical snapshots, not live coverage.",
+    "Do not merge feature-branch PRs as if they deployed main. After parent acceptance/deployment, preserve focused diffs on deployed main and repeat gates."
+  ],
+  "festivals": [
+    {
+      "slug": "2000trees",
+      "name": "2000trees",
+      "officialUrl": "https://2000trees.co.uk/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:17.414093+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Readability exposes older news, not reviewed current admission controls."
+    },
+    {
+      "slug": "alcatraz",
+      "name": "Alcatraz Open Air",
+      "officialUrl": "https://www.alcatraz.be/",
+      "ticketUrl": "https://www.alcatraz.be/en/tickets",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:18.104729+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Official tickets page reachable, but extraction does not expose verified current admission controls."
+    },
+    {
+      "slug": "alpen-flair",
+      "name": "Alpen Flair",
+      "officialUrl": "https://www.alpen-flair.com/",
+      "ticketUrl": "https://www.alpen-flair.com/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:20.296293+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 485,
+        "head": "9d63be8f6e9d5df82c62d2390b4219acd4e5a777",
+        "base": "fix/434-festival-ticket-parsers",
+        "run": 44200969884,
+        "test": "tests/ingestion-alpen-flair.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "barcelona-rock-fest",
+      "name": "Barcelona Rock Fest",
+      "officialUrl": "https://www.barcelonarockfest.com/",
+      "ticketUrl": "https://www.barcelonarockfest.com/en/tickets",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:20.052375+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 486,
+        "head": "0096af2d95891722f37ec5ea0456936dc48844c1",
+        "base": "fix/434-festival-ticket-parsers",
+        "run": 44201108254,
+        "test": "tests/barcelona-banner.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "bloodstock",
+      "name": "Bloodstock Open Air",
+      "officialUrl": "https://www.bloodstock.uk.com/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:17.317081+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Homepage marketing is not current purchase inventory."
+    },
+    {
+      "slug": "brutal-assault",
+      "name": "Brutal Assault",
+      "officialUrl": "https://brutalassault.cz/",
+      "ticketUrl": "https://brutalassault.cz/en/tickets",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:18.365980+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/ingestion-brutal-assault-repair.test.mjs",
+        "verifiedStates": [
+          "available",
+          "sold_out",
+          "unavailable"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "copenhell",
+      "name": "Copenhell",
+      "officialUrl": "https://www.copenhell.dk/",
+      "ticketUrl": "https://copenhell.dk/billetter/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:22.496803+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 491,
+        "head": "1aa9245bc6fbdf759ff40460baf33440f3914543",
+        "base": "fix/434-festival-ticket-parsers",
+        "run": 44204576866,
+        "test": "tests/ingestion-copenhell-current.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "download",
+      "name": "Download Festival",
+      "officialUrl": "https://downloadfestival.co.uk/",
+      "ticketUrl": "https://downloadfestival.co.uk/tickets/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:17.306521+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/ticket-supplements.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "dynamo-metal-fest",
+      "name": "Dynamo Metal Fest",
+      "officialUrl": "https://dynamo-metalfest.nl/",
+      "ticketUrl": "https://dynamo-metalfest.nl/early-bird-tickets-are-live/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:21.431062+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 496,
+        "head": "803bdef6d462e153ad9e3720150c49aeb2fb47ec",
+        "base": "fix/434-festival-ticket-parsers",
+        "run": 44206039768,
+        "test": "tests/ingestion-dynamo-tickets.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "eurockeennes",
+      "name": "Eurockéennes de Belfort",
+      "officialUrl": "https://www.eurockeennes.fr/",
+      "ticketUrl": "https://www.eurockeennes.fr/achat/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:17.215351+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Existing parser has a synthetic priced-card positive case, but checked-in real homepage fixture has no current stock cards. Current source inventory proof still required."
+    },
+    {
+      "slug": "firenze-rocks",
+      "name": "Firenze Rocks",
+      "officialUrl": "https://www.firenzerocks.it/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:20.150545+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "frequency",
+      "name": "Frequency Festival",
+      "officialUrl": "https://www.frequency.at/",
+      "ticketUrl": "https://www.frequency.at/tickets/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:18.294740+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 490,
+        "head": "8a368ab95f9ceb33d048a93bbde8a19a4da824e2",
+        "base": "fix/434-festival-ticket-parsers",
+        "run": 44202940911,
+        "test": "tests/frequency-parser.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "full-force",
+      "name": "Full Force",
+      "officialUrl": "https://full-force.de/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:17.007052+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "full-rewind",
+      "name": "Full Rewind",
+      "officialUrl": "https://full-rewind.de/",
+      "ticketUrl": "https://full-rewind.de/collections/tickets-2027",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:23.264661+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 487,
+        "head": "276f51d68922a2d45090916aacfc7f65bd1fb924",
+        "base": "fix/434-festival-ticket-parsers",
+        "run": 44201716124,
+        "test": "tests/full-rewind.test.mjs",
+        "verifiedStates": [
+          "available",
+          "unavailable"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "graspop",
+      "name": "Graspop Metal Meeting",
+      "officialUrl": "https://www.graspop.be/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:17.674512+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Ticket page retains a dated sale-opening announcement already in the past; that is not current inventory."
+    },
+    {
+      "slug": "greenfield",
+      "name": "Greenfield Festival",
+      "officialUrl": "https://greenfieldfestival.ch/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:21.575749+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Readable FAQ is not current inventory."
+    },
+    {
+      "slug": "heavy-weekend",
+      "name": "Heavy Week-End",
+      "officialUrl": "https://www.heavyweekend.live/",
+      "ticketUrl": "https://widget.weezevent.com/ticket/734dcd1a-6e7c-4465-b353-3bd5dcddd20b?locale=fr-fr",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:23.019905+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "hellfest",
+      "name": "Hellfest Open Air",
+      "officialUrl": "https://hellfest.fr/",
+      "ticketUrl": "https://tickets.hellfest.fr/en/index.html",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:17.048716+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Four-day pass sold out, future one-day sale and resale coexist. Do not flatten tier stock into global sold_out/not_on_sale; coordinate tier model #446."
+    },
+    {
+      "slug": "hurricane",
+      "name": "Hurricane Festival",
+      "officialUrl": "https://hurricane.de/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:16.876722+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Current-year on-sale news/price is not yet verified against actual current admission purchase controls."
+    },
+    {
+      "slug": "idays",
+      "name": "I-Days Milano",
+      "officialUrl": "https://www.idays.it/",
+      "ticketUrl": "https://www.idays.it/tickets",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:20.188500+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "new_head_revalidating",
+        "pr": 495,
+        "head": "51083b5f18d5eecf4a0a08650872baa22fe6059b",
+        "base": "fix/434-full-rewind-ticket-stock",
+        "run": 44210580872,
+        "test": "tests/idays-parser-repair.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "collector_publication_integration_ci_pending",
+        "evidence": {
+          "pr": 498,
+          "head": "22b5ee54afbb5cb14d0408c23b7680a69855e391",
+          "run": 44210452447,
+          "test": "tests/catalog-publication.e2e.test.ts",
+          "scope": "Composed fetchSource (offline HTTP) to parser, evaluateCandidate, durable evidence, combined/stock-only publication, public readback/replay/rollback. New head clean-reviewed; full CI still pending at snapshot."
+        }
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "impericon",
+      "name": "Impericon Festival",
+      "officialUrl": "https://www.impericon.com/pages/festival",
+      "ticketUrl": "https://www.impericon.com/products/25-26-06-2027-2-preisstufe-weekend-ticket",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:23.019527+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 488,
+        "head": "818dfdf7cd9e10a8f822f238ee18f1d33d67997f",
+        "base": "fix/434-full-rewind-ticket-stock",
+        "run": 44202478578,
+        "test": "tests/impericon-current.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "offline_adapter_publication_replay_rollback_verified",
+        "evidence": {
+          "pr": 497,
+          "head": "c1a1f6d0407557a6e1aeaebe817c7fb28bdc6afc",
+          "run": 44208471755,
+          "test": "tests/impericon-current.e2e.test.ts",
+          "scope": "Source-shaped announcement/product envelope to parser, persisted proof, combined and stock-only publication, readback, replay and rollback. HTTP collection is separately fixture-tested, not live production acceptance."
+        }
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "inferno",
+      "name": "Inferno Metal Festival",
+      "officialUrl": "https://www.infernofestival.net/",
+      "ticketUrl": "https://www.infernofestival.net/tickets",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:22.232991+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/ingestion-inferno.test.mjs",
+        "verifiedStates": [
+          "available",
+          "sold_out"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "jera-on-air",
+      "name": "Jera On Air",
+      "officialUrl": "https://www.jeraonair.nl/en/",
+      "ticketUrl": "https://www.jeraonair.nl/en/tickets/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:22.849665+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Current shop link exists; actual stock schema/product scopes not yet audited."
+    },
+    {
+      "slug": "leeds",
+      "name": "Leeds Festival",
+      "officialUrl": "https://www.leedsfestival.com/",
+      "ticketUrl": "https://www.leedsfestival.com/tickets",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:17.393987+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/ingestion-leeds.test.mjs",
+        "verifiedStates": [
+          "available",
+          "sold_out"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "leyendas-del-rock",
+      "name": "Leyendas del Rock",
+      "officialUrl": "https://www.leyendasdelrockfestival.com/",
+      "ticketUrl": "https://www.leyendasdelrockfestival.com/tickets/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:19.614942+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 492,
+        "head": "a67aa9c5c83565fca92324949ad48540a18cf95f",
+        "base": "fix/434-festival-ticket-parsers",
+        "run": 44204028350,
+        "test": "tests/ingestion-leyendas.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "mad-cool",
+      "name": "Mad Cool Festival",
+      "officialUrl": "https://madcoolfestival.es/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:19.900622+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "masters-of-rock",
+      "name": "Masters of Rock",
+      "officialUrl": "https://www.mastersofrock.cz/",
+      "ticketUrl": "https://www.mastersofrock.cz/cs/masters-of-rock-vstupenky",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:18.388543+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 484,
+        "head": "d15842192e98ce5e733c2aa5f1b39b3719160ccd",
+        "base": "fix/434-festival-ticket-parsers",
+        "run": 44198835440,
+        "test": "tests/ingestion-masters-of-rock.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "mera-luna",
+      "name": "M'era Luna Festival",
+      "officialUrl": "https://meraluna.de/",
+      "ticketUrl": "https://www.ticket-onlineshop.com/ols/meraluna/de",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:16.853376+00:00",
+        "httpStatus": null,
+        "error": "TimeoutError"
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Initial official source timed out; no inventory conclusion."
+    },
+    {
+      "slug": "midgardsblot",
+      "name": "Midgardsblot Festival",
+      "officialUrl": "https://midgardsblot.no/",
+      "ticketUrl": "https://www.ticketmaster.no/artist/midgardsblot-tickets/1197464",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:22.129134+00:00",
+        "httpStatus": 403,
+        "error": "http_error"
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Initial official source HTTP 403; no inventory conclusion."
+    },
+    {
+      "slug": "motocultor",
+      "name": "Motocultor Festival",
+      "officialUrl": "https://www.motocultor-festival.com/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:17.161257+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Ticket navigation without validated admission stock."
+    },
+    {
+      "slug": "mystic",
+      "name": "Mystic Festival",
+      "officialUrl": "https://www.mysticfestival.pl/",
+      "ticketUrl": "https://www.mysticfestival.pl/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:18.601687+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 483,
+        "head": "738741fd14d2059f9d360c1c45e959d3d2ab9194",
+        "base": "fix/434-festival-ticket-parsers",
+        "run": 44198126325,
+        "test": "tests/ingestion-mystic-markup.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "nova-rock",
+      "name": "Nova Rock",
+      "officialUrl": "https://www.novarock.at/",
+      "ticketUrl": "https://www.novarock.at/tickets/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:18.187691+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/ingestion-novarock-feedback.test.mjs",
+        "verifiedStates": [
+          "available",
+          "sold_out"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "paleo",
+      "name": "Paléo Festival",
+      "officialUrl": "https://yeah.paleo.ch/",
+      "ticketUrl": "https://yeah.paleo.ch/en/tickets",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:21.820070+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/ingestion-paleo.test.mjs",
+        "verifiedStates": [
+          "not_on_sale"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "pinkpop",
+      "name": "Pinkpop",
+      "officialUrl": "https://www.pinkpop.nl/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:20.461508+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "pistoia-blues",
+      "name": "Pistoia Blues Festival",
+      "officialUrl": "https://pistoiablues.com/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:20.395671+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "polandrock",
+      "name": "Pol'and'Rock Festival",
+      "officialUrl": "https://polandrockfestival.pl/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:18.487857+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "provinssi",
+      "name": "Provinssi",
+      "officialUrl": "https://www.provinssi.fi/en/",
+      "ticketUrl": "https://provinssi.fi/en/tickets-2027",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:16.689100+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Prior sale prose and future current-edition ticket gateway do not establish live Paylogic inventory."
+    },
+    {
+      "slug": "reading",
+      "name": "Reading Festival",
+      "officialUrl": "https://www.readingfestival.com/",
+      "ticketUrl": "https://www.readingfestival.com/tickets",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:17.371333+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/ingestion-reading.test.mjs",
+        "verifiedStates": [
+          "available",
+          "sold_out"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "resurrection-fest",
+      "name": "Resurrection Fest",
+      "officialUrl": "https://www.resurrectionfest.es/",
+      "ticketUrl": "https://www.resurrectionfest.es/entradas/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:19.724181+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "roadburn",
+      "name": "Roadburn Festival",
+      "officialUrl": "https://roadburn.com/",
+      "ticketUrl": "https://roadburn.com/tickets/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:21.341801+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Current-looking sale prose links stale/offsale ticket landing; no available/sold_out inference."
+    },
+    {
+      "slug": "rock-am-ring",
+      "name": "Rock am Ring",
+      "officialUrl": "https://www.rock-am-ring.com/",
+      "ticketUrl": "https://www.rock-am-ring.com/en/tickets",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:16.689920+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "rock-en-seine",
+      "name": "Rock en Seine",
+      "officialUrl": "https://www.rockenseine.com/",
+      "ticketUrl": "https://www.rockenseine.com/boutique-en-ligne/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:17.143643+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "rock-for-people",
+      "name": "Rock for People",
+      "officialUrl": "https://rockforpeople.cz/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:18.314031+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Partial capacity sold and tier changes coexist with on-sale copy; source-specific admission control/stock proof still needed."
+    },
+    {
+      "slug": "rock-im-park",
+      "name": "Rock im Park",
+      "officialUrl": "https://www.rock-im-park.com/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:16.690443+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "rock-imperium",
+      "name": "Rock Imperium Festival",
+      "officialUrl": "https://www.rockimperiumfestival.es/",
+      "ticketUrl": "https://www.rockimperiumfestival.es/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:19.436426+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 493,
+        "head": "0b0150794cdb3d2b4518fb3f308fc286047e547b",
+        "base": "fix/434-festival-ticket-parsers",
+        "run": 44204345375,
+        "test": "tests/ingestion-rock-imperium.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "rock-in-roma",
+      "name": "Rock in Roma",
+      "officialUrl": "https://rockinroma.com/",
+      "ticketUrl": "https://www.ticketone.it/artist/rock-in-roma/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:20.239059+00:00",
+        "httpStatus": null,
+        "error": "TimeoutError"
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Initial official source timed out; no inventory conclusion."
+    },
+    {
+      "slug": "rock-the-lakes",
+      "name": "Rock The Lakes",
+      "officialUrl": "https://www.rockthelakes.ch/",
+      "ticketUrl": "https://www.ticketcorner.ch/fr/event/rock-the-lakes-2027-rock-the-lakes-22018634/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:23.156042+00:00",
+        "httpStatus": null,
+        "error": "TimeoutError"
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Initial official source timed out; no inventory conclusion."
+    },
+    {
+      "slug": "rock-werchter",
+      "name": "Rock Werchter",
+      "officialUrl": "https://www.rockwerchter.be/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:17.923723+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/ingestion-rock-werchter-markup.test.mjs",
+        "verifiedStates": [
+          "not_on_sale"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "rockharz",
+      "name": "Rockharz Open Air",
+      "officialUrl": "https://www.rockharz-festival.com/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:16.817225+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/ingestion-rockharz-markup.test.mjs",
+        "verifiedStates": [
+          "sold_out"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "rockstadt",
+      "name": "Rockstadt Extreme Fest",
+      "officialUrl": "https://rockstadtextremefest.ro/",
+      "ticketUrl": "https://bilete.rockstadtextremefest.ro/bilete-rockstadt-fest-2027-129242/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:22.684372+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 494,
+        "head": "d28a8a0b4ab33940d24adf5419739271fe0887bd",
+        "base": "fix/434-festival-ticket-parsers",
+        "run": 44204853327,
+        "test": "tests/ingestion-rockstadt-markup.test.mjs",
+        "verifiedStates": [
+          "available"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "roskilde",
+      "name": "Roskilde Festival",
+      "officialUrl": "https://www.roskilde-festival.dk/",
+      "ticketUrl": "https://www.roskilde-festival.dk/billetter",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:22.511947+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Later official /billetter request returned HTTP 403 Cloudflare; initial homepage 200 did not verify inventory."
+    },
+    {
+      "slug": "southside",
+      "name": "Southside Festival",
+      "officialUrl": "https://southside.de/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:16.962284+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Readability exposes search chrome without inventory; treat as incomplete extraction, not a healthy stock check."
+    },
+    {
+      "slug": "summer-breeze",
+      "name": "Summer Breeze Open Air",
+      "officialUrl": "https://www.summer-breeze.de/",
+      "ticketUrl": "https://www.summer-breeze.de/en/tickets/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:16.782896+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/ingestion-summer-breeze-feedback.test.mjs",
+        "verifiedStates": [
+          "available",
+          "sold_out"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "sweden-rock",
+      "name": "Sweden Rock Festival",
+      "officialUrl": "https://swedenrock.com/",
+      "ticketUrl": "https://swedenrock.com/biljetter",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:21.833913+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/sweden-rock-parser-repair.test.mjs",
+        "verifiedStates": [
+          "not_on_sale",
+          "available",
+          "sold_out"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "tolminator",
+      "name": "Tolminator",
+      "officialUrl": "https://tolminator.com/en/",
+      "ticketUrl": "https://tolminator.mojekarte.si/en/all.html",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:22.689356+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "tons-of-rock",
+      "name": "Tons of Rock",
+      "officialUrl": "https://www.tonsofrock.no/",
+      "ticketUrl": null,
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:22.094091+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "tuska",
+      "name": "Tuska Festival",
+      "officialUrl": "https://tuska.fi/",
+      "ticketUrl": "https://tuska.fi/liput/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:21.904971+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/tuska-lineup.test.mjs",
+        "verifiedStates": [
+          "available",
+          "sold_out"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    },
+    {
+      "slug": "vainstream",
+      "name": "Vainstream Rockfest",
+      "officialUrl": "https://vainstream.com/",
+      "ticketUrl": "https://www.vainstream-shop.de/2027-tickets/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:23.095816+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "not_yet_verified",
+        "pr": null,
+        "head": null,
+        "base": null,
+        "run": null,
+        "test": null,
+        "verifiedStates": []
+      },
+      "canonicalAcceptance": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Current regular products coexist with sold-out early-bird tiers. Raw product stock/control proof not yet audited; no global sellout inference."
+    },
+    {
+      "slug": "wacken-open-air",
+      "name": "Wacken Open Air",
+      "officialUrl": "https://www.wacken.com/",
+      "ticketUrl": "https://www.wacken.com/de/tickets-shop/ticket-uebersicht-2027/",
+      "initialHttpObservation": {
+        "at": "2026-11-17T22:46:16.690894+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "parser": {
+        "state": "fixture_review_quality_verified",
+        "pr": 482,
+        "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+        "base": "fix/434-truthful-ticket-status",
+        "run": 44195591354,
+        "test": "tests/ticket-supplements.test.mjs",
+        "verifiedStates": [
+          "available",
+          "sold_out"
+        ]
+      },
+      "canonicalAcceptance": {
+        "state": "offline_adapter_publication_replay_verified",
+        "evidence": {
+          "pr": 482,
+          "head": "69d15f0745c2f761f8a68986d3c457e30ffab662",
+          "run": 44195591354,
+          "test": "tests/catalog-publication.e2e.test.ts",
+          "scope": "Fixture supplement parser to persisted ticket evidence, publication, canonical readback and idempotent replay. No production transport/rollout acceptance."
+        }
+      },
+      "rollout": {
+        "state": "not_accepted_or_deployed_by_this_agent",
+        "mainIntegration": "pending_accepted_deployed_parent_then_focused_rebase_and_exact_head_gates"
+      },
+      "remainingWork": "Complete source-specific canonical acceptance where not listed, integrate only after parent acceptance/deployment, and rerun exact-head gates."
+    }
+  ]
+}
