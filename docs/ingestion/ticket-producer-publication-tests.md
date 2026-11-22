@@ -26,3 +26,10 @@ catalogue suite via `tests/*ticket-publication.e2e.test.ts`. Locally use the
 repository Node version, a guarded loopback disposable database and the normal
 memory-limited test scope. After integrating onto the accepted/deployed main,
 require fresh full Quality and completed Codex review for the exact head.
+
+The helper removes only newly created source fixtures and restores pre-existing
+festival/edition/lineup and artist state. This isolation is required: the later
+initial-playlist suite creates its own same-slug/year shell (notably Full Rewind),
+so leaving a stock-test edition would mask the provider-policy regression with
+a unique-constraint failure. Verify the source suite followed by that later
+suite in a fresh disposable DB when changing fixture ownership/cleanup.
