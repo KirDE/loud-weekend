@@ -1,4 +1,4 @@
-# Отображение фестиваля на паузе — #523
+# Display festival editions on hiatus — #523
 
 Extracted from #522 at Kirill’s request. This is the preserved implementation for separate architectural review, NOT a ready/accepted design. Depends on the parser-only #522. General model/storage/review/catalogue/UI changes and parser-to-model integration belong here.
 
