@@ -13,7 +13,7 @@ import { evaluateCandidate } from "../../lib/ingestion/policy.ts";
 import type { FestivalCandidate, IngestionResult } from "../../lib/ingestion/types.ts";
 
 /** Frozen public structural source data, local synthetic DB and mocked GET only. */
-export function ticketProducerPublication(input: { slug: string; produce: (archived?: boolean) => Promise<FestivalCandidate>; forbiddenCandidates?: (candidate: FestivalCandidate) => FestivalCandidate[]; refusalPattern?: RegExp }) {
+export function ticketProducerPublication(input: { slug: string; produce: (archived?: boolean) => Promise<FestivalCandidate>; forbiddenCandidates?: (candidate: FestivalCandidate) => FestivalCandidate[]; refusalPattern?: RegExp; exerciseAnnouncementAddition?: boolean }) {
   test(`${input.slug}: source producer → persisted evidence → canonical readback/replay and stale-publication rollback`, async () => {
     requireLocalDisposableDatabase(process.env.DATABASE_URL);
     const db = createPrismaClient(), sourceCommit = `test-ticket-${randomUUID()}`;
@@ -48,7 +48,7 @@ export function ticketProducerPublication(input: { slug: string; produce: (archi
       }
       const festival = { ...catalogSeed.festivals[0], slug: input.slug, name: `Synthetic ${input.slug}`, officialUrl: candidate.sourceUrl,
         editionYear: year, startDate: candidate.startDate ?? `${year}-06-01`, endDate: candidate.endDate ?? `${year}-06-04`,
-        city: candidate.city, headliners: candidate.headliners ?? [], lineup: candidate.lineup ?? [] };
+        city: candidate.city, headliners: candidate.headliners ?? [], lineup: input.exerciseAnnouncementAddition ? candidate.lineup!.slice(0,-1) : candidate.lineup ?? [] };
       await seedCatalog(db, { ...catalogSeed, artists: [...catalogSeed.artists, ...artists], festivals: [...catalogSeed.festivals, festival],
         editions: [...catalogSeed.editions, { ...festival, recordState: "current", completeness: "partial", provenance: [] }] });
       const edition = await db.festivalEdition.findFirstOrThrow({ where: { festival: { slug: input.slug }, year, recordState: "CURRENT" } });
@@ -58,7 +58,7 @@ export function ticketProducerPublication(input: { slug: string; produce: (archi
       const value = evaluateCandidate(await read(), candidate);
       assert.equal(value.publishable, true, JSON.stringify(value.reviewReasons));
       assert.ok(value.changes.some(c => c.field === "ticketStatus"));
-      assert.ok(value.changes.every(c => ["ticketStatus", "ticketsUrl"].includes(c.field)), "stock check must not publish artists");
+      assert.ok(value.changes.every(c => (["ticketStatus", "ticketsUrl"].includes(c.field) || input.exerciseAnnouncementAddition && c.kind === "artist_added")), "only independently verified announcement additions may accompany stock");
       // Explicitly prove the canonical boundary even with forged policy approval.
       for (const forbidden of input.forbiddenCandidates?.(structuredClone(candidate)) ?? []) {
         const blocked = evaluateCandidate(await read(), forbidden);
@@ -77,6 +77,7 @@ export function ticketProducerPublication(input: { slug: string; produce: (archi
       const after = await read();
       assert.equal(after.ticketStatus, candidate.ticketStatus);
       assert.equal(after.ticketsUrl, candidate.ticketsUrl);
+      if (input.exerciseAnnouncementAddition) assert.ok(after.lineup.includes(candidate.lineup!.at(-1)!));
       const durable = await db.ingestionEvidence.findMany({ where: { candidate: { attemptId: attempt.id } } });
       for (const change of value.changes) {
         const proof = candidate.evidence.filter(e => e.field === change.field);

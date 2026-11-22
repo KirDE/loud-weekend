@@ -378,10 +378,11 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
       candidate.attempt.requestedUrl === PROVINSSI_HOME && input.result.sourceUrl === PROVINSSI_HOME &&
       isProvinssiAnnouncement(input.result.candidate, applied.edition.year) &&
       isProvinssiAnnouncement(candidate.normalized as unknown as FestivalCandidate, applied.edition.year) &&
-      input.result.changes.every(({field,kind}) => ['startDate','endDate','city','lineup','ticketsUrl','status'].includes(field) &&
+      (!observed.ticketSupplement || observed.startDate === '2027-07-01' && observed.endDate === '2027-07-03') &&
+      input.result.changes.every(({field,kind}) => (['ticketStatus','ticketsUrl'].includes(field) && observed.ticketSupplement && stored.ticketSupplement) || (['startDate','endDate','city','lineup','ticketsUrl','status'].includes(field) &&
         (field !== 'lineup' || kind === 'artist_added') &&
         candidate.evidence.some(e => e.field === field && e.sourceUrl === PROVINSSI_HOME &&
-          same(e.observedValue, (input.result.candidate as unknown as Record<string,unknown>)[field]))) &&
+          same(e.observedValue, (input.result.candidate as unknown as Record<string,unknown>)[field])))) &&
       ['startDate','endDate','city','lineup','ticketsUrl','status'].every(field =>
         same((candidate.normalized as Record<string,unknown>)[field], (input.result.candidate as unknown as Record<string,unknown>)[field]));
     const verifiedProvinssiStockOnly = provinssiPublication && candidate.festivalSlug === "provinssi" &&

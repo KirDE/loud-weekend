@@ -28,13 +28,16 @@ products stay out of normalized evidence and fixtures; fixtures use synthetic
 tokens. Scope is independently reconstructed and compared for request and stored
 JSONB evidence by the canonical publisher.
 
-The canonical addition is ticket-only. No change to existing Provinssi artist
-acceptance: forged approval for artist/date changes still fails. Primary dates,
+Stock-only publication has its own narrow canonical path. Independently verified
+primary announcement additions may also accompany verified stock; each field
+retains its own evidence gate. Forged approval with missing primary artist proof
+or conflicting dates still fails. Primary dates,
 city, lineup and status must retain matching original-source persisted evidence;
 no playlist/provider jobs. The existing announcement publication path remains
 unchanged. Scope/stripped-marker refusal, actual mocked source→policy→persisted
 proof→canonical reader/replay, archived-source and stale-write rollback are
-covered in disposable PostgreSQL. Full compatibility checks run separately.
+covered in disposable PostgreSQL, including a combined source-backed artist
+addition + unknown→available stock transaction, without provider jobs. Full compatibility checks run separately.
 
 Roadburn uses the same API, but its official buy link still points to `/offsale`
 while API ordinary inventory is positive. That conflict is **not** resolved by
