@@ -1,4 +1,6 @@
 import type { Festival } from "@/lib/domain/festival";
+import { editionOnHiatus } from "./edition-lifecycle.ts";
+import { festivalDateInterval } from "./festival-dates.ts";
 
 export function festivalArtists(item: Festival) {
   return new Set([...item.headliners, ...item.lineup].map((artist) => artist.toLocaleLowerCase()));
@@ -24,8 +26,13 @@ function escapeIcs(value: string) {
   return value.replaceAll("\\", "\\\\").replaceAll(";", "\\;").replaceAll(",", "\\,").replaceAll(/\r?\n/g, "\\n");
 }
 
+/** Scheduled calendar eligibility, not a mutation of canonical date facts. */
+export function calendarEligible(item: Festival): boolean {
+  return !editionOnHiatus(item) && festivalDateInterval(item) !== null;
+}
+
 export function calendarFile(items: Festival[]) {
-  const events = items.filter((item) => item.startDate).flatMap((item) => {
+  const events = items.filter(calendarEligible).flatMap((item) => {
     const end = new Date(`${item.endDate || item.startDate}T12:00:00Z`);
     end.setUTCDate(end.getUTCDate() + 1);
     const location = [item.city, item.country].filter(Boolean).join(", ");
@@ -45,11 +52,11 @@ export function calendarFile(items: Festival[]) {
 }
 
 export function calendarUrls(item: Festival) {
-  if (!item.startDate) return null;
+  if (!calendarEligible(item)) return null;
   const end = new Date(`${item.endDate || item.startDate}T12:00:00Z`);
   end.setUTCDate(end.getUTCDate() + 1);
   const exclusiveEnd = end.toISOString().slice(0, 10);
-  const dates = `${compactDate(item.startDate)}/${compactDate(exclusiveEnd)}`;
+  const dates = `${compactDate(item.startDate!)}/${compactDate(exclusiveEnd)}`;
   const details = `Official information: ${item.officialUrl}`;
   const query = new URLSearchParams({ action: "TEMPLATE", text: item.name, dates, details, location: [item.city, item.country].filter(Boolean).join(", ") });
   return {

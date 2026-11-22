@@ -186,3 +186,27 @@ absence semantics, SEO suppression and prior ticket/SEO regressions. This is
 server-rendered component proof, NOT browser/mobile proof. Date cards, calendar,
 planning exports and descriptive lifecycle notices still need integration before
 attaching approved lifecycle data to the actual catalogue.
+
+## Consumer prerequisite: calendar and personal plan (not yet catalogue-wired)
+
+Shared `calendarEligible` combines the strict lifecycle/target guard with the
+existing valid-date-interval parser. All ICS exports and Google/Apple calendar
+links now exclude paused editions, even if canonical historical dates remain.
+Malformed/transferred lifecycle fails closed; invalid or reversed dates yield
+no scheduled event. The personal planner reuses the shared ICS serializer rather
+than a second unescaped implementation. The actual calendar grid omits paused
+editions while geographic map links remain available (not a schedule claim).
+
+Saved personal preferences remain untouched. The saved hiatus stays visible with
+the localized hiatus label instead of old dates; its attendance control is disabled
+without resetting the existing selection. An all-paused personal plan offers no
+calendar download. Detail planning tools show hiatus rather than promising an
+export once dates are announced, and suppress the stage timetable for that edition.
+
+23 targeted tests cover helper/ICS fail-closed semantics plus real calendar,
+planning tools and ready-planner JSX renders across EN/DE/RU, mixed/all-paused
+exports, preference retention and existing date/localization regressions. The
+ready-planner test injects synthetic hydrated preferences, not a real browser.
+Full test:data and typecheck pass; no browser/mobile/CI/Codex claim. Canonical
+catalogue attachment, detail/card/month/date descriptions and source collection
+remain unfinished. No lifecycle is exposed through the database catalogue yet.

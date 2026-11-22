@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import { festivalDateInterval, festivalOverlapsMonth, formatFestivalDateRange, monthIndex } from "@/lib/festival-dates";
-import { calendarFile } from "@/lib/planning";
+import { calendarEligible, calendarFile } from "@/lib/planning";
 import { useLanguage, type Language } from "./LanguageProvider";
 
 const labels: Record<Language, { months: string[]; dates: string; calendar: string; previous: string; next: string; until: string; noDates: string; download: string; area: string; map: string; mapHelp: string; mapLabel: string; europe: string; marker: (country: string, count: number) => string }> = {
@@ -16,7 +16,7 @@ const POINTS: Record<string, [number, number]> = { AT:[57,61],BE:[42,45],CH:[48,
 export function FestivalViews({ festivals }: { festivals: Festival[] }) {
   const { language, locale } = useLanguage();
   const t = labels[language];
-  const dated = useMemo(() => festivals.filter((f) => festivalDateInterval(f)).sort((a,b) => a.startDate!.localeCompare(b.startDate!)), [festivals]);
+  const dated = useMemo(() => festivals.filter(calendarEligible).sort((a,b) => a.startDate!.localeCompare(b.startDate!)), [festivals]);
   const [selectedMonth, setSelectedMonth] = useState(() => dated[0] ? monthIndex(festivalDateInterval(dated[0])!.start) : (festivals[0]?.editionYear ?? 2027) * 12);
   const year = Math.floor(selectedMonth / 12);
   const month = selectedMonth - year * 12;

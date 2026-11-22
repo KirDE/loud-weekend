@@ -6,7 +6,9 @@ import { useLocalPlanner, type Attendance } from "./LocalPlanner";
 import { PlannerReset } from "./PlannerReset";
 import { AccountSyncPanel } from "./AccountSyncPanel";
 import { FestivalViews } from "./FestivalViews";
-import { useLanguage, type Language } from "./LanguageProvider";
+import { calendarEligible, calendarFile } from "@/lib/planning";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
+import { useLanguage, translate, type Language } from "./LanguageProvider";
 
 type PlannerLabels = {
   eyebrow: string; title: string; intro: string; clear: string; calendar: string;
@@ -47,7 +49,7 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
     new Set(selected.flatMap((f) => [...f.headliners, ...f.lineup])),
   ).sort();
   const dated = planned
-    .filter((f) => f.startDate)
+    .filter(calendarEligible)
     .sort((a, b) => a.startDate!.localeCompare(b.startDate!));
   async function createPlaylist() {
     setPlaylist({ status: "creating", message: t.creating });
@@ -91,7 +93,7 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
               {planned.map((f) => (
                 <article key={f.slug}>
                   <div>
-                    <small>{f.startDate || t.datesTba}</small>
+                    <small>{editionOnHiatus(f) ? translate(language, "editionHiatus") : f.startDate || t.datesTba}</small>
                     <Link href={`/festivals/${f.slug}/`}>
                       <strong>{f.name}</strong>
                     </Link>
@@ -100,6 +102,7 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
                     </span>
                   </div>
                   <select
+                    disabled={editionOnHiatus(f)}
                     value={p.attendance[f.slug] || ""}
                     aria-label={`${t.attendance} ${f.name}`}
                     onChange={(e) =>
@@ -187,27 +190,4 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
       )}
     </div>
   );
-}
-function calendarFile(items: Festival[]) {
-  const out = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Loud Weekend//Trip Planner//EN",
-    "CALSCALE:GREGORIAN",
-  ];
-  for (const f of items) {
-    const end = new Date(`${f.endDate || f.startDate}T12:00:00Z`);
-    end.setUTCDate(end.getUTCDate() + 1);
-    out.push(
-      "BEGIN:VEVENT",
-      `UID:${f.slug}-2027@festival-radar`,
-      `DTSTART;VALUE=DATE:${f.startDate!.replaceAll("-", "")}`,
-      `DTEND;VALUE=DATE:${end.toISOString().slice(0, 10).replaceAll("-", "")}`,
-      `SUMMARY:${f.name}`,
-      `LOCATION:${f.city || f.country}`,
-      `URL:${f.officialUrl}`,
-      "END:VEVENT",
-    );
-  }
-  return [...out, "END:VCALENDAR"].join("\r\n");
 }
