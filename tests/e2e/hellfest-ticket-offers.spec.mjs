@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { createPrismaClient } from '../../lib/prisma-client.mjs';
 import { requireLocalDisposableDatabase } from '../support/disposable-db.ts';
@@ -27,9 +28,23 @@ test.beforeAll(async () => {
   await stageHellfestOffers(db, { editionId, html, finalUrl: 'https://hellfest.fr/', status: 200, observedAt: new Date().toISOString() });
 });
 test.afterAll(async () => {
-  if (festivalId) await db.festival.delete({ where: { id: festivalId } });
-  if (userId) await db.user.delete({ where: { id: userId } });
-  await db.$disconnect();
+  try {
+    if (festivalId) await db.festival.delete({ where: { id: festivalId } });
+    if (userId) {
+      // Audit is append-only and restricts actor deletion. Retain that synthetic
+      // identity, revoke its sessions/role and free the allowlisted retry email.
+      await db.$transaction(async (tx) => {
+        await tx.session.deleteMany({ where: { userId } });
+        if (await tx.adminAuditEntry.count({ where: { actorId: userId } })) {
+          await tx.user.update({ where: { id: userId }, data: { role: 'USER', email: `retired-tier-${randomUUID()}@example.test` } });
+        } else {
+          await tx.user.delete({ where: { id: userId } });
+        }
+      });
+    }
+  } finally {
+    await db.$disconnect();
+  }
 });
 
 async function noOverflow(page) {
@@ -45,8 +60,8 @@ test('real session review publishes independent tiers; EN/DE/RU desktop and mobi
   await expect(page.locator('.ticketOfferSection')).toHaveCount(0);
   expect((await page.request.get(`/api/admin/ticket-offers/editions/${editionId}`)).status()).toBe(403);
   expect((await page.request.post('/api/auth/register', { data: { email, password: 'synthetic browser password 2027' } })).status()).toBe(201);
-  const user = await db.user.update({ where: { email }, data: { role: 'ADMIN' } });
-  userId = user.id;
+  userId = (await db.user.findUniqueOrThrow({ where: { email } })).id;
+  await db.user.update({ where: { id: userId }, data: { role: 'ADMIN' } });
   await page.goto('/admin');
   const queue = page.locator('.ticketOfferReview');
   await expect(queue).toBeVisible();
@@ -73,6 +88,12 @@ test('real session review publishes independent tiers; EN/DE/RU desktop and mobi
   expect((await db.festivalEdition.findUniqueOrThrow({ where: { id: editionId } })).ticketStatus).toBe('UNKNOWN');
   for (const locale of ['en', 'de', 'ru']) {
     await page.goto(`/${locale}/festivals/hellfest/`);
+    // Saved UI language intentionally wins over the URL after hydration.
+    // Exercise the real picker rather than racing the server-rendered locale.
+    const picker = page.locator('.languagePicker select');
+    await expect.poll(() => picker.evaluate(el => Object.keys(el).some(key => key.startsWith('__reactProps')))).toBe(true);
+    await picker.selectOption(locale);
+    await expect(page.locator('html')).toHaveAttribute('lang', locale);
     const offers = page.locator('.ticketOfferSection');
     await expect(offers.locator('[data-tier-kind=full_pass]')).toContainText(labels[locale][3]);
     await expect(offers.locator('[data-tier-kind=day_pass]')).toContainText(labels[locale][4]);
