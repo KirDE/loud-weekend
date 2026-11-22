@@ -23,3 +23,35 @@ or production coverage. Remaining prerequisite: reviewed additive edition-lifecy
 model, durable evidence binding and audited approval, public EN/DE/RU presentation,
 canonical read/replay/rollback and full exact-head CI/review. Do not create fictive
 2027 festival dates or transfer2028 dates; preserve blocked/unrelated stock health.
+
+## Durable pending staging (local prerequisite)
+
+`stageRockEnSeineHiatus` re-extracts a supplied bounded official response; it does
+not accept caller-built lifecycle assertions. The additive
+`EditionLifecycleProposalSnapshot` table binds the existing current Rock en Seine
+2027 edition, exact requested/final route, HTTP200, normalized observation time,
+parser version and strict minimized proposal to a SHA256 revision. No raw HTML,
+cookies or session/contact data is stored. No new fetcher/runner/CLI is registered.
+The caller must supply the real response time; historical HTML must not be
+restamped as a new observation. Actual live access was not refreshed by DB tests.
+
+An edition row lock serializes even empty-history observations and concurrent
+replays. The same observation is idempotent; newer evidence appends, older input
+fails. Observation freshness is rechecked after lock acquisition. Corruption in
+the latest record fails both pending read and subsequent staging, with no older
+healthy fallback. Current edition/source drift fails closed. This is an
+application append-only service, not a database immutability/access-control claim.
+
+`readPendingRockEnSeineHiatus` is an INTERNAL reviewer read, not an authenticated
+HTTP endpoint or public catalogue projection. It always returns `pending`;
+`eligibleForReview` becomes false outside24h/60s-future bounds. No approval is
+inferred, including from the absence of evidence. Neither service modifies
+FestivalEdition fields, stock/source health, publications, notifications or
+provider jobs, nor creates2028 editions. All synthetic SQL tests run only on an
+own isolated disposable database; no production migration was applied.
+
+Remaining: audited exact-revision reviewer decisions and authenticated endpoint,
+explicit edition lifecycle semantics and approved-only public EN/DE/RU read/UI,
+bounded native collector/invocation, replay/rollback and browser checks, focused
+PR/full Quality/exact-head Codex review. Pending snapshots alone do not complete
+the source and must never be presented as a cancellation/stock publication.

@@ -323,6 +323,7 @@ model FestivalEdition {
   timetable       TimetablePerformance[]
   playlists       FestivalPlaylist[]
   sources         FestivalSource[]
+  lifecycleProposals EditionLifecycleProposalSnapshot[]
 
   @@unique([festivalId, year])
   @@index([year, recordState])
@@ -901,4 +902,21 @@ model OperationalState {
   leaseOwner     String?
   leaseExpiresAt DateTime?
   updatedAt      DateTime @updatedAt
+}
+
+// Pending edition-lifecycle observations. No canonical lifecycle/approval implied.
+model EditionLifecycleProposalSnapshot {
+  id            String @id @default(cuid())
+  editionId     String
+  sourceUrl     String
+  finalUrl      String
+  httpStatus    Int
+  observedAt    DateTime @db.Timestamptz(3)
+  contentHash   String @db.Char(64)
+  parserVersion String
+  proposal      Json
+  createdAt     DateTime @default(now())
+  edition       FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@unique([editionId, observedAt])
 }
