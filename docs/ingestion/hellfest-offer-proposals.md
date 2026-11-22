@@ -1,7 +1,8 @@
 # Hellfest tier extraction — local implementation checkpoint for #446
 
 **Not production-ready or registered with ingestion/publication.** No catalog,
-notification, UI, migration, production source or global ticket status changes.
+notification, UI, production migration/source or global ticket status changes.
+Additive migrations have only been applied to the disposable local test DB.
 
 The existing domain has one ticket state. Official Hellfest homepage cards show
 separate states for the four-day pass and one-day pass; the page also advertises
@@ -59,7 +60,7 @@ returns the existing ID; conflicting same-time/older updates fail. Newer changes
 append rather than overwrite history.
 
 `readPendingHellfestOffers` validates the latest stored identity/time/value hash
-and schema before returning explicit **pending** data to a reviewer. Corrupt latest
+and schema before returning the latest snapshot and its explicit **pending/approved/rejected** review state to a reviewer. Corrupt latest
 data is an error, not healthy empty stock or a fallback to an older snapshot.
 This is NOT the canonical public reader. These snapshots are not signed proof of
 the HTTP response and do not replace the later reviewed publication mechanism.
@@ -76,9 +77,9 @@ DATABASE_URL=<local-disposable-test-db> node scripts/prepare-test-db.mjs
 DATABASE_URL=<local-disposable-test-db> node --import tsx --test tests/hellfest-offer-proposal-store.e2e.test.ts
 ```
 
-Still outstanding: actual bounded collector transport and registration, reviewed
-approval/publication/rejection flow, canonical public tier reader, EN/DE/RU/mobile
-UI/SEO, complete source-to-public DB rollback tests, CI and exact-head Codex review.
+Still outstanding: collector registration, authenticated review API/UI and public
+catalog/UI integration, EN/DE/RU/mobile presentation/SEO, CI and exact-head Codex review.
+The internal collector and explicit review/read service milestones are described below.
 Hellfest remains unfinished. Do not apply the migration to production as part of
 this work.
 
@@ -98,8 +99,8 @@ The observed timestamp is generated only after the document finishes reading.
 re-extraction/staging. Callers supply only an edition ID, not arbitrary offers,
 source URLs or timestamps. It remains **unregistered and not public**; there is
 no runtime job, source-health refresh or automatic approval/publication. The
-reviewer readback still explicitly says pending. This does not replace the
-required authenticated approval/rejection flow or canonical public reader.
+reviewer readback reports the actual stored decision (initially pending). This does
+not replace the required authenticated review API/UI or public catalog integration.
 
 Tests cover strict request/status/identity/MIME/size, malformed/empty/failed
 streams, deadline over stalled headers and stalled bodies, network failures, and
@@ -107,3 +108,37 @@ synthetic GET→atomic DB pending readback. Challenge HTML, wrong edition, malfo
 tier prices and HTTP/network errors preserve the last valid pending observation.
 The native collector also completed one live GET200, matching both tiers with no
 warnings (not a public inventory write or a readiness/acceptance claim).
+
+## Explicit review and approved-only read service (local checkpoint)
+
+`decideHellfestOffers` is an **internal service, not an HTTP endpoint**. It requires
+an actor ID from a future authenticated session boundary; it rechecks the user's
+persisted EDITOR/ADMIN role and the same ADMIN_EMAILS allowlist as currentAdmin.
+No request-body actor or arbitrary caller-built offer is acceptable. No route
+or production entry point has been registered yet.
+
+A decision binds the exact snapshot ID and expected content hash. Under the same
+edition row lock used for staging, only the latest fresh proposal may receive a
+first decision. Approve/reject is final through this service; identical retries
+by the same actor are idempotent, conflicting/reversed decisions fail. Decision
+and existing append-only AdminAuditEntry write commit atomically; injected audit
+failure rolls back both. Actor labels use internal IDs, not email copies. Pending
+readback now returns the actual pending/approved/rejected state.
+
+`readApprovedHellfestOffers` selects only explicitly approved snapshots and
+revalidates edition/source/parser/value/hash and decision hash. New pending or
+rejected observations cannot replace the previous approved one. Corrupt approved
+proof errors instead of falling back; approval older than 24h or >60s in the
+future returns null rather than current inventory. Publication uses this separate
+approved tier view, never a flattened global ticketStatus. The **existing public
+catalog is not yet wired to it**, and no notification/provider/source-health work
+is emitted. These are application-level append-only service operations, not a
+claim that a database administrator cannot alter rows.
+
+Synthetic collector→staging→review→approved-reader tests include denied reviewer
+role/allowlist/missing actor, stale revision/superseded snapshot rejection,
+concurrent idempotent approval, reversal conflict, audit rollback, preservation
+across pending/rejected changes, tampered snapshot/decision and edition drift,
+and expiry. All tests use the isolated local DB; append-only audit rows and their
+synthetic actors are retained there while fixture editions cascade-clean normally.
+No real user data or production writes are involved.

@@ -193,6 +193,7 @@ model User {
   reviewedSubmissions       FestivalSubmission[]       @relation("SubmissionReviewer")
   submissionAuditEntries    FestivalSubmissionAudit[]
   emailVerificationTokens   EmailVerificationToken[]
+  ticketOfferDecisions      TicketOfferReviewDecision[]
   passkeys                  Passkey[]
 }
 
@@ -916,5 +917,19 @@ model TicketOfferProposalSnapshot {
   createdAt     DateTime @default(now())
   edition       FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
 
+  decision      TicketOfferReviewDecision?
+
   @@unique([editionId, observedAt])
+}
+
+// Append-only reviewer decision; one explicit decision for one exact snapshot.
+model TicketOfferReviewDecision {
+  id           String @id @default(cuid())
+  snapshotId   String @unique
+  contentHash  String @db.Char(64)
+  decision     String
+  actorId      String
+  createdAt    DateTime @default(now())
+  snapshot     TicketOfferProposalSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  actor        User @relation(fields: [actorId], references: [id], onDelete: Restrict)
 }
