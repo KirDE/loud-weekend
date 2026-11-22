@@ -48,6 +48,7 @@ jobs:
       - run: node --import tsx --test tests/youtube-recovery.e2e.test.ts
       - run: npm run test:sources
       - run: npm run test:catalog-db
+      - run: node --import tsx --test tests/hellfest-offer-proposal-store.e2e.test.ts
       - run: node --import tsx --test --test-concurrency=1 tests/*ticket-publication.e2e.test.ts
       - run: node --import tsx --test tests/initial-playlist-publication.e2e.test.ts
       - run: node --import tsx --test tests/import-agent.e2e.test.ts

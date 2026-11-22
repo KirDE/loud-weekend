@@ -270,3 +270,24 @@ failures and command→synthetic DB pending readback. Preview/failures preserve 
 snapshots, last approval, global edition, decisions, health and outbox/provider
 counts. The command does not replace human review. Remaining readiness gates:
 actual browser/mobile verification, focused PR, full CI and exact-head Codex review.
+
+## Browser/CI readiness checkpoint
+
+`tests/e2e/hellfest-ticket-offers.spec.mjs` uses the existing real registration
+and session flow with its own allowlisted synthetic reviewer (no cookie injection
+or production identity). It stages a minimized fixture in a guarded local test
+DB, verifies pending isolation, performs exact-revision approval via the actual
+queue, reloads the persisted decision, and checks separate public tiers in
+EN/DE/RU at 1280/320/375/390px, including expanded evidence/hash wrapping and
+screenshots. It refuses to overwrite existing Hellfest/account fixtures and
+cleans up only its own records. The full existing browser CI discovers this spec;
+core CI explicitly runs the tier DB publication suite.
+
+Local execution is **not green**: the matching Playwright Chromium was installed;
+the real public detail, pending isolation, anonymous API denial and synthetic
+registration ran, but the 1GiB-capped Next dev process either OOMed or restarted
+at its configured heap threshold before the admin workflow could complete.
+Webpack and reduced heaps/source maps did not finish the workflow. Do not lift
+the workspace resource limit or claim mobile/authenticated review success.
+Use the existing CI runner for the full browser/build gate and fix any actual
+assertions it reports. No production app, cookies, migrations or data were used.
