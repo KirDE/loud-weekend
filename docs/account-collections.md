@@ -1,0 +1,11 @@
+# Account collections and Spotify imports
+
+Collections document schemaVersion 1 has two independent namespaces: playlistFestivals (local festival selection) and spotify (nullable last successful import with syncedAt and playlist records). Known legacy selection-only, provider-only and combined shapes are migrated on read/write without inventing timestamps or deleting a known namespace. Unknown/incomplete shapes fail closed.
+
+Ordinary device PUT owns selection only; provider import metadata from a client is never authoritative. Server keeps the currently persisted provider namespace while applying the selection under the expected revision. Merge UI unions local/account selections and retains remote imports; choosing account data restores only planner fields, never serializes provider collections into local planner storage.
+
+Import POST requires the expected collections revision. UI first merges/persists unsynchronized selection with normal conflict controls, then imports against that returned revision. Import reads provider pages without writes, validates pagination identity/shape and the bounded full list, and commits only under compare-and-swap of the original document revision. Document publication and connection lastSyncedAt commit together. Concurrent writes return 409; provider/schema/pagination failures retain previous import/time. No background tasks or provider playlist writes are added.
+
+Saved imported playlist names, safe provider links, counts and server-recorded last-successful-import time are rendered in EN/DE/RU. There is no client-side just-synced timestamp. Existing conflicts remain user-visible; import conflicts require reload/retry rather than silently overwriting another device.
+
+Verification: collections.test.mjs covers legacy migration/namespace rules; existing account-routes integration exercises disposable PostgreSQL, OAuth mock pages, normal sync/second device, provider/schema/pagination failures, concurrent import vs selection and first-write races. account-collections.spec.mjs drives the real account panel with synthetic HTTP fixtures for import, normal/merge sync, reload/another page, conflict controls and retained old import after failure. No real user/provider data is used.
