@@ -5,7 +5,7 @@ import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { useLanguage } from "./LanguageProvider";
 
 /** Only the approved, minimal public projection enters this component. */
-export function EditionLifecycleNotice({ item }: { item: Festival }) {
+export function EditionLifecycleNotice({ item }: { item: Pick<Festival, "slug" | "editionYear" | "officialUrl" | "editionLifecycle"> }) {
   const { locale, t } = useLanguage();
   if (!editionOnHiatus(item)) return null;
   const notice = item.editionLifecycle!;

@@ -5,6 +5,8 @@ import type { Festival } from "@/lib/domain/festival";
 import type { FestivalEdition } from "@/lib/domain/edition";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { useLanguage } from "./LanguageProvider";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
+import { EditionLifecycleNotice } from "./EditionLifecycleNotice";
 
 // Public route bodies use the selected UI language; their server routes and SEO
 // metadata remain independent of the saved preference and unchanged.
@@ -29,11 +31,18 @@ function usePublicCopy() {
   return { t, date, dateTime, range, locale };
 }
 
+// Archived snapshots keep their captured facts; only the current edition carries a live notice.
+function currentEditionOnHiatus(item: FestivalEdition) {
+  return item.recordState === "current" && editionOnHiatus(item);
+}
+
 function EditionRow({ item, archive = false }: { item: FestivalEdition; archive?: boolean }) {
   const { t, range } = usePublicCopy();
+  const { t: translate } = useLanguage();
+  const paused = !archive && currentEditionOnHiatus(item);
   const count = item.headliners.length + item.lineup.length;
   const summary = archive ? (count ? t.archivedArtists(count) : t.lineupTba) : (item.status === "tba" ? t.lineupTba : t.artistsRecorded(count));
-  return <article className="directoryRow"><div><strong>{item.name} {item.editionYear}</strong><span>{range(item)} · {summary}</span></div><Link className="textLink" href={"/festivals/" + item.slug + "/" + item.editionYear + "/"}>{t.openEdition}</Link></article>;
+  return <article className="directoryRow"><div><strong>{item.name} {item.editionYear}</strong><span>{paused ? translate("editionHiatus") : <>{range(item)} · {summary}</>}</span></div><Link className="textLink" href={"/festivals/" + item.slug + "/" + item.editionYear + "/"}>{t.openEdition}</Link></article>;
 }
 
 export function ArchiveContent({ archived, future }: { archived: FestivalEdition[]; future: FestivalEdition[] }) {
@@ -48,9 +57,11 @@ export function EditionYearContent({ year, items }: { year: number; items: Festi
 
 export function FestivalEditionContent({ item, artistSlugs = {} }: { item: FestivalEdition; artistSlugs?: Readonly<Record<string, string>> }) {
   const { t, date, dateTime, range } = usePublicCopy();
+  const { t: translate } = useLanguage();
+  const paused = currentEditionOnHiatus(item);
   const artists = [...item.headliners, ...item.lineup];
   const status = item.completeness !== "tba" ? (item.completeness === "complete" ? t.completeRecord : t.partialRecord) : (item.startDate || item.endDate || artists.length ? t.partialRecord : t.officialTba);
-  return <div className="detailPage"><Link className="back" href={"/editions/" + item.editionYear + "/"}>{t.backEdition(item.editionYear)}</Link><section className="detailHero"><div><div className="eyebrow">{t.states[item.recordState]} {t.edition} · {item.countryCode}</div><h1>{item.name} {item.editionYear}</h1><p className="detailDate">{range(item)}</p><span className={"status " + item.status}>{status}</span></div></section><section className="lineupSection"><h2>{t.lineupStatus}</h2>{artists.length ? <div className="lineupGrid">{artists.map((artist) => artistSlugs[artist] ? <Link key={artist} href={`/artists/${artistSlugs[artist]}/`}>{artist}</Link> : <span key={artist}>{artist}</span>)}</div> : <div className="lineupEmpty"><strong>{t.noArtists}</strong><span>{t.trackingNotice}</span></div>}</section><section className="sourceNote"><strong>{t.provenance}</strong>{item.snapshotAt && <p>{t.snapshot} {dateTime(item.snapshotAt)} UTC.</p>}{item.provenance.map((source) => <p key={source.field + "-" + source.url}><b>{t.fields[source.field]}:</b> {source.note} <a href={source.url} target="_blank" rel="noreferrer">{t.officialSource}</a> <small>{t.checked} {date(source.checkedAt)}</small></p>)}</section></div>;
+  return <div className="detailPage"><Link className="back" href={"/editions/" + item.editionYear + "/"}>{t.backEdition(item.editionYear)}</Link><section className="detailHero"><div><div className="eyebrow">{t.states[item.recordState]} {t.edition} · {item.countryCode}</div><h1>{item.name} {item.editionYear}</h1><p className="detailDate">{paused ? translate("editionHiatus") : range(item)}</p>{!paused && <span className={"status " + item.status}>{status}</span>}</div></section>{paused ? <EditionLifecycleNotice item={item} /> : <section className="lineupSection"><h2>{t.lineupStatus}</h2>{artists.length ? <div className="lineupGrid">{artists.map((artist) => artistSlugs[artist] ? <Link key={artist} href={`/artists/${artistSlugs[artist]}/`}>{artist}</Link> : <span key={artist}>{artist}</span>)}</div> : <div className="lineupEmpty"><strong>{t.noArtists}</strong><span>{t.trackingNotice}</span></div>}</section>}<section className="sourceNote"><strong>{t.provenance}</strong>{item.snapshotAt && <p>{t.snapshot} {dateTime(item.snapshotAt)} UTC.</p>}{item.provenance.map((source) => <p key={source.field + "-" + source.url}><b>{t.fields[source.field]}:</b> {source.note} <a href={source.url} target="_blank" rel="noreferrer">{t.officialSource}</a> <small>{t.checked} {date(source.checkedAt)}</small></p>)}</section></div>;
 }
 
 export function SharedPlanContent({ attendance, updatedAt }: { attendance: Record<string, string>; updatedAt: string }) {

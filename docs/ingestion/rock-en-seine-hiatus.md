@@ -249,3 +249,17 @@ for EN/DE/RU on locale routes), rather than promoting dates, tickets and lineup
 for a paused edition. This does not publish the lifecycle notice: canonical
 catalogue attachment, remaining aggregate consumers and end-to-end browser
 checks still require their separate gates.
+
+### Edition directories and immutable archives
+
+Current edition rows and the year-specific detail now display the approved pause
+instead of their raw scheduled dates/roster. The detail reuses the localized
+source/time notice. Archived snapshots continue showing their captured facts;
+a current-edition notice never rewrites archive history. EN/DE/RU real component
+renders cover both paths and reject malformed/transferred current notices.
+Country metadata describes edition records and official sources, not universally
+available tickets. Catalogue attachment is still intentionally absent. The audit
+also identified the independent offline catalogue (`lib/catalog/offline.ts`): its
+raw dates/timetable projection must respect approved pauses before attachment,
+with privacy, deterministic ETag and failure behavior preserved. The main
+catalogue current-artist aggregate still needs the same approved projection.
