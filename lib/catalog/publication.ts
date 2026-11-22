@@ -311,7 +311,7 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
         || observed.observedEditionYears.length !== 1 || observed.observedEditionYears[0] !== applied.edition.year
         || !Array.isArray(stored.observedEditionYears) || stored.observedEditionYears.length !== 1 || stored.observedEditionYears[0] !== applied.edition.year) return false;
       let proofUrl: string | undefined;
-      if (observed.festivalSlug === "idays" && ["https://www.idays.it/","https://www.idays.it/line-up"].includes(observed.sourceUrl)
+      if (observed.festivalSlug === "idays" && ["https://www.idays.it/","https://www.idays.it/line-up","https://www.idays.it/tickets"].includes(observed.sourceUrl)
         && observed.ticketsUrl === "https://www.idays.it/tickets") proofUrl = observed.ticketsUrl;
       if (observed.festivalSlug === "impericon" && observed.sourceUrl === "https://www.impericon.com/pages/festival") {
         try {
@@ -338,6 +338,11 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
         candidate.evidence.some(e => e.field === change.field && e.sourceUrl === input.result.sourceUrl) &&
         input.result.candidate.evidence.some(e => e.field === change.field && e.sourceUrl === input.result.sourceUrl)))))
       throw new Error("Impericon publication requires matching persisted official announcement evidence");
+    // Inventory-only updates must carry the same persisted field/value/time
+    // proof as combined artist updates; no lineup diff is needed to hit this gate.
+    if (input.result.festivalSlug === "idays" && input.result.changes.some(change => ["ticketStatus", "ticketsUrl"].includes(change.field))
+      && !input.result.changes.filter(change => ["ticketStatus","ticketsUrl"].includes(change.field)).every(verifiedSupplementTicketChange))
+      throw new Error("I-Days ticket publication requires matching persisted official inventory evidence");
     const idaysLineup = input.result.festivalSlug === "idays" &&
       input.result.changes.some(({ field }) => field === "lineup" || field === "headliners");
     if (idaysLineup && !(isIdaysAnnouncement(input.result.candidate, applied.edition.year) &&
