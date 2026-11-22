@@ -210,3 +210,26 @@ ready-planner test injects synthetic hydrated preferences, not a real browser.
 Full test:data and typecheck pass; no browser/mobile/CI/Codex claim. Canonical
 catalogue attachment, detail/card/month/date descriptions and source collection
 remain unfinished. No lifecycle is exposed through the database catalogue yet.
+
+## Discovery/detail dates prerequisite (still not attached to catalogue)
+
+Approved hiatus now replaces historical dates and confirmed/partial badges on
+actual discovery cards, comparison dates and festival detail with EN/DE/RU hiatus
+copy. Month discovery cannot match the paused edition or derive month options
+from its historical interval; sorting does not treat those old dates as scheduled.
+The underlying date interval and ticket/lineup facts remain untouched. Missing
+lifecycle retains existing behavior; malformed/transferred notices fail closed.
+
+Detail includes the fixed official source and precise UTC observation timestamp,
+not approval time or a fresh-check claim. It explicitly distinguishes announced
+2028 return from a confirmed new event and the merely considered 2027 alternative.
+Historical roster previews are suppressed on paused cards/detail, paused entries
+are excluded from announced-lineup discovery and comparison overlap, and detail
+attendance is disabled without rewriting saved preferences.
+
+Tests render real detail, cards and comparison JSX in EN/DE/RU, exercise restored
+month/announced filters with injected React state (not browser proof), verify
+missing/malformed/foreign notice behavior and immutable raw facts. Catalogue
+attachment is still deliberately absent: homepage/artist/discovery summaries and
+remaining public metadata consumers need a full audit before exposing notices.
+Collector/CLI/browser and focused PR exact-head gates remain unfinished.
