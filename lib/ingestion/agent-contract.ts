@@ -52,11 +52,21 @@ export const factsSchema = z
     ticketsUrl: z.string().url().max(2048).optional(),
     headliners: z.array(name).max(300).optional(),
     lineup: z.array(name).max(300).optional(),
+    finalLineup: z.object({
+      year: z.number().int().min(2000).max(2099),
+      complete: z.boolean(),
+    }).strict().optional(),
   })
   .strict()
   .refine(
     (v) => (v.headliners === undefined) === (v.lineup === undefined),
     "Both billing groups are required for a reviewed lineup",
+  )
+  .refine(
+    (v) => !v.finalLineup?.complete || (
+      v.headliners !== undefined && v.lineup !== undefined && v.headliners.length + v.lineup.length > 0
+    ),
+    "A final lineup requires the complete reviewed roster",
   );
 export const evidenceSchema = z
   .object({

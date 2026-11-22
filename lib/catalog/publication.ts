@@ -1,3 +1,4 @@
+import { rosterFingerprint } from "./lineup-proof.ts";
 import { ticketSupplementUrl, ticketSupplementPurchaseUrl } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
@@ -465,6 +466,9 @@ export async function publishAgentFestivalResolution(
     edition.recordState !== "CURRENT"
   )
     throw new Error("Reviewed edition mismatch");
+  const finalLineup = input.facts.finalLineup;
+  if (finalLineup && finalLineup.year !== edition.year)
+    throw new Error("Reviewed lineup edition mismatch");
   const dateStart = input.facts.startDate ?? isoDate(edition.startDate),
     dateEnd = input.facts.endDate ?? isoDate(edition.endDate);
   if (
@@ -545,7 +549,7 @@ export async function publishAgentFestivalResolution(
     }
   }
   const scalar = Object.entries(input.facts)
-    .filter(([field]) => field !== "headliners" && field !== "lineup")
+    .filter(([field]) => field !== "headliners" && field !== "lineup" && field !== "finalLineup")
     .map(([field, after]) => ({ field, after }));
   if (scalar.length) {
     const applied = await applyFestivalChanges(db, {
@@ -570,6 +574,23 @@ export async function publishAgentFestivalResolution(
       });
       changedFields.push("completeness");
     }
+  }
+  if (finalLineup) {
+    const entries = finalLineup.complete
+      ? await db.lineupEntry.findMany({
+        where: { editionId: edition.id },
+        select: { id: true, artistId: true, billing: true, status: true },
+      })
+      : [];
+    if (finalLineup.complete && !entries.some((entry) => entry.status === "ANNOUNCED"))
+      throw new Error("A final lineup requires announced artists");
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: {
+        finalLineupFingerprint: finalLineup.complete ? rosterFingerprint(edition.id, entries) : null,
+      },
+    });
+    changedFields.push("finalLineup");
   }
   for (const field of [...new Set(changedFields)]) {
     const evidence = input.evidence.find(

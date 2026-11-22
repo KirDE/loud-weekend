@@ -15,8 +15,8 @@ function render(language: Language, content: ReactNode) {
 }
 
 const expected = {
-  de: { archive: "Archivierte und künftige Ausgaben", future: "Künftige Ausgaben", edition: "Festivalausgaben 2027", detail: "Line-up-Status", status: "vollständiger Datensatz", empty: "Offizielle Termine und Line-up noch offen", share: "Geteilter Plan", attendance: "Dabei", country: "Festivals in Deutschland", month: "Festivals im Juni" },
-  ru: { archive: "Архивные и будущие выпуски", future: "Будущие выпуски", edition: "Выпуски фестивалей 2027 года", detail: "Состояние лайнапа", status: "полная запись", empty: "Официальные даты и лайнап уточняются", share: "Общий план", attendance: "Пойду", country: "Фестивали в стране: Германия", month: "Фестивали в июне" },
+  de: { archive: "Archivierte und künftige Ausgaben", future: "Künftige Ausgaben", edition: "Festivalausgaben 2027", detail: "Line-up-Status", status: "vollständiger Datensatz", empty: "Katalogeintrag noch offen", share: "Geteilter Plan", attendance: "Dabei", country: "Festivals in Deutschland", month: "Festivals im Juni" },
+  ru: { archive: "Архивные и будущие выпуски", future: "Будущие выпуски", edition: "Выпуски фестивалей 2027 года", detail: "Состояние лайнапа", status: "полная запись", empty: "Запись каталога уточняется", share: "Общий план", attendance: "Пойду", country: "Фестивали в стране: Германия", month: "Фестивали в июне" },
 };
 
 for (const language of ["de", "ru"] as const) {
@@ -34,7 +34,7 @@ for (const language of ["de", "ru"] as const) {
     assert.ok(!detail.includes("Lineup status") && !detail.includes("complete record"));
     const unannounced = render(language, <FestivalEditionContent item={tracking} />);
     assert.ok(unannounced.includes(t.empty));
-    assert.ok(!unannounced.includes("Official dates and lineup TBA"));
+    assert.ok(!unannounced.includes("Catalogue record pending"));
 
     const share = render(language, <SharedPlanContent attendance={{ "Synthetic Fest": "going", "Other Fest": "unknown" }} updatedAt="2026-01-01T12:00:00Z" />);
     assert.ok(share.includes(t.share) && share.includes(t.attendance));

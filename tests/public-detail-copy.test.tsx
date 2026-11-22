@@ -197,15 +197,16 @@ for (const language of ["en", "de", "ru"] as const) {
       lineup: Array.from({ length: 47 }, (_, index) => `Other Act ${index + 1}`),
     };
     const noActs = { ...festival, status: "partial" as const, headliners: [], lineup: [] };
-    for (const item of [announced, noActs]) {
-      const hasActs = item === announced;
+    const verified = { ...announced, finalLineup: true as const };
+    for (const item of [announced, verified, noActs]) {
+      const hasActs = item !== noActs;
       const html = renderToStaticMarkup(
         <LanguageProvider initialLanguage={language}><LocalPlannerProvider>
           <FestivalExplorer festivals={[item]} />
           <FestivalDetail item={item} festivals={[item]} artistSlugs={{}} />
         </LocalPlannerProvider></LanguageProvider>,
       );
-      const badge = translate(language, hasActs ? "actsAnnounced" : "noCurrentActs");
+      const badge = translate(language, item === verified ? "finalLineup" : hasActs ? "actsAnnounced" : "noCurrentActs");
       assert.equal(html.split(`>${badge}</span>`).length - 1, 2);
       assert.equal(html.includes(translate(language, "datesTba")), hasActs);
       if (hasActs) assert.ok(html.includes(`48 ${translate(language, "announcedActs")}`));

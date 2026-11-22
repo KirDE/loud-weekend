@@ -9,7 +9,8 @@ import { PlanningTools } from "./PlanningTools";
 import type { PlaylistStatus } from "@/lib/domain/festival";
 import { ticketPresentation } from "@/lib/tickets";
 import { festivalSetlistHistoryUrl } from "@/lib/setlist-history";
-import { announcedArtists, hasAnnouncedLineup, sortFestivalLineup, type LineupSort } from "@/lib/festival-lineup";
+import { festivalDateInterval } from "@/lib/festival-dates";
+import { announcedArtists, hasAnnouncedLineup, lineupPresentation, sortFestivalLineup, type LineupSort } from "@/lib/festival-lineup";
 import {
   FavoriteButton,
   useLocalPlanner,
@@ -46,6 +47,8 @@ export function FestivalDetail({
   const playlistUrl = playlist?.spotifyUrl || item.playlistUrl;
   const artistCount = announcedArtists(item).length;
   const hasArtists = hasAnnouncedLineup(item);
+  const lineupStatus = lineupPresentation(item);
+  const dates = festivalDateInterval(item);
   return (
     <div className="detailPage">
       <Link className="back" href="/">
@@ -60,11 +63,11 @@ export function FestivalDetail({
           </div>
           <h1>{item.name}</h1>
           <p className="detailDate">
-            {item.startDate
+            {dates && item.startDate
               ? `${prettyDate(item.startDate)}${item.endDate && item.endDate !== item.startDate ? ` — ${prettyDate(item.endDate)}` : ""}`
               : t("datesTba")}
           </p>
-          <span className={`status ${hasArtists ? "partial" : "tba"}`}>{t(hasArtists ? "actsAnnounced" : "noCurrentActs")}</span>
+          <span className={`status ${lineupStatus.tone}`}>{t(lineupStatus.label)}</span>
           {item.sourceDeprecated && <span className="status deprecated">{t("sourceDeprecated")}</span>}
         </div>
       </section>

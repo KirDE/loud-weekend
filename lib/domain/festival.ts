@@ -21,6 +21,7 @@ export type Festival = {
   dateLabel?: string;
   headliners: string[];
   lineup: string[];
+  finalLineup?: true;
   officialUrl: string;
   ticketsUrl?: string;
   playlistUrl?: string;

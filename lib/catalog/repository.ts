@@ -1,3 +1,4 @@
+import { rosterFingerprint } from "./lineup-proof.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
 import type { PrismaClient } from "@prisma/client";
 import type { ArtistProfile } from "../domain/artist.ts";
@@ -28,7 +29,6 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           festival: true,
           sources: { where: { enabled: true }, select: { deprecatedAt: true } },
           lineup: {
-            where: { status: "ANNOUNCED" },
             include: { artist: true },
             orderBy: [{ billing: "asc" }, { position: "asc" }],
           },
@@ -50,13 +50,17 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     if (!editionRows.length || !artistRows.length) throw new Error("database catalogue is empty or incomplete");
 
     const editions: FestivalEdition[] = editionRows.map((row) => {
-      const headliners = row.lineup.filter(({ billing }) => billing === "HEADLINER").map(({ artist }) => artist.name);
-      const lineup = row.lineup.filter(({ billing }) => billing === "LINEUP").map(({ artist }) => artist.name);
+      const announced = row.lineup.filter(({ status }) => status === "ANNOUNCED");
+      const headliners = announced.filter(({ billing }) => billing === "HEADLINER").map(({ artist }) => artist.name);
+      const lineup = announced.filter(({ billing }) => billing === "LINEUP").map(({ artist }) => artist.name);
       return {
         slug: row.festival.slug, name: row.festival.name, country: row.festival.country,
         countryCode: row.festival.countryCode, city: row.festival.city ?? undefined,
         startDate: dateOnly(row.startDate), endDate: dateOnly(row.endDate), dateLabel: row.dateLabel ?? undefined,
-        headliners, lineup, officialUrl: row.festival.officialUrl, ticketsUrl: row.ticketsUrl ?? undefined,
+        headliners, lineup,
+        ...(row.finalLineupFingerprint && announced.length && row.finalLineupFingerprint === rosterFingerprint(row.id, row.lineup)
+          ? { finalLineup: true as const } : {}),
+        officialUrl: row.festival.officialUrl, ticketsUrl: row.ticketsUrl ?? undefined,
         status: lower(row.status), editionYear: row.year,
         sourceDeprecated: !!row.sources?.length && row.sources.every(s => s.deprecatedAt !== null),
         sourceDeprecatedAt: row.sources?.length && row.sources.every(s => s.deprecatedAt !== null)
@@ -75,7 +79,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         recordState: lower(row.recordState), completeness: lower(row.completeness),
         snapshotAt: instant(row.snapshotAt),
         provenance: row.provenance.map((source) => ({
-          field: source.field as "edition" | "dates" | "lineup", url: source.url,
+          field: source.field as FestivalEdition["provenance"][number]["field"], url: source.url,
           checkedAt: source.checkedAt.toISOString(), note: source.note,
         })),
       };

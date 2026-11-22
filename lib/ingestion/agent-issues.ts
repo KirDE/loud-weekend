@@ -1,3 +1,4 @@
+import { rosterFingerprint } from "../catalog/lineup-proof.ts";
 import {
   Prisma,
   type PrismaClient,
@@ -157,6 +158,11 @@ export async function inspectSource(db: Database, sourceId: string) {
     lineup: s.edition.lineup
       .filter((l) => l.billing === "LINEUP" && l.status === "ANNOUNCED")
       .map((l) => l.artist.name),
+    finalLineup: {
+      year: s.editionYear,
+      complete: Boolean(s.edition.finalLineupFingerprint &&
+        s.edition.finalLineupFingerprint === rosterFingerprint(s.edition.id, s.edition.lineup)),
+    },
     entries: s.edition.lineup.map((l) => ({
       artistId: l.artistId,
       billing: l.billing,
@@ -412,6 +418,13 @@ function allowedEvidence(
       !d.evidence.some((e) => e.field === "source" && e.url === d.source!.url))
   )
     throw new ImportAgentError("invalid");
+  if (d.facts?.finalLineup) {
+    const festivalHosts = new Set([i.source.officialUrl, i.source.url, i.source.fetchUrl]
+      .filter((url): url is string => Boolean(url)).map((url) => new URL(url).hostname));
+    if (d.facts.finalLineup.year !== i.current.year ||
+        d.evidence.some((e) => e.field === "finalLineup" && !festivalHosts.has(new URL(e.url).hostname)))
+      throw new ImportAgentError("invalid");
+  }
   if (d.facts?.ticketsUrl && !valid(d.facts.ticketsUrl))
     throw new ImportAgentError("invalid");
 }
@@ -462,9 +475,13 @@ export async function resolveAgentIssue(
       // manual no-op reviews (including unchanged supplied facts/source) must
       // not manufacture repair tasks. Actual corrections and rejected/review
       // proposals still enqueue atomically with their audit.
-      const changedFacts = d.facts && Object.entries(d.facts).some(
-        ([field, value]) => fingerprint(value) !== fingerprint(i.current[field as keyof typeof i.current]),
+      const changedParserFacts = d.facts && Object.entries(d.facts).some(
+        ([field, value]) => field !== "finalLineup" &&
+          fingerprint(value) !== fingerprint(i.current[field as keyof typeof i.current]),
       );
+      // An explicit review can renew or revoke stored proof even when the
+      // published artist names and the current display state have not changed.
+      const changedFacts = changedParserFacts || d.facts?.finalLineup !== undefined;
       const changedSource = d.source && (
         d.source.url !== i.source.url ||
         fingerprint(d.source.strategies) !== fingerprint(i.source.strategies) ||
@@ -539,7 +556,7 @@ export async function resolveAgentIssue(
       const retryAt = d.action === "retry" || retryFailure
         ? failureRetryAt(Math.max(attempts, i.source.consecutiveFailures || 1), now).toISOString()
         : i.kind === "manual_source" && !changedSource ? new Date(now.getTime() + 604800000).toISOString() : null;
-      const parserRepairId = ["apply", "dismiss"].includes(d.action) && (changedFacts || changedSource || candidateFeedback)
+      const parserRepairId = ["apply", "dismiss"].includes(d.action) && (changedParserFacts || changedSource || candidateFeedback)
         ? await enqueueParserRepair(tx, { sourceId: i.sourceId, festivalSlug: i.festivalSlug, issueId: i.issueId,
             parserKey: i.source.parserKey, sourceUrl: i.source.fetchUrl ?? i.source.url, year: i.current.year,
             reason: d.reason, decision: d, candidate: i.candidate, current: i.current }) : null;
