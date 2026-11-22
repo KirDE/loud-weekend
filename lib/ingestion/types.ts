@@ -30,6 +30,8 @@ export type FestivalCandidate = Partial<Pick<Festival, "startDate" | "endDate" |
   lineupScope?: "announcement";
   /** Announcement feeds add artists; absence is not a removal. */
   artistListMode?: "additive";
+  /** Explicit producer provenance; persisted with normalized candidate evidence. */
+  ticketSupplement?: { sourceUrl: string; ticketUrl: string; editionYear: number };
   timetable?: { date: string; stage: string; start: string; artist: string }[];
   schemaVersion: typeof INGESTION_SCHEMA_VERSION;
   festivalSlug: string;
