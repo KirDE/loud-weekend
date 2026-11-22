@@ -346,6 +346,16 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
     assert.equal(selected.artistCount,1);assert.equal(selected.trackCount,1);assert.deepEqual(selected.unresolved,[]);
     assert.equal(selectionReads,1);assert.equal(selectionWrites.length,2);
     assert.deepEqual(selectionWrites[1].body,{uris:["spotify:track:"+"T".repeat(22)]});
+    for(const [index,original] of ["Attack Attack!","Sex Pistols","Ozzy Osbourne","Ultimate Ozzy"].entries()) {
+      const originalId=createHash("sha256").update("original-"+index+"-"+suffix).digest("hex").slice(0,22);
+      const row=await db.artist.create({data:{slug:"selection-original-"+index+"-"+suffix,name:original,aliases:[],genres:[],identityState:"LINKED",topTracks:[],recentSetlists:[],freshness:{},
+        identities:{create:{provider:"spotify",externalId:originalId}},links:{create:{label:"Spotify",source:"spotify",url:"https://open.spotify.com/artist/"+originalId,verified:true}}}});
+      created.push(row.id);selectionIdentity={id:originalId,name:original};
+      const beforeWrites=selectionWrites.length;
+      const response=await anonymous.json("/api/spotify/selection-playlist","POST",{artists:[original],festivals:["Synthetic"]});
+      if(original==="Ultimate Ozzy") {assert.equal(response.status,502);assert.equal(selectionWrites.length,beforeWrites);}
+      else {assert.equal(response.status,200);const body=await response.json();assert.equal(body.artistCount,1);assert.equal(body.trackCount,1);assert.deepEqual(body.unresolved,[]);assert.equal(selectionWrites.length,beforeWrites+2);}
+    }
     const shared="Synthetic Ambiguous Route "+suffix;
     for(const extra of ["one","two"]){const a=await db.artist.create({data:{slug:"selection-route-"+extra+"-"+suffix,name:"Synthetic Other "+extra+" "+suffix,aliases:[shared],genres:[],identityState:"UNRESOLVED",topTracks:[],recentSetlists:[],freshness:{}}});created.push(a.id);}
     const before={reads:selectionReads,writes:selectionWrites.length};

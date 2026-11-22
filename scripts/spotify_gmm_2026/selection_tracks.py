@@ -5,6 +5,7 @@ from track_policy import (GLOBAL_EXCLUDES, looks_like_tribute, canonical_track_k
     should_skip_track_for_artist, is_short_or_non_song, track_version_penalty, is_feat_track)
 from spotify_repertoire import validate_profile, eligible_track
 
+EXCLUDED_NAMES=frozenset(name.casefold() for name in GLOBAL_EXCLUDES)
 ID=re.compile(r'^[A-Za-z0-9]{22}$')
 
 def select_selection_tracks(value):
@@ -27,7 +28,7 @@ def select_selection_tracks(value):
                 raise ValueError('Mismatched repertoire binding')
         elif identity is not None and not ID.fullmatch(str(identity)):
             raise ValueError('Invalid reviewed artist identity')
-        if name in GLOBAL_EXCLUDES or looks_like_tribute(name) or (profile is None and identity is None):
+        if name.casefold() in EXCLUDED_NAMES or looks_like_tribute(name,reviewed_identity=profile is not None or identity is not None) or (profile is None and identity is None):
             unresolved.append(requested)
             continue
         eligible=[]

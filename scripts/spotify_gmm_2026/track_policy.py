@@ -62,10 +62,14 @@ def token_overlap(a: str, b: str) -> float:
 def setlist_lookup_name(name: str) -> str:
     return FEATURE_CLAUSE_RE.sub('', name).strip() or name
 
-def looks_like_tribute(name: str) -> bool:
+def looks_like_tribute(name: str, *, reviewed_identity: bool = False) -> bool:
     lowered = name.lower()
-    if any(keyword in lowered for keyword in KEYWORDS_EXCLUDE):
+    if any(keyword in (" " + lowered if reviewed_identity else lowered) for keyword in KEYWORDS_EXCLUDE):
         return True
+    # Canonical reviewed identity outranks ambiguous name hints. Explicit
+    # tribute/cover/karaoke/DJ labels and curated exclusions remain separate.
+    if reviewed_identity:
+        return False
     # The original act is not a tribute merely because its name contains
     # 'attack'. Keep explicit tribute keywords and every other exclusion.
     if lowered.strip() == 'massive attack':

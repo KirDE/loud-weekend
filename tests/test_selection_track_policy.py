@@ -33,3 +33,24 @@ class SelectionPolicyTest(unittest.TestCase):
                     {'artists':[{'id':'B'*22,'name':name},{'id':'A'*22,'name':name}]}):
                     invalid={**row,'tracks':[{**row['tracks'][0],**change}]}
                     self.assertEqual(selection.select_selection_tracks({'artists':[invalid]})['unresolved'],[name])
+
+    def test_reviewed_original_identity_outweighs_ambiguous_tribute_hints(self):
+        for name in ('Attack Attack!', 'Sex Pistols', 'Ozzy Osbourne', 'Massive Attack', 'Original Again', 'Not Nothing'):
+            row={'requestedName':name,'name':name,'slug':'synthetic-original','spotifyId':'A'*22,
+              'tracks':[{'id':'T'*22,'uri':'spotify:track:'+'T'*22,'name':'Studio song','duration_ms':180000,
+                'artists':[{'id':'A'*22,'name':name}]}]}
+            with self.subTest(name=name):
+                self.assertEqual(selection.select_selection_tracks({'artists':[row]})['selected'],
+                    [{'artist':name,'uri':'spotify:track:'+'T'*22}])
+                for change in ({'duration_ms':20000},{'name':'Studio song - Live'},{'artists':[{'id':'B'*22,'name':name}]}):
+                    self.assertEqual(selection.select_selection_tracks({'artists':[{**row,'tracks':[{**row['tracks'][0],**change}]}]})['unresolved'],[name])
+
+    def test_reviewed_identity_never_overrides_explicit_tribute_or_curated_exclusions(self):
+        for name in ('Ultimate Ozzy', 'ultimate ozzy', 'Korn Again', 'KORN AGAIN', 'Example Tribute', 'Tribute to Example', 'Cover Band Example', 'Example Karaoke', 'DJ Example'):
+            row={'requestedName':name,'name':name,'slug':'synthetic-tribute','spotifyId':'A'*22,
+              'tracks':[{'id':'T'*22,'uri':'spotify:track:'+'T'*22,'name':'Studio song','duration_ms':180000,
+                'artists':[{'id':'A'*22,'name':name}]}]}
+            with self.subTest(name=name):
+                self.assertEqual(selection.select_selection_tracks({'artists':[row]}),{'selected':[],'unresolved':[name]})
+        self.assertTrue(policy.looks_like_tribute('Original Again'))
+        self.assertFalse(policy.looks_like_tribute('Original Again',reviewed_identity=True))

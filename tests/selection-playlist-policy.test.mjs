@@ -91,3 +91,16 @@ test("reviewed primary identity accepts non-Latin and stop-word-only names throu
   assert.deepEqual(JSON.parse(writes(m).at(-1).init.body).uris,["spotify:track:"+id("t")]);
  }
 });
+
+test("reviewed original identities bypass vague tribute-name hints but not explicit tribute exclusions", async () => {
+ for(const name of ["Attack Attack!","Sex Pistols","Ozzy Osbourne","Massive Attack"]){
+  const m=mock({[id("G")]:[track("t","Eligible studio song",[["G",name]])]});
+  const result=await run([artist(name,"G")],m);
+  assert.equal(result.trackCount,1);assert.deepEqual(result.unresolved,[]);
+  assert.deepEqual(JSON.parse(writes(m).at(-1).init.body).uris,["spotify:track:"+id("t")]);
+ }
+ for(const name of ["Ultimate Ozzy","ultimate ozzy","Korn Again","Tribute to Example"]){
+  const m=mock({[id("G")]:[track("t","Eligible studio song",[["G",name]])]});
+  await assert.rejects(run([artist(name,"G")],m),/could not resolve/);assert.equal(writes(m).length,0);
+ }
+});
