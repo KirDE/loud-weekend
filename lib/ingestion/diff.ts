@@ -64,6 +64,14 @@ export function diffFestival(current: Festival, candidate: FestivalCandidate): F
       change.reason = "Billing changes require reviewed reclassification";
     }
   }
+  // New Summer Punch artists require protected review, without provider work.
+  // An unchanged additive replay must not generate another review.
+  if (candidate.festivalSlug === "summer-punch") for (const change of changes) {
+    if (change.kind === "artist_added" || change.kind === "headliner_added") {
+      change.reviewRequired = true;
+      change.reason = "Summer Punch additions require protected ingestion review";
+    }
+  }
   operationalChanges(changes, current, candidate);
   return changes;
 }

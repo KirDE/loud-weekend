@@ -19,6 +19,13 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
     return `https://www.wacken.com/de/tickets-shop/ticket-uebersicht-${source.editionYear}/`;
 }
 
+/** Human purchase destination can differ from the machine-readable stock URL. */
+export function ticketSupplementPurchaseUrl(source: FestivalSource): string | undefined {
+  const stockUrl = ticketSupplementUrl(source);
+  if (!stockUrl) return;
+  return source.festivalSlug === "full-rewind" ? `https://full-rewind.de/collections/tickets-${source.editionYear}` : stockUrl;
+}
+
 export function isTicketSupplementUrl(source: FestivalSource, actual: string): boolean {
   return actual === ticketSupplementUrl(source);
 }

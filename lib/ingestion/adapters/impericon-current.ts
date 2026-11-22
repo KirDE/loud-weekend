@@ -23,8 +23,10 @@ export const IMPERICON_NEWS = 'https://www.impericon.com/blogs/magazine/tagged/i
 // Recognize the fixed first-party loader as data; never execute page scripts or
 // follow arbitrary URLs supplied by them.
 export function impericonDynamicNewsUrl(home: string) {
-  return /<article-list\b[^>]*class=["'][^"']*\bloading\b[^"']*["']/i.test(home) &&
-    home.includes('fetch(`/blogs/magazine/tagged/impericonfestival?view=dynamic`)') ? IMPERICON_NEWS : undefined;
+  if (!/<article-list\b[^>]*class=["'][^"']*\bloading\b[^"']*["']/i.test(home)) return;
+  const routes = [IMPERICON_NEWS, IMPERICON_NEWS.replace('impericonfestival', 'impfestival')];
+  const matched = routes.filter(url => home.includes('fetch(`' + new URL(url).pathname + new URL(url).search + '`)'));
+  return matched.length === 1 ? matched[0] : undefined;
 }
 export function discoverImpericonAnnouncements(home: string, year: number, news?: string) {
   if (!closed(home)) throw new Error('Incomplete Impericon festival page');
@@ -34,7 +36,7 @@ export function discoverImpericonAnnouncements(home: string, year: number, news?
   if (dynamic) {
     if (!news || !closed(news)) throw new Error('Incomplete Impericon dynamic news');
     const canonical = [...clean(news).matchAll(/<link\b[^>]*>/gi)].filter(m => attr(m[0], 'rel') === 'canonical');
-    if (canonical.length !== 1 || attr(canonical[0][0], 'href') !== IMPERICON_NEWS.split('?')[0]) throw new Error('Impericon dynamic news identity changed');
+    if (canonical.length !== 1 || attr(canonical[0][0], 'href') !== dynamic.split('?')[0]) throw new Error('Impericon dynamic news identity changed');
   } else if (news !== undefined) throw new Error('Unexpected Impericon dynamic news');
   const listings = [...clean(dynamic ? news! : home).matchAll(/<article-list\b[^>]*>([\s\S]*?)<\/article-list>/gi)];
   if (listings.length !== 1) throw new Error('Impericon official news listing is missing or ambiguous');

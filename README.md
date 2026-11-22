@@ -86,7 +86,7 @@ for every job before running this required check.
 Quality runs independent `core` and `browser-tests` jobs. The existing required
 `test-and-build` check succeeds only when both jobs succeed (including on cancel
 or skip). The browser job runs the full `tests/e2e` suite in the official
-Playwright 1.65.0 Noble image, pinned by digest; browsers and OS libraries are
+Playwright 1.65.1 Noble image, pinned by digest; browsers and OS libraries are
 preinstalled, so no APT or `playwright install` step is needed. The supported
 Node runtime from `.node-version` is mounted into the image rather than using
 its default Node. Host networking preserves the strict loopback-only test DB
