@@ -53,3 +53,13 @@ test('article failures include homepage, dynamic listing, earlier articles and a
   await assert.rejects(fetchSource(source,{maxAttempts:3,sleep:async()=>{},fetchImpl:f}),error=>{assert.equal(calls,expected);assert.equal(error.attempts,expected);return true;});
  }
 });
+
+test('official impfestival loader uses the matching canonical without losing later articles',async()=>{
+ const e=fixture();const endpoint=IMPERICON_NEWS.replace('impericonfestival','impfestival');
+ e.home=e.home.replaceAll('impericonfestival','impfestival');e.news=e.news.replaceAll('impericonfestival','impfestival');
+ assert.equal(impericonDynamicNewsUrl(e.home),endpoint);
+ const r=await fetchSource(source,{maxAttempts:1,fetchImpl:async(u,o)=>u===endpoint?new Response(e.news):mock(e)(u,o)});
+ const c=extractFestivalCandidate(await r.response.text(),source,'2026-11-19T18:30:00Z');assert.deepEqual(c.warnings,[]);assert.ok(c.headliners.includes('Beartooth'));
+ assert.throws(()=>discoverImpericonAnnouncements(e.home,2027,e.news.replaceAll('impfestival','impericonfestival')),/identity changed/);
+ for(const tag of ['other','impfestival?evil=1','impfestival/extra'])assert.equal(impericonDynamicNewsUrl(e.home.replace('impfestival?',tag+'?')),undefined);
+});

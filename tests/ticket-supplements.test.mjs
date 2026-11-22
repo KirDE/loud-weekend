@@ -13,12 +13,12 @@ const home = '<a href="/de/tickets-shop/ticket-uebersicht-2027/">Tickets</a>';
 const current = { slug: source.festivalSlug, editionYear: 2027, status: "partial", ticketStatus: "unknown", headliners: [], lineup: [] };
 const at = "2026-11-17T22:46:00Z";
 
-async function pipeline(html = fixture) {
+async function pipeline(html = fixture, primary = home) {
   const requested = [];
   const result = await fetchSource(source, { maxAttempts: 1, fetchImpl: async target => {
     requested.push(target);
     assert.ok([source.url, url].includes(target));
-    return new Response(target === source.url ? home : html, { headers: { "content-type": "text/html" } });
+    return new Response(target === source.url ? primary : html, { headers: { "content-type": "text/html" } });
   } });
   assert.equal(result.attempts, 2);
   return { candidate: extractFestivalCandidate(await result.response.text(), source, at), requested };
@@ -97,4 +97,20 @@ for (const [name, change] of [
   const result = observeTicketSupplement(change(downloadFixture), download, downloadUrl);
   assert.equal(result.status, undefined);
   assert.ok(result.warning);
+});
+
+test("successful supplement reconciles absent optional homepage formats, not edition or semantic warnings", async () => {
+  const { candidate } = await pipeline(fixture, "<html><h1>Wacken news</h1></html>");
+  assert.equal(candidate.ticketStatus, "available");
+  assert.deepEqual(candidate.warnings, []);
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  const archived = `<script type="application/ld+json">${JSON.stringify({ "@type": "MusicEvent", name: "Wacken Open Air 2026", startDate: "2026-07-29", endDate: "2026-08-01" })}</script>`;
+  const stale = (await pipeline(fixture, archived)).candidate;
+  assert.ok(stale.observedEditionYears.includes(2026));
+  assert.equal(evaluateCandidate(current, stale).publishable, false);
+  assert.ok(evaluateCandidate(current, stale).reviewReasons.length);
+  const cancelled = archived.replaceAll("2026", "2027").replace('"@type":"MusicEvent"', '"@type":"MusicEvent","eventStatus":"https://schema.org/EventCancelled"');
+  const blocked = (await pipeline(fixture, cancelled)).candidate;
+  assert.ok(blocked.warnings.some(w => /cancel/i.test(w)));
+  assert.equal(evaluateCandidate(current, blocked).publishable, false);
 });

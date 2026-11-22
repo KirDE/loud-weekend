@@ -11,6 +11,30 @@ A successful HTTP response is **not** evidence of available tickets. An updated
 fixture path is not a claim of production acceptance or support for every
 possible future ticket page layout.
 
+## Integration follow-up (2026-11-22)
+
+This focused PR now integrates main `c6a8647` (including the deployed #480
+foundation) and targets main. The historical table below remains the original
+13/59 rollout snapshot, not a current live-stock assertion. The public offline
+catalogue now lists **60** paths (Summer Punch was added in #504); therefore
+neither 13/59 nor the separate dated 26/59 proposal ledger closes #434.
+
+For Wacken and Download, disposable-DB tests now exercise the mocked official
+fetch → extraction → policy → persisted secondary evidence → canonical reader
+chain. They check mixed available/sold-out products, idempotent publication and
+fresh evaluation, archived/missing/foreign source rejection, and rollback when
+durable evidence is missing, foreign, value-mismatched, edition-mismatched or
+bound to a different requested source. No playlist refresh or provider binding
+is created. The publisher independently checks the registered secondary URL,
+source/edition identity, normalized values and matching persisted evidence.
+
+The existing Rockharz source-specific publication/replay cases remain in the
+same suite. The other ten semantic-upgrade producers retain their source-specific
+fixture/negative tests; this PR does not claim new end-to-end acceptance for
+untested combinations. Impericon and I-Days secondary inventory are separate
+follow-ups #497/#498, not silently enabled here. Maintainer release acceptance
+and deployment are separate gates; this agent performed neither.
+
 ## Current verified changes
 
 - Existing producers: keep explicit full-pass sellouts separate from ambiguous
