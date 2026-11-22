@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createPrismaClient } from '../lib/prisma-client.mjs';
 import { requireLocalDisposableDatabase } from './support/disposable-db.ts';
-import { stageRockEnSeineHiatus as stage, readPendingRockEnSeineHiatus as read, decideRockEnSeineHiatus as decide } from '../lib/ingestion/edition-lifecycle-proposal-store.ts';
+import { stageRockEnSeineHiatus as stage, readPendingRockEnSeineHiatus as read, decideRockEnSeineHiatus as decide, readApprovedRockEnSeineHiatus as publicRead } from '../lib/ingestion/edition-lifecycle-proposal-store.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db = createPrismaClient();
 const html = readFileSync(new URL('./fixtures/rock-en-seine/hiatus.html', import.meta.url), 'utf8');
@@ -24,7 +24,9 @@ test.after(async () => {
   if (festivalId) await db.festival.deleteMany({ where: { id: festivalId } });
   await db.$disconnect();
 });
-test('absent lifecycle evidence is not a confirmed active edition', async () => assert.equal(await read(db, editionId), null));
+test('absent lifecycle evidence is not a confirmed active edition', async () => {
+  assert.equal(await read(db, editionId), null); assert.equal(await publicRead(db, editionId), null);
+});
 test('durable pending evidence/read/replay has NO catalogue, health, provider or notification effects', async () => {
   const before = await db.festivalEdition.findMany();
   const counts = async () => Promise.all([db.catalogPublication.count(), db.catalogPlaylistRefresh.count(), db.ingestionNotificationOutbox.count(), db.ingestionSourceState.count()]);
@@ -34,6 +36,7 @@ test('durable pending evidence/read/replay has NO catalogue, health, provider or
   assert.equal(pending!.id, row.id); assert.equal(pending!.reviewState, 'pending'); assert.equal(pending!.eligibleForReview, true);
   assert.equal(pending!.proposal.lifecycle, 'hiatus'); assert.equal(pending!.proposal.announcedReturnYear, 2028);
   assert.equal(pending!.proposal.alternativeEvent, 'under_consideration');
+  assert.equal(await publicRead(db, editionId), null);
   assert.equal((await stage(db, input())).id, row.id);
   assert.equal(await db.editionLifecycleProposalSnapshot.count(), 1);
   assert.deepEqual(await db.festivalEdition.findMany(), before); // also no 2028 auto-creation
@@ -67,7 +70,7 @@ test('persisted evidence drift fails read AND new staging without older healthy 
     { proposal: { ...(row.proposal as object), announcedReturnYear: 2029 } },
     { proposal: { ...(row.proposal as object), excerpt: 'forged assertion' } }]) {
     await db.editionLifecycleProposalSnapshot.update({ where: { id: row.id }, data: patch });
-    await assert.rejects(read(db, editionId)); await assert.rejects(stage(db, input(100)));
+    await assert.rejects(read(db, editionId)); await assert.rejects(publicRead(db, editionId)); await assert.rejects(stage(db, input(100)));
     await db.editionLifecycleProposalSnapshot.update({ where: { id: row.id }, data: {
       sourceUrl: row.sourceUrl, finalUrl: row.finalUrl, httpStatus: row.httpStatus, contentHash: row.contentHash,
       parserVersion: row.parserVersion, observedAt: row.observedAt, proposal: row.proposal!,
@@ -78,12 +81,12 @@ test('persisted evidence drift fails read AND new staging without older healthy 
 test('source and edition rebinding cannot authorize evidence', async () => {
   for (const patch of [{ slug: 'other' }, { officialUrl: 'https://other.invalid/' }]) {
     await db.festival.update({ where: { id: festivalId }, data: patch });
-    await assert.rejects(read(db, editionId)); await assert.rejects(stage(db, input(100)));
+    await assert.rejects(read(db, editionId)); await assert.rejects(publicRead(db, editionId)); await assert.rejects(stage(db, input(100)));
     await db.festival.update({ where: { id: festivalId }, data: { slug, officialUrl: url } });
   }
   for (const patch of [{ year: 2028 }, { recordState: 'ARCHIVED' as const }]) {
     await db.festivalEdition.update({ where: { id: editionId }, data: patch });
-    await assert.rejects(read(db, editionId)); await assert.rejects(stage(db, input(100)));
+    await assert.rejects(read(db, editionId)); await assert.rejects(publicRead(db, editionId)); await assert.rejects(stage(db, input(100)));
     await db.festivalEdition.update({ where: { id: editionId }, data: { year: 2027, recordState: 'CURRENT' } });
   }
 });
@@ -174,18 +177,29 @@ test('stored decision or snapshot drift fails read and replay instead of fabrica
   const row = await db.editionLifecycleReviewDecision.findUniqueOrThrow({ where: { snapshotId: reviewed.id } });
   for (const patch of [{ decision: 'reject' }, { contentHash: '0'.repeat(64) }]) {
     await db.editionLifecycleReviewDecision.update({ where: { id: row.id }, data: patch });
-    await assert.rejects(read(db, editionId)); await assert.rejects(decide(db, decisionInput()));
+    await assert.rejects(read(db, editionId)); await assert.rejects(publicRead(db, editionId)); await assert.rejects(decide(db, decisionInput()));
     await db.editionLifecycleReviewDecision.update({ where: { id: row.id }, data: { decision: row.decision, contentHash: row.contentHash } });
   }
   await db.editionLifecycleProposalSnapshot.update({ where: { id: reviewed.id }, data: { contentHash: '0'.repeat(64) } });
-  await assert.rejects(read(db, editionId)); await assert.rejects(decide(db, decisionInput()));
+  await assert.rejects(read(db, editionId)); await assert.rejects(publicRead(db, editionId)); await assert.rejects(decide(db, decisionInput()));
   await db.editionLifecycleProposalSnapshot.update({ where: { id: reviewed.id }, data: { contentHash: reviewed.contentHash } });
 });
 test('new rejected observation does not silently inherit previous approval', async () => {
+  const approved = await publicRead(db, editionId);
+  assert.ok(approved); assert.equal(approved.lifecycle, 'hiatus');
+  assert.deepEqual(Object.keys(approved).sort(), ['editionYear', 'lifecycle', 'announcedReturnYear', 'alternativeEvent', 'sourceUrl', 'observedAt', 'approvedAt'].sort());
+  assert.doesNotMatch(JSON.stringify(approved), /actor|audit|contentHash|snapshotId|eligible|reviewState|ticketStatus|startDate|endDate|excerpt/);
+  const now = Date.now;
+  try {
+    Date.now = () => time + 90_000_000;
+    assert.deepEqual(await publicRead(db, editionId), approved, 'Historical approved fact retains original times, no fresh stock assertion');
+  } finally { Date.now = now; }
   reviewed = await stage(db, input(102));
+  assert.deepEqual(await publicRead(db, editionId), approved, 'New pending does not inherit approval or restamp previous notice');
   assert.equal((await read(db, editionId))!.reviewState, 'pending');
   const rejected = await decide(db, { ...decisionInput(), decision: 'reject' });
   assert.equal(rejected.decision, 'reject');
+  assert.deepEqual(await publicRead(db, editionId), approved, 'Rejected notice is not published; prior approved notice retained explicitly');
   assert.equal((await read(db, editionId))!.reviewState, 'rejected');
   assert.equal((await read(db, editionId))!.eligibleForReview, false);
   if (originalAllowlist === undefined) delete process.env.ADMIN_EMAILS;
@@ -258,4 +272,28 @@ test('actual lifecycle handlers→currentAdmin→DB decision/audit/read/replay a
     if (priorAllow === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = priorAllow;
     if (priorApp === undefined) delete process.env.APP_URL; else process.env.APP_URL = priorApp;
   }
+});
+
+
+test('approved public proof remains fail-closed beneath a newer pending revision', async () => {
+  await stage(db, input(104));
+  const row = await db.editionLifecycleProposalSnapshot.findFirstOrThrow({
+    where: { editionId, decision: { decision: 'approve' } }, orderBy: { observedAt: 'desc' },
+  });
+  const approved = await publicRead(db, editionId);
+  const decision = await db.editionLifecycleReviewDecision.findUniqueOrThrow({ where: { snapshotId: row.id } });
+  for (const patch of [{ decision: 'reject' }, { contentHash: '0'.repeat(64) }]) {
+    await db.editionLifecycleReviewDecision.update({ where: { id: decision.id }, data: patch });
+    try { await assert.rejects(publicRead(db, editionId)); }
+    finally { await db.editionLifecycleReviewDecision.update({ where: { id: decision.id }, data: { decision: decision.decision, contentHash: decision.contentHash } }); }
+  }
+  await db.editionLifecycleProposalSnapshot.update({ where: { id: row.id }, data: { contentHash: '0'.repeat(64) } });
+  try { await assert.rejects(publicRead(db, editionId)); }
+  finally { await db.editionLifecycleProposalSnapshot.update({ where: { id: row.id }, data: { contentHash: row.contentHash } }); }
+  assert.deepEqual(await publicRead(db, editionId), approved);
+  const latest = await db.editionLifecycleProposalSnapshot.findFirstOrThrow({ where: { editionId }, orderBy: { observedAt: 'desc' } });
+  await db.editionLifecycleProposalSnapshot.update({ where: { id: latest.id }, data: { httpStatus: 403 } });
+  try { await assert.rejects(publicRead(db, editionId)); }
+  finally { await db.editionLifecycleProposalSnapshot.update({ where: { id: latest.id }, data: { httpStatus: 200 } }); }
+  assert.deepEqual(await publicRead(db, editionId), approved);
 });

@@ -12,3 +12,13 @@ export const lifecycleReviewSchema = z.object({
   proposal: lifecycleProposalSchema,
 }).strict().refine(value => value.reviewState === "pending" || !value.eligibleForReview, "Decided revision cannot be eligible");
 export type LifecycleReview = z.infer<typeof lifecycleReviewSchema>;
+
+/** Public, edition-scoped factual notice. Absence means unknown, NOT active.
+ * A hiatus is not a ticket/lineup status and announces no replacement event. */
+export const publicEditionLifecycleSchema = z.object({
+  editionYear: z.literal(2027), lifecycle: z.literal("hiatus"),
+  announcedReturnYear: z.literal(2028), alternativeEvent: z.literal("under_consideration"),
+  sourceUrl: z.literal("https://www.rockenseine.com/"),
+  observedAt: z.iso.datetime({ precision: 3 }), approvedAt: z.iso.datetime({ precision: 3 }),
+}).strict();
+export type PublicEditionLifecycle = z.infer<typeof publicEditionLifecycleSchema>;

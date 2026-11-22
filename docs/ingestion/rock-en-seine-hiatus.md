@@ -19,9 +19,9 @@ heading and two public policy paragraphs; output uses a fixed minimized excerpt.
 
 Not registered in the runner, public catalogue, publisher, source health or CLI.
 No production writes. No cancellation notifications. No claim of completed source
-or production coverage. Remaining prerequisite: reviewed additive edition-lifecycle
-model, durable evidence binding and audited approval, public EN/DE/RU presentation,
-canonical read/replay/rollback and full exact-head CI/review. Do not create fictive
+or production coverage. Implemented locally: durable evidence, audited decisions, protected reviewer queue
+and approved-only read service. Remaining: catalogue integration and EN/DE/RU
+presentation, collector/CLI, browser and full exact-head CI/review. Do not create fictive
 2027 festival dates or transfer2028 dates; preserve blocked/unrelated stock health.
 
 ## Durable pending staging (local prerequisite)
@@ -137,3 +137,29 @@ actual AdminConsole mounting. These are not browser/mobile layout verification.
 Current approval copy explicitly states that catalogue presentation is not yet
 connected. Public approved-only lifecycle, ticket/SEO handling, bounded native
 collector/CLI and full PR/CI/review/browser gates remain unfinished.
+
+## Approved-only public projection (not yet wired to catalogue)
+
+`readApprovedRockEnSeineHiatus` reads a consistent RepeatableRead snapshot and
+returns only editionYear, lifecycle, announcedReturnYear, alternativeEvent,
+sourceUrl, observedAt and approvedAt. No evidence excerpt, internal IDs, revision,
+review state, actor or audit details cross this boundary. `null` means no approved
+notice, not proof of an active edition. No dates or ticket enum are rewritten.
+
+It validates the latest observation/decision as well as the latest approved proof
+and its immutable audit. The approval query also selects immutable approval audit
+identity: changing the decision to reject cannot silently hide an existing approval
+and revive an older notice. Corrupt selected evidence throws, never healthy empty
+or an older fallback. Pending/rejected revisions receive no inherited approval;
+the last explicitly approved notice remains available with its ORIGINAL source
+and approval times. A lifecycle announcement is a historical fact, not inventory:
+24h freshness is required for staging/new decisions, not erasure of an approved
+notice. A newer approved announcement would replace it; no automatic reactivation.
+
+Actual disposable-DB tests cover unknown/pending, exact minimized approved output,
+historical approved read without restamping, newer pending/rejected isolation,
+source/edition drift, corrupt latest and approved evidence, and decision/hash
+mutation beneath a pending revision. The reader performs no writes. This service
+is deliberately not called by DatabaseCatalogRepository or a public route until
+all detail/cards/comparison/filter/SEO/CTA consumers respect the separate lifecycle.
+Current UI therefore remains unchanged; this is not browser/public delivery proof.
