@@ -219,7 +219,7 @@ function impericonTicketStock(env: { home: string; ticketProducts?: ImpericonTic
   // A sold-out price tier can be superseded by another tier. Only a current
   // purchasable standard weekend admission establishes global availability.
   if (!available) return fail();
-  return { ticketStatus: "available" as const, ticketsUrl: available.url.slice(0, -3),
+  return { ticketStatus: "available" as const, ticketsUrl: available.url.slice(0, -3), ticketsSourceUrl: available.url,
     ticketsExcerpt: available.title + "; official current Shopify product and standard variant available=true; " + available.url };
 }
 

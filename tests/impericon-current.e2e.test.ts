@@ -71,6 +71,8 @@ test('actual source product stock and artist addition publish atomically with th
  const before=await db.catalogPlaylistRefresh.count({where:{festivalSlug:'impericon'}});
  const publication=await publishIngestionResult(db,{attemptId:attempt.id,result,sourceCommit:'impericon-stock-test'});
  assert(publication);assert.equal(publication.playlistRefreshRequested,true);
+ const durable=await db.ingestionEvidence.findMany({where:{candidate:{attemptId:attempt.id},field:{in:['ticketStatus','ticketsUrl']}}});
+ assert.equal(durable.length,2);assert(durable.every(e=>e.sourceUrl===impericonTicketUrl));
  const saved=(await new DatabaseCatalogRepository(db).read()).festivals.find(f=>f.slug==='impericon')!;
  assert.equal(saved.ticketStatus,'available');assert.equal(saved.ticketsUrl,impericonTicketUrl.slice(0,-3));assert(saved.headliners.includes('Beartooth'));
  assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}})).reviewState,'PUBLISHED');
@@ -90,13 +92,18 @@ test('ticket-only inventory changes persist and replay without adding provider w
  assert.equal(await db.catalogPlaylistRefresh.count({where:{festivalSlug:'impericon'}}),before);
 });
 test('missing, foreign, stale or mismatched persisted inventory evidence rolls back stock and artist changes',async()=>{
- for(const drift of ['persisted-evidence','observed-value','normalized-value','foreign-proof','timestamp']){
+ for(const drift of ['persisted-evidence','observed-value','normalized-value','foreign-proof','unfetched-html-proof','timestamp']){
   const {result,attempt}=await prepareInventory();
   const candidate=await db.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}});
   if(drift==='persisted-evidence')await db.ingestionEvidence.deleteMany({where:{candidateId:candidate.id,field:'ticketStatus'}});
   if(drift==='observed-value')await db.ingestionEvidence.updateMany({where:{candidateId:candidate.id,field:'ticketStatus'},data:{observedValue:'sold_out'}});
   if(drift==='normalized-value')await db.ingestionCandidate.update({where:{id:candidate.id},data:{normalized:{...result.candidate,ticketStatus:'sold_out'} as any}});
   if(drift==='foreign-proof')result.candidate.evidence.filter(e=>e.field==='ticketStatus').forEach(e=>e.sourceUrl='https://elsewhere.example/product');
+  if(drift==='unfetched-html-proof'){
+   result.candidate.evidence.filter(e=>['ticketStatus','ticketsUrl'].includes(e.field)).forEach(e=>e.sourceUrl=impericonTicketUrl.slice(0,-3));
+   await db.ingestionEvidence.updateMany({where:{candidateId:candidate.id,field:{in:['ticketStatus','ticketsUrl']}},data:{sourceUrl:impericonTicketUrl.slice(0,-3)}});
+   await db.ingestionCandidate.update({where:{id:candidate.id},data:{normalized:result.candidate as any}});
+  }
   if(drift==='timestamp')await db.ingestionEvidence.updateMany({where:{candidateId:candidate.id,field:'ticketStatus'},data:{observedAt:new Date('2020-01-01T00:00:00Z')}});
   const before={entries:await db.lineupEntry.count(),jobs:await db.catalogPlaylistRefresh.count(),pub:await db.catalogPublication.count()};
   await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result,sourceCommit:'impericon-stock-test'}),/Impericon publication requires matching persisted/);

@@ -54,7 +54,8 @@ function ticketEnvelope(product=JSON.parse(impericonTicketFixture),e=impericonFi
 test('real public Shopify weekend JSON adds source-backed inventory, not prose or VIP stock',()=>{
  const c=extract(ticketEnvelope());
  assert.equal(c.ticketStatus,'available');assert.equal(c.ticketsUrl,impericonTicketUrl.slice(0,-3));
- assert(c.evidence.some(e=>e.field==='ticketStatus'&&e.excerpt.includes(impericonTicketUrl)));
+ for (const field of ['ticketStatus','ticketsUrl']) assert(c.evidence.some(e=>e.field===field&&e.sourceUrl===impericonTicketUrl&&e.excerpt.includes(impericonTicketUrl)));
+ assert(c.evidence.filter(e=>['headliners','lineup'].includes(e.field)).every(e=>e.sourceUrl===source.url));
  assert.deepEqual(c.headliners,['Beartooth','Sample Artist']);
  const saved={...current,headliners:c.headliners,ticketStatus:'available',ticketsUrl:c.ticketsUrl};
  assert.deepEqual(evaluateCandidate(saved,c).changes,[]);

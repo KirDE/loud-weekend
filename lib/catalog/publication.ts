@@ -319,7 +319,7 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
           const product = url.pathname.match(/^\/products\/(\d{1,2})-(\d{1,2})-(\d{2})-(20\d{2})-\d{1,2}-preisstufe-weekend-ticket$/);
           if (url.origin === "https://www.impericon.com" && !url.username && !url.password && !url.search && !url.hash && product
             && Number(product[4]) === applied.edition.year && same(stored.startDate,observed.startDate) && same(stored.endDate,observed.endDate) && observed.startDate === product[4]+"-"+product[3]+"-"+product[1].padStart(2,"0")
-            && observed.endDate === product[4]+"-"+product[3]+"-"+product[2].padStart(2,"0")) proofUrl = url.href;
+            && observed.endDate === product[4]+"-"+product[3]+"-"+product[2].padStart(2,"0")) proofUrl = url.href + ".js";
         } catch { /* Only a reviewed dated weekend product can supply stock. */ }
       }
       if (!proofUrl) return false;
