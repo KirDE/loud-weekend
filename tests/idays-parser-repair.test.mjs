@@ -1,3 +1,5 @@
+import { fetchSource } from "../lib/ingestion/fetch.ts";
+import { ticketSupplementUrl } from "../lib/ingestion/ticket-supplements.ts";
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
@@ -58,5 +60,68 @@ test('safe additions still require official provenance and retain billing/semant
  }
  for(const candidate of [parse(home.replaceAll('Sombr','Pierce The Veil')),{...parse(),lineup:[...current.lineup,'SOMBR']}]) {
   assert.ok(evaluateCandidate(current,candidate).reviewReasons.some(r=>r.includes('billing')));
+ }
+});
+
+test('configured homepage now fetches actual official ticket page and emits stock alongside unchanged artist facts',async()=>{
+ const calls=[];const r=await fetchSource(source,{maxAttempts:1,fetchImpl:async (url,request)=>{
+  calls.push(url);assert([source.url,current.ticketsUrl].includes(url));
+  if(url===current.ticketsUrl)assert.equal(request.headers.authorization,undefined);
+  return new Response(url===source.url?home:tickets,{headers:{'content-type':'text/html'}});
+ }});
+ assert.deepEqual(calls,[source.url,current.ticketsUrl]);assert.equal(r.attempts,2);
+ const c=parse(await r.response.text());assert.equal(c.ticketStatus,'available');assert.equal(c.ticketsUrl,current.ticketsUrl);
+ assert.deepEqual(c.headliners,parse(home).headliners);assert.deepEqual(c.lineup,parse(home).lineup);
+ assert(c.evidence.some(e=>e.field==='ticketStatus'&&e.sourceUrl===current.ticketsUrl));
+ assert.deepEqual(evaluateCandidate(current,c).changes,[]);
+});
+test('hidden, disabled, userinfo and nonstandard-port controls are not actual current ticket inventory',()=>{
+ for(const changed of [
+  '<div hidden>'+tickets+'</div>',
+  tickets.replaceAll('>Acquista',' aria-disabled="true">Acquista'),
+  tickets.replaceAll('tabindex="0"','aria-disabled="true" tabindex="0"'),
+  tickets.replaceAll('https://www.ticketmaster.it/','https://user@www.ticketmaster.it/').replaceAll('https://www.vivaticket.com/','https://user@www.vivaticket.com/'),
+  tickets.replaceAll('https://www.ticketmaster.it/','https://www.ticketmaster.it:8443/').replaceAll('https://www.vivaticket.com/','https://www.vivaticket.com:8443/'),
+ ])assert.equal(parse(changed,{url:current.ticketsUrl}).ticketStatus,undefined);
+});
+test('a concert admission statement cannot borrow unrelated vendor buttons or next concert controls',()=>{
+ const intro="<section id=\"13-giugno\"><p>L'acquisto del biglietto garantisce l'accesso al festival per l'intera giornata.</p></section>",button="<a href=\"https://www.ticketmaster.it/biglietti/example-13-06-2027/event/abc\">Acquista</a>";
+ assert.equal(parse(intro+'<section>'+button+'</section>',{url:current.ticketsUrl}).ticketStatus,'available');
+ assert.equal(parse(intro+'<section id="19-giugno">'+button+'</section>',{url:current.ticketsUrl}).ticketStatus,undefined);
+});
+test('live ticket source failures and manual/explicit source overrides do not become healthy empty stock checks',async()=>{
+ for(const status of [403,404,429,503]){
+  const r=await fetchSource(source,{maxAttempts:1,fetchImpl:async url=>new Response(url===source.url?home:'blocked',{status:url===source.url?200:status,headers:{'content-type':'text/html'}})});
+  assert.equal(r.response.status,status);assert.equal(r.attempts,2);
+ }
+ for(const extra of [{fetchUrl:source.url},{followLinkPattern:'tickets'},{strategies:['manual_review']}]){
+  assert.equal(ticketSupplementUrl({...source,...extra}),undefined);
+ }
+});
+test('later official ticket year stays source-bound without a frozen vendor/event ID',async()=>{
+ const later={...source,editionYear:2028};
+ const r=await fetchSource(later,{maxAttempts:1,fetchImpl:async url=>new Response((url===source.url?home:tickets).replaceAll('2027','2028'),{headers:{'content-type':'text/html'}})});
+ const c=extractFestivalCandidate(await r.response.text(),later,'2027-10-10T17:10:00Z');
+ assert.equal(c.ticketStatus,'available');assert.deepEqual(c.observedEditionYears,[2028]);
+});
+
+test('Ticketmaster ancillary-only controls cannot borrow ordinary concert admission wording',()=>{
+ const intro="<section id=\"13-giugno\"><p>L'acquisto del biglietto garantisce l'accesso al festival per l'intera giornata.</p></section>";
+ const card=path=>intro+'<section><li><a href="https://www.ticketmaster.it/biglietti/'+path+'-13-06-2027/event/abc">Acquista</a></li></section>';
+ assert.equal(parse(card("blink-182"),{url:current.ticketsUrl}).ticketStatus,"available");
+ for(const product of ["vip","parking","merch","offsale"]){
+  const c=parse(card("blink-182-"+product),{url:current.ticketsUrl});
+  assert.equal(c.ticketStatus,undefined);assert(c.warnings.some(w=>/review required/.test(w)));
+ }
+});
+
+
+test('all Italian month labels bind ordinary admission to the exact Ticketmaster date',()=>{
+ const months=['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+ for(const [index,month] of months.entries()){
+  const number=String(index+1).padStart(2,'0');
+  const html=`<section id="13-${month}"><p>L'acquisto del biglietto garantisce l'accesso al festival per l'intera giornata.</p></section><section><a href="https://www.ticketmaster.it/biglietti/show-13-${number}-2027/event/abc">Acquista</a></section>`;
+  assert.equal(parse(html,{url:current.ticketsUrl}).ticketStatus,'available',month);
+  for(const invalid of [html.replace(`13-${number}-2027`,'13-06-2026'),html.replace(`13-${month}`,`13-unknown`),html.replace('www.ticketmaster.it','evil.test')])assert.equal(parse(invalid,{url:current.ticketsUrl}).ticketStatus,undefined,month);
  }
 });
