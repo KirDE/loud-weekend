@@ -77,10 +77,12 @@ function artistResolver(db: Database, observedAt: Date) {
 
 type EnsureArtist = ReturnType<typeof artistResolver>;
 
-async function replaceLineup(db: Database, editionId: string, billing: LineupBilling, names: string[], ensureArtist: EnsureArtist) {
+async function replaceLineup(db: Database, editionId: string, billing: LineupBilling, names: string[], ensureArtist: EnsureArtist, expected?: string[]) {
   const otherBilling = billing === LineupBilling.HEADLINER ? LineupBilling.LINEUP : LineupBilling.HEADLINER;
   const existing = await db.lineupEntry.findMany({ where: { editionId, billing }, include: { artist: true }, orderBy: { position: "asc" } });
-  if (same(existing.map(({ artist }) => artist.name), names)) return false;
+  const current = existing.map(({ artist }) => artist.name);
+  if (same(current, names)) return false;
+  if (expected && !same(current, expected)) throw new Error("Stale reviewed lineup");
   const other = await db.lineupEntry.findMany({ where: { editionId, billing: otherBilling }, include: { artist: true } });
   const otherNames = new Set(other.map(({ artist }) => artist.name.toLocaleLowerCase()));
   if (names.some((name) => otherNames.has(name.toLocaleLowerCase()))) throw new Error("Artist cannot have ambiguous lineup billing");
@@ -187,7 +189,8 @@ async function applyFestivalChanges(db: Database, input: {
       case "headliners": {
         const billing = change.field === "headliners" ? LineupBilling.HEADLINER : LineupBilling.LINEUP;
         changed = Array.isArray(change.after) || (typeof change.after === "string" && /\r?\n|,/.test(change.after))
-          ? await replaceLineup(db, edition.id, billing, stringList(change.after, change.field), ensureArtist)
+          ? await replaceLineup(db, edition.id, billing, stringList(change.after, change.field), ensureArtist,
+              input.expectedEditionId ? stringList(change.before, change.field) : undefined)
           : await addLineupArtist(db, edition.id, billing, String(change.after), ensureArtist);
         break;
       }

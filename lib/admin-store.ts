@@ -1,7 +1,7 @@
 import { assertAdminArtistReviewAllowed } from "@/lib/catalog/admin-artist-review";
 import { AdminChangeStatus, AdminDraftStatus, AdminResourceKind, AdminRunStatus, Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
-import { mapSource, type ConfiguredSource } from "@/lib/sources/repository";
+import { mapSource } from "@/lib/sources/repository";
 import { claimDueSources, completeSourceLease, releaseOwnedSourceLease } from "@/lib/ingestion/lease";
 import { evaluateCandidate } from "@/lib/ingestion/policy";
 import type { Festival } from "@/lib/domain/festival";
@@ -122,6 +122,12 @@ export async function decideChange(id: string, decision: "approve" | "reject", a
       await tx.adminResourceState.upsert({ where: { resourceKind_resourceKey: { resourceKind: change.resourceKind, resourceKey: change.resourceKey } }, create: { resourceKind: change.resourceKind, resourceKey: change.resourceKey, revision: currentRevision + 1, values: json({ ...existing, [change.field]: change.afterValue }) }, update: { revision: { increment: 1 }, values: json({ ...existing, [change.field]: change.afterValue }) } });
       if (change.draftId) await tx.adminChange.updateMany({ where: { draftId: change.draftId, status: AdminChangeStatus.PENDING, NOT: { id } }, data: { baseRevision: currentRevision + 1 } });
     }
+    if (decision === "approve" && change.parserRunId && !change.draftId) {
+      await tx.adminChange.updateMany({
+        where: { parserRunId: change.parserRunId, status: AdminChangeStatus.PENDING, baseRevision: currentRevision },
+        data: { baseRevision: currentRevision + 1 },
+      });
+    }
     if (change.draftId) {
       const pending = await tx.adminChange.count({ where: { draftId: change.draftId, status: AdminChangeStatus.PENDING, NOT: { id } } });
       if (!pending) await tx.adminDraft.update({ where: { id: change.draftId }, data: { status: decision === "approve" ? AdminDraftStatus.APPLIED : AdminDraftStatus.REJECTED } });
@@ -138,37 +144,38 @@ export class FestivalRefreshError extends Error {
 
 type RefreshActor = { id: string; email: string };
 
-async function refreshSource(source: ConfiguredSource, editionId: string, festival: Festival, actor: RefreshActor,
+async function refreshSource(sourceId: string, editionId: string, festival: Festival, actor: RefreshActor,
     aliases: Awaited<ReturnType<typeof readAliases>>) {
   const owner = randomUUID();
   const [claim] = await claimDueSources(db, {
     owner, now: new Date(), limit: 1, ttlMs: 30 * 60_000,
-    manualSource: { sourceId: source.id, editionId },
+    manualSource: { sourceId, editionId },
   });
   if (!claim) return { status: "skipped" as const };
 
   const lease = { ...claim, owner };
   let runId: string | undefined;
+  let httpStatus: number | undefined;
   let stage: "pre_attempt_error" | "fetch_error" | "parser_error" | "post_attempt_error" = "pre_attempt_error";
   try {
     // The selected configuration may have changed between the query and claim.
     const row = await db.festivalSource.findUniqueOrThrow({
-      where: { id: source.id }, include: { edition: { select: { festivalId: true, year: true } } },
+      where: { id: sourceId }, include: { edition: { select: { festivalId: true, year: true } } },
     });
     if (row.updatedAt.getTime() !== claim.updatedAt.getTime() || row.editionId !== editionId)
       throw new Error("Source changed during refresh");
     const active = mapSource(row);
-    const sourceUrl = process.env.NODE_ENV !== "production" && process.env.ADMIN_TEST_SOURCE_URL
-      ? process.env.ADMIN_TEST_SOURCE_URL : active.url;
     const run = await db.adminParserRun.create({ data: {
       festivalSlug: festival.slug, sourceId: active.id, adapter: active.strategies.join(","),
       requestedById: actor.id, log: json([{ at: new Date().toISOString(), message: "Fetch started" }]),
     } });
     runId = run.id;
     stage = "fetch_error";
-    const { response } = await fetchSource(sourceUrl === active.url ? active :
-      { ...active, url: sourceUrl, fetchUrl: sourceUrl, followLinkPattern: undefined });
-    if (!response.ok) throw new Error(`Source returned HTTP ${response.status}`);
+    const { response } = await fetchSource(active);
+    if (!response.ok) {
+      httpStatus = response.status;
+      throw new Error("Source HTTP failure");
+    }
     const html = await response.text();
     stage = "parser_error";
     const candidate = extractFestivalCandidate(html, active, new Date().toISOString());
@@ -188,7 +195,7 @@ async function refreshSource(source: ConfiguredSource, editionId: string, festiv
         : differences[0].after;
       if (afterValue === undefined) return [];
       return [{
-        field, beforeValue: json(festival[field] ?? null), afterValue: json(afterValue), confidence: 90,
+        field, beforeValue: festival[field] === undefined ? Prisma.JsonNull : json(festival[field]), afterValue: json(afterValue), confidence: 90,
         sourceEvidence: json({ kind: "scoped-refresh", editionId, editionYear: active.editionYear, evidence }),
       }];
     });
@@ -232,10 +239,13 @@ async function refreshSource(source: ConfiguredSource, editionId: string, festiv
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return { status: "checked" as const, ...saved };
   } catch {
-    if (runId) await db.adminParserRun.update({ where: { id: runId }, data: {
-      status: AdminRunStatus.FAILED, finishedAt: new Date(), message: stage,
-      log: json([{ at: new Date().toISOString(), message: stage }]),
-    } });
+    if (runId) {
+      const message = httpStatus === undefined ? stage : `Source returned HTTP ${httpStatus}`;
+      await db.adminParserRun.update({ where: { id: runId }, data: {
+        status: AdminRunStatus.FAILED, finishedAt: new Date(), message,
+        log: json([{ at: new Date().toISOString(), message }]),
+      } });
+    }
     await completeSourceLease(db, { ...lease, now: new Date(), outcome: stage });
     return { status: "failed" as const, id: runId };
   } finally {
@@ -254,16 +264,16 @@ export async function refreshFestival(slug: string, actor: RefreshActor, edition
   });
   if (editions.length !== 1) throw new FestivalRefreshError("Select one current festival edition.", 404);
   const [edition] = editions;
-  const rows = await db.festivalSource.findMany({
+  const sources = await db.festivalSource.findMany({
     where: { festivalSlug: slug, enabled: true, editionId: edition.id, editionYear: edition.year, configurationBackfilledAt: { not: null } },
-    include: { edition: { select: { festivalId: true, year: true } } }, orderBy: { id: "asc" },
+    select: { id: true }, orderBy: { id: "asc" },
   });
-  if (!rows.length) throw new FestivalRefreshError("No enabled sources are configured for this edition.", 409);
+  if (!sources.length) throw new FestivalRefreshError("No enabled sources are configured for this edition.", 409);
   const [catalog, aliases] = await Promise.all([readCatalog(), readAliases()]);
   const festival = catalog.festivals.find((item) => item.slug === slug && item.editionYear === edition.year);
   if (!festival) throw new FestivalRefreshError("The festival edition changed during refresh.", 409);
   const results = [];
-  for (const row of rows) results.push(await refreshSource(mapSource(row), edition.id, festival, actor, aliases));
+  for (const { id } of sources) results.push(await refreshSource(id, edition.id, festival, actor, aliases));
   const checked = results.filter((result) => result.status === "checked");
   const failed = results.filter((result) => result.status === "failed");
   const skipped = results.length - checked.length - failed.length;
