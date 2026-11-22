@@ -1,29 +1,11 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient, Prisma } from "@prisma/client";
 import { z } from "zod";
+import { hellfestProposalSchema as schema } from "../domain/ticket-offer-review.ts";
 import { extractHellfestOfferProposals } from "./adapters/hellfest-offers.ts";
 
 const sourceUrl = "https://hellfest.fr/";
 const version = "hellfest-offer-proposals-v1";
-const iso = z.string().datetime({ precision: 3 });
-const offer = z.object({
-  key: z.string(), kind: z.enum(["full_pass", "day_pass"]), label: z.string().min(1).max(80),
-  status: z.enum(["sold_out", "not_on_sale", "unknown"]),
-  price: z.object({ amountMinor: z.number().int().min(0).max(9_999_999), currency: z.literal("EUR"), fees: z.literal("unknown") }).strict().nullable(),
-  saleDateText: z.string().min(1).max(120).nullable(), sourceUrl: z.literal(sourceUrl), observedAt: iso,
-  excerpt: z.string().min(1).max(500),
-}).strict();
-const schema = z.object({
-  festivalSlug: z.literal("hellfest"), editionYear: z.number().int().min(2000).max(2100),
-  sourceUrl: z.literal(sourceUrl), observedAt: iso, offers: z.array(offer).length(2), warnings: z.array(z.string()).length(0),
-}).strict().superRefine((batch, ctx) => {
-  if (new Date(batch.observedAt).toISOString() !== batch.observedAt ||
-      new Set(batch.offers.map(o => o.kind)).size !== 2 ||
-      batch.offers.some(o => o.sourceUrl !== batch.sourceUrl || o.observedAt !== batch.observedAt ||
-        o.key !== `hellfest-${batch.editionYear}-${o.kind}`)) {
-    ctx.addIssue({ code: "custom", message: "Tier identity/time mismatch" });
-  }
-});
 const digest = (value: z.infer<typeof schema>) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 /** Durable REVIEW ONLY staging. No catalog writes, source health refresh,

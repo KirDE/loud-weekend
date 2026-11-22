@@ -202,3 +202,37 @@ objects. Full catalog DB regression and browser/mobile tests remain due, along
 with the reviewer queue UI, collector invocation path, focused PR/full CI and
 exact-head Codex review. Nothing in this checkpoint is deployed or approved in
 production; Hellfest is still unfinished.
+
+## Actionable reviewer queue (local checkpoint)
+
+The existing `/admin` review section now discovers current canonical Hellfest
+edition IDs on the authenticated server page. Its EN/DE/RU tier cards explicitly
+load the latest snapshot using the existing protected GET API (no polling or
+collector invocation). The reviewer sees the two categories, honest unknowns,
+official source/observation time, minimized source excerpts and exact revision.
+The preview is explicitly pending/not published until a validated decision.
+
+Approve/reject sends only the displayed snapshot ID, hash and decision, never an
+actor or offer override. Duplicate in-flight actions are blocked; requests have
+a ten-second deadline and unmount cancellation. Successful decisions reread the
+server state rather than assuming optimistic success. Conflict, auth failure,
+malformed/foreign-edition response or uncertain result clears actionable data and
+requires a fresh load. Expired/future observations have disabled decision buttons;
+the existing service still checks freshness and persisted reviewer rights at the
+write boundary. Network errors never masquerade as an empty queue.
+
+A single browser-safe strict Zod schema now validates both stored proposals and
+reviewer responses, retaining existing key/source/time/value binding and field
+order (no hash-format change). No server/crypto/Prisma module crosses the client
+boundary. Public tier rendering is reused only within the clearly labeled review
+preview; no new public data projection or automatic publication is introduced.
+
+Six tests execute the actual component handlers with a deterministic hook host
+and the actual API client, covering EN/DE/RU load→approve→reread, exact request
+revision/fields, conflict/auth/malformed/uncertain result, schema/edition drift,
+expired observations, explicit absence and duplicate in-flight action suppression.
+These are NOT browser/cookie-login/mobile verification. The isolated DB, existing
+actual HTTP handler and catalog regression suites also pass with the shared
+schema. Outstanding: explicit collector invocation, browser/mobile verification,
+focused PR/full CI/exact-head Codex review. Hellfest remains unfinished; no
+production migrations, writes, scheduler or deployment were performed.
