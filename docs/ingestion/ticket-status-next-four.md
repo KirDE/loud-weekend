@@ -1,7 +1,7 @@
 # Five stock producers from the remaining 31 (22 November 2026)
 
 Scope: source-specific **proposals**, not production acceptance or a claim that
-all 60 festival paths are covered. Based on deployed main #482 (`ebe9cd3`).
+all 60 festival paths are covered. Integrated with deployed main #487 (`387fe7d`), including accepted #501.
 No production configuration change, import, provider write, merge or deployment.
 
 | Source | Reviewed stock evidence | Public purchase gateway |
@@ -62,7 +62,7 @@ Minified DOM regressions preserve `<br>` word boundaries.
 candidate/diff/evidence→canonical publisher→public reader→same-attempt replay and
 unchanged reevaluation. It also rejects old-edition and concurrent stale
 publication, rolls back the transaction and verifies no provider refresh/binding.
-The shared helper restores prior source/artist state and removes owned fixtures.
+The shared helper restores prior source/artist state and removes owned fixtures. Resurrection additionally forges policy approval for forbidden artist/date proposals and verifies rejection at the persisted canonical publisher, with no partial catalogue/provider write.
 Quality explicitly executes the new source DB tests, in addition to existing
 catalog, browser, account-route, Python, build and production-archive checks.
 

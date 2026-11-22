@@ -7,7 +7,7 @@ import {RESURRECTION_CONFIG,RESURRECTION_SHOP,RESURRECTION_PRODUCTS} from '../li
 import {parserSource} from './support/parser-source.ts';
 const fixture=(name:string)=>readFile(new URL('./fixtures/ticket-status/'+name,import.meta.url),'utf8');
 const source=parserSource('resurrection-fest',{url:'https://www.resurrectionfest.es/',strategies:['html_fallback']});
-ticketProducerPublication({slug:source.festivalSlug,produce:async archived=>{
+ticketProducerPublication({slug:source.festivalSlug,forbiddenCandidates:c=>[{...c,lineup:['Synthetic Unreviewed Performer']},{...c,startDate:'2027-06-29'}],refusalPattern:/cannot bypass source artist or date review/,produce:async archived=>{
  const pages=new Map([[source.url,await fixture('resurrection-primary.html')],[RESURRECTION_CONFIG,await fixture('resurrection-public-config.json')],[RESURRECTION_SHOP,await fixture('resurrection-public-shop.json')],[RESURRECTION_PRODUCTS,await fixture('resurrection-public-products.json')]]);
  // Keep valid transport while independently checking the primary edition anchor;
  // extraction must preserve its old-year warning, despite current API stock.
