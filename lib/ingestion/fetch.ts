@@ -1,3 +1,4 @@
+import { ALCATRAZ_STOCK, alcatrazPrimaryUrl } from "./alcatraz-ticket-stock.ts";
 import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters/full-rewind.ts';
@@ -532,7 +533,7 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
   if (!primary.response.ok || !ticketUrl) return primary;
   let attempts = primary.attempts;
   try {
-    if (primary.response.url && primary.response.url !== source.url) throw new Error("Official ticket primary source changed identity");
+    if (primary.response.url && !(source.festivalSlug === "alcatraz" ? alcatrazPrimaryUrl(source.url, primary.response.url) : primary.response.url === source.url)) throw new Error("Official ticket primary source changed identity");
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
     // source overrides or authorization headers on a public ticket destination.
@@ -542,7 +543,7 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     if (!ticket.response.ok) return { response: ticket.response, attempts };
     if (ticket.response.url && ticket.response.url !== ticketUrl) throw new Error("Official ticket destination changed identity");
     const type = ticket.response.headers.get("content-type") ?? "";
-    const supportedType = source.festivalSlug === "full-rewind"
+    const supportedType = ticketUrl === ALCATRAZ_STOCK ? /^application\/json\b/i.test(type) : source.festivalSlug === "full-rewind"
       ? /^(?:application\/json|text\/javascript|application\/javascript)\b/i.test(type)
       : /^text\/html\b|^application\/xhtml\+xml\b/i.test(type);
     if (!supportedType) throw new Error(source.festivalSlug === "full-rewind" ? "Official ticket destination returned a non-JSON document" : "Official ticket destination returned a non-HTML document");
