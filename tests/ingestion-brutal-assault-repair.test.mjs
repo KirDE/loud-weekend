@@ -46,7 +46,7 @@ test('wrong-edition product cannot establish dates, availability or lineup',asyn
 });
 test('disabled purchase is not availability; explicit sold out remains an operational fact',async()=>{
   const pass=docs.pass.replace('type="submit"','disabled type="submit"');const r=await parse({pass});assert.equal(r.candidate.ticketStatus,undefined);
-  const sold=await parse({pass:pass.replace('<span>Available</span>','<span>Sold out</span>')});assert.equal(sold.candidate.ticketStatus,'unavailable');
+  const sold=await parse({pass:pass.replace('<span>Available</span>','<span>Sold out</span>')});assert.equal(sold.candidate.ticketStatus,'sold_out');
 });
 test('empty or shortened live cards never silently overwrite verified partial lineup',async()=>{
   const empty=await parse({lineup:'<h1>47% CONFIRMED!</h1>'});assert.equal(empty.candidate.lineup,undefined);assert.match(empty.candidate.warnings.join(' '),/do not erase/);

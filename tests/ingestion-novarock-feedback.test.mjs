@@ -36,7 +36,7 @@ test('changed live standard pass price is supported; stale years, ambiguous stan
 test('actual standard-pass sellout and reopening are scoped to that offer',()=>{
  const offer=tickets.match(/<li class="ticketCard__offer is:available">[\s\S]*?<\/li>/)[0];
  const sold='<li class="ticketCard__offer is:sold_out"><h4 class="ticketCard__offerTitle">Festivalpass</h4><strong class="ticketCard__offerInfoNotice">Sold Out!</strong></li>';
- assert.equal(extract(tickets.replace(offer,sold)).ticketStatus,'unavailable');assert.equal(extract().ticketStatus,'available');
+ assert.equal(extract(tickets.replace(offer,sold)).ticketStatus,'sold_out');assert.equal(extract().ticketStatus,'available');
 });
 test('two-document fetch uses fixed official ticket URL and preserves real HTTP failures',async()=>{
  const calls=[];const response=await fetchSource(source,{maxAttempts:1,fetchImpl:async(url)=>{calls.push(url);return new Response(url===source.url?lineup:tickets)}});

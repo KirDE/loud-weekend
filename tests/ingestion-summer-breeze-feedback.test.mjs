@@ -17,7 +17,7 @@ test("real corrected homepage does not replace verified artists with the Alle fi
   assert.equal(c.startDate, "2027-08-18");
   assert.equal(c.endDate, "2027-08-21");
   assert.equal(c.status, "partial");
-  assert.equal(c.ticketStatus, "unavailable");
+  assert.equal(c.ticketStatus, "sold_out");
   assert.equal(c.ticketsUrl, "https://www.summer-breeze.de/de/tickets/");
   assert.deepEqual(c.observedEditionYears, [2027]);
   assert.deepEqual(c.warnings, []);
@@ -28,7 +28,7 @@ test("the corrected facts produce no destructive catalog or provider-triggering 
   const current = { slug: "summer-breeze", name: "Summer Breeze", country: "Germany", countryCode: "DE",
     officialUrl: source.url, editionYear: 2027, startDate: "2027-08-18", endDate: "2027-08-21",
     headliners: ["Electric Callboy"], lineup: ["John Bush", "PeelingFlesh"], genres: [],
-    status: "partial", ticketStatus: "unavailable", ticketsUrl: "https://www.summer-breeze.de/de/tickets/", updatedAt: "2026-10-10T09:00:00Z" };
+    status: "partial", ticketStatus: "sold_out", ticketsUrl: "https://www.summer-breeze.de/de/tickets/", updatedAt: "2026-10-10T09:00:00Z" };
   const r = evaluateCandidate(current, parse());
   assert.deepEqual(r.changes, []);
   assert.deepEqual(r.reviewReasons, []);
@@ -67,7 +67,7 @@ test("later edition, dates and news work without a pinned bill or document hash"
   const c = parse(fixture.replaceAll("2027", "2028").replaceAll("08-18", "08-16").replaceAll("08-21", "08-19") + '<p>New official announcement and new artists</p>', { editionYear: 2028 });
   assert.equal(c.startDate, "2028-08-16");
   assert.equal(c.endDate, "2028-08-19");
-  assert.equal(c.ticketStatus, "unavailable");
+  assert.equal(c.ticketStatus, "sold_out");
   assert.equal(c.status, "partial");
 });
 

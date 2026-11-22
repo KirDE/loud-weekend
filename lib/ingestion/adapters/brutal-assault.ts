@@ -79,7 +79,11 @@ export function extractBrutalAssaultCandidate(payload: string, source: FestivalS
   const productId = new URL(bundle.pass.url).pathname.split("/").at(-1);
   const enabledPurchase = form && action?.pathname === `/en/tickets/cart/add/${productId}` && [...form[2].matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/gi)].some((b) => !/\bdisabled\b/i.test(b[1]) && /\bAdd to cart\b/i.test(text(b[2])));
   if (enabledPurchase) add("ticketStatus", "available", bundle.pass, form![0]);
-  else if (/\b(?:sold out|unavailable)\b/i.test(text(pass.match(/<div\b[^>]*class=["'][^"']*product_availability[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] ?? ""))) add("ticketStatus", "unavailable", bundle.pass, title);
+  else {
+    const availability = text(pass.match(/<div\b[^>]*class=["'][^"']*product_availability[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] ?? "");
+    if (/\bsold out\b/i.test(availability)) add("ticketStatus", "sold_out", bundle.pass, `${title}; ${availability}`);
+    else if (/\bunavailable\b/i.test(availability)) add("ticketStatus", "unavailable", bundle.pass, `${title}; ${availability}`);
+  }
   const percent = bill.match(/<h1\b[^>]*>\s*(\d{1,3})%\s+CONFIRMED!\s*<\/h1>/i);
   if (!percent || Number(percent[1]) > 100) return reject("Brutal Assault current bill completeness is absent or invalid");
   const names = [...bill.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)].flatMap((m) => {

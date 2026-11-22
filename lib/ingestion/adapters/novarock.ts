@@ -196,7 +196,7 @@ function ticketOffer(html: string, year: number) {
     return { ticketsUrl: novarockTicketsUrl, ticketStatus: "available" as const, ticketsExcerpt: `Festivalpass ${year}; Festivalpass EUR ${decode(value.text)}; Jetzt kaufen; ${purchase!.a.href}` };
   }
   if (soldOut && !available && !links.length && nodes.some(n => hasClass(n, "ticketCard__offerInfoNotice") && decode(n.text) === "Sold Out!")) {
-    return { ticketsUrl: novarockTicketsUrl, ticketStatus: "unavailable" as const, ticketsExcerpt: `Festivalpass ${year}; Festivalpass Sold Out!` };
+    return { ticketsUrl: novarockTicketsUrl, ticketStatus: "sold_out" as const, ticketsExcerpt: `Festivalpass ${year}; Festivalpass Sold Out!` };
   }
   return undefined;
 }

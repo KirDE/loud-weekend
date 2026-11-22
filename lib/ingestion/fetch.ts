@@ -1,3 +1,4 @@
+import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters/full-rewind.ts';
 import { isDownloadSource, DOWNLOAD_ARTISTS, DOWNLOAD_DOCUMENTS } from "./adapters/download.ts";
@@ -35,7 +36,7 @@ export type FetchOptions = {
 
 const retryable = (status: number) => status === 403 || status === 408 || status === 425 || status === 429 || status >= 500;
 
-export async function fetchSource(source: FestivalSource, options: FetchOptions = {}): Promise<FetchAttempt> {
+async function fetchSourceWithoutTicketSupplement(source: FestivalSource, options: FetchOptions = {}): Promise<FetchAttempt> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const maxAttempts = Math.max(1, options.maxAttempts ?? 3);
@@ -507,4 +508,47 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
 
   const linked = await fetchWithRetry(linkedUrl.href);
   return { response: linked.response, attempts: initial.attempts + linked.attempts };
+}
+
+
+async function boundedTicketText(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Empty official ticket document");
+  const chunks: Uint8Array[] = []; let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read(); if (done) break;
+      size += value.byteLength;
+      if (size > 2_000_000) throw new Error("Official ticket document exceeds size limit");
+      chunks.push(value);
+    }
+  } finally { await reader.cancel(); }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+export async function fetchSource(source: FestivalSource, options: FetchOptions = {}): Promise<FetchAttempt> {
+  const primary = await fetchSourceWithoutTicketSupplement(source, options);
+  const ticketUrl = ticketSupplementUrl(source);
+  if (!primary.response.ok || !ticketUrl) return primary;
+  let attempts = primary.attempts;
+  try {
+    if (primary.response.url && primary.response.url !== source.url) throw new Error("Official ticket primary source changed identity");
+    const body = await boundedTicketText(primary.response);
+    // Reuse the normal bounded-retry transport, without recursive supplements,
+    // source overrides or authorization headers on a public ticket destination.
+    const ticket = await fetchSourceWithoutTicketSupplement({ ...source, url: ticketUrl, headers: undefined,
+      fetchUrl: undefined, followLinkPattern: undefined, strategies: ["html_fallback"] }, options);
+    attempts += ticket.attempts;
+    if (!ticket.response.ok) return { response: ticket.response, attempts };
+    if (ticket.response.url && ticket.response.url !== ticketUrl) throw new Error("Official ticket destination changed identity");
+    const type = ticket.response.headers.get("content-type") ?? "";
+    if (!/^text\/html\b|^application\/xhtml\+xml\b/i.test(type)) throw new Error("Official ticket destination returned a non-HTML document");
+    const html = await boundedTicketText(ticket.response);
+    const response = new Response(JSON.stringify({ kind: TICKET_SUPPLEMENT, body, ticket: { url: ticketUrl, html } }), { headers: { "content-type": "application/json" } });
+    Object.defineProperty(response, "url", { value: source.url });
+    return { response, attempts };
+  } catch (error) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    throw Object.assign(failure, { attempts: attempts + Number((failure as Error & { attempts?: number }).attempts ?? 0) });
+  }
 }

@@ -1,0 +1,870 @@
+{
+  "schemaVersion": 1,
+  "scope": "59 public current-edition records, observed 2026-11-17; not production parser configuration",
+  "catalogueSource": "https://loudweekend.eu/api/offline/catalog/",
+  "festivals": [
+    {
+      "slug": "2000trees",
+      "name": "2000trees",
+      "officialUrl": "https://2000trees.co.uk/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:17.414093+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "alcatraz",
+      "name": "Alcatraz Open Air",
+      "officialUrl": "https://www.alcatraz.be/",
+      "ticketUrl": "https://www.alcatraz.be/en/tickets",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:18.104729+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "alpen-flair",
+      "name": "Alpen Flair",
+      "officialUrl": "https://www.alpen-flair.com/",
+      "ticketUrl": "https://www.alpen-flair.com/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:20.296293+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "barcelona-rock-fest",
+      "name": "Barcelona Rock Fest",
+      "officialUrl": "https://www.barcelonarockfest.com/",
+      "ticketUrl": "https://www.barcelonarockfest.com/en/tickets",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:20.052375+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "bloodstock",
+      "name": "Bloodstock Open Air",
+      "officialUrl": "https://www.bloodstock.uk.com/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:17.317081+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "brutal-assault",
+      "name": "Brutal Assault",
+      "officialUrl": "https://brutalassault.cz/",
+      "ticketUrl": "https://brutalassault.cz/en/tickets",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:18.365980+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "available",
+        "sold_out",
+        "unavailable"
+      ],
+      "test": "tests/ingestion-brutal-assault-repair.test.mjs"
+    },
+    {
+      "slug": "copenhell",
+      "name": "Copenhell",
+      "officialUrl": "https://www.copenhell.dk/",
+      "ticketUrl": "https://copenhell.dk/billetter/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:22.496803+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "download",
+      "name": "Download Festival",
+      "officialUrl": "https://downloadfestival.co.uk/",
+      "ticketUrl": "https://downloadfestival.co.uk/tickets/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:17.306521+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "available"
+      ],
+      "test": "tests/ticket-supplements.test.mjs"
+    },
+    {
+      "slug": "dynamo-metal-fest",
+      "name": "Dynamo Metal Fest",
+      "officialUrl": "https://dynamo-metalfest.nl/",
+      "ticketUrl": "https://dynamo-metalfest.nl/early-bird-tickets-are-live/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:21.431062+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "eurockeennes",
+      "name": "Eurockéennes de Belfort",
+      "officialUrl": "https://www.eurockeennes.fr/",
+      "ticketUrl": "https://www.eurockeennes.fr/achat/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:17.215351+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "firenze-rocks",
+      "name": "Firenze Rocks",
+      "officialUrl": "https://www.firenzerocks.it/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:20.150545+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "frequency",
+      "name": "Frequency Festival",
+      "officialUrl": "https://www.frequency.at/",
+      "ticketUrl": "https://www.frequency.at/tickets/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:18.294740+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "full-force",
+      "name": "Full Force",
+      "officialUrl": "https://full-force.de/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:17.007052+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "full-rewind",
+      "name": "Full Rewind",
+      "officialUrl": "https://full-rewind.de/",
+      "ticketUrl": "https://full-rewind.de/collections/tickets-2027",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:23.264661+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "graspop",
+      "name": "Graspop Metal Meeting",
+      "officialUrl": "https://www.graspop.be/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:17.674512+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "greenfield",
+      "name": "Greenfield Festival",
+      "officialUrl": "https://greenfieldfestival.ch/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:21.575749+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "heavy-weekend",
+      "name": "Heavy Week-End",
+      "officialUrl": "https://www.heavyweekend.live/",
+      "ticketUrl": "https://widget.weezevent.com/ticket/734dcd1a-6e7c-4465-b353-3bd5dcddd20b?locale=fr-fr",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:23.019905+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "hellfest",
+      "name": "Hellfest Open Air",
+      "officialUrl": "https://hellfest.fr/",
+      "ticketUrl": "https://tickets.hellfest.fr/en/index.html",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:17.048716+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "hurricane",
+      "name": "Hurricane Festival",
+      "officialUrl": "https://hurricane.de/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:16.876722+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "idays",
+      "name": "I-Days Milano",
+      "officialUrl": "https://www.idays.it/",
+      "ticketUrl": "https://www.idays.it/tickets",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:20.188500+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "impericon",
+      "name": "Impericon Festival",
+      "officialUrl": "https://www.impericon.com/pages/festival",
+      "ticketUrl": "https://www.impericon.com/products/25-26-06-2027-2-preisstufe-weekend-ticket",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:23.019527+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "inferno",
+      "name": "Inferno Metal Festival",
+      "officialUrl": "https://www.infernofestival.net/",
+      "ticketUrl": "https://www.infernofestival.net/tickets",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:22.232991+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "available",
+        "sold_out"
+      ],
+      "test": "tests/ingestion-inferno.test.mjs"
+    },
+    {
+      "slug": "jera-on-air",
+      "name": "Jera On Air",
+      "officialUrl": "https://www.jeraonair.nl/en/",
+      "ticketUrl": "https://www.jeraonair.nl/en/tickets/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:22.849665+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "leeds",
+      "name": "Leeds Festival",
+      "officialUrl": "https://www.leedsfestival.com/",
+      "ticketUrl": "https://www.leedsfestival.com/tickets",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:17.393987+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "available",
+        "sold_out"
+      ],
+      "test": "tests/ingestion-leeds.test.mjs"
+    },
+    {
+      "slug": "leyendas-del-rock",
+      "name": "Leyendas del Rock",
+      "officialUrl": "https://www.leyendasdelrockfestival.com/",
+      "ticketUrl": "https://www.leyendasdelrockfestival.com/tickets/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:19.614942+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "mad-cool",
+      "name": "Mad Cool Festival",
+      "officialUrl": "https://madcoolfestival.es/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:19.900622+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "masters-of-rock",
+      "name": "Masters of Rock",
+      "officialUrl": "https://www.mastersofrock.cz/",
+      "ticketUrl": "https://www.mastersofrock.cz/cs/masters-of-rock-vstupenky",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:18.388543+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "mera-luna",
+      "name": "M'era Luna Festival",
+      "officialUrl": "https://meraluna.de/",
+      "ticketUrl": "https://www.ticket-onlineshop.com/ols/meraluna/de",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:16.853376+00:00",
+        "httpStatus": null,
+        "error": "TimeoutError"
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "midgardsblot",
+      "name": "Midgardsblot Festival",
+      "officialUrl": "https://midgardsblot.no/",
+      "ticketUrl": "https://www.ticketmaster.no/artist/midgardsblot-tickets/1197464",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:22.129134+00:00",
+        "httpStatus": 403,
+        "error": "http_error"
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "motocultor",
+      "name": "Motocultor Festival",
+      "officialUrl": "https://www.motocultor-festival.com/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:17.161257+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "mystic",
+      "name": "Mystic Festival",
+      "officialUrl": "https://www.mysticfestival.pl/",
+      "ticketUrl": "https://www.mysticfestival.pl/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:18.601687+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "nova-rock",
+      "name": "Nova Rock",
+      "officialUrl": "https://www.novarock.at/",
+      "ticketUrl": "https://www.novarock.at/tickets/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:18.187691+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "available",
+        "sold_out"
+      ],
+      "test": "tests/ingestion-novarock-feedback.test.mjs"
+    },
+    {
+      "slug": "paleo",
+      "name": "Paléo Festival",
+      "officialUrl": "https://yeah.paleo.ch/",
+      "ticketUrl": "https://yeah.paleo.ch/en/tickets",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:21.820070+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "not_on_sale"
+      ],
+      "test": "tests/ingestion-paleo.test.mjs"
+    },
+    {
+      "slug": "pinkpop",
+      "name": "Pinkpop",
+      "officialUrl": "https://www.pinkpop.nl/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:20.461508+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "pistoia-blues",
+      "name": "Pistoia Blues Festival",
+      "officialUrl": "https://pistoiablues.com/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:20.395671+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "polandrock",
+      "name": "Pol'and'Rock Festival",
+      "officialUrl": "https://polandrockfestival.pl/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:18.487857+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "provinssi",
+      "name": "Provinssi",
+      "officialUrl": "https://www.provinssi.fi/en/",
+      "ticketUrl": "https://provinssi.fi/en/tickets-2027",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:16.689100+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "reading",
+      "name": "Reading Festival",
+      "officialUrl": "https://www.readingfestival.com/",
+      "ticketUrl": "https://www.readingfestival.com/tickets",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:17.371333+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "available",
+        "sold_out"
+      ],
+      "test": "tests/ingestion-reading.test.mjs"
+    },
+    {
+      "slug": "resurrection-fest",
+      "name": "Resurrection Fest",
+      "officialUrl": "https://www.resurrectionfest.es/",
+      "ticketUrl": "https://www.resurrectionfest.es/entradas/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:19.724181+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "roadburn",
+      "name": "Roadburn Festival",
+      "officialUrl": "https://roadburn.com/",
+      "ticketUrl": "https://roadburn.com/tickets/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:21.341801+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "rock-am-ring",
+      "name": "Rock am Ring",
+      "officialUrl": "https://www.rock-am-ring.com/",
+      "ticketUrl": "https://www.rock-am-ring.com/en/tickets",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:16.689920+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "rock-en-seine",
+      "name": "Rock en Seine",
+      "officialUrl": "https://www.rockenseine.com/",
+      "ticketUrl": "https://www.rockenseine.com/boutique-en-ligne/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:17.143643+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "rock-for-people",
+      "name": "Rock for People",
+      "officialUrl": "https://rockforpeople.cz/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:18.314031+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "rock-im-park",
+      "name": "Rock im Park",
+      "officialUrl": "https://www.rock-im-park.com/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:16.690443+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "rock-imperium",
+      "name": "Rock Imperium Festival",
+      "officialUrl": "https://www.rockimperiumfestival.es/",
+      "ticketUrl": "https://www.rockimperiumfestival.es/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:19.436426+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "rock-in-roma",
+      "name": "Rock in Roma",
+      "officialUrl": "https://rockinroma.com/",
+      "ticketUrl": "https://www.ticketone.it/artist/rock-in-roma/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:20.239059+00:00",
+        "httpStatus": null,
+        "error": "TimeoutError"
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "rock-the-lakes",
+      "name": "Rock The Lakes",
+      "officialUrl": "https://www.rockthelakes.ch/",
+      "ticketUrl": "https://www.ticketcorner.ch/fr/event/rock-the-lakes-2027-rock-the-lakes-22018634/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:23.156042+00:00",
+        "httpStatus": null,
+        "error": "TimeoutError"
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "rock-werchter",
+      "name": "Rock Werchter",
+      "officialUrl": "https://www.rockwerchter.be/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:17.923723+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "not_on_sale"
+      ],
+      "test": "tests/ingestion-rock-werchter-markup.test.mjs"
+    },
+    {
+      "slug": "rockharz",
+      "name": "Rockharz Open Air",
+      "officialUrl": "https://www.rockharz-festival.com/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:16.817225+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "sold_out"
+      ],
+      "test": "tests/ingestion-rockharz-markup.test.mjs"
+    },
+    {
+      "slug": "rockstadt",
+      "name": "Rockstadt Extreme Fest",
+      "officialUrl": "https://rockstadtextremefest.ro/",
+      "ticketUrl": "https://bilete.rockstadtextremefest.ro/bilete-rockstadt-fest-2027-129242/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:22.684372+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "roskilde",
+      "name": "Roskilde Festival",
+      "officialUrl": "https://www.roskilde-festival.dk/",
+      "ticketUrl": "https://www.roskilde-festival.dk/billetter",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:22.511947+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "southside",
+      "name": "Southside Festival",
+      "officialUrl": "https://southside.de/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:16.962284+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "summer-breeze",
+      "name": "Summer Breeze Open Air",
+      "officialUrl": "https://www.summer-breeze.de/",
+      "ticketUrl": "https://www.summer-breeze.de/en/tickets/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:16.782896+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "available",
+        "sold_out"
+      ],
+      "test": "tests/ingestion-summer-breeze-feedback.test.mjs"
+    },
+    {
+      "slug": "sweden-rock",
+      "name": "Sweden Rock Festival",
+      "officialUrl": "https://swedenrock.com/",
+      "ticketUrl": "https://swedenrock.com/biljetter",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:21.833913+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "not_on_sale",
+        "available",
+        "sold_out"
+      ],
+      "test": "tests/sweden-rock-parser-repair.test.mjs"
+    },
+    {
+      "slug": "tolminator",
+      "name": "Tolminator",
+      "officialUrl": "https://tolminator.com/en/",
+      "ticketUrl": "https://tolminator.mojekarte.si/en/all.html",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:22.689356+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "tons-of-rock",
+      "name": "Tons of Rock",
+      "officialUrl": "https://www.tonsofrock.no/",
+      "ticketUrl": null,
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:22.094091+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "tuska",
+      "name": "Tuska Festival",
+      "officialUrl": "https://tuska.fi/",
+      "ticketUrl": "https://tuska.fi/liput/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:21.904971+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "available",
+        "sold_out"
+      ],
+      "test": "tests/tuska-lineup.test.mjs"
+    },
+    {
+      "slug": "vainstream",
+      "name": "Vainstream Rockfest",
+      "officialUrl": "https://vainstream.com/",
+      "ticketUrl": "https://www.vainstream-shop.de/2027-tickets/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:23.095816+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
+    },
+    {
+      "slug": "wacken-open-air",
+      "name": "Wacken Open Air",
+      "officialUrl": "https://www.wacken.com/",
+      "ticketUrl": "https://www.wacken.com/de/tickets-shop/ticket-uebersicht-2027/",
+      "sourceObservation": {
+        "at": "2026-11-17T22:46:16.690894+00:00",
+        "httpStatus": 200,
+        "error": null
+      },
+      "coverage": "updated_fixture_verified",
+      "verifiedStates": [
+        "available",
+        "sold_out"
+      ],
+      "test": "tests/ticket-supplements.test.mjs"
+    }
+  ]
+}

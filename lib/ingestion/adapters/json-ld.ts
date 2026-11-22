@@ -76,10 +76,16 @@ function ticketUrl(offers: unknown): string | undefined {
 
 function ticketStatus(offers: unknown): FestivalCandidate["ticketStatus"] {
   const values = Array.isArray(offers) ? offers : [offers];
-  const availability = values.flatMap((offer) => offer && typeof offer === "object" ? [text((offer as JsonLd).availability)?.toLowerCase()] : []).filter(Boolean);
-  if (availability.some((value) => value?.includes("soldout") || value?.includes("outofstock"))) return "unavailable";
-  if (availability.some((value) => value?.includes("limitedavailability") || value?.includes("limited"))) return "low";
-  if (availability.some((value) => value?.includes("instock") || value?.includes("preorder") || value?.includes("presale"))) return "available";
+  const availability = values.map((offer) => {
+    const value = offer && typeof offer === "object" ? text((offer as JsonLd).availability) : undefined;
+    return value?.match(/^(?:https?:\/\/schema\.org\/)?(SoldOut|OutOfStock|LimitedAvailability|InStock|PreOrder|PreSale)$/i)?.[1].toLowerCase();
+  });
+  // A sold-out tier does not mean the whole event is sold out. Positive offers
+  // take precedence; only an explicit complete set of sellouts proves sellout.
+  if (availability.some(value => ["instock", "preorder", "presale"].includes(value ?? ""))) return "available";
+  if (availability.includes("limitedavailability")) return "low";
+  if (availability.length && availability.every(value => value === "soldout")) return "sold_out";
+  if (availability.length && availability.every(value => value === "soldout" || value === "outofstock")) return "unavailable";
   return undefined;
 }
 

@@ -42,7 +42,7 @@ export function extractSummerBreezeCandidate(html: string, source: FestivalSourc
   const sales = headlines.filter(h => /\bswiper-slide__headline\b/i.test(h.markup));
   const soldOut = sales.find(h => /ausverkauft|sold out/i.test(h.title));
   const onSale = sales.find(h => /(?:tage[s]?tickets|day tickets|festivaltickets|festival tickets).*(?:jetzt (?:erhältlich|verfügbar|im (?:vor)?verkauf)|now (?:available|on sale))/i.test(h.title));
-  if (soldOut && !onSale) add("ticketStatus", "unavailable", soldOut.markup);
+  if (soldOut && !onSale) add("ticketStatus", "sold_out", soldOut.markup);
   if (onSale && !soldOut) add("ticketStatus", "available", onSale.markup);
   for (const link of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>[\s\S]*?<\/a>/gi)) {
     try {
