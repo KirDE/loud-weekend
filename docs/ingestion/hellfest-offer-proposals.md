@@ -41,3 +41,43 @@ and public ticket cards only, without contacts/legal/customer/token content.
 
 Local rollback: leave the adapter unregistered or remove these isolated files;
 there is no production data/schema effect.
+
+## Durable pending snapshots (local continuation)
+
+`stageHellfestOffers` re-extracts a supplied official HTTP response (it does not
+accept caller-constructed offers), validates the current canonical Hellfest
+edition/source, and stages both tiers atomically in `TicketOfferProposalSnapshot`.
+An additive migration creates only this review-staging table. It does not backfill
+catalog data, register a collector or approve/publish an observation.
+
+Snapshots bind edition ID/year, source, observed time, parser version and a SHA256
+of the strictly validated structured proposal. The minimized tier excerpts remain
+inside the proposal. HTML is not persisted. Observations older than 24h or more
+than 60s in the future are rejected at ingestion. Edition row locking serializes
+concurrent observations even when no snapshot exists; identical latest replay
+returns the existing ID; conflicting same-time/older updates fail. Newer changes
+append rather than overwrite history.
+
+`readPendingHellfestOffers` validates the latest stored identity/time/value hash
+and schema before returning explicit **pending** data to a reviewer. Corrupt latest
+data is an error, not healthy empty stock or a fallback to an older snapshot.
+This is NOT the canonical public reader. These snapshots are not signed proof of
+the HTTP response and do not replace the later reviewed publication mechanism.
+No production entry point calls either function; no new runtime process or cron.
+
+Synthetic PostgreSQL integration tests run on an isolated local disposable DB:
+staging/readback, null price/unknown fees, idempotency, concurrent replay, immutable
+history, HTTP/URL/edition/schema/time failures, stored proof drift. Rejections leave
+the last valid snapshot intact. Global edition rows, publication counts, source
+health and provider job counts stay unchanged. Run with:
+
+```
+DATABASE_URL=<local-disposable-test-db> node scripts/prepare-test-db.mjs
+DATABASE_URL=<local-disposable-test-db> node --import tsx --test tests/hellfest-offer-proposal-store.e2e.test.ts
+```
+
+Still outstanding: actual bounded collector transport and registration, reviewed
+approval/publication/rejection flow, canonical public tier reader, EN/DE/RU/mobile
+UI/SEO, complete source-to-public DB rollback tests, CI and exact-head Codex review.
+Hellfest remains unfinished. Do not apply the migration to production as part of
+this work.
