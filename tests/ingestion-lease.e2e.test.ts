@@ -213,3 +213,29 @@ test("heartbeat extends a shortened lease during asynchronous work and detects s
     await assert.rejects(heartbeat.stop(), /renewal failed/);
   } finally { try { await heartbeat.stop(); } catch { /* expected after takeover */ } }
 });
+
+test("manual claims target one current-edition source without bypassing failure backoff", async () => {
+  const source = await first.festivalSource.findUniqueOrThrow({ where: { id } });
+  const sourceScope = { ...options(ownerA), manualSource: { editionId: source.editionId!, sourceId: id } };
+  const later = new Date("2027-03-02T00:00:00Z");
+  await first.festivalSource.update({ where: { id }, data: {
+    enabled: true, parserKey: "manual_review", nextRunAt: later,
+    leaseOwner: null, leaseExpiresAt: null, consecutiveFailures: 0,
+  } });
+  assert.deepEqual(await claimDueSources(first, sourceScope), [], "tracking editions cannot be refreshed");
+  await first.festivalEdition.update({ where: { id: source.editionId! }, data: { recordState: "CURRENT" } });
+  try {
+    assert.deepEqual(await claimDueSources(first, { ...sourceScope,
+      manualSource: { ...sourceScope.manualSource, editionId: "other-edition" },
+    }), []);
+    await first.festivalSource.update({ where: { id }, data: { consecutiveFailures: 1 } });
+    assert.deepEqual(await claimDueSources(first, sourceScope), []);
+    await first.festivalSource.update({ where: { id }, data: { consecutiveFailures: 0 } });
+    const [claim] = await claimDueSources(first, sourceScope);
+    assert.equal(claim.id, id);
+    assert.deepEqual(await claimDueSources(second, { ...sourceScope, owner: ownerB }), []);
+    assert.equal(await releaseOwnedSourceLease(first, { ...claim, owner: ownerA }), true);
+  } finally {
+    await first.festivalEdition.update({ where: { id: source.editionId! }, data: { recordState: "TRACKING" } });
+  }
+});

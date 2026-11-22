@@ -1,6 +1,12 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
-type ClaimOptions = { owner: string; now: Date; limit: number; ttlMs: number };
+type ClaimOptions = {
+  owner: string;
+  now: Date;
+  limit: number;
+  ttlMs: number;
+  manualSource?: { editionId: string; sourceId: string };
+};
 type LeaseIdentity = { id: string; owner: string; updatedAt: Date };
 type Completion = { id: string; owner: string; now: Date; updatedAt: Date; outcome: "success" | "fetch_error" | "parser_error" | "pre_attempt_error" | "post_attempt_error" };
 
@@ -24,12 +30,21 @@ export async function markDeprecatedSources(db: PrismaClient, now = new Date()):
 }
 
 /** One atomic PostgreSQL statement: no worker may claim the same source while another holds its row lock. */
-export async function claimDueSources(db: PrismaClient, { owner, now, limit, ttlMs }: ClaimOptions): Promise<Array<{ id: string; updatedAt: Date }>> {
+export async function claimDueSources(db: PrismaClient, { owner, now, limit, ttlMs, manualSource }: ClaimOptions): Promise<Array<{ id: string; updatedAt: Date }>> {
   validateOwner(owner);
   validateNow(now);
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Invalid ingestion batch size");
   if (!Number.isInteger(ttlMs) || ttlMs < 30_000 || ttlMs > 30 * 60_000) throw new Error("Invalid ingestion lease duration");
-  await markDeprecatedSources(db, now);
+  if (!manualSource) await markDeprecatedSources(db, now);
+  const scope = manualSource ? Prisma.sql`
+    AND id = ${manualSource.sourceId} AND "editionId" = ${manualSource.editionId}
+    AND EXISTS (SELECT 1 FROM "FestivalEdition" edition
+      WHERE edition.id = "FestivalSource"."editionId" AND edition."recordState" = 'CURRENT'
+        AND edition.year = "FestivalSource"."editionYear" AND edition."festivalId" = "FestivalSource"."festivalId")
+  ` : Prisma.empty;
+  // An explicit manual refresh can run before a healthy source's cadence, but
+  // it must share the normal lock and never jump a failed source's backoff.
+  const healthyManualSource = manualSource ? Prisma.sql`OR "consecutiveFailures" = 0` : Prisma.empty;
   const expires = new Date(now.getTime() + ttlMs);
   const rows = await db.$queryRaw<Array<{ id: string; updatedAt: Date }>>`
     WITH due AS (
@@ -37,7 +52,8 @@ export async function claimDueSources(db: PrismaClient, { owner, now, limit, ttl
       WHERE enabled = true AND "configurationBackfilledAt" IS NOT NULL
         AND "festivalId" IS NOT NULL AND "editionId" IS NOT NULL
         AND "parserKey" IS NOT NULL AND "cadenceSeconds" > 0
-        AND ("nextRunAt" IS NULL OR "nextRunAt" <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC'))
+        ${scope}
+        AND ("nextRunAt" IS NULL OR "nextRunAt" <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') ${healthyManualSource})
         AND ("leaseExpiresAt" IS NULL OR "leaseExpiresAt" <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC'))
       ORDER BY "nextRunAt" ASC NULLS FIRST, id ASC
       FOR UPDATE SKIP LOCKED LIMIT ${limit}
