@@ -77,7 +77,7 @@ DATABASE_URL=<local-disposable-test-db> node scripts/prepare-test-db.mjs
 DATABASE_URL=<local-disposable-test-db> node --import tsx --test tests/hellfest-offer-proposal-store.e2e.test.ts
 ```
 
-Still outstanding: collector registration, authenticated review API/UI and public
+At this staging checkpoint, outstanding: collector registration, authenticated review API/UI and public
 catalog/UI integration, EN/DE/RU/mobile presentation/SEO, CI and exact-head Codex review.
 The internal collector and explicit review/read service milestones are described below.
 Hellfest remains unfinished. Do not apply the migration to production as part of
@@ -100,7 +100,7 @@ re-extraction/staging. Callers supply only an edition ID, not arbitrary offers,
 source URLs or timestamps. It remains **unregistered and not public**; there is
 no runtime job, source-health refresh or automatic approval/publication. The
 reviewer readback reports the actual stored decision (initially pending). This does
-not replace the required authenticated review API/UI or public catalog integration.
+not replace the required reviewer UI or public catalog integration.
 
 Tests cover strict request/status/identity/MIME/size, malformed/empty/failed
 streams, deadline over stalled headers and stalled bodies, network failures, and
@@ -112,10 +112,9 @@ warnings (not a public inventory write or a readiness/acceptance claim).
 ## Explicit review and approved-only read service (local checkpoint)
 
 `decideHellfestOffers` is an **internal service, not an HTTP endpoint**. It requires
-an actor ID from a future authenticated session boundary; it rechecks the user's
+an actor ID from the authenticated session boundary; it rechecks the user's
 persisted EDITOR/ADMIN role and the same ADMIN_EMAILS allowlist as currentAdmin.
-No request-body actor or arbitrary caller-built offer is acceptable. No route
-or production entry point has been registered yet.
+No request-body actor or arbitrary caller-built offer is acceptable. The HTTP review routes below supply the session actor; no collector job is registered.
 
 A decision binds the exact snapshot ID and expected content hash. Under the same
 edition row lock used for staging, only the latest fresh proposal may receive a
@@ -142,3 +141,32 @@ across pending/rejected changes, tampered snapshot/decision and edition drift,
 and expiry. All tests use the isolated local DB; append-only audit rows and their
 synthetic actors are retained there while fixture editions cascade-clean normally.
 No real user data or production writes are involved.
+
+
+## Authenticated review HTTP boundary (local checkpoint)
+
+- `GET /api/admin/ticket-offers/editions/:id/` requires `currentAdmin`
+  (persisted EDITOR/ADMIN plus ADMIN_EMAILS) and returns the latest validated
+  snapshot with its contentHash and actual review state. Missing is 404;
+  failed proof is 409, never a healthy empty result. Responses are private/no-store.
+- `POST /api/admin/ticket-offers/snapshots/:id/` checks the existing trusted-origin
+  policy and `currentAdmin` before reading the body. Strict JSON accepts only
+  `decision` (approve/reject) and the exact `expectedContentHash`; unknown fields
+  including actorId/offers are rejected. Snapshot ID comes from the path, actor
+  from the session, never the body. The service rechecks persisted authorization.
+- The actual streamed body is capped at 4096 bytes (not Content-Length), with
+  fatal UTF-8 validation and a five-second whole-body deadline. Responses contain
+  only snapshotId/decision or generic errors, not actor IDs or DB diagnostics.
+- Review still emits no global ticketStatus, notification, provider or health
+  mutations. These routes were exercised only in tests; no deployment performed.
+
+Tests execute the real transpiled route handlers with only explicit boundary
+injection. Unit cases cover origin, unauthenticated access, strict schema,
+forged actor, revision binding, body bounds/UTF-8/deadline, minimal response and
+DB-error isolation. The isolated DB test executes actual GET→revision→POST→audit→
+approved-reader, conflict/replay and persisted role-revocation checks; only session
+lookup is stubbed there. No claim of end-to-end cookie login/browser verification.
+
+Still required before #446 is complete: reviewer queue UI, approved-only public
+catalog integration, EN/DE/RU mobile presentation/appropriate SEO, focused PR and
+fresh exact-head CI/Codex review. This local checkpoint is not completed coverage.

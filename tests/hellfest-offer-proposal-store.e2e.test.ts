@@ -198,3 +198,55 @@ test('explicit review: authorization, exact revision, atomic audit, concurrent r
     // The fixture edition cleanup cascades its proposal/decision history only.
   }
 });
+
+test('actual HTTP handlers: session-derived review through durable DB audit and approved readback', async () => {
+  // @ts-expect-error Test-only JavaScript route loader executes transpiled actual handlers.
+  const { loadReviewRoute } = await import('./support/hellfest-review-routes.mjs');
+  const { rejectUntrustedOrigin } = await import('../lib/request-origin.ts');
+  const store = await import('../lib/ingestion/ticket-offer-proposal-store.ts');
+  const oldAllowlist = process.env.ADMIN_EMAILS;
+  const oldApp = process.env.APP_URL;
+  const actor = await db.user.create({ data: { email: `synthetic-http-tier-${randomUUID()}@example.invalid`, role: 'EDITOR' } });
+  const before = await db.festivalEdition.findUnique({ where: { id: editionId } });
+  const row = await stageHellfestOffers(db, { ...input(), observedAt: new Date(Date.now()).toISOString() });
+  try {
+    process.env.ADMIN_EMAILS = actor.email;
+    process.env.APP_URL = 'https://tier.example.invalid';
+    // Only cookie/session lookup is stubbed. Store, origin guard and isolated DB are real.
+    const deps = {
+      '@/lib/admin-access': { currentAdmin: async () => ({ id: actor.id }) },
+      '@/lib/db': { db }, '@/lib/request-origin': { rejectUntrustedOrigin },
+      '@/lib/ingestion/ticket-offer-proposal-store': store,
+    };
+    const { GET } = await loadReviewRoute('editions', deps);
+    const { POST } = await loadReviewRoute('snapshots', deps);
+    const url = 'https://tier.example.invalid/api/admin/ticket-offers';
+    const getContext = { params: Promise.resolve({ id: editionId }) };
+    const postContext = { params: Promise.resolve({ id: row.id }) };
+    const pending = await GET(new Request(url), getContext);
+    assert.equal(pending.status, 200);
+    const revision = await pending.json();
+    assert.equal(revision.contentHash, row.contentHash);
+    const post = (extra = {}) => POST(new Request(url, { method: 'POST', headers: { origin: 'https://tier.example.invalid', 'content-type': 'application/json' }, body: JSON.stringify({ decision: 'approve', expectedContentHash: revision.contentHash, ...extra }) }), postContext);
+    assert.equal((await post({ actorId: 'forged' })).status, 400);
+    assert.equal((await post({ expectedContentHash: '0'.repeat(64) })).status, 409);
+    assert.equal(await db.ticketOfferReviewDecision.count({ where: { snapshotId: row.id } }), 0);
+    const approved = await post();
+    assert.equal(approved.status, 200);
+    assert.deepEqual(await approved.json(), { snapshotId: row.id, decision: 'approve' });
+    assert.equal((await post()).status, 200, 'HTTP replay idempotent');
+    assert.equal((await post({ decision: 'reject' })).status, 409);
+    assert.equal((await store.readApprovedHellfestOffers(db, editionId))!.id, row.id);
+    assert.equal((await (await GET(new Request(url), getContext)).json()).reviewState, 'approved');
+    assert.equal(await db.adminAuditEntry.count({ where: { actorId: actor.id } }), 1);
+    assert.equal((await db.ticketOfferReviewDecision.findUniqueOrThrow({ where: { snapshotId: row.id } })).actorId, actor.id);
+    // Session role revocation is rechecked by persisted authorization at decision time.
+    await db.user.update({ where: { id: actor.id }, data: { role: 'USER' } });
+    assert.equal((await post()).status, 409);
+    assert.equal(await db.adminAuditEntry.count({ where: { actorId: actor.id } }), 1);
+    assert.deepEqual(await db.festivalEdition.findUnique({ where: { id: editionId } }), before);
+  } finally {
+    if (oldAllowlist === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = oldAllowlist;
+    if (oldApp === undefined) delete process.env.APP_URL; else process.env.APP_URL = oldApp;
+  }
+});

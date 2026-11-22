@@ -75,7 +75,7 @@ export async function readPendingHellfestOffers(db: PrismaClient, editionId: str
   if (decision && (decision.contentHash !== row.contentHash || !["approve", "reject"].includes(decision.decision))) {
     throw new Error("Persisted tier decision proof mismatch");
   }
-  return { id: row.id, reviewState: decision ? (decision.decision === "approve" ? "approved" : "rejected") : "pending", proposal };
+  return { id: row.id, contentHash: row.contentHash, reviewState: decision ? (decision.decision === "approve" ? "approved" : "rejected") : "pending", proposal };
 }
 
 function validateSnapshot(row: Awaited<ReturnType<PrismaClient["ticketOfferProposalSnapshot"]["findFirstOrThrow"]>> & {
@@ -90,7 +90,7 @@ function validateSnapshot(row: Awaited<ReturnType<PrismaClient["ticketOfferPropo
   return value;
 }
 
-/** Internal service boundary only. The eventual HTTP caller MUST supply a
+/** Internal service boundary only. The HTTP caller MUST supply a
  * session-derived actorId after origin/auth checks, never a request-body actor.
  * Rechecks persisted role + the existing administrator email allowlist.
  */
