@@ -26,7 +26,7 @@ import { discoverDynamoTickets } from "./adapters/dynamo-tickets.ts";
 import { discoverDynamoBands, isDynamoAnnouncement } from "./adapters/dynamo.ts";
 import {isGraspopSource, discoverGraspopAnnouncements, GRASPOP_HOME, GRASPOP_ROSTER, GRASPOP_DOCUMENTS} from './adapters/graspop.ts';
 
-export type FetchAttempt = { response: Response; attempts: number };
+export type FetchAttempt = { response: Response; attempts: number; verifiedPrimaryUrl?: string };
 export type FetchOptions = {
   fetchImpl?: typeof fetch;
   sleep?: (milliseconds: number) => Promise<void>;
@@ -323,7 +323,9 @@ async function fetchSourceWithoutTicketSupplement(source: FestivalSource, option
       const linkedUrl = discoverMotocultorAnnouncement(await initial.response.text(), source);
       if (!linkedUrl) throw Object.assign(new Error("No current-edition Motocultor announcement found"), { attempts: initial.attempts });
       const linked = await fetchWithRetry(linkedUrl);
-      return { response: linked.response, attempts: initial.attempts + linked.attempts };
+      if (linked.response.ok && linked.response.url && linked.response.url !== linkedUrl)
+        throw Object.assign(new Error("Motocultor announcement changed its discovered official identity"), { attempts: initial.attempts + linked.attempts });
+      return { response: linked.response, attempts: initial.attempts + linked.attempts, verifiedPrimaryUrl: linkedUrl };
     }
   }
 
@@ -532,7 +534,7 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
   if (!primary.response.ok || !ticketUrl) return primary;
   let attempts = primary.attempts;
   try {
-    if (primary.response.url && primary.response.url !== source.url) throw new Error("Official ticket primary source changed identity");
+    if (primary.response.url && primary.response.url !== source.url && primary.response.url !== primary.verifiedPrimaryUrl) throw new Error("Official ticket primary source changed identity");
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
     // source overrides or authorization headers on a public ticket destination.

@@ -669,14 +669,14 @@ test("explicit ticket states survive reviewed publication and canonical public r
   }
 });
 
-for (const slug of ["wacken-open-air", "download"]) {
+for (const slug of ["wacken-open-air", "download", "motocultor"]) {
   test(`${slug}: fetch → producer → durable ticket evidence → canonical readback and replay`, async () => {
     const { fetchSource } = await import("../lib/ingestion/fetch.ts");
     const { TICKET_SUPPLEMENT, ticketSupplementUrl } = await import("../lib/ingestion/ticket-supplements.ts");
-    const source = parserSource(slug, { url: slug === "download" ? "https://downloadfestival.co.uk/" : "https://www.wacken.com/",
+    const source = parserSource(slug, { url: slug === "download" ? "https://downloadfestival.co.uk/" : slug === "motocultor" ? "https://www.motocultor-festival.com/" : "https://www.wacken.com/",
       strategies: ["html_fallback"] });
     const ticketUrl = ticketSupplementUrl(source)!;
-    const fixture = await readFile(new URL(`./fixtures/ticket-status/${slug === "download" ? "download-regular-admission" : "wacken-standard-pass"}.html`, import.meta.url), "utf8");
+    const fixture = await readFile(new URL(`./fixtures/ticket-status/${slug === "download" ? "download-regular-admission" : slug === "motocultor" ? "motocultor-regular-pass" : "wacken-standard-pass"}.html`, import.meta.url), "utf8");
     const festival = await db.festival.upsert({ where: { slug }, create: { slug, name: `Synthetic ${slug}`, country: "Testland", countryCode: "DE", officialUrl: source.url, genres: [] }, update: {} });
     const edition = await db.festivalEdition.upsert({ where: { festivalId_year: { festivalId: festival.id, year: 2027 } },
       create: { festivalId: festival.id, year: 2027, status: "PARTIAL", ticketStatus: "UNKNOWN", recordState: "CURRENT", completeness: "PARTIAL", sourceUpdatedAt: new Date("2026-01-01") },

@@ -9,6 +9,7 @@ import {validateSource} from '../lib/sources/repository.ts';
 import {parserSource} from './support/parser-source.ts';
 const source = parserSource('motocultor', {url:'https://www.motocultor-festival.com/actualites/'});
 const at='2026-10-10T09:41:03.674Z';
+const ticketHome=await readFile(new URL('./fixtures/ticket-status/motocultor-regular-pass.html',import.meta.url),'utf8');
 const html=await readFile(new URL('./fixtures/official-markup/motocultor-announcement.html',import.meta.url),'utf8');
 const news=await readFile(new URL('./fixtures/official-markup/motocultor-news.html',import.meta.url),'utf8');
 const expected=['Helloween','Halestorm','The HU','Wind Rose','Kanonenfieber','Malevolence','Slomosa','Dark Funeral','Equilibrium','John Bush','Make Them Suffer','My Sleeping Karma','Non Est Deus','PeelingFlesh','Prong','Sylosis','Shadow of Intent','The Acacia Strain','The Browning'];
@@ -47,8 +48,8 @@ test('latest same-host news discovery excludes tour, archive and navigation, acc
   assert.equal(discoverMotocultorAnnouncement(card.replace('20 nouveaux groupes','Groupes annulés 2027')+news,source),undefined);
 });
 test('actual discovery fetches official article; 403 stays a source failure',async()=>{
-  const seen=[];const result=await fetchSource(source,{maxAttempts:1,fetchImpl:async url=>{seen.push(url);return new Response(seen.length===1?news:html,{status:200});}});
-  assert.equal(seen.length,2);assert.match(seen[1],/les-premiers-noms-de-ledition-2027/);assert.equal(parse(await result.response.text()).lineup.length,19);
+  const seen=[];const result=await fetchSource(source,{maxAttempts:1,fetchImpl:async url=>{seen.push(url);return new Response(seen.length===1?news:seen.length===2?html:ticketHome,{status:200,headers:{'content-type':'text/html'}});}});
+  assert.equal(seen.length,3);assert.match(seen[1],/les-premiers-noms-de-ledition-2027/);assert.equal(parse(await result.response.text()).lineup.length,19);
   const denied=await fetchSource(source,{maxAttempts:1,fetchImpl:async()=>new Response('blocked',{status:403})});assert.equal(denied.response.status,403);assert.equal(denied.attempts,1);
   await assert.rejects(()=>fetchSource(source,{maxAttempts:1,fetchImpl:async()=>new Response('<h3>No bill</h3>')}),/No current-edition/);
 });
@@ -62,14 +63,16 @@ test('2026-10-27 production failure: Astro cards discover latest nested article 
   const seen=[];
   const home={...source,url:'https://www.motocultor-festival.com/'};
   const r=await fetchSource(home,{maxAttempts:1,fetchImpl:async url=>{
-    seen.push(url);return new Response(seen.length===1?'<h1>Motocultor</h1>':seen.length===2?astroNews:astroNew);
+    seen.push(url);return new Response(seen.length===1?'<h1>Motocultor</h1>':seen.length===2?astroNews:seen.length===3?astroNew:ticketHome,{headers:{'content-type':'text/html'}});
   }});
-  assert.deepEqual(seen,[home.url,source.url,'https://www.motocultor-festival.com/actualites/nouveaux-noms/']);
+  assert.deepEqual(seen,[home.url,source.url,'https://www.motocultor-festival.com/actualites/nouveaux-noms/',home.url]);
   const c=parse(await r.response.text());assert.deepEqual(c.lineup,added);assert.deepEqual(c.warnings,[]);assert.equal(c.lineupScope,'announcement');
-  const result=evaluateCandidate(current,c);
+  const stockCurrent={...current,ticketStatus:'available',ticketsUrl:home.url};
+  const result=evaluateCandidate(stockCurrent,c);
   assert.equal(result.changes.length,17);assert.ok(result.changes.every(x=>x.kind==='artist_added'));assert.deepEqual(result.reviewReasons,[]);
-  for(const field of ['headliners','startDate','endDate','city','ticketsUrl','ticketStatus'])assert.equal(c[field],undefined);
-  const alreadyUpdated={...current,lineup:[...current.lineup,...added]};
+  for(const field of ['headliners','startDate','endDate','city'])assert.equal(c[field],undefined);
+  assert.equal(c.ticketStatus,'available');assert.equal(c.ticketsUrl,home.url);
+  const alreadyUpdated={...stockCurrent,lineup:[...current.lineup,...added]};
   assert.deepEqual(evaluateCandidate(alreadyUpdated,c).changes,[]);
 });
 test('Astro first announcement still yields original 19, excludes contextual Anthrax and sibling new names',()=>{
