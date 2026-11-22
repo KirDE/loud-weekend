@@ -1,4 +1,5 @@
 import { createPrismaClient } from '../lib/prisma-client.mjs';
+import { TOLMINATOR_PRODUCT } from "../lib/ingestion/adapters/tolminator-stock.ts";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { createIngestionRun, finishIngestionRun, ingestionQueries, persistAttempt } from "../lib/ingestion/repository.ts";
@@ -71,4 +72,59 @@ test("persists partial failure, retry lineage and immutable candidate history", 
   assert.ok(runs.some(({ id }) => id === runId));
   assert.equal(states.find((state) => state.festivalSlug === slug).lastSuccessfulCheck.toISOString(), new Date(now.getTime() + 2_000).toISOString());
 
+});
+
+
+test("independent stock success/failure cannot reset primary health, extraction or lineage", async () => {
+  const run = await createIngestionRun(db, { trigger: "TEST", sourceCommit: "health-isolation", totalSources: 2 });
+  createdRunIds.push(run.id);
+  const primaryUrl = "https://example.test/festival";
+  let tick = 10;
+  const save = (url, value, festivalSlug = slug) => persistAttempt(db, { runId: run.id, festivalSlug, requestedUrl: url,
+    finalUrl: url, httpStatus: value ? 200 : 403, durationMs: 1,
+    startedAt: now, endedAt: new Date(now.getTime() + tick++ * 1000),
+    ...(value ? { result: value } : { error: "HTTP 403" }) });
+  const primary = await ingestionQueries.latestResult(db, slug);
+  const health = (await ingestionQueries.sourceStates(db)).find(s => s.festivalSlug === slug);
+  const extraction = await ingestionQueries.lastSuccessfulExtraction(db, slug);
+  const failure = await save(primaryUrl);
+  assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 1);
+  const value = result("2027-06-04", true);
+  value.sourceUrl = value.candidate.sourceUrl = TOLMINATOR_PRODUCT;
+  value.candidate.evidence = [{ field: "ticketStatus", sourceUrl: TOLMINATOR_PRODUCT,
+    observedAt: new Date(now.getTime() + 9000).toISOString(), excerpt: "Synthetic current ordinary stock" }];
+  value.candidate.ticketStatus = "available";
+  const stock = await save(TOLMINATOR_PRODUCT, value);
+  assert.equal(stock.priorAttemptId, null, "primary attempt is not a stock predecessor");
+  const stockCandidate = await db.ingestionCandidate.findUnique({ where: { attemptId: stock.id } });
+  assert.equal(stockCandidate.supersedesId, null, "stock does not supersede roster candidate");
+  assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 1);
+  assert.equal((await ingestionQueries.latestResult(db, slug)).id, failure.id);
+  assert.deepEqual((await ingestionQueries.sourceStates(db)).find(s => s.festivalSlug === slug), health);
+  assert.deepEqual(await ingestionQueries.lastSuccessfulExtraction(db, slug), extraction);
+  assert.equal((await ingestionQueries.latestResult(db, slug, TOLMINATOR_PRODUCT)).id, stock.id);
+  assert.equal(await ingestionQueries.consecutiveFailures(db, slug, TOLMINATOR_PRODUCT), 0);
+  assert.equal((await ingestionQueries.lastSuccessfulExtraction(db, slug, TOLMINATOR_PRODUCT)).observedAt.toISOString(), value.candidate.evidence[0].observedAt);
+  const stockFailure = await save(TOLMINATOR_PRODUCT);
+  assert.equal(stockFailure.priorAttemptId, stock.id);
+  assert.equal(await ingestionQueries.consecutiveFailures(db, slug, TOLMINATOR_PRODUCT), 1);
+  assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 1);
+  const failure2 = await save(primaryUrl);
+  assert.equal(failure2.priorAttemptId, failure.id);
+  assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 2);
+  const recovery = await save(primaryUrl, result("2027-06-05", true));
+  assert.equal(recovery.priorAttemptId, failure2.id);
+  const recoveredCandidate = await db.ingestionCandidate.findUnique({ where: { attemptId: recovery.id } });
+  assert.equal(recoveredCandidate.supersedesId, primary.candidate.id);
+  assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 0);
+  assert.equal(await ingestionQueries.consecutiveFailures(db, slug, TOLMINATOR_PRODUCT), 1, "primary recovery does not heal failed stock");
+  const isolatedSlug = `${slug}-stock-only`;
+  const isolated = structuredClone(value);
+  isolated.festivalSlug = isolated.candidate.festivalSlug = isolatedSlug;
+  await save(TOLMINATOR_PRODUCT, isolated, isolatedSlug);
+  assert.equal(await db.ingestionSourceState.findUnique({ where: { festivalSlug: isolatedSlug } }), null, "stock cannot create primary health");
+  assert.equal(await ingestionQueries.latestResult(db, isolatedSlug), null);
+  assert.equal(await ingestionQueries.lastSuccessfulExtraction(db, isolatedSlug), null);
+  assert.equal(await ingestionQueries.consecutiveFailures(db, isolatedSlug), 0);
+  assert.ok(await ingestionQueries.latestResult(db, isolatedSlug, TOLMINATOR_PRODUCT));
 });

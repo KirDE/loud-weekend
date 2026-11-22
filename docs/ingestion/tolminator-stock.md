@@ -75,13 +75,19 @@ synthetic observations, NOT a new live success; the last real HTTP 403 is unreso
 
 ## Remaining before source completion
 
-Neither producer is registered or invoked in production. The existing generic
-`persistAttempt` updates slug-wide `IngestionSourceState` even for independent
-stock-only attempts. A live supplementary route must first isolate that health
-write from primary roster health (and its consumer views), using existing source
-identity mechanisms; do NOT simply call this persistence path from a live stock
-collector. Synthetic DB tests do not authorize a production call.
+Neither producer is registered or invoked in production. Repository health is now
+isolated by the exact reviewed requested URL (also on failed attempts with no
+candidate). Stock attempts neither create nor update slug-wide primary health.
+The default latest-result, extraction-time and consecutive-failure queries exclude
+this independent route; an explicit requested URL reads its own success/failure
+history. Attempt predecessors and candidate supersession cannot cross these scopes.
+Full run/candidate/diff audit history still includes both. Existing per-source import
+events, admin queue and lease views already match exact source URLs and stay unchanged.
+No schema, migration or new state table is needed. Synthetic DB regressions cover
+interleaved stock/roster success, failure and recovery in both directions, plus a
+stock-only festival without primary health. This does not register a live producer.
 
-Then wire the reviewed source route, verify live access without bypass or blind
+Still wire an explicit reviewed invocation, with source-specific queries (not the
+legacy file-state runner's slug-only health/output keys), verify live access without bypass or blind
 retries, and obtain focused PR/exact-head full CI/Codex gates. No source completion,
 healthy primary roster, fresh availability or deployed coverage is claimed.

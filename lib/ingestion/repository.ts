@@ -1,3 +1,4 @@
+import { TOLMINATOR_PRODUCT } from "./adapters/tolminator-stock.ts";
 import { queueImportEvent } from "./import-event-queue.ts";
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -17,11 +18,19 @@ export async function createIngestionRun(db: Client, input: { trigger: "SCHEDULE
   return db.ingestionRun.create({ data: { schemaVersion: INGESTION_SCHEMA_VERSION, ...input } });
 }
 
+// Only reviewed independent endpoints are excluded. Do not infer scope from
+// caller-supplied candidate fields (a failed request has no candidate at all).
+const independentTicketUrls = [TOLMINATOR_PRODUCT];
+const attemptScope = (requestedUrl?: string): Prisma.IngestionAttemptWhereInput =>
+  requestedUrl ? { requestedUrl } : { requestedUrl: { notIn: independentTicketUrls } };
+
 export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
   return db.$transaction(async (tx) => {
     const result = input.result;
+    const independent = independentTicketUrls.includes(input.requestedUrl);
+    const scope = attemptScope(independent ? input.requestedUrl : undefined);
     const status = !result ? "FAILED" : result.reviewReasons.length ? "REVIEW" : result.publishable ? "PUBLISHABLE" : "UNCHANGED";
-    const previous = await tx.ingestionAttempt.findFirst({ where: { festivalSlug: input.festivalSlug }, orderBy: { endedAt: "desc" }, select: { id: true } });
+    const previous = await tx.ingestionAttempt.findFirst({ where: { festivalSlug: input.festivalSlug, ...scope }, orderBy: { endedAt: "desc" }, select: { id: true } });
     const attempt = await tx.ingestionAttempt.create({ data: {
       runId: input.runId, festivalSlug: input.festivalSlug, requestedUrl: input.requestedUrl,
       finalUrl: input.finalUrl, httpStatus: input.httpStatus, durationMs: input.durationMs,
@@ -29,7 +38,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
       status, startedAt: input.startedAt, endedAt: input.endedAt, priorAttemptId: previous?.id,
     } });
     if (result) {
-      const prior = await tx.ingestionCandidate.findFirst({ where: { festivalSlug: input.festivalSlug }, orderBy: { createdAt: "desc" }, select: { id: true } });
+      const prior = await tx.ingestionCandidate.findFirst({ where: { festivalSlug: input.festivalSlug, attempt: scope }, orderBy: { createdAt: "desc" }, select: { id: true } });
       const candidate = await tx.ingestionCandidate.create({ data: {
         runId: input.runId, attemptId: attempt.id, festivalSlug: input.festivalSlug,
         schemaVersion: result.schemaVersion, sourceEdition: result.candidate.startDate,
@@ -49,7 +58,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
         afterValue: (d.after ?? null) as Prisma.InputJsonValue, reviewRequired: d.reviewRequired, policyVersion: INGESTION_POLICY_VERSION,
       })) });
     }
-    if (result) await tx.ingestionSourceState.upsert({ where: { festivalSlug: input.festivalSlug }, create: { festivalSlug: input.festivalSlug, lastSuccessfulCheck: input.endedAt, lastAttemptId: attempt.id }, update: { lastSuccessfulCheck: input.endedAt, lastAttemptId: attempt.id } });
+    if (result && !independent) await tx.ingestionSourceState.upsert({ where: { festivalSlug: input.festivalSlug }, create: { festivalSlug: input.festivalSlug, lastSuccessfulCheck: input.endedAt, lastAttemptId: attempt.id }, update: { lastSuccessfulCheck: input.endedAt, lastAttemptId: attempt.id } });
     const sources = await tx.festivalSource.findMany({ where: { enabled: true, festivalSlug: input.festivalSlug, url: input.requestedUrl }, select: { id: true } });
     for (const source of sources) await queueImportEvent(tx, attempt.id + '-' + source.id, { kind: 'source', sourceId: source.id, attemptId: attempt.id });
     return attempt;
@@ -65,17 +74,17 @@ export async function finishIngestionRun(db: Client, runId: string) {
 
 export const ingestionQueries = {
   runHistory: (db: Client, take = 50) => db.ingestionRun.findMany({ orderBy: { startedAt: "desc" }, take, include: { attempts: true } }),
-  latestResult: (db: Client, festivalSlug: string) => db.ingestionAttempt.findFirst({ where: { festivalSlug }, orderBy: { endedAt: "desc" }, include: { candidate: { include: { evidence: true, diffs: true } } } }),
+  latestResult: (db: Client, festivalSlug: string, requestedUrl?: string) => db.ingestionAttempt.findFirst({ where: { festivalSlug, ...attemptScope(requestedUrl) }, orderBy: { endedAt: "desc" }, include: { candidate: { include: { evidence: true, diffs: true } } } }),
   candidateHistory: (db: Client, festivalSlug: string) => db.ingestionCandidate.findMany({ where: { festivalSlug }, orderBy: { createdAt: "desc" }, include: { evidence: true } }),
   diffHistory: (db: Client, festivalSlug: string) => db.ingestionDiff.findMany({ where: { candidate: { festivalSlug } }, orderBy: { createdAt: "desc" } }),
   sourceStates: (db: Client) => db.ingestionSourceState.findMany({ select: { festivalSlug: true, lastSuccessfulCheck: true } }),
-  lastSuccessfulExtraction: (db: Client, festivalSlug: string) => db.ingestionEvidence.findFirst({
-    where: { candidate: { festivalSlug } },
+  lastSuccessfulExtraction: (db: Client, festivalSlug: string, requestedUrl?: string) => db.ingestionEvidence.findFirst({
+    where: { candidate: { festivalSlug, attempt: attemptScope(requestedUrl) } },
     orderBy: { observedAt: "desc" },
     select: { observedAt: true },
   }),
-  consecutiveFailures: async (db: Client, festivalSlug: string) => {
-    const attempts = await db.ingestionAttempt.findMany({ where: { festivalSlug }, orderBy: { endedAt: "desc" }, take: 100, select: { status: true } });
+  consecutiveFailures: async (db: Client, festivalSlug: string, requestedUrl?: string) => {
+    const attempts = await db.ingestionAttempt.findMany({ where: { festivalSlug, ...attemptScope(requestedUrl) }, orderBy: { endedAt: "desc" }, take: 100, select: { status: true } });
     return attempts.findIndex(({ status }) => status !== "FAILED") === -1 ? attempts.length : attempts.findIndex(({ status }) => status !== "FAILED");
   },
 };
