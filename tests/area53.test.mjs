@@ -32,3 +32,12 @@ test('fetch rejects redirects and overrides but preserves actual HTTP failures',
  assert.equal((await fetchSource(source,{fetchImpl:async()=>reply(source.url),maxAttempts:1})).response.status,200);
  assert.equal((await fetchSource(source,{fetchImpl:async()=>reply(source.url,503),maxAttempts:1})).response.status,503);
 });
+
+test('ticket facts require consistent visible official purchase links',()=>{
+ assert.equal(c.ticketsUrl,'https://area53festival.at/de/tickets');
+ for(const route of ['/de/old-tickets','https://foreign.test/tickets','javascript:void(0)']) {
+   assert.equal(parse(html.replaceAll('/de/tickets',route)).lineup,undefined);
+ }
+ assert.equal(parse(html.replace('href="/de/tickets"','href="/de/new-tickets"')).lineup,undefined);
+ assert.equal(parse(html.replaceAll(/<a\b[^>]*href="(?:https:\/\/area53festival\.at)?\/de\/tickets"[^>]*>[\s\S]*?<\/a>/g,'')).lineup,undefined);
+});
