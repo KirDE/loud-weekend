@@ -49,7 +49,8 @@ export function AdminConsole({ festivals, initialChanges, parserRuns, auditEntri
     setRefreshing(true);
     setNotice("");
     try {
-      const response = await fetch(`/api/admin/refresh/${selected.slug}`, { method: "POST" });
+      const year = selected.editionYear ? `?year=${selected.editionYear}` : "";
+      const response = await fetch(`/api/admin/refresh/${selected.slug}/${year}`, { method: "POST" });
       const body = await response.json();
       setNotice(response.ok ? `${selected.name}: ${ta("refreshFinished")} ${body.message}` : body.error ?? "Refresh failed");
     } finally { setRefreshing(false); }

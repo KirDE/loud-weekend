@@ -127,7 +127,7 @@ export function startSourceLeaseRenewal(
 }
 
 /** Fenced acknowledgement; expired/reclaimed work may not advance the schedule or clear a new lease. */
-export async function completeSourceLease(db: PrismaClient, { id, owner, now, updatedAt, outcome }: Completion): Promise<boolean> {
+export async function completeSourceLease(db: Pick<PrismaClient, "$queryRaw">, { id, owner, now, updatedAt, outcome }: Completion): Promise<boolean> {
   validateOwner(owner);
   validateNow(now);
   validateNow(updatedAt);

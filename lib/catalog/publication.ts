@@ -108,6 +108,7 @@ async function addLineupArtist(db: Database, editionId: string, billing: LineupB
 async function applyFestivalChanges(db: Database, input: {
   festivalSlug: string;
   expectedYear?: number;
+  expectedEditionId?: string;
   changes: CatalogChange[];
   strictBefore: boolean;
   observedAt: Date;
@@ -116,6 +117,8 @@ async function applyFestivalChanges(db: Database, input: {
   if (!festival) throw new Error(`Unknown catalogue festival: ${input.festivalSlug}`);
   if (festival.editions.length !== 1) throw new Error(`Ambiguous current edition for ${input.festivalSlug}`);
   const edition = festival.editions[0];
+  if (input.expectedEditionId !== undefined && edition.id !== input.expectedEditionId)
+    throw new Error("Reviewed edition is no longer current");
   if (input.expectedYear !== undefined && edition.year !== input.expectedYear) throw new Error(`Candidate edition ${input.expectedYear} does not match catalogue edition ${edition.year}`);
 
   const ensureArtist = artistResolver(db, input.observedAt);
@@ -422,8 +425,12 @@ export async function publishAdminFestivalChange(db: Prisma.TransactionClient, i
   const afterValue = input.change.field === "lineup" || input.change.field === "headliners"
     ? stringList(input.change.afterValue, input.change.field)
     : input.change.afterValue;
+  const evidence = input.change.sourceEvidence as { kind?: string; editionYear?: number; editionId?: string } | null;
+  const scoped = input.change.parserRunId && evidence?.kind === "scoped-refresh" ? evidence : null;
+  if (scoped && (!scoped.editionId || !Number.isInteger(scoped.editionYear)))
+    throw new Error("Reviewed edition binding is incomplete");
   const applied = await applyFestivalChanges(db, {
-    festivalSlug: input.change.resourceKey,
+    festivalSlug: input.change.resourceKey, expectedYear: scoped?.editionYear, expectedEditionId: scoped?.editionId,
     changes: [{ field: input.change.field, before: input.change.beforeValue, after: afterValue }],
     strictBefore: Boolean(input.change.parserRunId), observedAt: new Date(),
   });

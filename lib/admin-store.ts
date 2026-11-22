@@ -1,6 +1,10 @@
 import { assertAdminArtistReviewAllowed } from "@/lib/catalog/admin-artist-review";
 import { AdminChangeStatus, AdminDraftStatus, AdminResourceKind, AdminRunStatus, Prisma } from "@prisma/client";
-import { listConfiguredSources } from "@/lib/sources/repository";
+import { randomUUID } from "node:crypto";
+import { mapSource, type ConfiguredSource } from "@/lib/sources/repository";
+import { claimDueSources, completeSourceLease, releaseOwnedSourceLease } from "@/lib/ingestion/lease";
+import { evaluateCandidate } from "@/lib/ingestion/policy";
+import type { Festival } from "@/lib/domain/festival";
 import { fetchSource } from "@/lib/ingestion/fetch";
 import { db } from "@/lib/db";
 import { publishAdminFestivalChange } from "@/lib/catalog/publication";
@@ -128,29 +132,145 @@ export async function decideChange(id: string, decision: "approve" | "reject", a
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-export async function refreshFestival(slug: string, actor: { id: string; email: string }) {
-  const sources = await listConfiguredSources(db, slug);
-  const festival = (await readCatalog()).festivals.find((item) => item.slug === slug);
-  if (sources.length !== 1 || !festival || !sources[0].enabled) throw new Error("Festival source is not configured");
-  const [source] = sources;
-  const sourceUrl = process.env.NODE_ENV !== "production" && process.env.ADMIN_TEST_SOURCE_URL ? process.env.ADMIN_TEST_SOURCE_URL : source.url;
-  const run = await db.adminParserRun.create({ data: { festivalSlug: slug, sourceId: sourceUrl, adapter: source.strategies.join(","), requestedById: actor.id, log: json([{ at: new Date().toISOString(), message: "Fetch started" }]) } });
-  const started = Date.now();
+export class FestivalRefreshError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
+type RefreshActor = { id: string; email: string };
+
+async function refreshSource(source: ConfiguredSource, editionId: string, festival: Festival, actor: RefreshActor,
+    aliases: Awaited<ReturnType<typeof readAliases>>) {
+  const owner = randomUUID();
+  const [claim] = await claimDueSources(db, {
+    owner, now: new Date(), limit: 1, ttlMs: 30 * 60_000,
+    manualSource: { sourceId: source.id, editionId },
+  });
+  if (!claim) return { status: "skipped" as const };
+
+  const lease = { ...claim, owner };
+  let runId: string | undefined;
+  let stage: "pre_attempt_error" | "fetch_error" | "parser_error" | "post_attempt_error" = "pre_attempt_error";
   try {
-    const { response } = await fetchSource(sourceUrl === source.url ? source : { ...source, url: sourceUrl, fetchUrl: sourceUrl, followLinkPattern: undefined });
+    // The selected configuration may have changed between the query and claim.
+    const row = await db.festivalSource.findUniqueOrThrow({
+      where: { id: source.id }, include: { edition: { select: { festivalId: true, year: true } } },
+    });
+    if (row.updatedAt.getTime() !== claim.updatedAt.getTime() || row.editionId !== editionId)
+      throw new Error("Source changed during refresh");
+    const active = mapSource(row);
+    const sourceUrl = process.env.NODE_ENV !== "production" && process.env.ADMIN_TEST_SOURCE_URL
+      ? process.env.ADMIN_TEST_SOURCE_URL : active.url;
+    const run = await db.adminParserRun.create({ data: {
+      festivalSlug: festival.slug, sourceId: active.id, adapter: active.strategies.join(","),
+      requestedById: actor.id, log: json([{ at: new Date().toISOString(), message: "Fetch started" }]),
+    } });
+    runId = run.id;
+    stage = "fetch_error";
+    const { response } = await fetchSource(sourceUrl === active.url ? active :
+      { ...active, url: sourceUrl, fetchUrl: sourceUrl, followLinkPattern: undefined });
     if (!response.ok) throw new Error(`Source returned HTTP ${response.status}`);
-    const candidate = extractFestivalCandidate(await response.text(), source, new Date().toISOString());
-    const fields = ["startDate", "endDate", "city", "headliners", "lineup", "ticketsUrl", "status"] as const;
-    const changes = fields.filter((field) => candidate[field] !== undefined && JSON.stringify(candidate[field]) !== JSON.stringify(festival[field])).map((field) => ({ resourceKind: AdminResourceKind.FESTIVAL, resourceKey: slug, field, baseRevision: 0, beforeValue: json(festival[field] ?? null), afterValue: json(candidate[field] ?? null), sourceEvidence: json(candidate.evidence.filter((item) => item.field === field)), confidence: candidate.evidence.some((item) => item.field === field) ? 90 : 60, parserRunId: run.id }));
-    assertAdminArtistReviewAllowed(slug, changes.map(change => change.field));
-    if (changes.length) await db.adminChange.createMany({ data: changes });
-    const finishedAt = new Date();
-    const updated = await db.adminParserRun.update({ where: { id: run.id }, data: { status: candidate.warnings.length ? AdminRunStatus.PARTIAL : AdminRunStatus.SUCCEEDED, finishedAt, durationMs: Date.now() - started, extracted: candidate.evidence.length, message: `${changes.length} change(s) queued`, log: json([{ at: run.startedAt.toISOString(), message: "Fetch started" }, { at: finishedAt.toISOString(), message: "Parse completed", warnings: candidate.warnings, queued: changes.length }]) } });
-    await db.adminAuditEntry.create({ data: { actorId: actor.id, actorLabel: actor.email, action: "FESTIVAL_REFRESHED", resourceKind: AdminResourceKind.FESTIVAL, resourceKey: slug, evidence: json({ source: sourceUrl }), metadata: json({ runId: run.id, queued: changes.length }) } });
-    return updated;
-  } catch (cause) {
-    const message = cause instanceof Error ? cause.message : "Refresh failed";
-    await db.adminParserRun.update({ where: { id: run.id }, data: { status: AdminRunStatus.FAILED, finishedAt: new Date(), durationMs: Date.now() - started, message, log: json([{ at: new Date().toISOString(), message }]) } });
-    throw new Error(message);
+    const html = await response.text();
+    stage = "parser_error";
+    const candidate = extractFestivalCandidate(html, active, new Date().toISOString());
+    const result = evaluateCandidate(festival, candidate, aliases);
+    if (!candidate.evidence.length) throw new Error("Official source provided no supported evidence");
+    if (candidate.observedEditionYears.some((year) => year !== active.editionYear))
+      throw new Error("Official source returned another edition");
+    const fields = ["startDate", "endDate", "city", "headliners", "lineup", "ticketsUrl", "ticketStatus", "status"] as const;
+    const proposals = fields.flatMap((field) => {
+      const differences = result.changes.filter((item) => item.field === field);
+      const evidence = candidate.evidence.filter((item) => item.field === field);
+      if (!differences.length || !evidence.length) return [];
+      if ((field === "lineup" || field === "headliners") && !candidate.observedEditionYears.includes(active.editionYear)) return [];
+      const afterValue = field === "lineup" || field === "headliners"
+        ? [...festival[field].filter((name) => !differences.some((diff) => diff.before === name)),
+            ...differences.flatMap((diff) => diff.after === undefined ? [] : [diff.after])]
+        : differences[0].after;
+      if (afterValue === undefined) return [];
+      return [{
+        field, beforeValue: json(festival[field] ?? null), afterValue: json(afterValue), confidence: 90,
+        sourceEvidence: json({ kind: "scoped-refresh", editionId, editionYear: active.editionYear, evidence }),
+      }];
+    });
+    assertAdminArtistReviewAllowed(festival.slug, proposals.map(({ field }) => field));
+    stage = "post_attempt_error";
+    const saved = await db.$transaction(async (tx) => {
+      const finishedAt = new Date();
+      const bound = await tx.festivalEdition.findFirst({
+        where: { id: editionId, year: active.editionYear, recordState: "CURRENT" }, select: { id: true },
+      });
+      if (!bound || !await completeSourceLease(tx, { ...lease, now: finishedAt, outcome: "success" }))
+        throw new Error("Source or edition changed before recording the refresh");
+      const resourceKind = AdminResourceKind.FESTIVAL;
+      const resourceKey = festival.slug;
+      const resource = await tx.adminResourceState.findUnique({ where: { resourceKind_resourceKey: { resourceKind, resourceKey } } });
+      const baseRevision = resource?.revision ?? 0;
+      let queued = 0;
+      for (const proposal of proposals) {
+        const duplicate = await tx.adminChange.findFirst({ where: {
+          resourceKind, resourceKey, field: proposal.field, baseRevision, status: "PENDING",
+          beforeValue: { equals: proposal.beforeValue }, afterValue: { equals: proposal.afterValue },
+          sourceEvidence: { path: ["editionId"], equals: editionId },
+        } });
+        if (duplicate) continue;
+        await tx.adminChange.create({ data: { ...proposal, resourceKind, resourceKey, baseRevision, parserRunId: run.id } });
+        queued++;
+      }
+      const updated = await tx.adminParserRun.update({ where: { id: run.id }, data: {
+        status: result.reviewReasons.length ? AdminRunStatus.PARTIAL : AdminRunStatus.SUCCEEDED,
+        finishedAt, durationMs: finishedAt.getTime() - run.startedAt.getTime(), extracted: candidate.evidence.length,
+        message: `${queued} change(s) queued`, log: json([
+          { at: run.startedAt.toISOString(), message: "Fetch started" },
+          { at: finishedAt.toISOString(), message: "Parse completed", reviewReasons: result.reviewReasons, queued },
+        ]),
+      } });
+      await tx.adminAuditEntry.create({ data: {
+        actorId: actor.id, actorLabel: actor.email, action: "FESTIVAL_REFRESHED", resourceKind, resourceKey,
+        metadata: json({ runId: run.id, sourceId: active.id, editionYear: active.editionYear, queued }),
+      } });
+      return { id: updated.id, queued, result: updated.status };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return { status: "checked" as const, ...saved };
+  } catch {
+    if (runId) await db.adminParserRun.update({ where: { id: runId }, data: {
+      status: AdminRunStatus.FAILED, finishedAt: new Date(), message: stage,
+      log: json([{ at: new Date().toISOString(), message: stage }]),
+    } });
+    await completeSourceLease(db, { ...lease, now: new Date(), outcome: stage });
+    return { status: "failed" as const, id: runId };
+  } finally {
+    await releaseOwnedSourceLease(db, lease);
   }
+}
+
+function readAliases() {
+  return db.artist.findMany({ select: { id: true, slug: true, name: true, aliases: true } });
+}
+
+export async function refreshFestival(slug: string, actor: RefreshActor, editionYear?: number) {
+  const editions = await db.festivalEdition.findMany({
+    where: { festival: { slug }, year: editionYear, recordState: "CURRENT" },
+    select: { id: true, year: true },
+  });
+  if (editions.length !== 1) throw new FestivalRefreshError("Select one current festival edition.", 404);
+  const [edition] = editions;
+  const rows = await db.festivalSource.findMany({
+    where: { festivalSlug: slug, enabled: true, editionId: edition.id, editionYear: edition.year, configurationBackfilledAt: { not: null } },
+    include: { edition: { select: { festivalId: true, year: true } } }, orderBy: { id: "asc" },
+  });
+  if (!rows.length) throw new FestivalRefreshError("No enabled sources are configured for this edition.", 409);
+  const [catalog, aliases] = await Promise.all([readCatalog(), readAliases()]);
+  const festival = catalog.festivals.find((item) => item.slug === slug && item.editionYear === edition.year);
+  if (!festival) throw new FestivalRefreshError("The festival edition changed during refresh.", 409);
+  const results = [];
+  for (const row of rows) results.push(await refreshSource(mapSource(row), edition.id, festival, actor, aliases));
+  const checked = results.filter((result) => result.status === "checked");
+  const failed = results.filter((result) => result.status === "failed");
+  const skipped = results.length - checked.length - failed.length;
+  if (!checked.length && !failed.length) throw new FestivalRefreshError("All sources are busy or waiting for their next retry.", 409);
+  if (!checked.length) throw new FestivalRefreshError("All attempted sources failed. See parser runs for details.", 502);
+  const queued = checked.reduce((total, result) => total + result.queued, 0);
+  const status = failed.length || skipped || checked.some((result) => result.result === "PARTIAL") ? "PARTIAL" : "SUCCEEDED";
+  return { id: checked[0].id, status, editionYear: edition.year, checked: checked.length, failed: failed.length, skipped, queued,
+    message: `${queued} change(s) queued · ${checked.length} checked · ${failed.length} failed · ${skipped} skipped` };
 }

@@ -51,7 +51,7 @@ test.before(async () => {
   const source = await db.festivalSource.findFirst({ where: { festivalSlug: "wacken-open-air" } });
   const configured = { festivalId: festival.id, editionId: edition.id, editionYear: 2027,
     strategies: ["json_ld_event", "html_fallback"], refreshPolicy: "daily", enabled: true,
-    parserKey: "json_ld_event+html_fallback", cadenceSeconds: 86400 };
+    parserKey: "json_ld_event+html_fallback", cadenceSeconds: 86400, configurationBackfilledAt: new Date() };
   if (source) await db.festivalSource.update({ where: { id: source.id }, data: configured });
   else await db.festivalSource.create({ data: { festivalSlug: "wacken-open-air", url: festival.officialUrl, ...configured } });
   sourceServer.listen(3250, "127.0.0.1"); await once(sourceServer, "listening");
@@ -156,7 +156,7 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   const configuredSource = await db.festivalSource.findFirstOrThrow({ where: { festivalSlug: "wacken-open-air" } });
   await db.festivalSource.update({ where: { id: configuredSource.id }, data: { enabled: false } });
   const beforeDisabledRuns = await db.adminParserRun.count();
-  assert.equal((await admin.json("/api/admin/refresh/wacken-open-air", "POST")).status, 502);
+  assert.equal((await admin.json("/api/admin/refresh/wacken-open-air", "POST")).status, 409);
   assert.equal(await db.adminParserRun.count(), beforeDisabledRuns);
   await db.festivalSource.update({ where: { id: configuredSource.id }, data: { enabled: true } });
   sourceMode = "failure";
