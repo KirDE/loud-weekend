@@ -233,3 +233,19 @@ missing/malformed/foreign notice behavior and immutable raw facts. Catalogue
 attachment is still deliberately absent: homepage/artist/discovery summaries and
 remaining public metadata consumers need a full audit before exposing notices.
 Collector/CLI/browser and focused PR exact-head gates remain unfinished.
+
+### Summary and artist-discovery consumers
+
+Approved hiatus notices also suppress advertised artists in the shared
+`announcedArtists`/`hasAnnouncedLineup`/`lineupPreviewArtists` projection. This
+keeps the homepage announced count, both artist-page routes and shared-act
+recommendations from advertising the preserved historical roster. ArtistDetail
+also filters paused appearances defensively. Raw lineup arrays are unchanged;
+absence of a notice retains existing behavior, while transferred/malformed
+notices fail closed.
+
+Both festival metadata routes use the lifecycle-aware description (localized
+for EN/DE/RU on locale routes), rather than promoting dates, tickets and lineup
+for a paused edition. This does not publish the lifecycle notice: canonical
+catalogue attachment, remaining aggregate consumers and end-to-end browser
+checks still require their separate gates.

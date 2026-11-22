@@ -112,3 +112,59 @@ for(const locale of ['en','de','ru']) {
     assert.doesNotMatch(august,/Rock en Seine|Active Festival/);
   });
 }
+
+// Remaining summary/discovery surfaces must not revive the preserved raw roster.
+const {HomeContent}=await import('../components/HomeContent.tsx');
+const {ArtistDetail}=await import('../components/ArtistDetail.tsx');
+const {artist}=await import('./support/catalog.ts');
+const {announcedArtists,hasAnnouncedLineup,lineupPreviewArtists}=await import('../lib/festival-lineup.ts');
+const {festivalArtists,similarFestivals,lineupOverlap}=await import('../lib/planning.ts');
+const {festivalDescription}=await import('../lib/seo.ts');
+
+test('hiatus has no advertised roster or shared-act recommendation; stored facts remain intact',()=>{
+  const before=structuredClone(paused);
+  assert.deepEqual(announcedArtists(paused),[]);
+  assert.equal(hasAnnouncedLineup(paused),false);
+  assert.deepEqual(lineupPreviewArtists(paused),[]);
+  assert.equal(festivalArtists(paused).size,0);
+  assert.deepEqual(similarFestivals(paused,[paused,active]),[]);
+  assert.deepEqual(similarFestivals(active,[paused,active]),[]);
+  assert.deepEqual(lineupOverlap([paused,active]),[]);
+  const unknown={...paused,editionLifecycle:undefined};
+  assert.ok(hasAnnouncedLineup(unknown));
+  assert.deepEqual(announcedArtists(unknown),['Sample Artist']);
+  assert.equal(similarFestivals(active,[unknown,active])[0].shared,1);
+  assert.deepEqual(paused,before);
+  for(const invalid of [{...paused,slug:'other'},{...paused,editionLifecycle:{...notice,reviewState:'pending'}}]) {
+    for(const read of [announcedArtists,hasAnnouncedLineup,lineupPreviewArtists,festivalArtists,festivalDescription]) {
+      assert.throws(()=>read(invalid));
+    }
+  }
+});
+for(const locale of ['en','de','ru']) {
+  test('actual homepage and artist detail omit paused appearances in '+locale,()=>{
+    const home=render(locale,h(HomeContent,{festivals:[paused,active]}));
+    const stats=home.match(/class="heroStats"[^]*?<\/section>/)[0];
+    assert.ok(stats.includes(`<strong>1</strong> ${translate(locale,'withActs')}`));
+    assert.ok(stats.includes(`<strong>2</strong> ${translate(locale,'festivals')}`));
+    const detail=render(locale,h(ArtistDetail,{artist,appearances:[paused,active]}));
+    assert.match(detail,/Active Festival/);
+    assert.doesNotMatch(detail,/Rock en Seine/);
+    assert.ok(detail.includes(translate(locale,'europeanFestival')));
+    const allPaused=render(locale,h(ArtistDetail,{artist,appearances:[paused]}));
+    assert.doesNotMatch(allPaused,/href="\/festivals\//);
+    const description=festivalDescription(paused,locale);
+    assert.match(description,/Rock en Seine 2027/);
+    assert.doesNotMatch(description,/2028|2027-08-25|tickets|lineup|setlists/);
+    assert.match(festivalDescription(active,locale),/dates, lineup, tickets/);
+  });
+}
+
+test('both actual artist routes use guarded appearances and festival metadata uses lifecycle description',async()=>{
+  for(const prefix of ['', '[lang]/']) {
+    const artistRoute=await readFile(new URL(`../app/${prefix}artists/[slug]/page.tsx`,import.meta.url),'utf8');
+    assert.match(artistRoute,/announcedArtists\(festival\)\.includes\(artist.name\)/);
+    const festivalRoute=await readFile(new URL(`../app/${prefix}festivals/[slug]/page.tsx`,import.meta.url),'utf8');
+    assert.match(festivalRoute,/description: festivalDescription\(festival/);
+  }
+});

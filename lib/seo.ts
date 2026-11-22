@@ -43,3 +43,16 @@ export function festivalMusicEvent(item: Festival) {
       : {}),
   };
 }
+
+/** Descriptive metadata must not promote old scheduled facts for a paused edition. */
+export function festivalDescription(item: Festival, language: "en" | "de" | "ru" = "en") {
+  if (editionOnHiatus(item)) {
+    const descriptions = {
+      en: `${item.name} ${item.editionYear}: edition on hiatus. Official announcement and source.`,
+      de: `${item.name} ${item.editionYear}: Festivalausgabe pausiert. Offizielle Mitteilung und Quelle.`,
+      ru: `${item.name} ${item.editionYear}: фестиваль на паузе. Официальное объявление и источник.`,
+    };
+    return descriptions[language];
+  }
+  return `${item.name} ${item.editionYear ?? 2027}: dates, lineup, tickets, playlist and setlists.`;
+}

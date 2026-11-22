@@ -2,8 +2,10 @@ import type { Festival } from "@/lib/domain/festival";
 import { editionOnHiatus } from "./edition-lifecycle.ts";
 import { festivalDateInterval } from "./festival-dates.ts";
 
+import { announcedArtists } from "./festival-lineup.ts";
+
 export function festivalArtists(item: Festival) {
-  return new Set([...item.headliners, ...item.lineup].map((artist) => artist.toLocaleLowerCase()));
+  return new Set(announcedArtists(item).map((artist) => artist.toLocaleLowerCase()));
 }
 
 export function lineupOverlap(items: Festival[]) {
