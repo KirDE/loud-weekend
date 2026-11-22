@@ -4,7 +4,7 @@ import { getCatalog } from "./catalog/repository";
 import type { SupportedLanguage } from "./catalog/public";
 
 // Share one request-scoped catalogue snapshot between metadata and visible stats.
-export const getHomeCatalog = cache(getCatalog);
+export const getHomeCatalog = cache(() => getCatalog({ includeFreshness: true }));
 
 export function homeMetadata(language: SupportedLanguage, count: number): Metadata {
   const title = "Loud Weekend 2027";

@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: { params: Promise<{ lang: str
 export default async function LocalizedFestivalPage({ params }: { params: Promise<{ lang: string; slug: string }> }) {
   const { lang, slug } = await params;
   if (!supportedLanguages.includes(lang as Language)) notFound();
-  const { festivals, artists, playlists } = await getCatalog();
+  const { festivals, artists, playlists } = await getCatalog({ includeFreshness: true });
   const item = festivals.find((festival) => festival.slug === slug);
   if (!item) notFound();
   const event = festivalMusicEvent(item);

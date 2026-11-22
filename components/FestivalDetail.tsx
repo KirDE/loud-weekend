@@ -7,6 +7,7 @@ import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import { PlanningTools } from "./PlanningTools";
 import type { PlaylistStatus } from "@/lib/domain/festival";
+import { formatFreshnessDate } from "@/lib/freshness-date";
 import { ticketPresentation } from "@/lib/tickets";
 import { festivalSetlistHistoryUrl } from "@/lib/setlist-history";
 import { announcedArtists, hasAnnouncedLineup, sortFestivalLineup, type LineupSort } from "@/lib/festival-lineup";
@@ -200,7 +201,13 @@ export function FestivalDetail({
       <PlanningTools item={item} festivals={festivals} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
-        <p>{t("catalogUpdated", { date: prettyDate(item.updatedAt.slice(0, 10)) })}</p>
+        <p>{item.freshness?.checkedAt
+          ? <>{t("latestSourceCheck")} · <time dateTime={item.freshness.checkedAt}>{formatFreshnessDate(item.freshness.checkedAt, locale)}</time></>
+          : t("sourceCheckUnavailable")}</p>
+        {item.freshness?.sourceCheckStale && <p>{t("sourceCheckStale")}</p>}
+        {item.freshness?.lastPublishedAt && <p>
+          {t("latestCatalogPublication")} · <time dateTime={item.freshness.lastPublishedAt}>{formatFreshnessDate(item.freshness.lastPublishedAt, locale)}</time>
+        </p>}
         <p>{item.sourceDeprecated ? t("sourceDeprecatedHelp") : t("sourceText")}</p>
         <a href={item.officialUrl} target="_blank" rel="noreferrer">
           {t("primarySource")}

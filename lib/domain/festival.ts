@@ -1,3 +1,5 @@
+import type { EditionFreshness } from "./freshness.ts";
+
 // Catalogue shapes are independent of the live, repository-backed seed data.
 export type TimetableEntry = {
   date: string;
@@ -24,6 +26,7 @@ export type Festival = {
   officialUrl: string;
   ticketsUrl?: string;
   playlistUrl?: string;
+  freshness?: EditionFreshness;
   sourceDeprecated?: boolean;
   sourceDeprecatedAt?: string;
   status: "confirmed" | "partial" | "tba";

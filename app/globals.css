@@ -470,6 +470,8 @@ main {
 }
 .resultMeta {
   display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
   justify-content: space-between;
   margin: 35px 0 15px;
   color: var(--muted);
@@ -1226,9 +1228,6 @@ main {
   }
   .festivalCard {
     min-height: 350px;
-  }
-  .resultMeta span:last-child {
-    display: none;
   }
   .detailHero {
     flex-direction: column;

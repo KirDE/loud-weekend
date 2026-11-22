@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 }
 
 export default async function FestivalPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { festivals, artists, playlists } = await getCatalog();
+  const { festivals, artists, playlists } = await getCatalog({ includeFreshness: true });
   const requestedSlug = (await params).slug;
   const item = festivals.find(({ slug }) => slug === requestedSlug);
   if (!item) notFound();

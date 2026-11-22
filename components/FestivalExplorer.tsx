@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CatalogFreshness } from "@/lib/domain/freshness";
+import { formatFreshnessDate } from "@/lib/freshness-date";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
@@ -20,7 +22,7 @@ const origins: Record<string, { label: string; coordinates: Coordinates }> = {
   prague: { label: "Prague, Czechia", coordinates: { latitude: 50.0755, longitude: 14.4378 } },
 };
 
-export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
+export function FestivalExplorer({ festivals, freshness }: { festivals: Festival[]; freshness?: CatalogFreshness }) {
   const { locale, t } = useLanguage();
   const planner = useLocalPlanner();
   const [query, setQuery] = useState(planner.savedFilters.query);
@@ -99,7 +101,15 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
     </div>
     <p className="srOnly" role="status" aria-live="polite" aria-atomic="true">{comparisonStatus}</p>
     {compared.length > 0 && <div className="compareTray"><div className="compareHeading"><strong>{t("compare")} ({compared.length}/3)</strong>{compared.map((item) => <button aria-label={t("removeFestivalComparison", { festival: item.name })} onClick={() => toggleSelected(item)} key={item.slug}>{item.name} <span aria-hidden="true">×</span></button>)}</div>{compared.length < 2 ? <p className="compareHint">{t("comparisonInstructions")}</p> : <div className="comparisonScroll" tabIndex={0}><table className="comparisonTable"><thead><tr><th scope="col">{t("planningDetail")}</th>{compared.map((item) => <th scope="col" key={item.slug}><Link href={`/festivals/${item.slug}/`}>{item.name}</Link></th>)}</tr></thead><tbody><tr><th scope="row">{t("dates")}</th>{compared.map((item) => <td key={item.slug}>{formatFestivalDateRange(item, locale, t("datesTba"))}</td>)}</tr><tr><th scope="row">{t("locationDistance", { origin: origins[origin].label })}</th>{compared.map((item) => <td key={item.slug}>{item.city || item.country}{item.coordinates ? ` · ${distanceKm(originCoordinates, item.coordinates).toLocaleString(locale)} km` : ` · ${t("distanceUnavailable")}`}</td>)}</tr><tr><th scope="row">{t("tickets")}</th>{compared.map((item) => <td key={item.slug}>{item.ticketsUrl ? <a href={item.ticketsUrl} rel="noreferrer" target="_blank">{t("officialTickets")}</a> : item.ticketStatus === "unavailable" ? t("unavailable") : t("availabilityNotConfirmed")}</td>)}</tr><tr><th scope="row">{t("lineupOverlap")}</th><td colSpan={compared.length}>{overlap.length ? <><strong>{t("sharedActs", { count: overlap.length })}</strong><br/>{overlap.join(", ")}</> : t("noLineupOverlap")}</td></tr></tbody></table></div>}</div>}
-    <div className="resultMeta"><span>{visible.length} {t("festivals")}</span><span>{t("lastReview")}</span></div>
+    <div className="resultMeta">
+      <span>{visible.length} {t("festivals")}</span>
+      {freshness && <span>
+        {freshness.checkedAt
+          ? <>{t("latestSourceCheck")} · <time dateTime={freshness.checkedAt}>{formatFreshnessDate(freshness.checkedAt, locale)}</time></>
+          : t("sourceCheckUnavailable")}
+        {freshness.lastPublishedAt && <> · {t("latestCatalogPublication")} · <time dateTime={freshness.lastPublishedAt}>{formatFreshnessDate(freshness.lastPublishedAt, locale)}</time></>}
+      </span>}
+    </div>
     <div className="festivalGrid">{visible.map((item) => { const isSelected = selected.includes(item.slug); const previewArtists = lineupPreviewArtists(item); const artistCount = announcedArtists(item).length; return <article className="festivalCard" key={item.slug}><button type="button" className={`compareButton ${isSelected ? "active" : ""}`} aria-pressed={isSelected} aria-label={t("compareFestival", { festival: item.name })} onClick={() => toggleSelected(item)} disabled={!isSelected && selected.length >= 3}><span aria-hidden="true">{isSelected ? "✓ " : "+ "}</span>{t("compare")}</button><Link href={`/festivals/${item.slug}/`}>
       <div className="cardTop"><FestivalLogo slug={item.slug} name={item.name}/><span className={`status ${item.status}`}>{t(item.status === "tba" ? "tba" : item.status)}</span></div>
       {item.sourceDeprecated && <span className="status deprecated">{t("sourceDeprecated")}</span>}
