@@ -256,14 +256,14 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     // Secondary ticket observations are publishable only with the same exact
     // source, edition, value and durable evidence that passed the producer.
     // Do not extend the separate Impericon/I-Days publication paths here (#497).
-    if (["wacken-open-air", "download"].includes(input.result.festivalSlug) &&
-      input.result.changes.some(({ field }) => field === "ticketStatus")) {
-      const observed = input.result.candidate;
-      const stored = candidate.normalized as unknown as FestivalCandidate;
+    const observed = input.result.candidate;
+    const stored = candidate.normalized as unknown as FestivalCandidate;
+    if (observed.ticketSupplement || stored.ticketSupplement) {
       const ticketUrl = ticketSupplementUrl({ festivalSlug: input.result.festivalSlug,
         url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
         strategies: ["html_fallback"], refreshPolicy: "daily", enabled: true });
-      const valid = ticketUrl && candidate.festivalSlug === input.result.festivalSlug &&
+      const provenance = { sourceUrl: input.result.sourceUrl, ticketUrl, editionYear: expectedYear };
+      const valid = ticketUrl && same(observed.ticketSupplement, provenance) && same(stored.ticketSupplement, provenance) && candidate.festivalSlug === input.result.festivalSlug &&
         candidate.attempt.requestedUrl === input.result.sourceUrl &&
         observed.sourceUrl === input.result.sourceUrl && stored.sourceUrl === observed.sourceUrl &&
         stored.festivalSlug === observed.festivalSlug && observed.festivalSlug === candidate.festivalSlug &&

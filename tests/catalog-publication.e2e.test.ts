@@ -723,7 +723,7 @@ for (const slug of ["wacken-open-air", "download"]) {
       assert.equal((await current()).ticketStatus, "available");
     }
     // A result that passed policy still cannot bypass corrupted durable evidence.
-    for (const mutation of ["missing", "foreign", "value", "edition", "request"]) {
+    for (const mutation of ["missing", "foreign", "value", "edition", "request", "provenance"]) {
       await db.festivalEdition.update({ where: { id: edition.id }, data: { ticketStatus: "UNKNOWN", ticketsUrl: null } });
       const clean = evaluateCandidate(await current(), candidate);
       const saved = await persist(clean);
@@ -733,6 +733,7 @@ for (const slug of ["wacken-open-air", "download"]) {
       if (mutation === "value") await db.ingestionEvidence.updateMany({ where, data: { observedValue: "sold_out" } });
       if (mutation === "edition") await db.ingestionCandidate.update({ where: { attemptId: saved.id }, data: { normalized: { ...candidate, observedEditionYears: [2026] } as any } });
       if (mutation === "request") await db.ingestionAttempt.update({ where: { id: saved.id }, data: { requestedUrl: "https://foreign.example.test/" } });
+      if (mutation === "provenance") delete clean.candidate.ticketSupplement;
       const before = await db.catalogPublication.count();
       await assert.rejects(publishIngestionResult(db, { attemptId: saved.id, result: clean, sourceCommit: suffix }), /persisted official ticket evidence/, mutation);
       assert.equal(await db.catalogPublication.count(), before, mutation);
@@ -742,3 +743,17 @@ for (const slug of ["wacken-open-air", "download"]) {
     }
   });
 }
+
+test("explicitly configured non-supplemental Wacken JSON-LD stock retains the existing publication path", async () => {
+  const source = parserSource("wacken-open-air", { url: "https://www.wacken.com/custom-official-inventory", fetchUrl: "https://www.wacken.com/custom-official-inventory", strategies: ["json_ld_event"] });
+  const html = `<script type="application/ld+json">${JSON.stringify({ "@type": "MusicEvent", name: "Wacken Open Air", startDate: "2027-07-28", endDate: "2027-07-31", offers: { url: source.url, availability: "https://schema.org/InStock" } })}</script>`;
+  const candidate = extractFestivalCandidate(html, source, new Date().toISOString());
+  assert.equal(candidate.ticketSupplement, undefined);
+  assert.equal(candidate.ticketStatus, "available");
+  const current = (await readCatalog({ database: db })).festivals.find(f => f.slug === source.festivalSlug)!;
+  const value = evaluateCandidate(current, candidate);
+  assert.equal(value.publishable, true, JSON.stringify(value.reviewReasons));
+  const attempt = await persist(value);
+  assert.ok(await publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }));
+  assert.equal((await readCatalog({ database: db })).festivals.find(f => f.slug === source.festivalSlug)!.ticketStatus, "available");
+});
