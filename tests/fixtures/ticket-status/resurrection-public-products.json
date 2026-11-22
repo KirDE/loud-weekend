@@ -1,0 +1,144 @@
+{
+  "data": [
+    {
+      "id": "bleep_HZdeew4XTGyrGOQTjzZN_g",
+      "name": "Resurrection Fest 2027 - 4 day PANDEMONIUM ticket | GUEST",
+      "claimFlow": "regular",
+      "type": "ticket",
+      "price": 0,
+      "minQuantity": 1,
+      "maxQuantity": 100,
+      "stockAvailable": 0,
+      "soldOut": false,
+      "almostSoldOut": false,
+      "isUpgrade": false,
+      "restrictsToDay": "",
+      "categories": []
+    },
+    {
+      "id": "bleep_JF2zXO_JQG2fPoHjiA5DSg",
+      "name": "EARLY BIRD - Abono 4 días + Camiseta",
+      "claimFlow": "regular",
+      "type": "ticket",
+      "price": 195,
+      "minQuantity": 1,
+      "maxQuantity": 8,
+      "stockAvailable": 0,
+      "soldOut": true,
+      "almostSoldOut": true,
+      "isUpgrade": false,
+      "restrictsToDay": "",
+      "categories": [
+        {
+          "en": "ENTRANCE TICKETS"
+        }
+      ]
+    },
+    {
+      "id": "bleep_WcdPqQE3Qjqka02gch6qkg",
+      "name": "Resurrection Fest 2027 - 4 day ticket | GUEST",
+      "claimFlow": "regular",
+      "type": "ticket",
+      "price": 0,
+      "minQuantity": 1,
+      "maxQuantity": 100,
+      "stockAvailable": 0,
+      "soldOut": false,
+      "almostSoldOut": false,
+      "isUpgrade": false,
+      "restrictsToDay": "",
+      "categories": []
+    },
+    {
+      "id": "bleep_ZVcvxdk1Tyyc5xa8vL_bwQ",
+      "name": "4 Day Ticket / Abono 4 días",
+      "claimFlow": "regular",
+      "type": "ticket",
+      "price": 235,
+      "minQuantity": 1,
+      "maxQuantity": 8,
+      "stockAvailable": 8,
+      "soldOut": false,
+      "almostSoldOut": false,
+      "isUpgrade": false,
+      "restrictsToDay": "",
+      "categories": [
+        {
+          "en": "ENTRANCE TICKETS"
+        }
+      ]
+    },
+    {
+      "id": "bleep_bAMv429vTAuU6vUx4uhJGw",
+      "name": "EARLY BIRD - 4-Day Ticket PANDEMONIUM",
+      "claimFlow": "regular",
+      "type": "ticket",
+      "price": 295,
+      "minQuantity": 1,
+      "maxQuantity": 8,
+      "stockAvailable": 0,
+      "soldOut": true,
+      "almostSoldOut": true,
+      "isUpgrade": false,
+      "restrictsToDay": "",
+      "categories": [
+        {
+          "en": "ENTRANCE TICKETS"
+        }
+      ]
+    },
+    {
+      "id": "bleep_eFExZnclRqW8jr5W0hKdlQ",
+      "name": "EARLY BIRD - Abono 4 días PANDEMONIUM + Camiseta",
+      "claimFlow": "regular",
+      "type": "ticket",
+      "price": 295,
+      "minQuantity": 1,
+      "maxQuantity": 8,
+      "stockAvailable": 0,
+      "soldOut": true,
+      "almostSoldOut": true,
+      "isUpgrade": false,
+      "restrictsToDay": "",
+      "categories": [
+        {
+          "en": "ENTRANCE TICKETS"
+        }
+      ]
+    },
+    {
+      "id": "bleep_eOIMGi0jQT26sqwYPby0OA",
+      "name": "EARLY BIRD - 4-Day Ticket",
+      "claimFlow": "regular",
+      "type": "ticket",
+      "price": 195,
+      "minQuantity": 1,
+      "maxQuantity": 8,
+      "stockAvailable": 0,
+      "soldOut": true,
+      "almostSoldOut": true,
+      "isUpgrade": false,
+      "restrictsToDay": "",
+      "categories": [
+        {
+          "en": "ENTRANCE TICKETS"
+        }
+      ]
+    },
+    {
+      "id": "package_bleep_L7DJING3S1CKd1u9P-09JA",
+      "name": "Resurrection Fest 2027 - EARLY BIRD - 4 Day Pandemonium Ticket + T-Shirt Size S",
+      "claimFlow": "regular",
+      "type": "ticket",
+      "price": 312,
+      "minQuantity": 1,
+      "maxQuantity": 8,
+      "stockAvailable": 0,
+      "soldOut": true,
+      "almostSoldOut": true,
+      "isUpgrade": false,
+      "restrictsToDay": "",
+      "categories": []
+    }
+  ]
+}

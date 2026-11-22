@@ -1,0 +1,10 @@
+{
+  "data": {
+    "isOpen": true,
+    "isReadOnly": false,
+    "isAddOnShop": false,
+    "isUpgradeShop": false,
+    "paymentQueueEnabled": false,
+    "currency": "EUR"
+  }
+}

@@ -1,3 +1,4 @@
+import { RESURRECTION_ARTIST_REVIEW, isResurrectionTicketOnly } from "../ingestion/resurrection-ticket-stock.ts";
 import { ticketSupplementUrl, ticketSupplementPurchaseUrl } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
@@ -281,6 +282,10 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
         }) && input.result.changes.filter(c => ["ticketStatus", "ticketsUrl"].includes(c.field))
           .every(c => same(c.after, observed[c.field as "ticketStatus" | "ticketsUrl"]));
       if (!valid) throw new Error("Ticket supplement publication requires matching persisted official ticket evidence");
+      if ((observed.warnings.includes(RESURRECTION_ARTIST_REVIEW) || stored.warnings.includes(RESURRECTION_ARTIST_REVIEW))
+        && (!isResurrectionTicketOnly(observed, input.result.changes, expectedYear)
+          || !isResurrectionTicketOnly(stored, input.result.changes, expectedYear)))
+        throw new Error("Resurrection stock publication cannot bypass source artist or date review");
     }
     const applied = await applyFestivalChanges(db, { festivalSlug: input.result.festivalSlug, expectedYear, changes: input.result.changes, strictBefore: true, observedAt: new Date(input.result.fetchedAt) });
     // Rockharz 2027 publications retain exact edition/source/field and persisted

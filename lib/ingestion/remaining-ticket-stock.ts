@@ -1,3 +1,4 @@
+import { RESURRECTION_PRODUCTS, observeResurrectionStock } from "./resurrection-ticket-stock.ts";
 import { load, type CheerioAPI } from "cheerio";
 import type { FestivalSource } from "./types.ts";
 import type { TicketObservation } from "./ticket-supplements.ts";
@@ -9,6 +10,7 @@ export const TREES_STOCK = "https://tickets.2000trees.co.uk/events/2000trees/221
 export function remainingTicketUrl(source: FestivalSource): string | undefined {
   if (source.editionYear !== 2027) return;
   const routes: Record<string, { sources: string[]; stock: string }> = {
+    "resurrection-fest": { sources: ["https://www.resurrectionfest.es/"], stock: RESURRECTION_PRODUCTS },
     "2000trees": { sources: ["https://2000trees.co.uk/"], stock: TREES_STOCK },
     "pinkpop": { sources: ["https://www.pinkpop.nl/"], stock: "https://www.pinkpop.nl/tickets/" },
     "eurockeennes": { sources: ["https://www.eurockeennes.fr/"], stock: "https://www.eurockeennes.fr/achat/" },
@@ -35,6 +37,7 @@ export function observeRemainingTicket(html: string, source: FestivalSource, url
   const fail = (reason: string): TicketObservation => ({ excerpt: "", warning: `Official ${source.festivalSlug} ticket source requires review: ${reason}` });
   const pass = (excerpt: string): TicketObservation => ({ status: "available", excerpt });
   if (url !== remainingTicketUrl(source)) return fail("stock route identity changed");
+  if (source.festivalSlug === "resurrection-fest") return observeResurrectionStock(html);
   if (source.festivalSlug === "jera-on-air") {
     let p; try { p = JSON.parse(html); } catch { return fail("invalid public product JSON"); }
     if (!p || p.vendor !== "Jera On Air" || p.type !== "Hardtickets"

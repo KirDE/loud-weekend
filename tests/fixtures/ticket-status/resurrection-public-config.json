@@ -1,0 +1,11 @@
+{
+  "data": {
+    "shopSale": {
+      "title": "Resurrection Fest 2027",
+      "namespace": "resurrectionfest_2027_BL_JbWdUTvcUz",
+      "requireLogin": false,
+      "requirePremiumMembership": false,
+      "shopMode": "no_loading"
+    }
+  }
+}

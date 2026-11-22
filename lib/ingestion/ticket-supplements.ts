@@ -1,3 +1,4 @@
+import { RESURRECTION_PRODUCTS, RESURRECTION_PURCHASE } from "./resurrection-ticket-stock.ts";
 import { remainingTicketUrl, observeRemainingTicket, JERA_STOCK } from "./remaining-ticket-stock.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
@@ -22,6 +23,7 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
 /** The public purchase gateway can differ from the machine evidence URL. */
 export function ticketSupplementPurchaseUrl(source: FestivalSource): string | undefined {
   const stock = ticketSupplementUrl(source);
+  if (stock === RESURRECTION_PRODUCTS) return RESURRECTION_PURCHASE;
   return stock === JERA_STOCK ? "https://www.impericon.com/nl/collections/jera-on-air-tickets" : stock;
 }
 

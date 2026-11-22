@@ -1,4 +1,4 @@
-# Four stock producers from the remaining 31 (22 November 2026)
+# Five stock producers from the remaining 31 (22 November 2026)
 
 Scope: source-specific **proposals**, not production acceptance or a claim that
 all 60 festival paths are covered. Based on deployed main #482 (`ebe9cd3`).
@@ -18,13 +18,29 @@ configuration or discovers arbitrary secondary URLs from untrusted markup.
 The configured primary is still fetched/extracted: artist, lifecycle, source
 identity and edition warnings are not removed by a successful stock check.
 
+| Resurrection Fest | Official frontend public config/shop/products GETs: exact 2027 sale, open ordinary non-queued non-login shop, regular four-day product ID/name/category and adequate stock, explicit soldOut/almostSoldOut. Guest, Early Bird, PANDEMONIUM, upgrade, closed/queued shops do not establish ordinary availability. | Official four-day shop route |
+
+The Resurrection namespace is public sale routing from the official frontend's
+public content API, not a customer token. No shopping session/init, queue, cart,
+order or reservation endpoint is called. Its stockAvailable is capped purchase
+quantity, never total capacity. Explicit almostSoldOut maps to low; a low price
+or low per-order maximum does not. No global soldout is inferred.
+
+The existing Resurrection image-only lineup review warning is **retained** in
+candidate evidence. Policy permits independent tickets only when primary edition
+and dates already match the canonical row, no artist fields are proposed, all
+changes are ticket fields, and exact current stock provenance is present. Artist,
+date, identity and any other warnings/changes retain review. Canonical publication
+independently enforces that scope on request and stored candidate; it cannot be
+used to publish unparsed lineup images or trigger provider jobs.
+
 ## Transport, persistence and rollback
 
 - GET only, bounded bodies, existing bounded retry transport, public secondary
   requests without inherited primary authorization headers. Unexpected redirects,
   error codes and wrong media types are errors, not healthy empty inventory.
-- Jera alone permits the audited JSON/JavaScript media types at its exact public
-  product JSON URL; other ticket sources still require HTML.
+- Jera permits the audited JSON/JavaScript media types at its exact public
+  product JSON URL; Resurrection uses separately validated public JSON endpoints. Other ticket sources still require HTML.
 - Durable proof URL stays distinct from the human purchase gateway for Jera.
   Both request and stored normalized provenance trigger canonical validation;
   source, year, fields, values, evidence URL/excerpt/timestamp must agree.
@@ -41,7 +57,7 @@ edition, source overrides, access/schema failure, hidden/disabled products,
 duplicate cards, conflicting stock, accessory-only products and wrong sellers.
 Minified DOM regressions preserve `<br>` word boundaries.
 
-`tests/remaining-ticket-publication.e2e.test.ts` runs **all four** actual
+`tests/remaining-ticket-publication.e2e.test.ts` runs **all five** actual
 `fetchSource`→existing primary parser + stock producer→policy→persisted
 candidate/diff/evidence→canonical publisher→public reader→same-attempt replay and
 unchanged reevaluation. It also rejects old-edition and concurrent stale

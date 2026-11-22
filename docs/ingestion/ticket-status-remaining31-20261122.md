@@ -1,7 +1,7 @@
 # Audit of the remaining 31 — 22-Nov-2026
 
 Starting set from user message460, not the historical59-source denominator.
-**4 new proposals pending exact-head Quality/Codex; 27 still blocked/unverified.**
+**5 new proposals pending exact-head Quality/Codex; 26 still blocked/unverified.**
 These are not accepted/deployed producers; the rollout is not complete.
 
 | Source | Disposition |
@@ -25,7 +25,7 @@ These are not accepted/deployed producers; the rollout is not complete.
 | `pistoia-blues` | Official page presents 2026 programme; no current 2027 ticket inventory. |
 | `polandrock` | Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof. |
 | `provinssi` | Current official on-sale copy links Paylogic /offsale. Inventory not verified; do not trust copy over inactive gateway. |
-| `resurrection-fest` | Official current ordinary four-day gateway reached200 but only a client app shell, no stock; original /entradas403. |
+| `resurrection-fest` | Fifth source proposal: official frontend public sale/config/products APIs verified. Open non-queued ordinary shop and exact regular four-day stock; image-only artist review is retained and independent ticket-only scope is rechecked in policy and canonical publication. |
 | `roadburn` | Current and archived sale copy coexist, both pointing to /offsale. No verified stock or global sellout. |
 | `rock-en-seine` | Official homepage explicitly archived 2026; previous shop403. Do not publish current inventory from archive. |
 | `rock-for-people` | Current homepage regular four-day card and partial capacity sold copy confirmed; ticket page403; 50% sold is not low/global sellout or independent stock. |
@@ -38,4 +38,4 @@ These are not accepted/deployed producers; the rollout is not complete.
 | `tons-of-rock` | Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof. |
 | `vainstream` | Official current page distinguishes sold-out La Familia from priced Regular Festival ticket; regular product GET/category403, so stock unverified. |
 
-See [four-source evidence and tests](ticket-status-next-four.md). Existing access restrictions were not bypassed. No side-effecting reservation/cart requests, production writes, merge or deployment.
+See [five-source evidence and tests](ticket-status-next-four.md). Existing access restrictions were not bypassed. No side-effecting reservation/cart requests, production writes, merge or deployment.

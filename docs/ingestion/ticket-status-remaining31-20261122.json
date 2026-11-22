@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "asOf": "2026-11-22T12:32:00Z",
+  "asOf": "2026-11-22T12:44:00Z",
   "scope": "The 31 without verified source proposals at the start of message460, excluding already proposed Motocultor. Offline/transport audit, not production stock or acceptance.",
   "counts": {
     "startingRemaining": 31,
-    "newSourceProposalsPendingGates": 4,
-    "stillWithoutVerifiedImplementation": 27
+    "newSourceProposalsPendingGates": 5,
+    "stillWithoutVerifiedImplementation": 26
   },
   "results": [
     {
@@ -288,8 +288,8 @@
     },
     {
       "slug": "resurrection-fest",
-      "state": "blocked_unverified_inventory",
-      "reason": "Official current ordinary four-day gateway reached200 but only a client app shell, no stock; original /entradas403.",
+      "state": "proposal_pending_external_gates",
+      "reason": "Fifth source proposal: official frontend public sale/config/products APIs verified. Open non-queued ordinary shop and exact regular four-day stock; image-only artist review is retained and independent ticket-only scope is rechecked in policy and canonical publication.",
       "observations": [
         {
           "url": "https://www.resurrectionfest.es/entradas/",
