@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { isCalendarDate } from "../domain/edition-dates.ts";
 
 export function agentAuthorized(
   request: Request,
@@ -32,13 +33,7 @@ export function fingerprint(value: unknown): string {
 const date = z
   .string()
   .regex(/^20\d{2}-\d{2}-\d{2}$/)
-  .refine((v) => {
-    try {
-      return new Date(v + "T00:00:00Z").toISOString().slice(0, 10) === v;
-    } catch {
-      return false;
-    }
-  });
+  .refine(isCalendarDate);
 const name = z.string().trim().min(1).max(160);
 export const factsSchema = z
   .object({

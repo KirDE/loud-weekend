@@ -894,3 +894,57 @@ test("I-Days direct ticketsUrl-only publication validates durable proof and atom
   }
  }
 });
+
+test("invalid dates cannot publish or replace the last verified edition range", async () => {
+  const slug = "synthetic-fest";
+  const where = { festival: { slug }, recordState: "CURRENT" as const };
+  const before = await db.festivalEdition.findFirstOrThrow({ where });
+  const start = before.startDate!.toISOString().slice(0, 10);
+  const end = before.endDate!.toISOString().slice(0, 10);
+  const assertUnchanged = async () => {
+    const after = await db.festivalEdition.findUniqueOrThrow({ where: { id: before.id } });
+    assert.deepEqual([after.startDate, after.endDate, after.sourceUpdatedAt], [before.startDate, before.endDate, before.sourceUpdatedAt]);
+  };
+
+  for (const [after, reason] of [
+    ["2027-02-29", /valid calendar dates/],
+    ["2028-01-01", /match the edition year/],
+    ["2027-01-01", /end date cannot precede/],
+  ] as const) {
+    const value = result("Unused", {
+      changes: [{ kind: "date_changed", field: "endDate", before: end, after, reviewRequired: false }],
+    });
+    const attempt = await persist(value);
+    const candidate = await db.ingestionCandidate.findUniqueOrThrow({ where: { attemptId: attempt.id } });
+    await assert.rejects(publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }), reason);
+    assert.equal(await db.catalogPublication.findUnique({ where: { sourceId: `ingestion:${candidate.id}` } }), null);
+    assert.equal((await db.ingestionCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).reviewState, "PENDING");
+    await assertUnchanged();
+  }
+
+  const adminId = randomUUID();
+  await assert.rejects(db.$transaction(tx => publishAdminFestivalChange(tx, {
+    change: { id: adminId, resourceKey: slug, field: "endDate", beforeValue: end, afterValue: 20270601, sourceEvidence: {}, parserRunId: null },
+    actorLabel: "test",
+  })), /valid calendar dates/);
+  assert.equal(await db.catalogPublication.findUnique({ where: { sourceId: `admin:${adminId}` } }), null);
+  await assertUnchanged();
+
+  const value = result("Unused", { changes: [
+    { kind: "date_changed", field: "startDate", before: start, after: "2027-11-10", reviewRequired: false },
+    { kind: "date_changed", field: "endDate", before: end, after: "2027-11-13", reviewRequired: false },
+  ] });
+  const attempt = await persist(value);
+  try {
+    const publication = await publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix });
+    assert.deepEqual(publication?.fields, ["startDate", "endDate"]);
+    assert.equal(publication?.playlistRefreshRequested, false);
+    const visible = (await readCatalog({ database: db })).festivals.find(festival => festival.slug === slug);
+    assert.deepEqual([visible?.startDate, visible?.endDate], ["2027-11-10", "2027-11-13"]);
+    assert.equal((await publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }))?.id, publication?.id);
+  } finally {
+    await db.festivalEdition.update({ where: { id: before.id }, data: {
+      startDate: before.startDate, endDate: before.endDate, sourceUpdatedAt: before.sourceUpdatedAt,
+    } });
+  }
+});

@@ -1,3 +1,4 @@
+import { editionDateProblem } from "../domain/edition-dates.ts";
 import { ticketSupplementUrl, ticketSupplementPurchaseUrl } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
@@ -117,6 +118,16 @@ async function applyFestivalChanges(db: Database, input: {
   if (festival.editions.length !== 1) throw new Error(`Ambiguous current edition for ${input.festivalSlug}`);
   const edition = festival.editions[0];
   if (input.expectedYear !== undefined && edition.year !== input.expectedYear) throw new Error(`Candidate edition ${input.expectedYear} does not match catalogue edition ${edition.year}`);
+
+  const dateChanges = input.changes.filter(({ field }) => field === "startDate" || field === "endDate");
+  if (dateChanges.length) {
+    const proposed = new Map(dateChanges.map(({ field, after }) => [field, after === "" ? null : after]));
+    if (proposed.size !== dateChanges.length) throw new Error("Duplicate festival date changes");
+    const start = proposed.has("startDate") ? proposed.get("startDate") : isoDate(edition.startDate);
+    const end = proposed.has("endDate") ? proposed.get("endDate") : isoDate(edition.endDate);
+    const problem = editionDateProblem(edition.year, start, end);
+    if (problem) throw new Error(problem);
+  }
 
   const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
@@ -465,14 +476,9 @@ export async function publishAgentFestivalResolution(
     edition.recordState !== "CURRENT"
   )
     throw new Error("Reviewed edition mismatch");
-  const dateStart = input.facts.startDate ?? isoDate(edition.startDate),
-    dateEnd = input.facts.endDate ?? isoDate(edition.endDate);
-  if (
-    (dateStart && Number(dateStart.slice(0, 4)) !== edition.year) ||
-    (dateEnd && Number(dateEnd.slice(0, 4)) !== edition.year) ||
-    (dateStart && dateEnd && dateStart > dateEnd)
-  )
-    throw new Error("Reviewed dates mismatch");
+  const dateProblem = editionDateProblem(edition.year,
+    input.facts.startDate ?? isoDate(edition.startDate), input.facts.endDate ?? isoDate(edition.endDate));
+  if (dateProblem) throw new Error(`Reviewed dates mismatch: ${dateProblem}`);
   // Only a genuinely new edition's first reviewed roster enters the native
   // provider queue. Existing/cancelled rosters and prior generations stay gated.
   const initialPlaylistGeneration =
