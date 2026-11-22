@@ -10,19 +10,28 @@ const months: Record<string, number> = {
   diciembre: 12, desembre: 12, december: 12,
 };
 
+export function isBarcelonaSource(source: FestivalSource): boolean {
+  try {
+    const url = new URL(source.url);
+    return source.festivalSlug === "barcelona-rock-fest" && url.origin === "https://www.barcelonarockfest.com"
+      && !url.username && !url.password && !url.search && !url.hash
+      && /^\/(?:en\/?|es\/?|ca\/?)?$/.test(url.pathname);
+  } catch { return false; }
+}
+
 // The current homepage has explicit date/sales headings, not Event JSON-LD.
 // Do not infer duration from the evergreen FAQ or dates from last year's images.
 export function applyBarcelonaBanner(html: string, source: FestivalSource, candidate: FestivalCandidate): void {
   if (source.festivalSlug !== "barcelona-rock-fest") return;
-  try {
-    const url = new URL(source.url);
-    if (url.origin !== "https://www.barcelonarockfest.com" || url.username || url.password || url.search || url.hash
-      || !/^\/(?:en\/?|es\/?|ca\/?)?$/.test(url.pathname)) return;
-  } catch { return; }
+  // Generic discovery cannot bind a URL or stock to the validated control.
+  delete candidate.ticketStatus;
+  delete candidate.ticketsUrl;
+  candidate.evidence = candidate.evidence.filter(e => !["ticketStatus", "ticketsUrl"].includes(e.field));
+  if (!isBarcelonaSource(source)) return;
   // Only visible official banner/controls can establish a current sale.
   // Ignore hydration payloads, hidden translations and archival/footer copy.
   const $ = load(html);
-  $("script, style, template, noscript, footer, [hidden], [inert], [aria-hidden='true']").remove();
+  $("script, style, template, noscript, footer, .hidden, .invisible, [hidden], [inert], [aria-hidden='true']").remove();
   $("[style]").each((_, element) => {
     if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();
   });
@@ -41,16 +50,11 @@ export function applyBarcelonaBanner(html: string, source: FestivalSource, candi
   if (days.some(day => new Date(`${iso(day)}T00:00:00Z`).toISOString().slice(0, 10) !== iso(day))) return;
   candidate.observedEditionYears.push(year);
   if (year !== source.editionYear) return;
-  const add = (field: "startDate" | "endDate" | "ticketStatus", value: string, excerpt: string) => {
+  const add = (field: "startDate" | "endDate" | "ticketStatus" | "ticketsUrl", value: string, excerpt: string) => {
     Object.assign(candidate, { [field]: value });
     candidate.evidence = candidate.evidence.filter(e => e.field !== field);
     candidate.evidence.push({ field, sourceUrl: source.url, observedAt: candidate.fetchedAt, excerpt });
   };
-  // The official purchase route is localized; keep the reviewed English route
-  // when the Spanish homepage links the same /tickets landing page.
-  if (candidate.ticketsUrl === new URL("/tickets", source.url).href) {
-    candidate.ticketsUrl = new URL("/en/tickets", source.url).href;
-  }
   add("startDate", iso(days[0]), dates[0].excerpt);
   add("endDate", iso(days.at(-1)!), dates[0].excerpt);
   // Visible dated announcement headings are independent of the stale image
@@ -76,7 +80,7 @@ export function applyBarcelonaBanner(html: string, source: FestivalSource, candi
   const sales = headings.filter(h => h.role === "3");
   const purchase = $("a[href]").filter((_, element) => {
     const link = $(element);
-    if (link.is("[disabled], [aria-disabled='true']") || link.parents("[disabled], [aria-disabled='true']").length
+    if (link.is("[disabled], [aria-disabled='true'], .disabled") || link.parents("[disabled], [aria-disabled='true'], .disabled").length
       || !/^(?:tickets?|entradas?|entrades)$/i.test(link.text().replace(/\s+/g, " ").trim())) return false;
     try {
       const target = new URL(link.attr("href") ?? "", source.url);
@@ -85,6 +89,12 @@ export function applyBarcelonaBanner(html: string, source: FestivalSource, candi
     } catch { return false; }
   });
   if (purchase.length > 0 && sales.length === 1 && /^(?:tickets? ya a la venta|tickets? (?:are )?(?:now on sale|on sale(?: now)?)|entrades ja a la venda)$/i.test(sales[0].text)) {
-    add("ticketStatus", "available", sales[0].excerpt);
+    const control = purchase.first();
+    const target = new URL(control.attr("href")!, source.url);
+    if (/^\/tickets\/?$/.test(target.pathname)) target.pathname = "/en/tickets";
+    const controlProof = $.html(control);
+    add("ticketsUrl", target.href, controlProof);
+    add("ticketStatus", "available", sales[0].excerpt + "\n" + controlProof);
+
   }
 }

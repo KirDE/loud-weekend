@@ -74,6 +74,9 @@ async function fetchSourceWithoutTicketSupplement(source: FestivalSource, option
   if (isRoskildeSource(source) && !options.fetchImpl) return fetchRoskildeDocuments(source.editionYear);
 
   let initial = await fetchWithRetry(source.fetchUrl ?? source.url);
+  if (source.festivalSlug === "barcelona-rock-fest" && (source.fetchUrl || source.followLinkPattern
+    || (initial.response.url && initial.response.url !== source.url)))
+    throw Object.assign(new Error("Barcelona homepage identity changed"), { attempts: initial.attempts });
   if (source.festivalSlug === "summer-punch" && (source.url !== "https://summerpunchfestival.pl/" || source.fetchUrl || source.followLinkPattern || (initial.response.ok && initial.response.url !== source.url)))
     throw Object.assign(new Error("Summer Punch homepage changed its trusted identity"), { attempts: initial.attempts });
   if (initial.response.ok && isDownloadSource(source)) {

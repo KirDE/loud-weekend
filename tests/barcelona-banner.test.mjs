@@ -86,3 +86,31 @@ test('source identity excludes archive routes, userinfo, ports and query overrid
     assert.equal(parse(html,{...source,url}).ticketStatus,undefined);
   }
 });
+
+test('generic JSON-LD never restores unavailable Barcelona stock or unrelated ticket URLs', () => {
+  const ld = '<script type="application/ld+json">'+JSON.stringify({'@type':'Event', name:'Barcelona Rock Fest 2027',startDate:'2027-07-01',endDate:'2027-07-04',offers:{'@type':'Offer',availability:'https://schema.org/InStock',url:'https://example.test/tickets'}})+'</script>';
+  for (const control of ['<a hidden href=', '<a class="hidden" href=', '<div class="hidden"><a href=', '<a class="disabled" href=']) {
+    const c=parse(html.replace('<a href=',control)+ld);
+    assert.equal(c.ticketStatus,undefined);assert.equal(c.ticketsUrl,undefined);
+  }
+  const c=parse('<a href="https://foreign.test/tickets">Tickets</a>'+html+ld);
+  assert.equal(c.ticketStatus,'available');assert.equal(c.ticketsUrl,'https://www.barcelonarockfest.com/en/tickets');
+  assert.ok(c.evidence.find(e=>e.field==='ticketStatus').excerpt.includes('href="/tickets"'));
+  assert.ok(c.evidence.find(e=>e.field==='ticketsUrl').excerpt.includes('href="/tickets"'));
+});
+test('excluded source identity cannot leak generic metadata, links or artists',()=>{
+ const generic='<meta property="event:start_time" content="2027-07-01"><span data-artist="Foreign Band">Foreign Band</span>';
+ for(const url of ['https://www.barcelonarockfest.com/archive','https://www.barcelonarockfest.com/?year=2026','https://foreign.test/']){
+  const c=parse(html+generic,{...source,url});
+  for(const f of ['startDate','endDate','ticketsUrl','ticketStatus','lineup']) assert.equal(c[f],undefined,f);
+  assert.equal(c.evidence.length,0);
+ }
+});
+test('fetch rejects redirected Barcelona bodies and alternate fetch routes',async()=>{
+ const {fetchSource}=await import('../lib/ingestion/fetch.ts');
+ for(const url of ['https://www.barcelonarockfest.com/archive','https://foreign.test/']){
+  const response=new Response(html);Object.defineProperty(response,'url',{value:url});
+  await assert.rejects(fetchSource(source,{maxAttempts:1,fetchImpl:async()=>response}),/identity/);
+ }
+ await assert.rejects(fetchSource({...source,fetchUrl:'https://foreign.test/'},{maxAttempts:1,fetchImpl:async()=>new Response(html)}),/identity/);
+});
