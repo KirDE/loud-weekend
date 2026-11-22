@@ -52,3 +52,11 @@ test("a lineup for another edition still fails closed", () => {
   assert.equal(result.publishable, false);
   assert.ok(result.reviewReasons.includes("Candidate edition 2028 does not match catalogue edition 2027"));
 });
+
+test("headliner-only announcements still need matching edition evidence", () => {
+  const headlinersOnly = { ...candidate, lineup: undefined, headliners: ["Example Band"] };
+  assert.equal(evaluateCandidate(current, headlinersOnly).publishable, true);
+  const unbound = evaluateCandidate(current, { ...headlinersOnly, observedEditionYears: [] });
+  assert.equal(unbound.publishable, false);
+  assert.match(unbound.reviewReasons.join("; "), /edition could not be verified/);
+});

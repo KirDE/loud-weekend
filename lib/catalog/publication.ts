@@ -80,16 +80,25 @@ type EnsureArtist = ReturnType<typeof artistResolver>;
 async function replaceLineup(db: Database, editionId: string, billing: LineupBilling, names: string[], ensureArtist: EnsureArtist) {
   const otherBilling = billing === LineupBilling.HEADLINER ? LineupBilling.LINEUP : LineupBilling.HEADLINER;
   const existing = await db.lineupEntry.findMany({ where: { editionId, billing }, include: { artist: true }, orderBy: { position: "asc" } });
-  if (same(existing.map(({ artist }) => artist.name), names)) return false;
+  const announced = existing.filter(({ status }) => status === "ANNOUNCED");
+  const cancelled = existing.filter(({ status }) => status === "CANCELLED");
+  if (same(announced.map(({ artist }) => artist.name), names)) return false;
   const other = await db.lineupEntry.findMany({ where: { editionId, billing: otherBilling }, include: { artist: true } });
   const otherNames = new Set(other.map(({ artist }) => artist.name.toLocaleLowerCase()));
   if (names.some((name) => otherNames.has(name.toLocaleLowerCase()))) throw new Error("Artist cannot have ambiguous lineup billing");
   const artists = [];
   for (const name of names) artists.push(await ensureArtist(name));
   if (new Set(artists.map(a => a.id)).size !== artists.length || artists.some(a => other.some(entry => entry.artistId === a.id))) throw new Error("Artist cannot have ambiguous lineup billing or duplicate alias identities");
-  if (same(existing.map(entry => entry.artistId), artists.map(a => a.id))) return false;
-  await db.lineupEntry.deleteMany({ where: { editionId, billing } });
-  if (artists.length) await db.lineupEntry.createMany({ data: artists.map((artist, position) => ({ editionId, artistId: artist.id, billing, position })) });
+  if (artists.some((artist) => cancelled.some((entry) => entry.artistId === artist.id)))
+    throw new Error("Cancellation requires separate explicit review");
+  if (same(announced.map(entry => entry.artistId), artists.map(a => a.id))) return false;
+  await db.lineupEntry.deleteMany({ where: { editionId, billing, status: "ANNOUNCED" } });
+  const occupied = new Set(cancelled.map(({ position }) => position));
+  let position = 0;
+  if (artists.length) await db.lineupEntry.createMany({ data: artists.map((artist) => {
+    while (occupied.has(position)) position++;
+    return { editionId, artistId: artist.id, billing, position: position++ };
+  }) });
   return true;
 }
 
@@ -97,6 +106,7 @@ async function addLineupArtist(db: Database, editionId: string, billing: LineupB
   const artist = await ensureArtist(name);
   const existing = await db.lineupEntry.findUnique({ where: { editionId_artistId: { editionId, artistId: artist.id } } });
   if (existing) {
+    if (existing.status === "CANCELLED") throw new Error("Cancellation requires separate explicit review");
     if (existing.billing !== billing) throw new Error(`Ambiguous billing change for ${name}`);
     return false;
   }
@@ -183,9 +193,14 @@ async function applyFestivalChanges(db: Database, input: {
       case "lineup":
       case "headliners": {
         const billing = change.field === "headliners" ? LineupBilling.HEADLINER : LineupBilling.LINEUP;
-        changed = Array.isArray(change.after) || (typeof change.after === "string" && /\r?\n|,/.test(change.after))
-          ? await replaceLineup(db, edition.id, billing, stringList(change.after, change.field), ensureArtist)
-          : await addLineupArtist(db, edition.id, billing, String(change.after), ensureArtist);
+        // Admin replacements arrive as arrays; an ingestion diff adds one
+        // artist verbatim, including commas in an official billing name.
+        if (Array.isArray(change.after)) {
+          changed = await replaceLineup(db, edition.id, billing, stringList(change.after, change.field), ensureArtist);
+        } else {
+          if (typeof change.after !== "string" || !change.after.trim()) throw new Error("Invalid announced artist");
+          changed = await addLineupArtist(db, edition.id, billing, change.after, ensureArtist);
+        }
         break;
       }
       default:
