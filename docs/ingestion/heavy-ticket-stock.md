@@ -28,7 +28,7 @@ The reviewed unrestricted ordinary rate is 5629650 in standard subcategory
 1873636 / three-day category 1901845. Its exact ordinary label, matching EUR
 price, unselected quantity zero and enabled option one must agree. Hidden,
 disabled, conflicting, duplicate, foreign-edition or preselected forms do not
-produce availability. Friends/group-minimum, student/under-25, GOLD/VIP and
+produce availability. Friends/group-minimum, student/age-restricted, GOLD/VIP and
 day-ticket inventory cannot rescue the ordinary pass. No global sellout is
 inferred if this particular ordinary rate becomes unavailable.
 
