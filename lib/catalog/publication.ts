@@ -1,4 +1,4 @@
-import { ticketSupplementUrl } from "../ingestion/ticket-supplements.ts";
+import { ticketSupplementUrl, ticketSupplementPurchaseUrl } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
@@ -259,16 +259,18 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     const observed = input.result.candidate;
     const stored = candidate.normalized as unknown as FestivalCandidate;
     if (observed.ticketSupplement || stored.ticketSupplement) {
-      const ticketUrl = ticketSupplementUrl({ festivalSlug: input.result.festivalSlug,
+      const registeredSource = { festivalSlug: input.result.festivalSlug,
         url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
-        strategies: ["html_fallback"], refreshPolicy: "daily", enabled: true });
+        strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true };
+      const ticketUrl = ticketSupplementUrl(registeredSource);
+      const purchaseUrl = ticketSupplementPurchaseUrl(registeredSource);
       const provenance = { sourceUrl: input.result.sourceUrl, ticketUrl, editionYear: expectedYear };
       const valid = ticketUrl && same(observed.ticketSupplement, provenance) && same(stored.ticketSupplement, provenance) && candidate.festivalSlug === input.result.festivalSlug &&
         candidate.attempt.requestedUrl === input.result.sourceUrl &&
         observed.sourceUrl === input.result.sourceUrl && stored.sourceUrl === observed.sourceUrl &&
         stored.festivalSlug === observed.festivalSlug && observed.festivalSlug === candidate.festivalSlug &&
         same(observed.observedEditionYears, [expectedYear]) && same(stored.observedEditionYears, [expectedYear]) &&
-        observed.ticketsUrl === ticketUrl && stored.ticketsUrl === ticketUrl &&
+        observed.ticketsUrl === purchaseUrl && stored.ticketsUrl === purchaseUrl &&
         same(stored.ticketStatus, observed.ticketStatus) &&
         ["ticketStatus", "ticketsUrl"].every(field => {
           const value = observed[field as "ticketStatus" | "ticketsUrl"];

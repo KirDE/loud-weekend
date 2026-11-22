@@ -542,7 +542,10 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     if (!ticket.response.ok) return { response: ticket.response, attempts };
     if (ticket.response.url && ticket.response.url !== ticketUrl) throw new Error("Official ticket destination changed identity");
     const type = ticket.response.headers.get("content-type") ?? "";
-    if (!/^text\/html\b|^application\/xhtml\+xml\b/i.test(type)) throw new Error("Official ticket destination returned a non-HTML document");
+    const supportedType = source.festivalSlug === "full-rewind"
+      ? /^(?:application\/json|text\/javascript|application\/javascript)\b/i.test(type)
+      : /^text\/html\b|^application\/xhtml\+xml\b/i.test(type);
+    if (!supportedType) throw new Error(source.festivalSlug === "full-rewind" ? "Official ticket destination returned a non-JSON document" : "Official ticket destination returned a non-HTML document");
     const html = await boundedTicketText(ticket.response);
     const response = new Response(JSON.stringify({ kind: TICKET_SUPPLEMENT, body, ticket: { url: ticketUrl, html } }), { headers: { "content-type": "application/json" } });
     Object.defineProperty(response, "url", { value: source.url });
