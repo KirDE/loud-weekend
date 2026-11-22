@@ -260,11 +260,11 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     const observed = input.result.candidate;
     const stored = candidate.normalized as unknown as FestivalCandidate;
     if (observed.ticketSupplement || stored.ticketSupplement) {
-      const ticketSource = { festivalSlug: input.result.festivalSlug,
+      const registeredSource = { festivalSlug: input.result.festivalSlug,
         url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
-        strategies: ["html_fallback" as const], refreshPolicy: "daily" as const, enabled: true };
-      const ticketUrl = ticketSupplementUrl(ticketSource);
-      const purchaseUrl = ticketSupplementPurchaseUrl(ticketSource);
+        strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true };
+      const ticketUrl = ticketSupplementUrl(registeredSource);
+      const purchaseUrl = ticketSupplementPurchaseUrl(registeredSource);
       const provenance = { sourceUrl: input.result.sourceUrl, ticketUrl, editionYear: expectedYear };
       const valid = ticketUrl && same(observed.ticketSupplement, provenance) && same(stored.ticketSupplement, provenance) && candidate.festivalSlug === input.result.festivalSlug &&
         candidate.attempt.requestedUrl === input.result.sourceUrl &&

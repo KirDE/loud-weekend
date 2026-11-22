@@ -134,7 +134,7 @@ export function extractFestivalCandidate(html: string, source: FestivalSource, f
     return { schemaVersion: INGESTION_SCHEMA_VERSION, festivalSlug: source.festivalSlug, sourceUrl: source.url, fetchedAt,
       evidence: [], warnings: ["Invalid official ticket supplement"], observedEditionYears: [] };
   const candidate = extractCatalogueCandidate(envelope.body, source, fetchedAt);
-  const ticket = observeTicketSupplement(envelope.ticket.html, source, envelope.ticket.url);
+  const ticket = observeTicketSupplement(envelope.ticket.html, source, envelope.ticket.url, candidate);
   // A failed current ticket check must not publish an older stock assertion
   // from another format as if the current inventory had been verified.
   delete candidate.ticketStatus;
