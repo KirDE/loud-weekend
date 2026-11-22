@@ -125,7 +125,7 @@ export async function decideChange(id: string, decision: "approve" | "reject", a
     const refresh = change.parserRunId ? change.sourceEvidence as { kind?: string; editionId?: string } | null : null;
     // Proposals at the same revision and edition can share a review even if
     // re-observed on different runs. Canonical publication still checks each before-value.
-    if (decision === "approve" && refresh && refresh.kind === "scoped-refresh" && refresh.editionId && catalogPublication) {
+    if (decision === "approve" && refresh && refresh.kind === "scoped-refresh" && refresh.editionId) {
       await tx.adminChange.updateMany({
         where: {
           resourceKind: change.resourceKind, resourceKey: change.resourceKey, status: AdminChangeStatus.PENDING,

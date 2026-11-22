@@ -226,6 +226,15 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal(repeated.queued, 0);
   assert.equal(requests.filter((path) => path === "/failing").length, attempts);
 
+  // Normal ingestion may already have applied a reviewed value.
+  await db.festivalEdition.update({
+    where: { id: datesChange.sourceEvidence.editionId },
+    data: { startDate: new Date(`${correctedStartDate}T00:00:00Z`) },
+  });
+  const approveDates = await admin.json(`/api/admin/changes/${datesChange.id}`, "POST", { decision: "approve" });
+  assert.equal(approveDates.status, 200);
+  assert.equal((await approveDates.json()).catalogPublicationId, null);
+
   const approvePath = `/api/admin/changes/${ticketChange.id}`;
   assert.equal((await admin.json(approvePath, "POST", { decision: "approve" })).status, 200);
   assert.equal((await admin.json(approvePath, "POST", { decision: "approve" })).status, 409);
@@ -234,8 +243,6 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.deepEqual(publication.fields, ["ticketStatus"]);
   assert.equal(publication.editionYear, 2027);
   assert.equal(await db.catalogPlaylistRefresh.count({ where: { publicationId: publication.id } }), 0);
-  const approveDates = await admin.json(`/api/admin/changes/${datesChange.id}`, "POST", { decision: "approve" });
-  assert.equal(approveDates.status, 200);
   originalStartDate = correctedStartDate;
   const afterApproval = await admin.json(`${refreshPath}?year=2027`, "POST");
   assert.equal(afterApproval.status, 201);
