@@ -1,7 +1,7 @@
-# Tolminator ordinary-admission stock: local parser checkpoint
+# Tolminator ordinary-admission stock: local observer checkpoint
 
 `observeTolminatorStock` is a pure, **unregistered** stock observer. It is not a
-production source, collector, health signal or publication path. Existing source
+production source, registered collector, health signal or publication path. Existing source
 configuration is unchanged. No migration or production writes are involved.
 
 ## Reviewed evidence
@@ -17,7 +17,7 @@ passes against that complete cached response, not just the minimized fixture.
 A subsequent ordinary product GET returned **HTTP 403**. That is an access error,
 not fresh availability, healthy-empty inventory or a successful refresh. No
 challenge bypass or basket request was attempted. Fixture/cached parsing is not
-live verification. Transport and error-health integration remain unfinished.
+live verification. Registered error-health and publication integration remain unfinished.
 
 ## Guards and deliberate limits
 
@@ -36,10 +36,29 @@ live verification. Transport and error-health integration remain unfinished.
   dates. No price/fee or lineup change is returned either.
 - Changed future product, tariff or layout needs review, not broad fallback.
 
+## Bounded read-only transport (unregistered)
+
+`collectTolminatorStock` reuses the bounded public-document pattern from the
+Hellfest collector, with the same existing Fetch/stream/AbortController APIs.
+It performs only one exact product GET, no retries, redirects or credentials.
+The 20-second maximum deadline covers headers and the streamed body, including
+transports that ignore abort. The decompressed stream is capped at 2 MB, decoded
+as strict UTF-8, and requires status 200, exact final URL, HTML MIME and a
+compatible charset. Other statuses (including 403) throw an explicit HTTP error;
+challenge/changed-schema pages fail the stock observer, never healthy-empty.
+Cancellation is attempted without waiting on an uncooperative stream.
+
+Only minimized stock/source/edition/time evidence is returned after full parsing;
+no raw HTML, cookies, dates, prices or basket destination escapes. This function
+has NO DB, scheduler, source health or catalog mutation, and is not registered
+with the runner. Existing last-good data therefore remains untouched on failure.
+Its tests inject synthetic responses, including current test-only sale windows;
+they are NOT fresh seller verification. The earlier real 403 remains unresolved,
+with no blind repeated request, UA change or bypass attempt.
+
 ## Remaining before source completion
 
-Use existing bounded read-only transport with exact status/MIME/redirect guards;
-preserve primary roster failures independently. Do not silently turn the current
+Preserve primary roster failures independently. Do not silently turn the current
 403 into success or switch to unrelated products. Bind source/edition/observed
 time/value to persisted proof, exercise canonical readback, idempotent replay and
 rollback on stale or tampered evidence in synthetic DB. Only then wire a reviewed
