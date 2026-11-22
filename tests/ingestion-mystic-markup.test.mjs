@@ -74,3 +74,41 @@ test('quiet Mystic warning exception does not accept another source, edition or 
  for(const candidate of [{...c,sourceUrl:'https://evil.test/'},{...c,observedEditionYears:[2026]},{...c,evidence:[]},{...c,festivalSlug:'other'}])assert.ok(evaluateCandidate(saved,candidate).reviewReasons.length);
  assert.deepEqual(evaluateCandidate(saved,{...c,warnings:[...c.warnings,'Independent evidence conflict']}).reviewReasons,['Independent evidence conflict']);
 });
+
+
+test('Mystic ticket stock ignores hidden, archived and non-content sellout claims',()=>{
+ const archived='<span class="elementor-icon-box-title">Mystic Festival 2026 bilety wyprzedane</span>';
+ const hidden='<section hidden><span class="elementor-icon-box-title">bilety wyprzedane</span></section>';
+ const footer='<footer><span class="elementor-icon-box-title">bilety wyprzedane</span></footer>';
+ for(const extra of [archived,hidden,footer]) {
+  const c=parse(html+extra);assert.equal(c.ticketStatus,'available');
+  assert.deepEqual(c.warnings,[]);
+ }
+});
+
+test('Mystic conflicting current stock statements retain the last verified state for review',()=>{
+ const c=parse(html+'<span class="elementor-icon-box-title">Mystic Festival 2027 bilety wyprzedane</span>');
+ assert.equal(c.ticketStatus,undefined);
+ assert.ok(c.warnings.some(w=>w.includes('ticket banners conflict')));
+ const result=evaluateCandidate(current,c);
+ assert.equal(result.publishable,false);
+ assert.ok(!result.changes.some(change=>change.field==='ticketStatus'));
+});
+
+test('Mystic disabled or credential-bearing ticket controls are not live offers',()=>{
+ for(const document of [
+  html.replace('class="elementor-button elementor-button-link elementor-size-sm"','aria-disabled="true" class="elementor-button elementor-button-link elementor-size-sm"'),
+  html.replace('https://tickets.mysticfestival.pl/pl/','https://other@tickets.mysticfestival.pl/pl/'),
+  html.replace('https://tickets.mysticfestival.pl/pl/','https://tickets.mysticfestival.pl:8443/pl/'),
+ ]) { const c=parse(document);assert.equal(c.ticketStatus,undefined);assert.equal(c.ticketsUrl,undefined); }
+});
+
+test('Mystic hidden sale text and hidden current date do not establish current ticket inventory',()=>{
+ const hiddenSale=html.replace('🐙  Faith No More pierwszym headlinerem &amp; bilety Early Bird już w sprzedaży!  🎉','Faith No More pierwszym headlinerem')
+   +'<section style="display:none"><span class="elementor-icon-box-title">bilety w sprzedaży</span></section>';
+ assert.equal(parse(hiddenSale).ticketStatus,undefined);
+ const hiddenDate=html.replace('class="elementor-heading-title elementor-size-medium"','hidden class="elementor-heading-title elementor-size-medium"');
+ const c=parse(hiddenDate);assert.equal(c.ticketStatus,undefined);
+ assert.ok(c.warnings.some(w=>w.includes('visible current-edition date')));
+ assert.equal(evaluateCandidate(current,c).publishable,false);
+});

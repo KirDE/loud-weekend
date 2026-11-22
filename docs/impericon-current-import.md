@@ -31,3 +31,13 @@ persisted official field evidence before committing catalogue or queue changes.
 Replays remain idempotent and do not create another job. A subsequent unchanged check makes no publication or agent
 call. existing exact-article parsing remains available for old bindings until activation;
 it is not the ongoing discovery mechanism.
+
+## Current ticket inventory (#434)
+
+After the existing home/news/article fetch, discover at most four visible current-edition standard weekend ticket products. Bind their exact dated, price-stage title to an enabled same-origin product control. Read the matching public Shopify Ajax `.js` endpoint with redirect rejection, bounded body and explicit JSON/JavaScript content type. This is source data; scripts are never executed.
+
+Require the exact discovered title/handle/URL, festival vendor/type and a single ordinary purchasable variant with coherent inventory booleans, positive price and supported quantity rule. Any verified current weekend tier available means `available`. Closed tiers, contradictory inventory, missing products or changed schemas require review; a tier alone cannot prove whole-event `sold_out`. Active fetch envelopes always carry inventory observations; legacy stored artist-only envelopes retain their historical behavior without making a new ticket claim.
+
+Current product selection follows the live edition's linked stage/year, not a frozen Tier 2 slug. Existing artist/edition/date/publisher gates stay in place. Full Rewind's preceding ticket-supplement PR is a code dependency, not a deployment requirement on OpenClaw.
+
+The integrated PR includes the canonical secondary-ticket publication boundary from #497. The mocked fetch producer is covered through durable evidence, canonical readback/replay and stale/archived rollback in `tests/impericon-ticket-publication.e2e.test.ts`; mixed artist/ticket and proof-tampering cases remain in `tests/impericon-current.e2e.test.ts`. This is code acceptance evidence, not a claim of live catalogue publication.
