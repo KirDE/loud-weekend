@@ -82,3 +82,12 @@ test("all unresolved, provider read failure, and malformed provider replies crea
  const state={favoriteFestivals:[],favoriteArtists:[],attendance:{},playlistFestivals:["wacken-open-air","graspop"]};
  assert.deepEqual(parsePlannerState(serializePlannerState(state)).playlistFestivals,state.playlistFestivals);
 });
+
+test("reviewed primary identity accepts non-Latin and stop-word-only names through the real RPC", async () => {
+ for (const name of ["Молчат Дома", "The The"]) {
+  const m=mock({[id("G")]:[track("t","Valid studio song",[["G","Provider Display Alias"]])]});
+  const result=await run([artist(name,"G")],m);
+  assert.equal(result.trackCount,1);assert.deepEqual(result.unresolved,[]);
+  assert.deepEqual(JSON.parse(writes(m).at(-1).init.body).uris,["spotify:track:"+id("t")]);
+ }
+});

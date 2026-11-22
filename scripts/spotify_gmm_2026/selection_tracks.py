@@ -45,7 +45,7 @@ def select_selection_tracks(value):
                 reviewed={a['id'] for a in profile['searchArtists']}
                 if artists[0]['id'] not in reviewed or not eligible_track(profile,track) or is_short_or_non_song(track) or track_version_penalty(track)>=2:
                     continue
-            elif artists[0]['id']!=identity or should_skip_track_for_artist(name,track,name):
+            elif artists[0]['id']!=identity or should_skip_track_for_artist(name,track,name,verified_primary_artist_id=identity):
                 continue
             eligible.append(track)
         # Same ordinary fallback priorities as the festival planner, after the

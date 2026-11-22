@@ -20,3 +20,16 @@ class SelectionPolicyTest(unittest.TestCase):
     def test_tribute_identity_is_not_an_ordinary_act(self):
         result=selection.select_selection_tracks({'artists':[{'requestedName':'Example Tribute','name':'Example Tribute','slug':'tribute','spotifyId':'A'*22,'tracks':[]}]})
         self.assertEqual(result,{'selected':[],'unresolved':['Example Tribute']})
+
+    def test_verified_primary_id_does_not_require_ascii_or_fuzzy_name_agreement(self):
+        for name in ('Молчат Дома', 'The The', '東京', 'Reviewed Canonical Name'):
+            row={'requestedName':name,'name':name,'slug':'synthetic','spotifyId':'A'*22,
+              'tracks':[{'id':'T'*22,'uri':'spotify:track:'+'T'*22,'name':'Studio song','duration_ms':180000,
+                'artists':[{'id':'A'*22,'name':'Provider display alias'}]}]}
+            with self.subTest(name=name):
+                self.assertEqual(selection.select_selection_tracks({'artists':[row]}),
+                    {'selected':[{'artist':name,'uri':'spotify:track:'+'T'*22}],'unresolved':[]})
+                for change in ({'duration_ms':20000},{'name':'Studio song - Live'},{'name':'Studio song (From "Movie")'},
+                    {'artists':[{'id':'B'*22,'name':name},{'id':'A'*22,'name':name}]}):
+                    invalid={**row,'tracks':[{**row['tracks'][0],**change}]}
+                    self.assertEqual(selection.select_selection_tracks({'artists':[invalid]})['unresolved'],[name])
