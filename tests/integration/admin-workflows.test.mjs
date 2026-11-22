@@ -1,3 +1,4 @@
+import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 import { createPrismaClient } from '../../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -6,7 +7,7 @@ import { createServer } from "node:http";
 import test from "node:test";
 
 const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl || !/(?:test|integration)/i.test(new URL(databaseUrl).pathname)) throw new Error("A test DATABASE_URL is required");
+requireLocalDisposableDatabase(databaseUrl);
 const db = createPrismaClient();
 const port = 3244;
 const origin = `http://127.0.0.1:${port}`;
@@ -48,6 +49,9 @@ test.before(async () => {
     update: { recordState: "CURRENT" },
   });
   await db.lineupEntry.deleteMany({ where: { editionId: edition.id } });
+  await db.artist.updateMany({ where: { slug: "integration-headliner" }, data: { name: "Integration Headliner", aliases: [] } });
+  await db.artistLink.deleteMany({ where: { artist: { slug: "integration-headliner" } } });
+  await db.artistProvenance.deleteMany({ where: { artist: { slug: "integration-headliner" } } });
   const source = await db.festivalSource.findFirst({ where: { festivalSlug: "wacken-open-air" } });
   const configured = { festivalId: festival.id, editionId: edition.id, editionYear: 2027,
     strategies: ["json_ld_event", "html_fallback"], refreshPolicy: "daily", enabled: true,
@@ -122,6 +126,60 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal((await db.catalogPlaylistRefresh.findUniqueOrThrow({ where: { publicationId: lineupPublication.id } })).status, "PENDING");
   const publishedHeadliners = await db.lineupEntry.findMany({ where: { edition: { festival: { slug: "wacken-open-air" }, recordState: "CURRENT" }, billing: "HEADLINER" }, include: { artist: true } });
   assert.deepEqual(publishedHeadliners.map(({ artist }) => artist.name), ["Integration Headliner"]);
+
+  const artistSlug = "integration-headliner";
+  const originalArtist = await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } });
+  const artistName = "Integration Headliner Revised";
+  const officialSite = "https://artist.example.test/";
+  const artistResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist", resourceKey: artistSlug, baseRevision: 0,
+    values: { canonicalName: artistName, officialUrl: officialSite },
+  });
+  assert.equal(artistResponse.status, 201);
+  const artistDraft = await artistResponse.json();
+  const artistChanges = await db.adminChange.findMany({ where: { draftId: artistDraft.id }, orderBy: { field: "asc" } });
+  assert.deepEqual(artistChanges.map(({ beforeValue }) => beforeValue), ["Integration Headliner", null]);
+  const decideArtist = (id, decision = "approve") => admin.json(`/api/admin/changes/${id}`, "POST", { decision });
+
+  // A concurrent canonical edit outside the admin revision counters must not be overwritten.
+  await db.artist.update({ where: { id: originalArtist.id }, data: { name: "Integration Independent Edit" } });
+  assert.equal((await decideArtist(artistChanges[0].id)).status, 409);
+  assert.equal((await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name, "Integration Independent Edit");
+  await db.artist.update({ where: { id: originalArtist.id }, data: { name: originalArtist.name } });
+
+  for (const change of artistChanges) {
+    const response = await decideArtist(change.id);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).artistPublication, "published");
+  }
+  const canonicalArtist = await db.artist.findUniqueOrThrow({ where: { slug: artistSlug }, include: { links: true, provenance: true } });
+  assert.equal(canonicalArtist.id, originalArtist.id);
+  assert.equal(canonicalArtist.name, artistName);
+  assert.ok(canonicalArtist.aliases.includes(originalArtist.name));
+  assert.equal(canonicalArtist.links[0].url, officialSite);
+  assert.equal(canonicalArtist.provenance[0].url, officialSite);
+  const publicArtist = await anonymous.json(`/artists/${artistSlug}/`);
+  assert.equal(publicArtist.status, 200);
+  const artistHtml = await publicArtist.text();
+  assert.match(artistHtml, /Integration Headliner Revised/);
+  assert.match(artistHtml, /https:\/\/artist\.example\.test\//);
+
+  const noopResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist", resourceKey: artistSlug, baseRevision: 2, values: { officialUrl: officialSite },
+  });
+  assert.equal(noopResponse.status, 201);
+  const noopDraft = await noopResponse.json();
+  const noop = await db.adminChange.findFirstOrThrow({ where: { draftId: noopDraft.id } });
+  assert.equal((await (await decideArtist(noop.id)).json()).artistPublication, "unchanged");
+  assert.equal(await db.artistProvenance.count({ where: { artistId: originalArtist.id } }), 1);
+  const rejectedResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist", resourceKey: artistSlug, baseRevision: 3, values: { canonicalName: "Unpublished Name" },
+  });
+  assert.equal(rejectedResponse.status, 201);
+  const rejectedDraft = await rejectedResponse.json();
+  const rejected = await db.adminChange.findFirstOrThrow({ where: { draftId: rejectedDraft.id } });
+  assert.equal((await decideArtist(rejected.id, "reject")).status, 200);
+  assert.equal((await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name, artistName);
 
   const playlistResponse = await admin.json("/api/admin", "POST", { resourceKind: "playlist", resourceKey: "integration-playlist", baseRevision: 0, values: { url: "https://open.spotify.com/playlist/integration", platform: "spotify", status: "draft" } });
   assert.equal(playlistResponse.status, 201);

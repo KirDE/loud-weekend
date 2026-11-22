@@ -1,3 +1,4 @@
+import { prepareArtistDraft, publishAdminArtistChange } from "@/lib/catalog/admin-artist-publication";
 import { assertAdminArtistReviewAllowed } from "@/lib/catalog/admin-artist-review";
 import { AdminChangeStatus, AdminDraftStatus, AdminResourceKind, AdminRunStatus, Prisma } from "@prisma/client";
 import { listConfiguredSources } from "@/lib/sources/repository";
@@ -45,6 +46,25 @@ export async function decideSubmission(reference: string, decision: "approve" | 
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
+async function draftChanges(
+  tx: Prisma.TransactionClient,
+  draft: { id: string; resourceKind: AdminResourceKind; resourceKey: string; baseRevision: number },
+  values: Record<string, unknown>,
+  before: Record<string, unknown>,
+) {
+  const { resourceKind, resourceKey, baseRevision } = draft;
+  const artistDraft = resourceKind === AdminResourceKind.ARTIST ? await prepareArtistDraft(tx, resourceKey, values) : null;
+  const changes = artistDraft?.changes ?? Object.entries(values).map(([field, afterValue]) =>
+    ({ field, beforeValue: before[field] ?? null, afterValue: afterValue ?? null }));
+  const sourceEvidence = artistDraft
+    ? { kind: "artist-draft", draftId: draft.id, artistId: artistDraft.artistId }
+    : { kind: "operator-draft", draftId: draft.id };
+  await tx.adminChange.createMany({ data: changes.map(({ field, beforeValue, afterValue }) => ({
+    field, resourceKind, resourceKey, baseRevision, beforeValue: beforeValue === null ? Prisma.JsonNull : json(beforeValue),
+    afterValue: afterValue === null ? Prisma.JsonNull : json(afterValue), sourceEvidence, confidence: 100, draftId: draft.id,
+  })) });
+}
+
 export async function saveDraft(input: { resourceKind: string; resourceKey: string; baseRevision: number; values: unknown }, actor: { id: string; email: string }) {
   const resourceKind = kind(input.resourceKind);
   if (!resourceKind || !input.resourceKey || !Number.isInteger(input.baseRevision) || typeof input.values !== "object" || !input.values) throw new Error("Invalid draft");
@@ -56,7 +76,7 @@ export async function saveDraft(input: { resourceKind: string; resourceKey: stri
     if (!Object.keys(values).length) throw new Error("Draft has no fields");
     const draft = await tx.adminDraft.create({ data: { resourceKind, resourceKey: input.resourceKey, baseRevision: currentRevision, revision: currentRevision + 1, status: AdminDraftStatus.QUEUED, values: json(values), validation: json({ valid: true, checkedAt: new Date().toISOString() }), createdById: actor.id } });
     const before = resource?.values && typeof resource.values === "object" && !Array.isArray(resource.values) ? resource.values as Record<string, unknown> : {};
-    await tx.adminChange.createMany({ data: Object.entries(values).map(([field, afterValue]) => ({ resourceKind, resourceKey: input.resourceKey, field, baseRevision: currentRevision, beforeValue: json(before[field] ?? null), afterValue: json(afterValue ?? null), sourceEvidence: json({ kind: "operator-draft", draftId: draft.id }), confidence: 100, draftId: draft.id })) });
+    await draftChanges(tx, draft, values, before);
     await tx.adminAuditEntry.create({ data: { actorId: actor.id, actorLabel: actor.email, action: "DRAFT_SAVED", resourceKind, resourceKey: input.resourceKey, afterValue: json(input.values), metadata: json({ revision: draft.revision }) } });
     return draft;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -73,7 +93,7 @@ export async function updateDraft(id: string, valuesInput: unknown, actor: { id:
     const values = valuesInput as Record<string, unknown>;
     const before = resource?.values && typeof resource.values === "object" && !Array.isArray(resource.values) ? resource.values as Record<string, unknown> : {};
     await tx.adminChange.deleteMany({ where: { draftId: id } });
-    await tx.adminChange.createMany({ data: Object.entries(values).map(([field, afterValue]) => ({ resourceKind: draft.resourceKind, resourceKey: draft.resourceKey, field, baseRevision: draft.baseRevision, beforeValue: json(before[field] ?? null), afterValue: json(afterValue ?? null), sourceEvidence: json({ kind: "operator-draft", draftId: id }), confidence: 100, draftId: id })) });
+    await draftChanges(tx, draft, values, before);
     const updated = await tx.adminDraft.update({ where: { id }, data: { values: json(values), validation: json({ valid: true, checkedAt: new Date().toISOString() }) } });
     await tx.adminAuditEntry.create({ data: { actorId: actor.id, actorLabel: actor.email, action: "DRAFT_UPDATED", resourceKind: draft.resourceKind, resourceKey: draft.resourceKey, afterValue: json(values), metadata: json({ draftId: id }) } });
     return updated;
@@ -102,6 +122,9 @@ export async function decideChange(id: string, decision: "approve" | "reject", a
       await tx.adminChange.update({ where: { id }, data: { status: AdminChangeStatus.CONFLICT } });
       throw new Error(`Revision conflict: expected ${currentRevision}`);
     }
+    const artistPublication = decision === "approve" && change.resourceKind === AdminResourceKind.ARTIST
+      ? await publishAdminArtistChange(tx, change)
+      : null;
     const status = decision === "approve" ? AdminChangeStatus.APPROVED : AdminChangeStatus.REJECTED;
     const updated = await tx.adminChange.updateMany({ where: { id, status: AdminChangeStatus.PENDING }, data: { status, decidedById: actor.id, decidedAt: new Date() } });
     if (updated.count !== 1) throw new Error("Change was decided concurrently");
@@ -122,9 +145,9 @@ export async function decideChange(id: string, decision: "approve" | "reject", a
       const pending = await tx.adminChange.count({ where: { draftId: change.draftId, status: AdminChangeStatus.PENDING, NOT: { id } } });
       if (!pending) await tx.adminDraft.update({ where: { id: change.draftId }, data: { status: decision === "approve" ? AdminDraftStatus.APPLIED : AdminDraftStatus.REJECTED } });
     }
-    await tx.adminAuditEntry.create({ data: { actorId: actor.id, actorLabel: actor.email, action: decision === "approve" ? "CHANGE_APPROVED" : "CHANGE_REJECTED", resourceKind: change.resourceKind, resourceKey: change.resourceKey, beforeValue: json(change.beforeValue), afterValue: json(change.afterValue), evidence: json(change.sourceEvidence), metadata: json({ changeId: change.id, field: change.field, catalogPublicationId: catalogPublication?.id ?? null, playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false }) } });
+    await tx.adminAuditEntry.create({ data: { actorId: actor.id, actorLabel: actor.email, action: decision === "approve" ? "CHANGE_APPROVED" : "CHANGE_REJECTED", resourceKind: change.resourceKind, resourceKey: change.resourceKey, beforeValue: json(change.beforeValue), afterValue: json(change.afterValue), evidence: json(change.sourceEvidence), metadata: json({ changeId: change.id, field: change.field, artistPublication, catalogPublicationId: catalogPublication?.id ?? null, playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false }) } });
     const decided = await tx.adminChange.findUniqueOrThrow({ where: { id } });
-    return { ...decided, catalogPublicationId: catalogPublication?.id ?? null, playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false };
+    return { ...decided, artistPublication, catalogPublicationId: catalogPublication?.id ?? null, playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
