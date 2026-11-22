@@ -22,6 +22,9 @@ test('actual ordinary unrestricted pass has independently bound public stock and
  assert.equal(observe(doc(),{...dates,endDate:'2027-06-07'}).status,undefined);
 });
 const htmlCases=[
+ ['disabled fieldset ancestor',s=>'<fieldset disabled>'+s+'</fieldset>'],
+ ['aria-disabled ancestor',s=>'<div aria-disabled="true">'+s+'</div>'],
+ ['disabled class ancestor',s=>'<div class="disabled">'+s+'</div>'],
  ['disabled ordinary',s=>s.replace('<select ','<select disabled ')],
  ['hidden rate',s=>s.replace('<table ','<table hidden ')],
  ['hidden header',s=>s.replace('data-id="1901845"','hidden data-id="1901845"')],

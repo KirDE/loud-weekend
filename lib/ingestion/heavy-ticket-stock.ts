@@ -43,7 +43,7 @@ export function heavyRenderAction(data: any): { token: string; meta: { widget: s
 export function reduceHeavyStockDocument(body: string): string {
   const $ = load(body), table = $("#ticket_table_5629650"), dayHeader = $(".billetterie_tb_titre_categorie[data-id='1901845']"), standardHeader = $(".billetterie_tb_titre_sous_categorie[data-id='1873636']");
   if (table.length !== 1 || dayHeader.length !== 1 || standardHeader.length !== 1) throw new Error("Heavy ordinary stock table/category missing or duplicated");
-  const blocked = "[hidden],[inert],[aria-hidden='true'],.hidden,.is--hidden,.d-none";
+  const blocked = "[hidden],[inert],[aria-hidden='true'],[disabled],[aria-disabled='true'],.disabled,.hidden,.is--hidden,.d-none";
   for (const el of [table,dayHeader,standardHeader]) {
     if (el.is(blocked) || el.parents(blocked).length || el.add(el.parents()).toArray().some(e => /display\s*:\s*none|visibility\s*:\s*hidden/i.test($(e).attr("style") ?? "")))
       throw new Error("Heavy ordinary stock table/category is hidden");
