@@ -1,3 +1,4 @@
+import type { PublicTicketOffers } from "./ticket-offer-proposal.ts";
 // Catalogue shapes are independent of the live, repository-backed seed data.
 export type TimetableEntry = {
   date: string;
@@ -23,6 +24,7 @@ export type Festival = {
   lineup: string[];
   officialUrl: string;
   ticketsUrl?: string;
+  ticketOffers?: PublicTicketOffers;
   playlistUrl?: string;
   sourceDeprecated?: boolean;
   sourceDeprecatedAt?: string;

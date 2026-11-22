@@ -34,7 +34,7 @@ export function festivalMusicEvent(item: Festival) {
     },
     url: `${SITE_ORIGIN}/festivals/${item.slug}/`,
     sameAs: item.officialUrl,
-    ...(item.ticketsUrl && availability
+    ...(!item.ticketOffers && item.ticketsUrl && availability
       ? { offers: { "@type": "Offer", url: item.ticketsUrl, availability } }
       : {}),
   };

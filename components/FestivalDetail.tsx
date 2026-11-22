@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
+import { FestivalTicketOffers } from "./FestivalTicketOffers";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import { PlanningTools } from "./PlanningTools";
@@ -29,7 +30,7 @@ export function FestivalDetail({
   playlist?: PlaylistStatus;
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
-  const { locale, t } = useLanguage();
+  const { locale, language, t } = useLanguage();
   const [lineupSort, setLineupSort] = useState<LineupSort>("official");
   const sortedLineup = sortFestivalLineup(item, lineupSort, locale, artistPopularity);
   const planner = useLocalPlanner();
@@ -146,6 +147,7 @@ export function FestivalDetail({
           </div>
         )}
       </div>
+      {item.ticketOffers && <FestivalTicketOffers value={item.ticketOffers} locale={language} />}
       <section className="lineupSection">
         <div className="sectionHeading">
           <div>

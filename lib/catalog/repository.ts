@@ -1,3 +1,5 @@
+import { readApprovedHellfestOffers } from "../ingestion/ticket-offer-proposal-store.ts";
+import type { PublicTicketOffers } from "../domain/ticket-offer-proposal.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
 import type { PrismaClient } from "@prisma/client";
 import type { ArtistProfile } from "../domain/artist.ts";
@@ -45,6 +47,17 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     ]);
     if (!editionRows.length || !artistRows.length) throw new Error("database catalogue is empty or incomplete");
 
+    // Only current Hellfest uses this reviewed view. No extra lookup for other
+    // festivals or historical editions; never expose pending/internal evidence.
+    const approvedTiers = new Map<string, PublicTicketOffers>();
+    for (const row of editionRows.filter(row => row.festival.slug === "hellfest" && row.recordState === "CURRENT")) {
+      const approved = await readApprovedHellfestOffers(this.client, row.id);
+      if (approved) {
+        const { editionYear, sourceUrl, observedAt, offers } = approved.proposal;
+        approvedTiers.set(row.id, { editionYear, sourceUrl, observedAt,
+          offers: offers.map(({ key, kind, status, price, saleDateText }) => ({ key, kind, status, price, saleDateText })) });
+      }
+    }
     const editions: FestivalEdition[] = editionRows.map((row) => {
       const headliners = row.lineup.filter(({ billing }) => billing === "HEADLINER").map(({ artist }) => artist.name);
       const lineup = row.lineup.filter(({ billing }) => billing === "LINEUP").map(({ artist }) => artist.name);
@@ -57,6 +70,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         sourceDeprecated: !!row.sources?.length && row.sources.every(s => s.deprecatedAt !== null),
         sourceDeprecatedAt: row.sources?.length && row.sources.every(s => s.deprecatedAt !== null)
           ? row.sources.map(s => s.deprecatedAt!.toISOString()).sort()[0] : undefined,
+        ...(approvedTiers.has(row.id) ? { ticketOffers: approvedTiers.get(row.id)! } : {}),
         ticketStatus: lower(row.ticketStatus), updatedAt: row.sourceUpdatedAt.toISOString(),
         genres: row.festival.genres,
         coordinates: row.festival.latitude === null || row.festival.longitude === null

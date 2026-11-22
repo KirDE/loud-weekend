@@ -22,3 +22,11 @@ export type TicketOfferProposalBatch = {
   offers: TicketOfferProposal[];
   warnings: string[];
 };
+
+/** Public approved projection: no review IDs, actor, hash or internal excerpts. */
+export type PublicTicketOffers = {
+  editionYear: number;
+  sourceUrl: string;
+  observedAt: string;
+  offers: Pick<TicketOfferProposal, "key" | "kind" | "status" | "price" | "saleDateText">[];
+};

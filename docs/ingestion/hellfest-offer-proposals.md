@@ -1,7 +1,8 @@
 # Hellfest tier extraction — local implementation checkpoint for #446
 
-**Not production-ready or registered with ingestion/publication.** No catalog,
-notification, UI, production migration/source or global ticket status changes.
+**Not production-ready or registered with ingestion.** Local reviewed public
+catalog/UI integration exists (see milestones below); no notification,
+production migration/source or global ticket status writes.
 Additive migrations have only been applied to the disposable local test DB.
 
 The existing domain has one ticket state. Official Hellfest homepage cards show
@@ -129,8 +130,7 @@ revalidates edition/source/parser/value/hash and decision hash. New pending or
 rejected observations cannot replace the previous approved one. Corrupt approved
 proof errors instead of falling back; approval older than 24h or >60s in the
 future returns null rather than current inventory. Publication uses this separate
-approved tier view, never a flattened global ticketStatus. The **existing public
-catalog is not yet wired to it**, and no notification/provider/source-health work
+approved tier view, never a flattened global ticketStatus. The public catalog integration is described below; no notification/provider/source-health work
 is emitted. These are application-level append-only service operations, not a
 claim that a database administrator cannot alter rows.
 
@@ -167,6 +167,38 @@ DB-error isolation. The isolated DB test executes actual GET→revision→POST�
 approved-reader, conflict/replay and persisted role-revocation checks; only session
 lookup is stubbed there. No claim of end-to-end cookie login/browser verification.
 
-Still required before #446 is complete: reviewer queue UI, approved-only public
-catalog integration, EN/DE/RU mobile presentation/appropriate SEO, focused PR and
+Still required before #446 is complete: reviewer queue UI, collector invocation,
+browser/mobile verification, focused PR and
 fresh exact-head CI/Codex review. This local checkpoint is not completed coverage.
+
+## Approved public catalog and localized presentation (local checkpoint)
+
+The database catalog now reads the validated approved-only view for current
+Hellfest editions. It publishes a minimal `ticketOffers` projection (year, source,
+observation timestamp, tier kind/status/price/sale prose), without snapshot IDs,
+reviewer identities, hashes or evidence excerpts. Pending/rejected snapshots do
+not overwrite the last approval. Expired approvals disappear; corrupt approved
+proof fails the read rather than silently returning healthy old data. Archived
+editions and other festivals do not query this review view.
+
+`FestivalTicketOffers` is rendered by the real detail component in EN/DE/RU.
+It shows independent full/day-pass states, integer-minor-unit currency formatting,
+unknown prices/fees, the original unqualified sale prose and its missing year/time
+zone, official source and observation time in UTC. Responsive wrapping uses a
+single column at narrow widths; browser/mobile layout verification is still due.
+No buy/resale button or implied total is invented.
+
+Shared ticket presentation (including the actual comparison cell and sale-only
+filter) treats these mixed categories as information, not a global inventory
+claim, linking only to their official source. The stored global ticketStatus is
+unchanged. SEO deliberately omits global Offer markup when these tiers exist;
+there is no sufficiently precise checkout offer or sale timestamp to advertise.
+
+Real isolated DB tests now exercise catalog readback before approval, after an
+atomic audited approval, after newer pending/rejected observations, and after
+expiry/proof corruption. Render tests use the real detail and comparison cells
+in all three languages, including unknown price/fees and preservation of input
+objects. Full catalog DB regression and browser/mobile tests remain due, along
+with the reviewer queue UI, collector invocation path, focused PR/full CI and
+exact-head Codex review. Nothing in this checkpoint is deployed or approved in
+production; Hellfest is still unfinished.

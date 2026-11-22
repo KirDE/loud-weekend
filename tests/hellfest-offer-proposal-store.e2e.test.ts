@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createPrismaClient } from '../lib/prisma-client.mjs';
+import { DatabaseCatalogRepository } from '../lib/catalog/repository.ts';
 import { requireLocalDisposableDatabase } from './support/disposable-db.ts';
 import { collectPendingHellfestOffers } from '../lib/ingestion/hellfest-offer-collector.ts';
 import { stageHellfestOffers, readPendingHellfestOffers } from '../lib/ingestion/ticket-offer-proposal-store.ts';
@@ -11,6 +12,8 @@ const db = createPrismaClient();
 const html = readFileSync(new URL('./fixtures/hellfest/offer-cards.html', import.meta.url), 'utf8');
 const slug = 'hellfest';
 let editionId: string;
+let fixtureArtistId: string;
+const publicItem = async () => (await new DatabaseCatalogRepository(db).read()).festivals.find(f => f.slug === slug)!;
 const time = Date.now() - 10_000;
 const input = (delta = 0) => ({ editionId, html, finalUrl: 'https://hellfest.fr/', status: 200, observedAt: new Date(time + delta).toISOString() });
 test.before(async () => {
@@ -19,9 +22,12 @@ test.before(async () => {
   const f = await db.festival.create({ data: { slug, name: 'Synthetic Hellfest', country: 'France', countryCode: 'FR', officialUrl: 'https://hellfest.fr/', genres: [] } });
   const e = await db.festivalEdition.create({ data: { festivalId: f.id, year: 2027, status: 'CONFIRMED', ticketStatus: 'UNKNOWN', recordState: 'CURRENT', completeness: 'COMPLETE', sourceUpdatedAt: new Date(time) } });
   editionId = e.id;
+  const artist = await db.artist.create({ data: { slug: `tier-${randomUUID()}`, name: 'Synthetic Tier Artist', identityState: 'UNRESOLVED', topTracks: [], recentSetlists: [], freshness: {} } });
+  fixtureArtistId = artist.id;
 });
 test.after(async () => {
   if (editionId) await db.festival.deleteMany({ where: { slug, editions: { some: { id: editionId } } } });
+  if (fixtureArtistId) await db.artist.delete({ where: { id: fixtureArtistId } });
   await db.$disconnect();
 });
 test('durable tier staging, pending readback, replay; no global/publication/provider mutation', async () => {
@@ -133,6 +139,7 @@ test('explicit review: authorization, exact revision, atomic audit, concurrent r
     const row = await db.ticketOfferProposalSnapshot.findFirstOrThrow({ where: { editionId }, orderBy: { observedAt: 'desc' } });
     const review = { snapshotId: row.id, expectedContentHash: row.contentHash, decision: 'approve' as const, actorId: actor.id };
     assert.equal(await readApprovedHellfestOffers(db, editionId), null, 'pending is never public');
+    assert.equal((await publicItem()).ticketOffers, undefined);
     process.env.ADMIN_EMAILS = actor.email;
     await assert.rejects(decideHellfestOffers(db, review), /Authorized/);
     await db.user.update({ where: { id: actor.id }, data: { role: 'EDITOR' } });
@@ -163,6 +170,12 @@ test('explicit review: authorization, exact revision, atomic audit, concurrent r
     assert.equal(first.id, second.id);
     assert.equal(await db.adminAuditEntry.count({ where: { actorId: actor.id } }), 1);
     assert.equal((await readPendingHellfestOffers(db, editionId))!.reviewState, 'approved');
+    const publicOffers = (await publicItem()).ticketOffers!;
+    assert.deepEqual(publicOffers.offers.map(o => o.status), ['sold_out', 'not_on_sale']);
+    assert.equal(publicOffers.offers[0].price!.amountMinor, 38900);
+    assert.equal((await publicItem()).ticketStatus, 'unknown');
+    assert.doesNotMatch(JSON.stringify(publicOffers), /actorId|contentHash|excerpt|approvedAt|snapshotId|reviewState/);
+    assert.equal((await new DatabaseCatalogRepository(db).read()).editions.find(e => e.slug === slug)!.ticketOffers!.editionYear, 2027);
     assert.equal((await readApprovedHellfestOffers(db, editionId))!.id, row.id);
     await assert.rejects(decideHellfestOffers(db, { ...review, decision: 'reject' }), /already decided/);
     // Newer pending and rejected proposals must not replace explicit approval.
@@ -172,11 +185,13 @@ test('explicit review: authorization, exact revision, atomic audit, concurrent r
     const reject = { ...review, snapshotId: newer.id, expectedContentHash: newer.contentHash, decision: 'reject' as const };
     await decideHellfestOffers(db, reject);
     assert.equal((await readPendingHellfestOffers(db, editionId))!.reviewState, 'rejected');
+    assert.deepEqual((await publicItem()).ticketOffers, publicOffers);
     assert.equal((await readApprovedHellfestOffers(db, editionId))!.id, row.id);
     assert.equal(await db.adminAuditEntry.count({ where: { actorId: actor.id } }), 2);
     // Mutated approval proof must fail, never fall back to another snapshot.
     await db.ticketOfferReviewDecision.update({ where: { id: first.id }, data: { contentHash: '0'.repeat(64) } });
     await assert.rejects(readApprovedHellfestOffers(db, editionId), /decision proof/);
+    await assert.rejects(publicItem(), /decision proof/);
     await db.ticketOfferReviewDecision.update({ where: { id: first.id }, data: { contentHash: row.contentHash } });
     await db.ticketOfferProposalSnapshot.update({ where: { id: row.id }, data: { parserVersion: 'foreign' } });
     await assert.rejects(readApprovedHellfestOffers(db, editionId), /proof mismatch/);
@@ -185,6 +200,7 @@ test('explicit review: authorization, exact revision, atomic audit, concurrent r
     try {
       Date.now = () => realNow() + 86_400_001;
       assert.equal(await readApprovedHellfestOffers(db, editionId), null, 'expired approval is not current inventory');
+      assert.equal((await publicItem()).ticketOffers, undefined);
     } finally { Date.now = realNow; }
     // Target drift invalidates even an approved snapshot.
     await db.festivalEdition.update({ where: { id: editionId }, data: { year: 2028 } });

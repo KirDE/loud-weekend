@@ -1429,3 +1429,7 @@ a:focus-visible, select:focus-visible, summary:focus-visible {
 .plannerResetDialog::backdrop { background: rgb(0 0 0 / 65%); }
 .plannerResetDialog .playlistActions { margin-top: 1rem; flex-wrap: wrap; }
 .plannerReset [role="status"] { max-width: 28rem; }
+
+.ticketOfferSection { margin-block: 2rem; }
+.ticketOfferGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1rem; }
+.ticketOfferGrid article { border: 1px solid currentColor; border-radius: .75rem; padding: 1rem; min-width: 0; overflow-wrap: anywhere; }
