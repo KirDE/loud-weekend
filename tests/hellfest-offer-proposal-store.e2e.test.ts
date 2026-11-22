@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createPrismaClient } from '../lib/prisma-client.mjs';
 import { requireLocalDisposableDatabase } from './support/disposable-db.ts';
+import { collectPendingHellfestOffers } from '../lib/ingestion/hellfest-offer-collector.ts';
 import { stageHellfestOffers, readPendingHellfestOffers } from '../lib/ingestion/ticket-offer-proposal-store.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db = createPrismaClient();
@@ -88,4 +89,35 @@ test('rejects slug, canonical source and current-edition target drift', async ()
   await assert.rejects(readPendingHellfestOffers(db, editionId));
   await db.festivalEdition.update({ where: { id: editionId }, data: { recordState: 'CURRENT' } });
   assert.equal(await db.ticketOfferProposalSnapshot.count(), 3);
+});
+
+
+test('strict GET collector to durable pending evidence; failures preserve last-good snapshot', async () => {
+  const before = await db.festivalEdition.findUnique({ where: { id: editionId } });
+  const count = await db.ticketOfferProposalSnapshot.count();
+  const makeResponse = (body: string, status = 200) => {
+    const r = new Response(body, { status, headers: { 'content-type': 'text/html' } });
+    Object.defineProperty(r, 'url', { value: 'https://hellfest.fr/' });
+    return r;
+  };
+  for (const fetchImpl of [
+    async () => makeResponse('blocked', 403),
+    async () => makeResponse(html.replaceAll('2027', '2026')),
+    async () => makeResponse(html.replace('389€', 'wrong')),
+    async () => makeResponse('<html>Challenge</html>'),
+    async () => { throw new Error('network'); },
+  ]) {
+    await assert.rejects(collectPendingHellfestOffers(db, editionId, { fetchImpl }));
+    assert.equal(await db.ticketOfferProposalSnapshot.count(), count);
+    assert.equal((await readPendingHellfestOffers(db, editionId))!.proposal.offers[0].price!.amountMinor, 39900);
+  }
+  const row = await collectPendingHellfestOffers(db, editionId, { fetchImpl: async (url, options) => {
+    assert.equal(url, 'https://hellfest.fr/'); assert.equal(options?.method, 'GET');
+    return makeResponse(html);
+  } });
+  const pending = await readPendingHellfestOffers(db, editionId);
+  assert.equal(pending!.id, row.id); assert.equal(pending!.reviewState, 'pending');
+  assert.deepEqual(pending!.proposal.offers.map(o => o.status), ['sold_out', 'not_on_sale']);
+  assert.equal(await db.ticketOfferProposalSnapshot.count(), count + 1);
+  assert.deepEqual(await db.festivalEdition.findUnique({ where: { id: editionId } }), before);
 });

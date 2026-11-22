@@ -81,3 +81,29 @@ approval/publication/rejection flow, canonical public tier reader, EN/DE/RU/mobi
 UI/SEO, complete source-to-public DB rollback tests, CI and exact-head Codex review.
 Hellfest remains unfinished. Do not apply the migration to production as part of
 this work.
+
+## Bounded collector (still pending-only)
+
+`fetchHellfestOfferObservation` uses the normal native Fetch/AbortController and
+stream reader primitives already used by ingestion; no browser or new library.
+It performs exactly one credential-free GET of `https://hellfest.fr/`, refuses
+redirects, and requires exact final URL, HTTP 200 and an HTML content type. A
+20-second deadline covers headers and the entire body (not only initial fetch).
+Both advertised and streamed sizes are bounded to 2 MB; invalid UTF-8, empty,
+partial/error responses, read failures and timeouts fail without staging data.
+No retry, alternate endpoint, shop, account or reservation access is attempted.
+The observed timestamp is generated only after the document finishes reading.
+
+`collectPendingHellfestOffers` composes that transport directly with existing
+re-extraction/staging. Callers supply only an edition ID, not arbitrary offers,
+source URLs or timestamps. It remains **unregistered and not public**; there is
+no runtime job, source-health refresh or automatic approval/publication. The
+reviewer readback still explicitly says pending. This does not replace the
+required authenticated approval/rejection flow or canonical public reader.
+
+Tests cover strict request/status/identity/MIME/size, malformed/empty/failed
+streams, deadline over stalled headers and stalled bodies, network failures, and
+synthetic GET→atomic DB pending readback. Challenge HTML, wrong edition, malformed
+tier prices and HTTP/network errors preserve the last valid pending observation.
+The native collector also completed one live GET200, matching both tiers with no
+warnings (not a public inventory write or a readiness/acceptance claim).
