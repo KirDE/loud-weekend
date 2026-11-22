@@ -80,8 +80,9 @@ function extractConfiguredCandidate(html: string, source: FestivalSource, fetche
   // Its trusted fallback owns this existing source, not generic Event guesses.
   if (source.festivalSlug === "alcatraz" && source.strategies.includes("html_fallback"))
     return extractHtmlFallbackCandidate(html, source, fetchedAt);
-  // Barcelona's visible dated banner plus purchase control owns stock.
-  if (source.festivalSlug === "barcelona-rock-fest" && source.strategies.includes("html_fallback"))
+  // Scoped source DOM owns stock, including absence/conflicts; generic
+  // Event offers cannot restore unavailable or uncorroborated stock.
+  if (["barcelona-rock-fest", "masters-of-rock"].includes(source.festivalSlug) && source.strategies.includes("html_fallback"))
     return extractHtmlFallbackCandidate(html, source, fetchedAt);
   const candidates = source.strategies.flatMap((strategy) => {
     if (strategy === "json_ld_event") return [extractJsonLdCandidate(html, source, fetchedAt)];

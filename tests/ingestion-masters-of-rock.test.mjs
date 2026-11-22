@@ -72,3 +72,78 @@ test('partial list shrinkage stays review-required and cannot overwrite independ
   assert.equal(d.publishable, false);
   assert.ok(d.reviewReasons.includes('Removals require confirmation'));
 });
+
+
+test('ticket inventory ignores archived sections, seating sellouts and the conditional price deadline',()=>{
+ const archived=html.match(/<section class="mor-content-section mor-price-section"[^]*?<\/section>/)[0].replaceAll('2027','2026').replaceAll('Koupit vstupenku ↗','Vyprodáno');
+ const seated=html.replace('Tribuna Platinum</h3>','Tribuna Platinum vyprodáno</h3>');
+ assert.equal(parse(seated+archived).ticketStatus,'available');
+ assert.deepEqual(parse(seated+archived).warnings,[]);
+});
+
+test('an explicit current standard-pass sellout is distinct from ambiguous unavailability',()=>{
+ const sold=html.replace('Na stání</h3>','Na stání vyprodáno</h3>').replace(/<a href="\/cs\/koncerty\/2027-masters-of-rock"[^]*?<\/a>/,'');
+ const c=parse(sold);assert.equal(c.ticketStatus,'sold_out');
+ assert.ok(c.evidence.some(e=>e.field==='ticketStatus' && e.sourceUrl===source.url && e.excerpt.includes('vyprodáno')));
+ assert.equal(evaluateCandidate(current,c).changes.find(e=>e.field==='ticketStatus').after,'sold_out');
+});
+
+test('contradictory current stock retains last verified availability for review',()=>{
+ const c=parse(html.replace('Na stání</h3>','Na stání vyprodáno</h3>'));
+ assert.equal(c.ticketStatus,undefined);
+ assert.ok(c.warnings.some(w=>w.includes('stock conflicts')));
+ assert.equal(evaluateCandidate(current,c).publishable,false);
+});
+
+test('hidden, stale, duplicate or foreign ticket inventory cannot establish current availability',()=>{
+ const section=html.match(/<section class="mor-content-section mor-price-section"[^]*?<\/section>/)[0];
+ const cases=[
+  html.replace('class="mor-content-section mor-price-section"','hidden class="mor-content-section mor-price-section"'),
+  html.replace('class="mor-price-card custom-inner-bg is-primary"','style="display:none" class="mor-price-card custom-inner-bg is-primary"'),
+  html.replace('class="mor-hero-side custom-inner-bg"','aria-hidden="true" class="mor-hero-side custom-inner-bg"'),
+  html.replace('Masters of Rock 2027\t','Masters of Rock 2026\t'),
+  html+section,
+  html.replaceAll('/cs/koncerty/2027-masters-of-rock','https://other.example/cs/koncerty/2027-masters-of-rock'),
+  html.replaceAll('/cs/koncerty/2027-masters-of-rock','https://user@www.mastersofrock.cz/cs/koncerty/2027-masters-of-rock'),
+ ];
+ for(const document of cases) assert.equal(parse(document).ticketStatus,undefined);
+ assert.equal(parse(html,{...source,url:'https://other.example/'}).ticketStatus,undefined);
+});
+
+test('minified element boundaries preserve a valid standard four-day pass',()=>{
+ const minified=html.replace(/>\s+</g,'><');
+ assert.equal(parse(minified).ticketStatus,'available');
+ assert.deepEqual(parse(minified).warnings,[]);
+ const currentCard=minified.match(/<article[^]*?Na stání[^]*?<\/article>/)[0];
+ const noDuration=minified.replace(currentCard,currentCard.replace('4 dny','1 den')+'<small>4 dny archived promotion</small>');
+ assert.equal(parse(noDuration).ticketStatus,undefined);
+});
+
+test('minified sellout labels remain distinct from available and contradictory stock',()=>{
+ const contradictory=html.replace('Na stání</h3>','Na stání vyprodáno</h3>').replace(/>\s+</g,'><');
+ const blocked=parse(contradictory);assert.equal(blocked.ticketStatus,undefined);
+ assert.ok(blocked.warnings.some(w=>w.includes('stock conflicts')));
+ const sold=contradictory.replace(/<a href="\/cs\/koncerty\/2027-masters-of-rock"[^]*?<\/a>/,'');
+ assert.equal(parse(sold).ticketStatus,'sold_out');
+ assert.equal(evaluateCandidate(current,parse(contradictory)).publishable,false);
+});
+
+test('class-disabled link and ancestor cannot establish stock; identical CTAs are not ambiguous',()=>{
+ const anchor=html.match(/<a href="\/cs\/koncerty\/2027-masters-of-rock"[^]*?<\/a>/)[0];
+ for(const disabled of [anchor.replace('btn btn-primary','btn btn-primary disabled'), '<div class="disabled">'+anchor+'</div>']) {
+  const c=parse(html.replace(anchor,disabled));assert.equal(c.ticketStatus,undefined);
+ }
+ const duplicate=parse(html.replace(anchor,anchor+anchor.replace('href="/cs/', 'href="https://www.mastersofrock.cz/cs/')));
+ assert.equal(duplicate.ticketStatus,'available');assert.deepEqual(duplicate.warnings,[]);
+});
+
+test('current scoped card overrides generic Event stock including disabled and contradictory controls',()=>{
+ const event='<script type="application/ld+json">'+JSON.stringify({'@context':'https://schema.org','@type':'Event',name:'Masters of Rock 2027',startDate:'2027-07-08',endDate:'2027-07-11',offers:{'@type':'Offer',availability:'https://schema.org/InStock',url:'https://www.mastersofrock.cz/cs/masters-of-rock-vstupenky'}})+'</script>';
+ const anchor=html.match(/<a href="\/cs\/koncerty\/2027-masters-of-rock"[^]*?<\/a>/)[0];
+ const sold=html.replace('Na stání</h3>','Na stání vyprodáno</h3>').replace(anchor,'');
+ const c=parse(event+sold);assert.equal(c.ticketStatus,'sold_out');
+ assert.ok(c.evidence.find(e=>e.field==='ticketStatus').excerpt.includes('vyprodáno'));
+ const conflict=parse(event+html.replace('Na stání</h3>','Na stání vyprodáno</h3>'));
+ assert.equal(conflict.ticketStatus,undefined);assert.equal(evaluateCandidate(current,conflict).publishable,false);
+ assert.equal(parse(event+html.replace(anchor,anchor.replace('btn btn-primary','btn btn-primary disabled'))).ticketStatus,undefined);
+});
