@@ -1,8 +1,6 @@
 import type { Festival } from "./domain/festival";
 
-import { editionOnHiatus } from "./edition-lifecycle.ts";
-
-type Dates = Pick<Festival, "startDate" | "endDate"> & Partial<Pick<Festival, "slug" | "editionYear" | "officialUrl" | "editionLifecycle">>;
+type Dates = Pick<Festival, "startDate" | "endDate">;
 
 function parseDate(value: string | undefined): Date | null {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -22,7 +20,6 @@ export function monthIndex(date: Date): number {
 
 /** Month is 1–12; omit year only for the season-wide discovery filter. */
 export function festivalOverlapsMonth(item: Dates, month: number, year?: number): boolean {
-  if (editionOnHiatus(item)) return false;
   if (!Number.isInteger(month) || month < 1 || month > 12) return false;
   const interval = festivalDateInterval(item);
   if (!interval) return false;
@@ -40,8 +37,7 @@ export function availableFestivalMonths(items: Dates[]): number[] {
     .filter(month => items.some(item => festivalOverlapsMonth(item, month)));
 }
 
-export function formatFestivalDateRange(item: Dates, locale: string, unknown: string, hiatus = "Edition on hiatus"): string {
-  if (editionOnHiatus(item)) return hiatus;
+export function formatFestivalDateRange(item: Dates, locale: string, unknown: string): string {
   const interval = festivalDateInterval(item);
   if (!interval) return unknown;
   const formatter = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });

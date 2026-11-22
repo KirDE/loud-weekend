@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { announcedArtists } from "@/lib/festival-lineup";
 import { notFound } from "next/navigation";
 import type { Language } from "@/components/LanguageProvider";
 import { ArtistDetail } from "@/components/ArtistDetail";
@@ -34,6 +33,6 @@ export default async function LocalizedArtistPage({ params }: { params: Promise<
   const { artists, festivals } = await getCatalog();
   const artist = artists.find((item) => item.slug === slug);
   if (!artist) notFound();
-  const appearances = festivals.filter((festival) => announcedArtists(festival).includes(artist.name));
+  const appearances = festivals.filter((festival) => [...festival.headliners, ...festival.lineup].includes(artist.name));
   return <ArtistDetail artist={artist} appearances={appearances} />;
 }

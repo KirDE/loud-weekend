@@ -38,7 +38,7 @@ test("database repository preserves the public catalogue projection", async () =
 test("database reads fail closed without a file fallback", async () => {
   const failure = new Error("catalogue database unavailable");
   const failingDatabase = {
-    $transaction: async () => { throw failure; },
+    festivalEdition: { findMany: async () => { throw failure; } },
     artist: { findMany: async () => [] },
   } as unknown as PrismaClient;
   await assert.rejects(

@@ -107,7 +107,7 @@ test('repository projects serializable Spotify stats and suppresses a stale or u
   const row = { festival: { slug: 'synthetic-fest', name: 'Synthetic Fest', countryCode: 'DE', country: 'Germany', officialUrl: 'https://example.test', genres: [], latitude: null, longitude: null },
     year: 2027, startDate: null, endDate: null, snapshotAt: null, sourceUpdatedAt: checkedAt, status: 'PARTIAL', ticketStatus: 'UNKNOWN', recordState: 'CURRENT', completeness: 'PARTIAL',
     lineup: [{ billing: 'LINEUP', artist: { name: 'Synthetic' } }], timetable: [], provenance: [], playlists: [] };
-  const repository = new DatabaseCatalogRepository({ $transaction: async (fn) => fn({ editionLifecycleProposalSnapshot: { findFirst: async () => null }, artist: { findMany: async () => [f.artist] }, festivalEdition: { findMany: async () => [row] } }), artist: { findMany: async () => [f.artist] }, festivalEdition: { findMany: async () => [row] } });
+  const repository = new DatabaseCatalogRepository({ artist: { findMany: async () => [f.artist] }, festivalEdition: { findMany: async () => [row] } });
   let snapshot = await repository.read();
   assert.equal(snapshot.artists[0].spotifyStats.followers, 123);
   assert.equal(snapshot.artists[0].spotifyStats.checkedAt, '2026-10-01T00:00:00.000Z');

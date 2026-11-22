@@ -92,10 +92,10 @@ test("public content changes invalidate old validators without timestamp updates
 
 test("DB query selects only current 2027 public fields; missing/failed DB fails closed even with wildcard", async () => {
   let query;
-  const database = { editionLifecycleProposalSnapshot: { findFirst: async () => null }, festivalEdition: { findMany: async (args) => { query = args; return [edition()]; } } };
+  const database = { festivalEdition: { findMany: async (args) => { query = args; return [edition()]; } } };
   await readOfflineCatalog(database);
   assert.deepEqual(query.where, { year: 2027, recordState: "CURRENT" });
-  assert.deepEqual(Object.keys(query.select), ["id", "festival", "startDate", "endDate", "timetable"]);
+  assert.deepEqual(Object.keys(query.select), ["festival", "startDate", "endDate", "timetable"]);
   for (const findMany of [async () => [], async () => { throw new Error("secret connection error"); }]) {
     const response = await serveOfflineCatalog(request("*"), () => readOfflineCatalog({ festivalEdition: { findMany } }));
     assert.equal(response.status, 503);
@@ -113,7 +113,7 @@ test("actual GET route reads DB on each call and never returns 304 during DB fai
   let fail = false;
   let reads = 0;
   const previous = globalThis.prisma;
-  globalThis.prisma = { editionLifecycleProposalSnapshot: { findFirst: async () => null }, festivalEdition: { findMany: async () => {
+  globalThis.prisma = { festivalEdition: { findMany: async () => {
     reads++;
     if (fail) throw new Error("DB unavailable");
     return rows;

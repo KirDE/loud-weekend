@@ -1,4 +1,3 @@
-import type { PublicEditionLifecycle } from "./edition-lifecycle-review.ts";
 // Catalogue shapes are independent of the live, repository-backed seed data.
 export type TimetableEntry = {
   date: string;
@@ -29,8 +28,6 @@ export type Festival = {
   sourceDeprecatedAt?: string;
   status: "confirmed" | "partial" | "tba";
   editionYear?: number;
-  /** Approved factual notice; independent of canonical ticket/date fields. */
-  editionLifecycle?: PublicEditionLifecycle;
   completeness?: "complete" | "partial" | "tba";
   ticketStatus: "available" | "low" | "not_on_sale" | "sold_out" | "sales_ended" | "unavailable" | "unknown";
   updatedAt: string;

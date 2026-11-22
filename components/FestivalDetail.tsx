@@ -7,8 +7,6 @@ import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import { PlanningTools } from "./PlanningTools";
 import type { PlaylistStatus } from "@/lib/domain/festival";
-import { editionOnHiatus } from "@/lib/edition-lifecycle";
-import { EditionLifecycleNotice } from "./EditionLifecycleNotice";
 import { ticketPresentation } from "@/lib/tickets";
 import { festivalSetlistHistoryUrl } from "@/lib/setlist-history";
 import { announcedArtists, hasAnnouncedLineup, sortFestivalLineup, type LineupSort } from "@/lib/festival-lineup";
@@ -44,7 +42,6 @@ export function FestivalDetail({
       timeZone: "UTC",
     }).format(new Date(`${value}T12:00:00Z`));
   const setlistUrl = festivalSetlistHistoryUrl(item.slug);
-  const hiatus = editionOnHiatus(item);
   const tickets = ticketPresentation(item);
   const status =
     item.status === "tba"
@@ -67,15 +64,14 @@ export function FestivalDetail({
           </div>
           <h1>{item.name}</h1>
           <p className="detailDate">
-            {hiatus ? t("editionHiatus") : item.startDate
+            {item.startDate
               ? `${prettyDate(item.startDate)}${item.endDate && item.endDate !== item.startDate ? ` — ${prettyDate(item.endDate)}` : ""}`
               : t("datesTba")}
           </p>
-          <span className={`status ${hiatus ? "hiatus" : item.status}`}>{hiatus ? t("editionHiatus") : status}</span>
+          <span className={`status ${item.status}`}>{status}</span>
           {item.sourceDeprecated && <span className="status deprecated">{t("sourceDeprecated")}</span>}
         </div>
       </section>
-      <EditionLifecycleNotice item={item} />
       <section className="localActions">
         <FavoriteButton kind="festival" value={item.slug} />
         <select
@@ -89,9 +85,9 @@ export function FestivalDetail({
           }
         >
           <option value="">{t("setAttendance")}</option>
-          <option value="going" disabled={hiatus}>{t("going")}</option>
-          <option value="maybe" disabled={hiatus}>{t("maybe")}</option>
-          <option value="not-going" disabled={hiatus}>{t("notGoing")}</option>
+          <option value="going">{t("going")}</option>
+          <option value="maybe">{t("maybe")}</option>
+          <option value="not-going">{t("notGoing")}</option>
         </select>
         <Link href="/planner/">{t("openPlan")}</Link>
       </section>
@@ -150,7 +146,7 @@ export function FestivalDetail({
           </div>
         )}
       </div>
-      {!hiatus && <section className="lineupSection">
+      <section className="lineupSection">
         <div className="sectionHeading">
           <div>
             <div className="eyebrow">{t("discoverBill")}</div>
@@ -200,7 +196,7 @@ export function FestivalDetail({
             </div>
           </>
         )}
-      </section>}
+      </section>
       <PlanningTools item={item} festivals={festivals} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>

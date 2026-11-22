@@ -1,4 +1,3 @@
-import { announcedArtists } from "@/lib/festival-lineup";
 import { notFound } from "next/navigation";
 import { ArtistDetail } from "@/components/ArtistDetail";
 import { getCatalog } from "@/lib/catalog/repository";
@@ -18,7 +17,7 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
   const { artists, festivals } = await getCatalog();
   const artist = artists.find((item) => item.slug === slug);
   if (!artist) notFound();
-  const appearances = festivals.filter((festival) => announcedArtists(festival).includes(artist.name));
+  const appearances = festivals.filter((festival) => [...festival.headliners, ...festival.lineup].includes(artist.name));
   return <ArtistDetail artist={artist} appearances={appearances}/>;
 }
 import type { Metadata } from "next";
