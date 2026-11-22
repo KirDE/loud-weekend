@@ -1,7 +1,7 @@
 # Tolminator ordinary-admission stock: local observer checkpoint
 
 `observeTolminatorStock` is a pure, **unregistered** stock observer. It is not a
-production source, registered collector, health signal or publication path. Existing source
+production source, scheduled collector or automatic publication path. An explicit manual audit command is available below. Existing source
 configuration is unchanged. No migration or production writes are involved.
 
 ## Reviewed evidence
@@ -17,7 +17,7 @@ passes against that complete cached response, not just the minimized fixture.
 A subsequent ordinary product GET returned **HTTP 403**. That is an access error,
 not fresh availability, healthy-empty inventory or a successful refresh. No
 challenge bypass or basket request was attempted. Fixture/cached parsing is not
-live verification. Registered error-health and publication integration remain unfinished.
+live verification. This historical failure remains in the audit; the new successful observation below does not rewrite it.
 
 ## Guards and deliberate limits
 
@@ -53,8 +53,7 @@ no raw HTML, cookies, dates, prices or basket destination escapes. This function
 has NO DB, scheduler, source health or catalog mutation, and is not registered
 with the runner. Existing last-good data therefore remains untouched on failure.
 Its tests inject synthetic responses, including current test-only sale windows;
-they are NOT fresh seller verification. The earlier real 403 remains unresolved,
-with no blind repeated request, UA change or bypass attempt.
+they are NOT fresh seller verification. A later bounded verification after concrete integration work succeeded as documented below; no UA change, bypass or basket request was used.
 
 ## Ticket-only candidate and durable proof (local, unregistered)
 
@@ -87,7 +86,35 @@ No schema, migration or new state table is needed. Synthetic DB regressions cove
 interleaved stock/roster success, failure and recovery in both directions, plus a
 stock-only festival without primary health. This does not register a live producer.
 
-Still wire an explicit reviewed invocation, with source-specific queries (not the
-legacy file-state runner's slug-only health/output keys), verify live access without bypass or blind
-retries, and obtain focused PR/exact-head full CI/Codex gates. No source completion,
-healthy primary roster, fresh availability or deployed coverage is claimed.
+## Explicit operator invocation (no automatic publication)
+
+`node --import tsx scripts/collect-tolminator-stock.ts` is a DB-free preview.
+It performs exactly one reviewed GET and prints only the minimized candidate.
+`--record-attempt EXACT_COMMIT` explicitly requires DATABASE_URL and the matching
+current Tolminator 2027 canonical target. It writes only the existing run,
+attempt, candidate and evidence audit rows, evaluating against that target. It
+never invokes the publisher, modifies production source configuration, hydrates
+the legacy slug-file runner or starts a scheduler. Existing source-specific
+import-event behavior is unchanged; no source is registered by this command.
+
+Collection failures record a FAILED attempt (403 remains HTTP 403), without a
+candidate, last-good overwrite or primary-health mutation. Only bounded safe
+error categories escape; arbitrary transport exception messages are not stored
+or printed. DB errors propagate, never trigger a fabricated second attempt.
+The summary queries extraction time/failure streak using the exact product URL.
+Invalid arguments or an absent/mismatched target fail before any public request.
+
+On 2026-11-22 at 17:44:29.916 UTC the DB-free command made a new ordinary public
+GET which passed the exact status/URL/MIME/schema guards: ordinary 2027 admission
+explicitly In stock, two field proofs, zero warnings. No DB, basket, account,
+reservation, source configuration or production write occurred. Availability
+is time-bound; prior 403s are not relabelled or erased. Seller dates remain excluded.
+
+Synthetic DB coverage exercises real invocation → evidence/attempt audit,
+403 and arbitrary network failure, independent counters and preserved last-good
+extraction/canonical catalog/primary health, and rejection of invalid target or
+commit before network/run creation. Fixtures use actual transport timestamps,
+not artificial future attempt times that would poison later health queries.
+
+Focused PR exact-head full CI/Codex gates are still required. No accepted/deployed
+coverage or healthy primary roster is claimed.

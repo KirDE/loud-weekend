@@ -6,9 +6,10 @@ import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
 import { seedCatalog } from "./support/seed-catalog.ts";
 import { catalogSeed } from "./support/catalog.ts";
 import { collectTolminatorCandidate } from "../lib/ingestion/tolminator-stock-candidate.ts";
+import { recordTolminatorStockAttempt } from "../lib/ingestion/tolminator-stock-invocation.ts";
 import { TOLMINATOR_PRODUCT } from "../lib/ingestion/adapters/tolminator-stock.ts";
 import { evaluateCandidate } from "../lib/ingestion/policy.ts";
-import { createIngestionRun, persistAttempt } from "../lib/ingestion/repository.ts";
+import { createIngestionRun, persistAttempt, ingestionQueries } from "../lib/ingestion/repository.ts";
 import { publishIngestionResult } from "../lib/catalog/publication.ts";
 import { readCatalog } from "../lib/catalog/repository.ts";
 import type { IngestionResult } from "../lib/ingestion/types.ts";
@@ -29,7 +30,7 @@ test("Tolminator real producer → durable proof → canonical read, replay, tam
   const persist = async (value: IngestionResult) => {
     const run = await createIngestionRun(db, { trigger: "TEST", sourceCommit, totalSources: 1 });
     return persistAttempt(db, { runId: run.id, festivalSlug: "tolminator", requestedUrl: value.sourceUrl,
-      finalUrl: value.sourceUrl, httpStatus: 200, durationMs: 1, startedAt: new Date(value.fetchedAt), endedAt: new Date(value.fetchedAt), result: value });
+      finalUrl: value.sourceUrl, httpStatus: 200, durationMs: 1, startedAt: new Date(), endedAt: new Date(), result: value });
   };
   try {
     assert.equal(await db.festival.findUnique({ where: { slug: "tolminator" } }), null, "requires isolated fixture namespace");
@@ -49,6 +50,35 @@ test("Tolminator real producer → durable proof → canonical read, replay, tam
     assert.ok(value.changes.every(c => ["ticketStatus", "ticketsUrl"].includes(c.field)));
     const publish = (attemptId: string, result = value) => publishIngestionResult(db, { attemptId, result, sourceCommit });
     const snapshot = async () => ({ catalog: await read(), count: await db.catalogPublication.count(), jobs: await db.catalogPlaylistRefresh.count() });
+    // Real explicit invocation records evidence only, never publishes or
+    // changes primary health. All responses here are synthetic, not live stock.
+    const preInvocation = await snapshot();
+    const primaryHealth = await db.ingestionSourceState.findUnique({ where: { festivalSlug: "tolminator" } });
+    const good = await recordTolminatorStockAttempt(db, { sourceCommit: "abcdef1234567", fetchImpl });
+    assert.notEqual(good.status, "FAILED"); assert.equal(good.consecutiveFailures, 0);
+    assert.ok(good.lastSuccessfulExtraction);
+    assert.deepEqual(await snapshot(), preInvocation);
+    assert.equal((await ingestionQueries.latestResult(db, "tolminator", TOLMINATOR_PRODUCT))?.id, good.attemptId);
+    const failed = await recordTolminatorStockAttempt(db, { sourceCommit: "abcdef1234567",
+      fetchImpl: async () => new Response("blocked", { status: 403 }) });
+    assert.equal(failed.status, "FAILED"); assert.equal(failed.error, "Tolminator HTTP 403");
+    assert.equal(failed.consecutiveFailures, 1); assert.equal(failed.lastSuccessfulExtraction, good.lastSuccessfulExtraction);
+    const failedRow = await db.ingestionAttempt.findUniqueOrThrow({ where: { id: failed.attemptId }, include: { candidate: true } });
+    assert.equal(failedRow.httpStatus, 403); assert.equal(failedRow.candidate, null);
+    assert.equal((await db.ingestionRun.findUniqueOrThrow({ where: { id: failedRow.runId } })).status, "FAILED");
+    const unsafe = await recordTolminatorStockAttempt(db, { sourceCommit: "abcdef1234567",
+      fetchImpl: async () => { throw new Error("https://private.invalid/?token=do-not-store"); } });
+    assert.equal(unsafe.error, "Tolminator stock collection failed");
+    assert.equal(unsafe.consecutiveFailures, 2);
+    assert.deepEqual(await snapshot(), preInvocation);
+    assert.deepEqual(await db.ingestionSourceState.findUnique({ where: { festivalSlug: "tolminator" } }), primaryHealth);
+    const count = await db.ingestionRun.count();
+    let fetched = false;
+    await assert.rejects(recordTolminatorStockAttempt(db, { sourceCommit: "not-a-commit", fetchImpl: async () => { fetched = true; throw Error(); } }), /commit/);
+    await db.festivalEdition.update({ where: { id: edition.id }, data: { year: 2028 } });
+    await assert.rejects(recordTolminatorStockAttempt(db, { sourceCommit: "abcdef1234567", fetchImpl: async () => { fetched = true; throw Error(); } }), /2027/);
+    assert.equal(fetched, false); assert.equal(await db.ingestionRun.count(), count);
+    await db.festivalEdition.update({ where: { id: edition.id }, data: { year: 2027 } });
     // Every request-side identity/value/time/extra-field mutation fails atomically.
     for (const mutate of [
       (v: IngestionResult) => { v.candidate.sourceUrl = "https://foreign.example/"; },
@@ -101,8 +131,7 @@ test("Tolminator real producer → durable proof → canonical read, replay, tam
     const stale = evaluateCandidate(await read(), candidate), staleAttempt = await persist(stale);
     await db.festivalEdition.update({ where: { id: edition.id }, data: { ticketStatus: "LOW" } });
     const preStale = await snapshot(); await assert.rejects(publish(staleAttempt.id, stale), /Stale ticketStatus/); assert.deepEqual(await snapshot(), preStale);
-    // Production registration is deliberately absent: global persistAttempt
-    // health is NOT used by a live independent producer until scoped separately.
+
   } finally {
     if (festivalId) await db.festival.delete({ where: { id: festivalId } });
     await db.$disconnect();
