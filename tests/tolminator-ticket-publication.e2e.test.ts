@@ -8,6 +8,8 @@ import { catalogSeed } from "./support/catalog.ts";
 import { collectTolminatorCandidate } from "../lib/ingestion/tolminator-stock-candidate.ts";
 import { recordTolminatorStockAttempt } from "../lib/ingestion/tolminator-stock-invocation.ts";
 import { TOLMINATOR_PRODUCT } from "../lib/ingestion/adapters/tolminator-stock.ts";
+import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
+import { parserSource } from "./support/parser-source.ts";
 import { evaluateCandidate } from "../lib/ingestion/policy.ts";
 import { createIngestionRun, persistAttempt, ingestionQueries } from "../lib/ingestion/repository.ts";
 import { publishIngestionResult } from "../lib/catalog/publication.ts";
@@ -86,6 +88,10 @@ test("Tolminator real producer → durable proof → canonical read, replay, tam
       (v: IngestionResult) => { v.candidate.observedEditionYears = [2026]; },
       (v: IngestionResult) => { v.candidate.startDate = "2027-07-31"; },
       (v: IngestionResult) => { v.candidate.evidence = []; },
+      (v: IngestionResult) => {
+        v.festivalSlug = v.candidate.festivalSlug = "other";
+        v.sourceUrl = v.candidate.sourceUrl = "https://foreign.example/";
+      },
       (v: IngestionResult) => { v.candidate.ticketStatus = "sold_out"; },
     ]) {
       const attempt = await persist(value), changed = structuredClone(value); mutate(changed);
@@ -131,6 +137,26 @@ test("Tolminator real producer → durable proof → canonical read, replay, tam
     const stale = evaluateCandidate(await read(), candidate), staleAttempt = await persist(stale);
     await db.festivalEdition.update({ where: { id: edition.id }, data: { ticketStatus: "LOW" } });
     const preStale = await snapshot(); await assert.rejects(publish(staleAttempt.id, stale), /Stale ticketStatus/); assert.deepEqual(await snapshot(), preStale);
+
+    // Regression: the existing primary homepage adapter may fill missing dates
+    // without satisfying the unrelated seller's ticket-only contract.
+    await db.festivalEdition.update({ where: { id: edition.id }, data: { startDate: null, endDate: null } });
+    const primaryBefore = await read();
+    const primary = extractFestivalCandidate(
+      readFileSync(new URL("./fixtures/official-markup/tolminator.html", import.meta.url), "utf8"),
+      parserSource("tolminator", { url: "https://tolminator.com/" }), new Date().toISOString());
+    const primaryValue = evaluateCandidate(primaryBefore, primary);
+    assert.equal(primaryValue.publishable, true, JSON.stringify(primaryValue.reviewReasons));
+    assert.deepEqual(primaryValue.changes.map(c => c.field).sort(), ["endDate", "startDate"]);
+    const primaryAttempt = await persist(primaryValue);
+    const primaryPublication = await publish(primaryAttempt.id, primaryValue);
+    assert.ok(primaryPublication);
+    assert.equal(primaryPublication.playlistRefreshRequested, false);
+    const primaryAfter = await read();
+    assert.equal(primaryAfter.startDate, "2027-07-28"); assert.equal(primaryAfter.endDate, "2027-08-01");
+    for (const key of ["ticketStatus", "ticketsUrl", "lineup", "headliners"] as const) assert.deepEqual(primaryAfter[key], primaryBefore[key]);
+    assert.equal((await publish(primaryAttempt.id, primaryValue))?.id, primaryPublication.id);
+    assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
 
   } finally {
     if (festivalId) await db.festival.delete({ where: { id: festivalId } });

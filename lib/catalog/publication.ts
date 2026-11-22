@@ -261,11 +261,11 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     // Do not extend the separate Impericon/I-Days publication paths here (#497).
     const observed = input.result.candidate;
     const stored = candidate.normalized as unknown as FestivalCandidate;
-    // Independent stock-only proposal: key off durable identity too so removing
-    // the caller's slug/source cannot bypass proof validation. Not registered
-    // with the primary roster runner or its global success/health state.
-    if ([input.result.festivalSlug, candidate.festivalSlug, observed.festivalSlug, stored.festivalSlug].includes("tolminator") ||
-      [input.result.sourceUrl, candidate.attempt.requestedUrl, observed.sourceUrl, stored.sourceUrl].includes(TOLMINATOR_PRODUCT)) {
+    // Scope this stock-only guard to the product route, never the festival
+    // slug: the primary homepage still publishes its independent date fields.
+    // Durable route identities keep caller slug/source stripping fail-closed.
+    if ([input.result.sourceUrl, candidate.attempt.requestedUrl, candidate.attempt.finalUrl,
+      observed.sourceUrl, stored.sourceUrl].includes(TOLMINATOR_PRODUCT)) {
       const time = Date.parse(observed.fetchedAt);
       const allowed = new Set(["schemaVersion", "festivalSlug", "sourceUrl", "fetchedAt", "observedEditionYears", "warnings", "ticketStatus", "ticketsUrl", "evidence"]);
       const valid = input.result.festivalSlug === "tolminator" && candidate.festivalSlug === "tolminator" &&
