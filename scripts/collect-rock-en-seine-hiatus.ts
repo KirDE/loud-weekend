@@ -11,10 +11,10 @@ if (!(args.length === 0 || (args.length === 2 && args[0] === '--stage' && /^[a-z
     if (!args.length) console.log(JSON.stringify({ mode: 'preview', proposal }));
     else {
       const { createPrismaClient } = await import('../lib/prisma-client.mjs');
-      const { stageRockEnSeineHiatus } = await import('../lib/ingestion/edition-lifecycle-proposal-store.ts');
+      const { stageEditionLifecycle } = await import('../lib/ingestion/edition-lifecycle-proposal-store.ts');
       const db = createPrismaClient();
       try {
-        await stageRockEnSeineHiatus(db, { ...receipt, editionId: args[1] });
+        await stageEditionLifecycle(db, { parserVersion: "rock-en-seine-hiatus-v1", ...receipt, editionId: args[1] });
         console.log(JSON.stringify({ mode: 'staged', reviewState: 'pending', observedAt: proposal.observedAt }));
       } finally { await db.$disconnect(); }
     }

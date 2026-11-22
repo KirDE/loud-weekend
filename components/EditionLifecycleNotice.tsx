@@ -15,8 +15,10 @@ export function EditionLifecycleNotice({ item }: { item: Pick<Festival, "slug" |
     timeZone: "UTC", timeZoneName: "short",
   }).format(new Date(notice.observedAt));
   return <section className="sourceNote" aria-label={t("editionHiatus")}>
-    <strong>{t("editionHiatus")}</strong>
+    <strong>{t("editionHiatus")} · {notice.editionYear}</strong>
     <p>{t("editionHiatusExplanation")}</p>
+    {notice.announcedReturnYear !== null && <p>{t("editionReturn")}: {notice.announcedReturnYear}</p>}
+    {notice.alternativeEvent === "under_consideration" && <p>{t("editionAlternative")}</p>}
     <p>{t("lifecycleObserved")}: <time dateTime={notice.observedAt}>{observed}</time></p>
     <a href={notice.sourceUrl} target="_blank" rel="noreferrer">{t("primarySource")}</a>
   </section>;

@@ -1,6 +1,6 @@
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
 import { announcedArtists } from "../festival-lineup.ts";
-import { readApprovedRockEnSeineHiatusInSnapshot } from "../ingestion/edition-lifecycle-proposal-store.ts";
+import { readApprovedEditionLifecycleInSnapshot } from "../ingestion/edition-lifecycle-proposal-store.ts";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type { ArtistProfile } from "../domain/artist.ts";
 import type { FestivalEdition } from "../domain/edition.ts";
@@ -53,8 +53,8 @@ export class DatabaseCatalogRepository implements CatalogRepository {
 
     const lifecycles = new Map<string, NonNullable<Festival["editionLifecycle"]>>();
     for (const row of editionRows) {
-      if (row.recordState === "CURRENT" && row.festival.slug === "rock-en-seine") {
-        const notice = await readApprovedRockEnSeineHiatusInSnapshot(tx, row.id);
+      if (row.recordState === "CURRENT") {
+        const notice = await readApprovedEditionLifecycleInSnapshot(tx, row.id);
         if (notice) lifecycles.set(row.id, notice);
       }
     }

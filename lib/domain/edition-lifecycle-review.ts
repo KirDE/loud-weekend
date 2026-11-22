@@ -1,11 +1,11 @@
 import { z } from "zod";
 export const lifecycleProposalSchema = z.object({
-  festivalSlug: z.literal("rock-en-seine"), editionYear: z.literal(2027),
-  lifecycle: z.literal("hiatus"), announcedReturnYear: z.literal(2028),
-  alternativeEvent: z.literal("under_consideration"), sourceUrl: z.literal("https://www.rockenseine.com/"),
+  festivalSlug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/), editionYear: z.number().int().min(2000).max(2200),
+  lifecycle: z.literal("hiatus"), announcedReturnYear: z.number().int().min(2000).max(2200).nullable(),
+  alternativeEvent: z.literal("under_consideration").nullable(), sourceUrl: z.url().refine(value => new URL(value).protocol === "https:"),
   observedAt: z.iso.datetime({ precision: 3 }),
-  excerpt: z.literal("Rock en Seine: festival pauses in 2027 and announces a return in 2028. A different 2027 event is only under consideration, not confirmed. No ordinary 2027 ticket inventory assertion."),
-}).strict();
+  excerpt: z.string().min(1).max(1000),
+}).strict().refine(value => value.announcedReturnYear === null || value.announcedReturnYear > value.editionYear, "Return must follow paused edition");
 export const lifecycleReviewSchema = z.object({
   id: z.string().min(1), contentHash: z.string().regex(/^[a-f0-9]{64}$/),
   reviewState: z.enum(["pending", "approved", "rejected"]), eligibleForReview: z.boolean(),
@@ -16,9 +16,9 @@ export type LifecycleReview = z.infer<typeof lifecycleReviewSchema>;
 /** Public, edition-scoped factual notice. Absence means unknown, NOT active.
  * A hiatus is not a ticket/lineup status and announces no replacement event. */
 export const publicEditionLifecycleSchema = z.object({
-  editionYear: z.literal(2027), lifecycle: z.literal("hiatus"),
-  announcedReturnYear: z.literal(2028), alternativeEvent: z.literal("under_consideration"),
-  sourceUrl: z.literal("https://www.rockenseine.com/"),
+  festivalSlug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/), editionYear: z.number().int().min(2000).max(2200), lifecycle: z.literal("hiatus"),
+  announcedReturnYear: z.number().int().min(2000).max(2200).nullable(), alternativeEvent: z.literal("under_consideration").nullable(),
+  sourceUrl: z.url().refine(value => new URL(value).protocol === "https:"),
   observedAt: z.iso.datetime({ precision: 3 }), approvedAt: z.iso.datetime({ precision: 3 }),
-}).strict();
+}).strict().refine(value => value.announcedReturnYear === null || value.announcedReturnYear > value.editionYear, "Return must follow paused edition");
 export type PublicEditionLifecycle = z.infer<typeof publicEditionLifecycleSchema>;

@@ -40,7 +40,7 @@ supersession, expiry or uncertain responses cannot produce optimistic approval.
 
 The main database catalogue and independent offline schedule compose approved
 proof validation with their data reads in RepeatableRead snapshots. Only current
-editions receive the seven-field public notice: editionYear, lifecycle,
+editions receive the eight-field public notice: festivalSlug, editionYear, lifecycle,
 announcedReturnYear, alternativeEvent, sourceUrl, observedAt and approvedAt.
 No reviewer, internal ID, hash, raw HTML or audit details enter the public notice.
 Archive snapshots retain captured facts. Raw dates, ticket enums, lineup arrays,
@@ -69,3 +69,17 @@ test `tests/e2e/rock-en-seine-hiatus.spec.mjs` exercises authenticated review th
 public desktop/mobile rendering, source/time, ticket/SEO suppression and offline
 exclusion. Synthetic DBs only. No deployment, production migration or approval is
 performed by these tests. PR gates report exact-head outcomes separately.
+
+
+## Boundary correction after architectural review
+
+Source-specific identity, parser version, years, minimized excerpt and proof
+validation belong to the adapter, selected by the ingestion source allowlist.
+Storage/review routes, admin target discovery, domain schemas, catalogue/offline
+readers and consumer UI contain no brand branches. Admin targets are current
+editions with actual stored proposals, not an invented list of eligible brands.
+The public notice binds its own slug, edition year and official source URL;
+consumers compare those against the target, rather than knowing one festival.
+Return year and alternative-event information can be unknown (null); UI never
+invents these from the existence of a pause. These changes correct boundaries,
+not permission to deploy or an architectural acceptance based on green CI.

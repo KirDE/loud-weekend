@@ -18,8 +18,8 @@ async function harness(actor = { id: 'session-actor' }, service = {}) {
     '@/lib/db': { db: {} },
     '@/lib/request-origin': { requestHasTrustedOrigin },
     '@/lib/ingestion/edition-lifecycle-proposal-store': {
-      decideRockEnSeineHiatus: async (_db, input) => { calls.push(input); return { ...input, actorId: 'private-actor', internal: 'private' }; },
-      readPendingRockEnSeineHiatus: async () => { calls.push('read'); return { id: 'snapshot', contentHash: hash, reviewState: 'pending' }; },
+      decideEditionLifecycle: async (_db, input) => { calls.push(input); return { ...input, actorId: 'private-actor', internal: 'private' }; },
+      readPendingEditionLifecycle: async () => { calls.push('read'); return { id: 'snapshot', contentHash: hash, reviewState: 'pending' }; },
       ...service,
     },
   };
@@ -59,7 +59,7 @@ test('actual review route binds path/hash and session actor; returns only minima
 });
 test('actual routes hide DB diagnostics and return conflicts rather than false success', async () => {
   const fail = async () => { throw new Error('private database diagnostic'); };
-  const h = await harness(undefined, { decideRockEnSeineHiatus: fail, readPendingRockEnSeineHiatus: fail });
+  const h = await harness(undefined, { decideEditionLifecycle: fail, readPendingEditionLifecycle: fail });
   for (const res of [await h.post(request(), ctx), await h.get(new Request('https://lifecycle.example.invalid'), ctx)]) {
     assert.equal(res.status, 409); assert.doesNotMatch(await res.text(), /private database/);
   }
@@ -69,7 +69,7 @@ test('actual reviewer GET supplies exact review revision and no-store; absent pr
   const res = await h.get(req, ctx);
   assert.equal(res.status, 200); assert.equal(res.headers.get('cache-control'), 'private, no-store');
   assert.deepEqual(await res.json(), { id: 'snapshot', contentHash: hash, reviewState: 'pending' });
-  const empty = await harness(undefined, { readPendingRockEnSeineHiatus: async () => null });
+  const empty = await harness(undefined, { readPendingEditionLifecycle: async () => null });
   assert.equal((await empty.get(req, ctx)).status, 404);
 });
 test('actual decision body rejects invalid UTF8/stream errors and a lying Content-Length', async () => {

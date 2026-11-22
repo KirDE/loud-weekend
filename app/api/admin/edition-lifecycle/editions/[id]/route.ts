@@ -1,6 +1,6 @@
 import { currentAdmin } from "@/lib/admin-access";
 import { db } from "@/lib/db";
-import { readPendingRockEnSeineHiatus } from "@/lib/ingestion/edition-lifecycle-proposal-store";
+import { readPendingEditionLifecycle } from "@/lib/ingestion/edition-lifecycle-proposal-store";
 
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "private, no-store" } });
 
@@ -8,7 +8,7 @@ const reply = (body: unknown, status = 200) => Response.json(body, { status, hea
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!await currentAdmin()) return reply({ error: "Forbidden" }, 403);
   try {
-    const snapshot = await readPendingRockEnSeineHiatus(db, (await params).id);
+    const snapshot = await readPendingEditionLifecycle(db, (await params).id);
     return snapshot ? reply(snapshot) : reply({ error: "No lifecycle proposal" }, 404);
   } catch {
     return reply({ error: "Lifecycle proposal could not be validated" }, 409);

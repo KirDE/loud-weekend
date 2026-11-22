@@ -13,7 +13,7 @@ import { LanguageProvider, translate } from '../components/LanguageProvider.tsx'
 import { LocalPlannerProvider } from '../components/LocalPlanner.tsx';
 import { festival } from './support/catalog.ts';
 
-const notice = {editionYear:2027,lifecycle:'hiatus',announcedReturnYear:2028,
+const notice = {festivalSlug:'rock-en-seine',editionYear:2027,lifecycle:'hiatus',announcedReturnYear:2028,
   alternativeEvent:'under_consideration',sourceUrl:'https://www.rockenseine.com/',
   observedAt:'2026-11-22T18:56:40.000Z',approvedAt:'2026-11-22T19:00:00.000Z'};
 const paused = {...festival,slug:'rock-en-seine',name:'Rock en Seine',officialUrl:notice.sourceUrl,

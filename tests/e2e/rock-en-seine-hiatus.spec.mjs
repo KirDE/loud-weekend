@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { randomBytes, createHash } from 'node:crypto';
 import { createPrismaClient } from '../../lib/prisma-client.mjs';
 import { requireLocalDisposableDatabase } from '../support/disposable-db.ts';
-import { stageRockEnSeineHiatus } from '../../lib/ingestion/edition-lifecycle-proposal-store.ts';
+import { stageEditionLifecycle } from '../../lib/ingestion/edition-lifecycle-proposal-store.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db = createPrismaClient();
 let festivalId, editionId, snapshot, actorId, staleArtistId;
@@ -16,7 +16,7 @@ test.beforeAll(async () => {
   editionId = (await db.festivalEdition.create({ data: { festivalId, year: 2027, recordState: 'CURRENT', status: 'CONFIRMED', ticketStatus: 'AVAILABLE', ticketsUrl: 'https://tickets.example.invalid/old', completeness: 'COMPLETE', sourceUpdatedAt: new Date(), startDate: new Date('2027-08-25'), endDate: new Date('2027-08-29') } })).id;
   staleArtistId = (await db.artist.create({ data: { slug: 'paused-browser-roster', name: 'Paused Browser Artist', identityState: 'UNRESOLVED', aliases: [], genres: [], topTracks: [], recentSetlists: [], freshness: {} } })).id;
   await db.lineupEntry.create({ data: { editionId, artistId: staleArtistId, billing: 'HEADLINER', position: 0 } });
-  snapshot = await stageRockEnSeineHiatus(db, { editionId, html, requestedUrl: url, finalUrl: url, status: 200, observedAt: new Date().toISOString() });
+  snapshot = await stageEditionLifecycle(db, { parserVersion: "rock-en-seine-hiatus-v1", editionId, html, requestedUrl: url, finalUrl: url, status: 200, observedAt: new Date().toISOString() });
   const actor = await db.user.upsert({ where: { email: 'browser-admin@example.test' }, create: { email: 'browser-admin@example.test', passwordHash: 'not-a-login-hash', role: 'ADMIN' }, update: { role: 'ADMIN' } });
   actorId = actor.id;
 });
@@ -34,7 +34,7 @@ test('actual reviewer approval→catalogue EN/DE/RU desktop and mobile, offline 
   await db.session.create({ data: { userId: actorId, tokenHash: createHash('sha256').update(token).digest('hex'), expiresAt: new Date(Date.now() + 60_000 * 30) } });
   await context.addCookies([{ name: 'festival_radar_session', value: token, url: 'http://localhost:3245', httpOnly: true, sameSite: 'Lax' }]);
   await page.goto('/admin/?section=review');
-  const card = page.locator('article.reviewCard').filter({ hasText: 'Rock en Seine edition review' });
+  const card = page.locator('article.reviewCard').filter({ hasText: 'rock-en-seine · 2027' });
   await card.getByRole('button', { name: 'Load latest proposal' }).click();
   await expect(card).toContainText('Pending review');
   await card.getByRole('button', { name: 'Approve announcement' }).click();

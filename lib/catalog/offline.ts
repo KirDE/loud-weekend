@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { readApprovedRockEnSeineHiatusInSnapshot } from "../ingestion/edition-lifecycle-proposal-store.ts";
+import { readApprovedEditionLifecycleInSnapshot } from "../ingestion/edition-lifecycle-proposal-store.ts";
 
 // Internal ID is only for approved proof lookup; the public allowlist below
 // excludes IDs, source metadata, artist profiles, URLs and review details.
@@ -54,8 +54,7 @@ export async function readOfflineCatalog(database?: OfflineDatabase) {
     for (const row of rows) {
       // Approved historical notice, not fresh inventory. Pending/rejected do not
       // suppress events; damaged latest/approved proof throws (HTTP 503).
-      if (row.festival.slug === "rock-en-seine"
-        && await readApprovedRockEnSeineHiatusInSnapshot(tx, row.id)) continue;
+      if (await readApprovedEditionLifecycleInSnapshot(tx, row.id)) continue;
       scheduled.push(row);
     }
     // A nonempty catalogue with every edition paused is a valid empty schedule.

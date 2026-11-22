@@ -2,7 +2,7 @@ import { z } from "zod";
 import { currentAdmin } from "@/lib/admin-access";
 import { db } from "@/lib/db";
 import { requestHasTrustedOrigin } from "@/lib/request-origin";
-import { decideRockEnSeineHiatus } from "@/lib/ingestion/edition-lifecycle-proposal-store";
+import { decideEditionLifecycle } from "@/lib/ingestion/edition-lifecycle-proposal-store";
 
 const bodySchema = z.object({ decision: z.enum(["approve", "reject"]), expectedContentHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "private, no-store" } });
@@ -38,7 +38,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     void reader.cancel().catch(() => {});
   }
   try {
-    const result = await decideRockEnSeineHiatus(db, { ...body, snapshotId: (await params).id, actorId: admin.id });
+    const result = await decideEditionLifecycle(db, { ...body, snapshotId: (await params).id, actorId: admin.id });
     // Do not expose persisted actor IDs, audit records or database diagnostics.
     return reply({ snapshotId: result.snapshotId, decision: result.decision });
   } catch {

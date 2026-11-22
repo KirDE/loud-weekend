@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createPrismaClient } from '../lib/prisma-client.mjs';
 import { requireLocalDisposableDatabase } from './support/disposable-db.ts';
-import { stageRockEnSeineHiatus as stage, readPendingRockEnSeineHiatus as read, decideRockEnSeineHiatus as decide, readApprovedRockEnSeineHiatus as publicRead } from '../lib/ingestion/edition-lifecycle-proposal-store.ts';
+import { stageEditionLifecycle as stage, readPendingEditionLifecycle as read, decideEditionLifecycle as decide, readApprovedEditionLifecycle as publicRead } from '../lib/ingestion/edition-lifecycle-proposal-store.ts';
 import { DatabaseCatalogRepository } from '../lib/catalog/repository.ts';
 import { readOfflineCatalog, serveOfflineCatalog } from '../lib/catalog/offline.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
@@ -15,7 +15,7 @@ let editionId: string;
 let festivalId: string;
 let artistId: string;
 const time = Date.now() - 10_000;
-const input = (delta = 0) => ({ editionId, html, requestedUrl: url, finalUrl: url, status: 200, observedAt: new Date(time + delta).toISOString() });
+const input = (delta = 0) => ({ parserVersion: "rock-en-seine-hiatus-v1", editionId, html, requestedUrl: url, finalUrl: url, status: 200, observedAt: new Date(time + delta).toISOString() });
 test.before(async () => {
   assert.equal(await db.festival.count({ where: { slug } }), 0, 'Requires isolated disposable DB without Rock en Seine');
   const f = await db.festival.create({ data: { slug, name: 'Synthetic Rock en Seine', country: 'France', countryCode: 'FR', officialUrl: url, genres: [] } });
@@ -199,7 +199,7 @@ test('stored decision or snapshot drift fails read and replay instead of fabrica
 test('new rejected observation does not silently inherit previous approval', async () => {
   const approved = await publicRead(db, editionId);
   assert.ok(approved); assert.equal(approved.lifecycle, 'hiatus');
-  assert.deepEqual(Object.keys(approved).sort(), ['editionYear', 'lifecycle', 'announcedReturnYear', 'alternativeEvent', 'sourceUrl', 'observedAt', 'approvedAt'].sort());
+  assert.deepEqual(Object.keys(approved).sort(), ['festivalSlug', 'editionYear', 'lifecycle', 'announcedReturnYear', 'alternativeEvent', 'sourceUrl', 'observedAt', 'approvedAt'].sort());
   assert.doesNotMatch(JSON.stringify(approved), /actor|audit|contentHash|snapshotId|eligible|reviewState|ticketStatus|startDate|endDate|excerpt/);
   const now = Date.now;
   try {
@@ -234,7 +234,7 @@ test('actual lifecycle handlers→currentAdmin→DB decision/audit/read/replay a
   const deps = {
     '@/lib/admin-access': { currentAdmin }, '@/lib/db': { db },
     '@/lib/request-origin': { requestHasTrustedOrigin },
-    '@/lib/ingestion/edition-lifecycle-proposal-store': { readPendingRockEnSeineHiatus: read, decideRockEnSeineHiatus: decide },
+    '@/lib/ingestion/edition-lifecycle-proposal-store': { readPendingEditionLifecycle: read, decideEditionLifecycle: decide },
   };
   const get = (await loadReviewRoute('editions', deps)).GET;
   const post = (await loadReviewRoute('snapshots', deps)).POST;

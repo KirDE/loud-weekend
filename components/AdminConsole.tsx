@@ -11,7 +11,7 @@ type Section = "content" | "review" | "submissions" | "assets" | "diagnostics" |
 type Submission = { reference:string; name:string; year:number; officialUrl:string; notes:string|null; status:"pending"|"approved"|"rejected"; submittedAt:string; audit:{action:string;at:string}[] };
 type Operator = { email: string; role: "USER" | "EDITOR" | "ADMIN" };
 
-export function AdminConsole({ festivals, initialChanges, parserRuns, auditEntries, submissions: initialSubmissions, sourceHealth = [], lifecycleTargets = [] }: { lifecycleTargets?: { id: string; year: number }[]; festivals: Festival[]; initialChanges: ReviewChange[]; parserRuns: ParserRun[]; auditEntries: AuditEntry[]; submissions: Submission[]; sourceHealth?: { id:string; festivalSlug:string; consecutiveFailures:number; failureStartedAt:string|null; deprecatedAt:string|null; nextRunAt:string|null }[] }) {
+export function AdminConsole({ festivals, initialChanges, parserRuns, auditEntries, submissions: initialSubmissions, sourceHealth = [], lifecycleTargets = [] }: { lifecycleTargets?: { id: string; year: number; festival: { slug: string; officialUrl: string } }[]; festivals: Festival[]; initialChanges: ReviewChange[]; parserRuns: ParserRun[]; auditEntries: AuditEntry[]; submissions: Submission[]; sourceHealth?: { id:string; festivalSlug:string; consecutiveFailures:number; failureStartedAt:string|null; deprecatedAt:string|null; nextRunAt:string|null }[] }) {
   const [section, setSection] = useState<Section>("review");
   const [selectedSlug, setSelectedSlug] = useState(festivals[0]?.slug ?? "");
   const selected = festivals.find((item) => item.slug === selectedSlug) ?? festivals[0];
@@ -80,7 +80,7 @@ export function AdminConsole({ festivals, initialChanges, parserRuns, auditEntri
       {notice && <div className="adminNotice" role="status" aria-live="polite">{notice}<button onClick={() => setNotice("")} aria-label={ta("dismiss")}>×</button></div>}
 
       {section === "review" && <div className="reviewList">
-        {lifecycleTargets.map(target => <LifecycleReviewQueue key={target.id} editionId={target.id} year={target.year} locale={language} />)}
+        {lifecycleTargets.map(target => <LifecycleReviewQueue key={target.id} editionId={target.id} year={target.year} festivalSlug={target.festival.slug} sourceUrl={target.festival.officialUrl} locale={language} />)}
         <div className="adminToolbar"><p>{ta("reviewHelp")}</p><select aria-label={ta("filter")}><option>{ta("allPending")}</option><option>{ta("conflicts")}</option><option>{ta("highConfidence")}</option></select></div>
         {changes.map((change) => <article className={`reviewCard ${change.status}`} key={change.id}>
           <div className="reviewMeta"><span className={change.conflict ? "risk" : "safe"}>{change.conflict ? ta("conflict") : `${change.confidence}% ${ta("confidence")}`}</span><small>{change.id} · {change.source}</small></div>

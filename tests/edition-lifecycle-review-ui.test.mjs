@@ -28,7 +28,7 @@ function harness(fetcher, locale = 'en') {
   };
   const module = { exports: {} };
   new Function('require','module','exports', code)(id => { assert.ok(Object.hasOwn(deps, id), id); return deps[id]; }, module, module.exports);
-  const render = () => { cursor = 0; return module.exports.LifecycleReviewQueue({ editionId: 'edition/test', year: 2027, locale }); };
+  const render = () => { cursor = 0; return module.exports.LifecycleReviewQueue({ editionId: 'edition/test', year: 2027, festivalSlug: 'rock-en-seine', sourceUrl: ROCK_EN_SEINE_HOME, locale }); };
   const buttons = tree => {
     if (!tree || typeof tree !== 'object') return [];
     if (Array.isArray(tree)) return tree.flatMap(buttons);
@@ -142,6 +142,6 @@ test('admin review section actually mounts canonical server-provided lifecycle t
     './LifecycleReviewQueue': { LifecycleReviewQueue: props => require('react').createElement('div', { 'data-edition': props.editionId, 'data-year': props.year, lang: props.locale }) },
   };
   new Function('require','module','exports',code)(id => { assert.ok(Object.hasOwn(deps,id), id); return deps[id]; }, module, module.exports);
-  const html = renderToStaticMarkup(module.exports.AdminConsole({ festivals: [], initialChanges: [], parserRuns: [], auditEntries: [], submissions: [], lifecycleTargets: [{ id: 'canonical-test-edition', year: 2027 }] }));
+  const html = renderToStaticMarkup(module.exports.AdminConsole({ festivals: [], initialChanges: [], parserRuns: [], auditEntries: [], submissions: [], lifecycleTargets: [{ id: 'canonical-test-edition', year: 2027, festival: { slug: 'rock-en-seine', officialUrl: ROCK_EN_SEINE_HOME } }] }));
   assert.match(html, /data-edition="canonical-test-edition" data-year="2027" lang="ru"/);
 });

@@ -6,7 +6,7 @@ import { publicEditionLifecycleSchema } from "./domain/edition-lifecycle-review.
 export function editionOnHiatus(item: Partial<Pick<Festival, "slug" | "editionYear" | "officialUrl" | "editionLifecycle">>): boolean {
   if (item.editionLifecycle === undefined) return false;
   const notice = publicEditionLifecycleSchema.parse(item.editionLifecycle);
-  if (item.slug !== "rock-en-seine" || item.editionYear !== notice.editionYear
+  if (item.slug !== notice.festivalSlug || item.editionYear !== notice.editionYear
     || item.officialUrl !== notice.sourceUrl) throw new Error("Edition lifecycle target mismatch");
   return notice.lifecycle === "hiatus";
 }
