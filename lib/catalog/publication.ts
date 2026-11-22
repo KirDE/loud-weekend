@@ -262,7 +262,7 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     // Summer's shared POST proof must not be bypassed by stripping both markers,
     // including ticket-URL-only updates approved by an untrusted caller.
     const summerTicketChange = input.result.festivalSlug === "summer-punch" && input.result.changes.some(c => ["ticketStatus", "ticketsUrl"].includes(c.field));
-    if (observed.ticketSupplement || stored.ticketSupplement || summerTicketChange) {
+    if (observed.ticketSupplement || stored.ticketSupplement || summerTicketChange || input.result.festivalSlug === "provinssi" && input.result.changes.some(c => c.field === "ticketStatus")) {
       const registeredSource = { festivalSlug: input.result.festivalSlug,
         url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
         strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true };
@@ -384,7 +384,17 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
           same(e.observedValue, (input.result.candidate as unknown as Record<string,unknown>)[field]))) &&
       ['startDate','endDate','city','lineup','ticketsUrl','status'].every(field =>
         same((candidate.normalized as Record<string,unknown>)[field], (input.result.candidate as unknown as Record<string,unknown>)[field]));
-    if (provinssiPublication && !verifiedProvinssiAnnouncement)
+    const verifiedProvinssiStockOnly = provinssiPublication && candidate.festivalSlug === "provinssi" &&
+      candidate.attempt.requestedUrl === PROVINSSI_HOME && input.result.sourceUrl === PROVINSSI_HOME && applied.edition.year === 2027 &&
+      observed.ticketSupplement && stored.ticketSupplement && input.result.changes.length > 0 &&
+      input.result.changes.every(c => ["ticketStatus","ticketsUrl"].includes(c.field)) &&
+      observed.startDate === "2027-07-01" && observed.endDate === "2027-07-03" &&
+      [observed,stored].every(c => c.artistListMode === "additive" && c.lineupScope === "announcement" && c.headliners === undefined && c.status === "partial") &&
+      ["startDate","endDate","city","lineup","status"].every(field =>
+        same((stored as unknown as Record<string,unknown>)[field],(observed as unknown as Record<string,unknown>)[field]) &&
+        observed.evidence.some(e => e.field === field && e.sourceUrl === PROVINSSI_HOME) &&
+        candidate.evidence.some(e => e.field === field && e.sourceUrl === PROVINSSI_HOME && same(e.observedValue,(observed as unknown as Record<string,unknown>)[field])));
+    if (provinssiPublication && !verifiedProvinssiAnnouncement && !verifiedProvinssiStockOnly)
       throw new Error('Provinssi publication requires matching persisted official addition evidence');
     const provinssiLineup = verifiedProvinssiAnnouncement && input.result.changes.some(c => c.kind === 'artist_added');
     if((graspopLineup || verifiedDownloadAnnouncement || provinssiLineup) && applied.edition.completeness==='TBA') {

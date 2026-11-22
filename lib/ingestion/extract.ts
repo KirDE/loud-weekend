@@ -147,10 +147,14 @@ export function extractFestivalCandidate(html: string, source: FestivalSource, f
   if (ticket.status) {
     const scope = ticketSupplementScope(source);
     candidate.ticketSupplement = { sourceUrl: source.url, ticketUrl: envelope.ticket.url, editionYear: source.editionYear, ...(scope ? {scope} : {}) };
+    const previousTicketsUrl = candidate.ticketsUrl;
     candidate.ticketStatus = ticket.status;
     candidate.ticketsUrl = ticket.ticketsUrl ?? envelope.ticket.url;
     candidate.observedEditionYears = [...new Set([...candidate.observedEditionYears, source.editionYear])];
-    candidate.evidence = candidate.evidence.filter(evidence => evidence.field !== "ticketsUrl");
+    // Preserve corroborating Provinssi primary purchase-link evidence only when
+    // the verified stock route keeps exactly that same human destination.
+    const retainPrimaryTicketProof = source.festivalSlug === "provinssi" && previousTicketsUrl === candidate.ticketsUrl && candidate.evidence.some(e => e.field === "ticketsUrl" && e.sourceUrl === source.url);
+    candidate.evidence = candidate.evidence.filter(evidence => evidence.field !== "ticketsUrl" || retainPrimaryTicketProof);
     for (const field of ["ticketStatus", "ticketsUrl"] as const) candidate.evidence.push({ field, sourceUrl: envelope.ticket.url, observedAt: fetchedAt, excerpt: ticket.excerpt });
     // Supplemental evidence makes optional homepage formats unnecessary, but
     // semantic, edition, source-identity and artist/provider warnings still gate.

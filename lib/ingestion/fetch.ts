@@ -1,3 +1,4 @@
+import { PROVINSSI_STOCK, fetchProvinssiStock } from "./provinssi-ticket-stock.ts";
 import { SUMMER_STOCK, fetchSummerStock } from "./summer-ticket-stock.ts";
 import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
@@ -550,8 +551,8 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
     // source overrides or authorization headers on a public ticket destination.
-    if (ticketUrl === SUMMER_STOCK) {
-      const stock = await fetchSummerStock(options.fetchImpl);
+    if (ticketUrl === SUMMER_STOCK || ticketUrl === PROVINSSI_STOCK) {
+      const stock = await (ticketUrl === PROVINSSI_STOCK ? fetchProvinssiStock : fetchSummerStock)(options.fetchImpl);
       attempts += stock.attempts;
       const response = new Response(JSON.stringify({kind:TICKET_SUPPLEMENT,body,ticket:{url:ticketUrl,html:stock.html}}),{headers:{"content-type":"application/json"}});
       Object.defineProperty(response,"url",{value:source.url});

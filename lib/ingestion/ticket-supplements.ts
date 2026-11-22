@@ -1,3 +1,4 @@
+import { PROVINSSI_STOCK, PROVINSSI_SCOPE, PROVINSSI_PURCHASE, observeProvinssiStock } from "./provinssi-ticket-stock.ts";
 import { SUMMER_STOCK, SUMMER_SCOPE, SUMMER_PURCHASE, observeSummerStock } from "./summer-ticket-stock.ts";
 import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
@@ -12,6 +13,7 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review")) return;
   let url: URL; try { url = new URL(source.url); } catch { return; }
   if (url.protocol !== "https:" || url.username || url.password || url.port || url.search || url.hash) return;
+  if (source.festivalSlug === "provinssi" && source.editionYear === 2027 && url.href === "https://www.provinssi.fi/en/" && source.strategies.includes("official_markup")) return PROVINSSI_STOCK;
   if (source.festivalSlug === "summer-punch" && source.editionYear === 2027 && url.href === "https://summerpunchfestival.pl/" && source.strategies.includes("official_markup")) return SUMMER_STOCK;
   if (source.festivalSlug === "full-rewind" && url.href === "https://full-rewind.de/" && source.strategies.includes("official_markup")
     && Number.isInteger(source.editionYear) && source.editionYear >= 2027 && source.editionYear <= 2100)
@@ -28,12 +30,14 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
 export function ticketSupplementPurchaseUrl(source: FestivalSource): string | undefined {
   const stockUrl = ticketSupplementUrl(source);
   if (!stockUrl) return;
+  if (stockUrl === PROVINSSI_STOCK) return PROVINSSI_PURCHASE;
   if (stockUrl === SUMMER_STOCK) return SUMMER_PURCHASE;
   return source.festivalSlug === "full-rewind" ? `https://full-rewind.de/collections/tickets-${source.editionYear}` : stockUrl;
 }
 
 /** Shared POST endpoints need explicit independently reconstructed event/rate scope. */
 export function ticketSupplementScope(source: FestivalSource): { namespace: string; productId: string } | undefined {
+  if (ticketSupplementUrl(source) === PROVINSSI_STOCK) return {...PROVINSSI_SCOPE};
   return ticketSupplementUrl(source) === SUMMER_STOCK ? { ...SUMMER_SCOPE } : undefined;
 }
 
@@ -45,6 +49,7 @@ export function observeTicketSupplement(html: string, source: FestivalSource, ur
   const fail = (reason: string): TicketObservation => ({ excerpt: "", warning: `Official ${source.festivalSlug} ticket source requires review: ${reason}` });
   if (!isTicketSupplementUrl(source, url) || html.length > 2_000_000) return fail("source identity or size changed");
   if (source.festivalSlug === "idays") return observeIdaysTicketStock(html, source.editionYear);
+  if (source.festivalSlug === "provinssi") return observeProvinssiStock(html, dates);
   if (source.festivalSlug === "summer-punch") return observeSummerStock(html, dates);
   if (source.festivalSlug === "full-rewind") {
     const year = source.editionYear;
