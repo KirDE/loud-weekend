@@ -10,7 +10,7 @@ ordinary-admission evidence, persisted through the canonical publication path.
 Unknown/missing/blocked responses must preserve last-good data, never imply free
 admission. No historic festival copy may silently establish next year's policy.
 
-- EN/DE/RU detail views say free admission / no ticket needed and link to the
+- EN/DE/RU detail and comparison views say free admission / no ticket needed and link to the
   festival's official information, never an ancillary `ticketsUrl`.
 - The existing **tickets available** filter remains paid-ticket inventory only.
   Free events remain in the default catalogue; they do not claim available stock.
@@ -24,7 +24,9 @@ admission. No historic festival copy may silently establish next year's policy.
 
 ## Acceptance
 
-`tickets.test.mjs` renders EN/DE/RU and verifies CTA, filtering and structured data;
+`tickets.test.mjs` renders EN/DE/RU detail and comparison ticket cells and verifies
+CTA destinations (including absent URLs and camping extras), every paid/unknown
+status, filtering and structured data;
 `notification-pipeline.test.mjs` protects combined status/URL changes. The canonical
 `catalog-publication.e2e.test.ts` suite covers persisted ingestion evidence, public
 readback, idempotent replay, absence of provider jobs and transactional rollback

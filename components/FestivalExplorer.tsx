@@ -7,7 +7,7 @@ import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import { lineupOverlap } from "@/lib/planning";
 import { emptyPlannerState, useLocalPlanner } from "./LocalPlanner";
-import { hasAvailableTickets } from "@/lib/tickets";
+import { hasAvailableTickets, ticketPresentation } from "@/lib/tickets";
 import { distanceKm, festivalGenres, festivalMatchesDiscoveryFilters, type Coordinates } from "@/lib/festival-discovery";
 import { availableFestivalMonths, festivalOverlapsMonth, formatFestivalDateRange } from "@/lib/festival-dates";
 import { announcedArtists, hasAnnouncedLineup, lineupPreviewArtists } from "@/lib/festival-lineup";
@@ -19,6 +19,14 @@ const origins: Record<string, { label: string; coordinates: Coordinates }> = {
   london: { label: "London, United Kingdom", coordinates: { latitude: 51.5072, longitude: -0.1276 } },
   prague: { label: "Prague, Czechia", coordinates: { latitude: 50.0755, longitude: 14.4378 } },
 };
+
+export function FestivalComparisonTicket({ item }: { item: Festival }) {
+  const { t } = useLanguage();
+  const tickets = ticketPresentation(item);
+  return <td data-ticket-status={tickets.status}>{tickets.href
+    ? <a href={tickets.href} rel="noreferrer" target="_blank">{t(tickets.label)}</a>
+    : t(tickets.label)}</td>;
+}
 
 export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
   const { locale, t } = useLanguage();
@@ -98,7 +106,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
       </div>
     </div>
     <p className="srOnly" role="status" aria-live="polite" aria-atomic="true">{comparisonStatus}</p>
-    {compared.length > 0 && <div className="compareTray"><div className="compareHeading"><strong>{t("compare")} ({compared.length}/3)</strong>{compared.map((item) => <button aria-label={t("removeFestivalComparison", { festival: item.name })} onClick={() => toggleSelected(item)} key={item.slug}>{item.name} <span aria-hidden="true">×</span></button>)}</div>{compared.length < 2 ? <p className="compareHint">{t("comparisonInstructions")}</p> : <div className="comparisonScroll" tabIndex={0}><table className="comparisonTable"><thead><tr><th scope="col">{t("planningDetail")}</th>{compared.map((item) => <th scope="col" key={item.slug}><Link href={`/festivals/${item.slug}/`}>{item.name}</Link></th>)}</tr></thead><tbody><tr><th scope="row">{t("dates")}</th>{compared.map((item) => <td key={item.slug}>{formatFestivalDateRange(item, locale, t("datesTba"))}</td>)}</tr><tr><th scope="row">{t("locationDistance", { origin: origins[origin].label })}</th>{compared.map((item) => <td key={item.slug}>{item.city || item.country}{item.coordinates ? ` · ${distanceKm(originCoordinates, item.coordinates).toLocaleString(locale)} km` : ` · ${t("distanceUnavailable")}`}</td>)}</tr><tr><th scope="row">{t("tickets")}</th>{compared.map((item) => <td key={item.slug}>{item.ticketsUrl ? <a href={item.ticketsUrl} rel="noreferrer" target="_blank">{t("officialTickets")}</a> : item.ticketStatus === "unavailable" ? t("unavailable") : t("availabilityNotConfirmed")}</td>)}</tr><tr><th scope="row">{t("lineupOverlap")}</th><td colSpan={compared.length}>{overlap.length ? <><strong>{t("sharedActs", { count: overlap.length })}</strong><br/>{overlap.join(", ")}</> : t("noLineupOverlap")}</td></tr></tbody></table></div>}</div>}
+    {compared.length > 0 && <div className="compareTray"><div className="compareHeading"><strong>{t("compare")} ({compared.length}/3)</strong>{compared.map((item) => <button aria-label={t("removeFestivalComparison", { festival: item.name })} onClick={() => toggleSelected(item)} key={item.slug}>{item.name} <span aria-hidden="true">×</span></button>)}</div>{compared.length < 2 ? <p className="compareHint">{t("comparisonInstructions")}</p> : <div className="comparisonScroll" tabIndex={0}><table className="comparisonTable"><thead><tr><th scope="col">{t("planningDetail")}</th>{compared.map((item) => <th scope="col" key={item.slug}><Link href={`/festivals/${item.slug}/`}>{item.name}</Link></th>)}</tr></thead><tbody><tr><th scope="row">{t("dates")}</th>{compared.map((item) => <td key={item.slug}>{formatFestivalDateRange(item, locale, t("datesTba"))}</td>)}</tr><tr><th scope="row">{t("locationDistance", { origin: origins[origin].label })}</th>{compared.map((item) => <td key={item.slug}>{item.city || item.country}{item.coordinates ? ` · ${distanceKm(originCoordinates, item.coordinates).toLocaleString(locale)} km` : ` · ${t("distanceUnavailable")}`}</td>)}</tr><tr><th scope="row">{t("tickets")}</th>{compared.map((item) => <FestivalComparisonTicket key={item.slug} item={item} />)}</tr><tr><th scope="row">{t("lineupOverlap")}</th><td colSpan={compared.length}>{overlap.length ? <><strong>{t("sharedActs", { count: overlap.length })}</strong><br/>{overlap.join(", ")}</> : t("noLineupOverlap")}</td></tr></tbody></table></div>}</div>}
     <div className="resultMeta"><span>{visible.length} {t("festivals")}</span><span>{t("lastReview")}</span></div>
     <div className="festivalGrid">{visible.map((item) => { const isSelected = selected.includes(item.slug); const previewArtists = lineupPreviewArtists(item); const artistCount = announcedArtists(item).length; return <article className="festivalCard" key={item.slug}><button type="button" className={`compareButton ${isSelected ? "active" : ""}`} aria-pressed={isSelected} aria-label={t("compareFestival", { festival: item.name })} onClick={() => toggleSelected(item)} disabled={!isSelected && selected.length >= 3}><span aria-hidden="true">{isSelected ? "✓ " : "+ "}</span>{t("compare")}</button><Link href={`/festivals/${item.slug}/`}>
       <div className="cardTop"><FestivalLogo slug={item.slug} name={item.name}/><span className={`status ${item.status}`}>{t(item.status === "tba" ? "tba" : item.status)}</span></div>
