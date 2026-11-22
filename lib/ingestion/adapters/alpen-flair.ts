@@ -1,3 +1,4 @@
+import { load } from "cheerio";
 import type { FestivalCandidate, FestivalSource, FieldEvidence } from '../types.ts';
 import { INGESTION_SCHEMA_VERSION } from '../types.ts';
 import { visibleHtml } from './reading.ts';
@@ -15,14 +16,6 @@ export function alpenAnnouncements(html: string, year: number): string[] {
     } catch { /* no external/social/archive discovery */ }
   }
   return links.slice(0, 6);
-}
-function divBlock(html: string, start: number): string {
-  let depth = 0;
-  for (const token of html.slice(start).matchAll(/<\/?div\b[^>]*>/gi)) {
-    depth += /^<\//.test(token[0]) ? -1 : 1;
-    if (!depth) return html.slice(start, start + token.index! + token[0].length);
-  }
-  return '';
 }
 type Document = { url: string; html: string };
 export const alpenEnvelope = (home: string, articles: Document[]) => JSON.stringify({ kind: 'alpen-flair-official', home, articles });
@@ -42,15 +35,50 @@ export function extractAlpenFlairCandidate(input: string, source: FestivalSource
   if (first < 1 || last > 30 || last < first || last-first > 7) { c.warnings.push('Invalid Alpen Flair festival dates'); return c; }
   const add = (field: FieldEvidence['field'], value: string | string[], excerpt: string, url = source.url) => { Object.assign(c, {[field]:value}); c.evidence.push({field, sourceUrl:url, observedAt:fetchedAt, excerpt:excerpt.slice(0,500)}); };
   add('startDate', `${year}-06-${String(first).padStart(2,'0')}`,range[0]); add('endDate', `${year}-06-${String(last).padStart(2,'0')}`,range[0]);
-  // Require the edition-tagged festival ticket image and explicit live sales
-  // copy within the same card. Never return/fetch the untrusted shop URL.
-  for (const m of home.matchAll(/<div\b[^>]*class=["'][^"']*\buk-card-primary\b[^"']*["'][^>]*>/gi)) {
-    const card = divBlock(home, m.index!);
-    if (!new RegExp(`AF${year}_Festival_Ticket`).test(card)) continue;
-    const title = text(card.match(/<h3\b[^>]*>([\s\S]*?)<\/h3>/i)?.[1] ?? '');
-    const description = text(card.match(/<div\b[^>]*class=["'][^"']*\bel-meta\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] ?? '');
-    const buy = [...card.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)].some(a => !/aria-disabled=["']true["']|\sdisabled(?:\s|=|$)/i.test(a[1]) && /^JETZT BESTELLEN!$/i.test(text(a[2])) && /href=["']https:\/\/shop\.alpen-flair\.com\/listing\.html\?/i.test(a[1]));
-    if (!/\b(?:ausverkauft|sold\s*out)\b/i.test(text(card)) && /^VVK ist gestartet!$/i.test(title) && /^Die limitierten Frühbuchertickets können JETZT bestellt werden!$/i.test(description) && buy) { add('ticketsUrl',source.url,`${title}; ${description}`); add('ticketStatus','available',`${title}; ${description}`); }
+  // The image, copy and purchase control must describe the same unique,
+  // visible current-edition festival ticket card. A sold-out early-bird tier
+  // alone cannot establish a whole-festival sellout.
+  const $ = load(home);
+  // DOM text() omits <br> separators; preserve visible word boundaries.
+  $("br").replaceWith(" ");
+  $("nav, footer, [hidden], [inert], [aria-hidden='true']").remove();
+  $("[style]").each((_, element) => {
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();
+  });
+  const cards = $(".uk-card-primary").filter((_, element) =>
+    $(element).find("img[src]").toArray().some(image => {
+      try {
+        const asset = new URL($(image).attr("src") ?? "", origin);
+        return asset.origin === origin && !asset.username && !asset.password
+          && new RegExp(`^AF${year}_Festival_Ticket(?:[-.]|$)`).test(asset.pathname.split("/").at(-1) ?? "");
+      } catch { return false; }
+    }));
+  if (cards.length !== 1) {
+    c.warnings.push("Alpen Flair current festival ticket card is missing or ambiguous");
+  } else {
+    const card = cards.first(), title = text(card.find("h3").text()), description = text(card.children(".el-meta").text());
+    const purchase = card.find("a[href]").filter((_, element) => {
+      const link = $(element);
+      if (link.is("[disabled], [aria-disabled='true']") || link.parents("[disabled], [aria-disabled='true']").length
+        || !/^JETZT BESTELLEN!$/i.test(text(link.text()))) return false;
+      try {
+        const target = new URL(link.attr("href") ?? "");
+        return target.protocol === "https:" && target.hostname === "shop.alpen-flair.com" && !target.port
+          && !target.username && !target.password && target.pathname === "/listing.html" && !target.hash
+          && /^[1-9]\d*$/.test(target.searchParams.get("id") ?? "")
+          && [...target.searchParams.keys()].length === 1;
+      } catch { return false; }
+    });
+    if (/\b(?:ausverkauft|sold\s*out)\b/i.test(text(card.text()))) {
+      c.warnings.push("Alpen Flair ticket tier contains sellout text; whole-festival inventory requires review");
+    } else if (purchase.length === 1 && /^VVK ist gestartet!$/i.test(title)
+      && /^Die limitierten Frühbuchertickets können JETZT bestellt werden!$/i.test(description)) {
+      // Publish the already-reviewed festival gateway, never the shop URL.
+      add("ticketsUrl", source.url, `${title}; ${description}`);
+      add("ticketStatus", "available", `${title}; ${description}`);
+    } else {
+      c.warnings.push("Alpen Flair current ticket product has no verified live purchase proof");
+    }
   }
   if (!articles.length && new RegExp(`ALPEN FLAIR ${year}.*(?:BANDWELLE|BANDS|LINEUP|ACTS)`, 'i').test(text(home)))
     c.warnings.push('Alpen Flair current announcement link could not be verified');
