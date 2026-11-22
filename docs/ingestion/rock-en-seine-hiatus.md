@@ -263,3 +263,27 @@ also identified the independent offline catalogue (`lib/catalog/offline.ts`): it
 raw dates/timetable projection must respect approved pauses before attachment,
 with privacy, deterministic ETag and failure behavior preserved. The main
 catalogue current-artist aggregate still needs the same approved projection.
+
+### Independent offline schedule projection
+
+`readOfflineCatalog` now composes the existing approved-only proof reader with
+its current-edition query in ONE RepeatableRead snapshot. Only an audited approved
+pause excludes Rock en Seine from this scheduled-event list; absent/pending
+notices do not. A newer pending/rejected revision cannot reactivate an already
+approved pause. Damaged latest/approved proof fails the route with 503/no-store,
+even with a matching ETag, rather than returning an apparently healthy schedule.
+The raw dates/timetable and main catalogue remain unchanged. Internal edition IDs
+are selected only for the proof lookup and never enter the allowlisted JSON.
+
+The schema-v1 scheduled-event list may be empty when all current editions are
+paused. The offline page distinguishes that valid empty schedule from unavailable
+or missing catalogue data; it does not invent a timetable or event. Public bytes
+and the ETag remain content-derived and contain no review/source/actor details.
+Previously saved offline responses may still be outdated, as the offline warning
+states; no fresh observation or cache replacement is claimed without a fetch.
+
+Real DB tests cover pending inclusion, approved exclusion beneath a newer pending
+revision, unaffected other events, matching validators, damaged latest/approved
+proof returning 503 without ETag, unchanged raw facts and an all-paused schedule
+inside a rolled-back RepeatableRead transaction. Main catalogue/current-artist
+projection, native collector, browser/mobile and PR gates remain unfinished.

@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { createPrismaClient } from '../lib/prisma-client.mjs';
 import { requireLocalDisposableDatabase } from './support/disposable-db.ts';
 import { stageRockEnSeineHiatus as stage, readPendingRockEnSeineHiatus as read, decideRockEnSeineHiatus as decide, readApprovedRockEnSeineHiatus as publicRead } from '../lib/ingestion/edition-lifecycle-proposal-store.ts';
+import { readOfflineCatalog, serveOfflineCatalog } from '../lib/catalog/offline.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db = createPrismaClient();
 const html = readFileSync(new URL('./fixtures/rock-en-seine/hiatus.html', import.meta.url), 'utf8');
@@ -26,6 +27,7 @@ test.after(async () => {
 });
 test('absent lifecycle evidence is not a confirmed active edition', async () => {
   assert.equal(await read(db, editionId), null); assert.equal(await publicRead(db, editionId), null);
+  assert.ok((await readOfflineCatalog(db)).festivals.some(f => f.slug === slug));
 });
 test('durable pending evidence/read/replay has NO catalogue, health, provider or notification effects', async () => {
   const before = await db.festivalEdition.findMany();
@@ -37,6 +39,7 @@ test('durable pending evidence/read/replay has NO catalogue, health, provider or
   assert.equal(pending!.proposal.lifecycle, 'hiatus'); assert.equal(pending!.proposal.announcedReturnYear, 2028);
   assert.equal(pending!.proposal.alternativeEvent, 'under_consideration');
   assert.equal(await publicRead(db, editionId), null);
+  assert.ok((await readOfflineCatalog(db)).festivals.some(f => f.slug === slug), 'Pending is not approved hiatus');
   assert.equal((await stage(db, input())).id, row.id);
   assert.equal(await db.editionLifecycleProposalSnapshot.count(), 1);
   assert.deepEqual(await db.festivalEdition.findMany(), before); // also no 2028 auto-creation
@@ -296,4 +299,41 @@ test('approved public proof remains fail-closed beneath a newer pending revision
   try { await assert.rejects(publicRead(db, editionId)); }
   finally { await db.editionLifecycleProposalSnapshot.update({ where: { id: latest.id }, data: { httpStatus: 200 } }); }
   assert.deepEqual(await publicRead(db, editionId), approved);
+});
+
+ test('real offline reader excludes approved pause, preserves other events, stable ETag and fails closed on corruption', async () => {
+  const other = await db.festival.create({ data: { slug: 'offline-synthetic-other', name: 'Other offline fixture', country: 'France', countryCode: 'FR', officialUrl: 'https://example.invalid/', genres: [],
+    editions: { create: { year: 2027, recordState: 'CURRENT', status: 'CONFIRMED', ticketStatus: 'UNKNOWN', completeness: 'COMPLETE', sourceUpdatedAt: new Date(time), startDate: new Date('2027-07-01') } } } });
+  const req = (tag?: string) => new Request('http://localhost/api/offline/catalog', { headers: tag ? { 'if-none-match': tag } : {} });
+  const readOffline = () => readOfflineCatalog(db);
+  const before = await db.festivalEdition.findMany();
+  try {
+    const body = await readOffline();
+    assert.equal(body.festivals.some(f => f.slug === slug), false);
+    assert.equal(body.festivals.find(f => f.slug === other.slug)!.startDate, '2027-07-01');
+    const first = await serveOfflineCatalog(req(), readOffline);
+    const tag = first.headers.get('etag')!;
+    assert.equal((await serveOfflineCatalog(req(tag), readOffline)).status, 304);
+    assert.doesNotMatch(await first.text(), /rock-en-seine|contentHash|actor|audit|sourceUrl|editionId/);
+    const approved = await db.editionLifecycleProposalSnapshot.findFirstOrThrow({ where: { editionId, decision: { decision: 'approve' } } });
+    const latest = await db.editionLifecycleProposalSnapshot.findFirstOrThrow({ where: { editionId }, orderBy: { observedAt: 'desc' } });
+    for (const row of [approved, latest]) {
+      await db.editionLifecycleProposalSnapshot.update({ where: { id: row.id }, data: { httpStatus: 403 } });
+      try {
+        const failure = await serveOfflineCatalog(req(tag), readOffline);
+        assert.equal(failure.status, 503); assert.equal(failure.headers.get('etag'), null);
+        assert.equal(failure.headers.get('cache-control'), 'no-store');
+      } finally { await db.editionLifecycleProposalSnapshot.update({ where: { id: row.id }, data: { httpStatus: row.httpStatus } }); }
+    }
+    assert.equal((await serveOfflineCatalog(req(tag), readOffline)).status, 304);
+    assert.deepEqual(await db.festivalEdition.findMany(), before);
+  } finally { await db.festival.delete({ where: { id: other.id } }); }
+  // All paused is healthy empty, unlike absent DB rows (unavailable).
+  const rollback = new Error('rollback isolated all-paused schedule');
+  await assert.rejects(db.$transaction(async tx => {
+    await tx.festivalEdition.updateMany({ where: { id: { not: editionId }, year: 2027, recordState: 'CURRENT' }, data: { recordState: 'TRACKING' } });
+    assert.deepEqual((await readOfflineCatalog(tx)).festivals, []);
+    assert.equal((await serveOfflineCatalog(req(), () => readOfflineCatalog(tx))).status, 200);
+    throw rollback;
+  }, { isolationLevel: 'RepeatableRead' }), e => e === rollback);
 });

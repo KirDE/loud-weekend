@@ -95,7 +95,7 @@ test("DB query selects only current 2027 public fields; missing/failed DB fails 
   const database = { festivalEdition: { findMany: async (args) => { query = args; return [edition()]; } } };
   await readOfflineCatalog(database);
   assert.deepEqual(query.where, { year: 2027, recordState: "CURRENT" });
-  assert.deepEqual(Object.keys(query.select), ["festival", "startDate", "endDate", "timetable"]);
+  assert.deepEqual(Object.keys(query.select), ["id", "festival", "startDate", "endDate", "timetable"]);
   for (const findMany of [async () => [], async () => { throw new Error("secret connection error"); }]) {
     const response = await serveOfflineCatalog(request("*"), () => readOfflineCatalog({ festivalEdition: { findMany } }));
     assert.equal(response.status, 503);

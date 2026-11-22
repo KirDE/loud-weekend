@@ -137,32 +137,37 @@ export async function decideRockEnSeineHiatus(db: PrismaClient, input: {
  * or approved proof throws rather than presenting an older healthy fallback.
  * Not wired to the catalogue until all public CTA/SEO consumers honour hiatus. */
 export async function readApprovedRockEnSeineHiatus(db: PrismaClient, editionId: string) {
-  return db.$transaction(async tx => {
-    const latest = await tx.editionLifecycleProposalSnapshot.findFirst({
-      where: { editionId }, orderBy: { observedAt: "desc" },
-      include: { edition: { include: { festival: true } }, decision: { include: { audit: true } } },
-    });
-    if (!latest) return null;
-    validateTarget(latest.edition); validateSnapshot(latest);
-    if (latest.decision) validateDecision(latest, latest.decision);
-    const approved = await tx.editionLifecycleProposalSnapshot.findFirst({
-      // Include immutable approval audits as well: mutating a decision to
-      // "reject" must not silently hide that approval and revive an older one.
-      where: { editionId, OR: [
-        { decision: { decision: "approve" } },
-        { decision: { audit: { action: "EDITION_LIFECYCLE_APPROVED" } } },
-      ] }, orderBy: { observedAt: "desc" },
-      include: { decision: { include: { audit: true } } },
-    });
-    if (!approved) return null;
-    const proposal = validateSnapshot(approved);
-    if (!approved.decision) throw new Error("Missing approved lifecycle audit");
-    validateDecision(approved, approved.decision);
-    return publicEditionLifecycleSchema.parse({
-      editionYear: proposal.editionYear, lifecycle: proposal.lifecycle,
-      announcedReturnYear: proposal.announcedReturnYear, alternativeEvent: proposal.alternativeEvent,
-      sourceUrl: proposal.sourceUrl, observedAt: proposal.observedAt,
-      approvedAt: approved.decision.audit.createdAt.toISOString(),
-    });
-  }, { isolationLevel: "RepeatableRead" });
+  return db.$transaction(tx => readApprovedRockEnSeineHiatusInSnapshot(tx, editionId), { isolationLevel: "RepeatableRead" });
+}
+
+/** Compose with another public projection in the caller's RepeatableRead snapshot. */
+export async function readApprovedRockEnSeineHiatusInSnapshot(
+  tx: Pick<Prisma.TransactionClient, "editionLifecycleProposalSnapshot">, editionId: string,
+) {
+  const latest = await tx.editionLifecycleProposalSnapshot.findFirst({
+    where: { editionId }, orderBy: { observedAt: "desc" },
+    include: { edition: { include: { festival: true } }, decision: { include: { audit: true } } },
+  });
+  if (!latest) return null;
+  validateTarget(latest.edition); validateSnapshot(latest);
+  if (latest.decision) validateDecision(latest, latest.decision);
+  const approved = await tx.editionLifecycleProposalSnapshot.findFirst({
+    // Include immutable approval audits as well: mutating a decision to
+    // "reject" must not silently hide that approval and revive an older one.
+    where: { editionId, OR: [
+      { decision: { decision: "approve" } },
+      { decision: { audit: { action: "EDITION_LIFECYCLE_APPROVED" } } },
+    ] }, orderBy: { observedAt: "desc" },
+    include: { decision: { include: { audit: true } } },
+  });
+  if (!approved) return null;
+  const proposal = validateSnapshot(approved);
+  if (!approved.decision) throw new Error("Missing approved lifecycle audit");
+  validateDecision(approved, approved.decision);
+  return publicEditionLifecycleSchema.parse({
+    editionYear: proposal.editionYear, lifecycle: proposal.lifecycle,
+    announcedReturnYear: proposal.announcedReturnYear, alternativeEvent: proposal.alternativeEvent,
+    sourceUrl: proposal.sourceUrl, observedAt: proposal.observedAt,
+    approvedAt: approved.decision.audit.createdAt.toISOString(),
+  });
 }
