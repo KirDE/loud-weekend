@@ -34,7 +34,7 @@ export function sortFestivalLineup(item: Pick<Festival, "lineup" | "timetable">,
   }).map(({ name }) => name);
 }
 
-type FestivalLineup = Pick<Festival, "headliners" | "lineup"> &
+type FestivalLineup = { headliners: readonly string[]; lineup: readonly string[] } &
   Partial<Pick<Festival, "slug" | "editionYear" | "officialUrl" | "editionLifecycle">>;
 
 export function announcedArtists(item: FestivalLineup) {

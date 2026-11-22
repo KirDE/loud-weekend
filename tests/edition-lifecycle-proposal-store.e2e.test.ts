@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { createPrismaClient } from '../lib/prisma-client.mjs';
 import { requireLocalDisposableDatabase } from './support/disposable-db.ts';
 import { stageRockEnSeineHiatus as stage, readPendingRockEnSeineHiatus as read, decideRockEnSeineHiatus as decide, readApprovedRockEnSeineHiatus as publicRead } from '../lib/ingestion/edition-lifecycle-proposal-store.ts';
+import { DatabaseCatalogRepository } from '../lib/catalog/repository.ts';
 import { readOfflineCatalog, serveOfflineCatalog } from '../lib/catalog/offline.ts';
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db = createPrismaClient();
@@ -12,21 +13,28 @@ const url = 'https://www.rockenseine.com/';
 const slug = 'rock-en-seine';
 let editionId: string;
 let festivalId: string;
+let artistId: string;
 const time = Date.now() - 10_000;
 const input = (delta = 0) => ({ editionId, html, requestedUrl: url, finalUrl: url, status: 200, observedAt: new Date(time + delta).toISOString() });
 test.before(async () => {
   assert.equal(await db.festival.count({ where: { slug } }), 0, 'Requires isolated disposable DB without Rock en Seine');
   const f = await db.festival.create({ data: { slug, name: 'Synthetic Rock en Seine', country: 'France', countryCode: 'FR', officialUrl: url, genres: [] } });
   festivalId = f.id;
+  artistId = (await db.artist.create({ data: { slug: 'lifecycle-synthetic-artist', name: 'Lifecycle Synthetic Artist', aliases: [], genres: [], identityState: 'UNRESOLVED', topTracks: [], recentSetlists: [], freshness: {} } })).id;
   editionId = (await db.festivalEdition.create({ data: { festivalId, year: 2027, status: 'CONFIRMED', ticketStatus: 'UNKNOWN', recordState: 'CURRENT', completeness: 'COMPLETE', sourceUpdatedAt: new Date(time), startDate: new Date('2027-08-25'), endDate: new Date('2027-08-29') } })).id;
+  await db.lineupEntry.create({ data: { editionId, artistId, billing: 'HEADLINER', position: 0 } });
 });
 test.after(async () => {
   if (editionId) await db.editionLifecycleReviewDecision.deleteMany({ where: { snapshot: { editionId } } });
   if (festivalId) await db.festival.deleteMany({ where: { id: festivalId } });
+  if (artistId) await db.artist.delete({ where: { id: artistId } });
   await db.$disconnect();
 });
 test('absent lifecycle evidence is not a confirmed active edition', async () => {
   assert.equal(await read(db, editionId), null); assert.equal(await publicRead(db, editionId), null);
+  const catalog = await new DatabaseCatalogRepository(db).read();
+  assert.equal(catalog.festivals.find(f => f.slug === slug)!.editionLifecycle, undefined);
+  assert.ok(catalog.artists.some(a => a.name === 'Lifecycle Synthetic Artist'));
   assert.ok((await readOfflineCatalog(db)).festivals.some(f => f.slug === slug));
 });
 test('durable pending evidence/read/replay has NO catalogue, health, provider or notification effects', async () => {
@@ -40,6 +48,7 @@ test('durable pending evidence/read/replay has NO catalogue, health, provider or
   assert.equal(pending!.proposal.alternativeEvent, 'under_consideration');
   assert.equal(await publicRead(db, editionId), null);
   assert.ok((await readOfflineCatalog(db)).festivals.some(f => f.slug === slug), 'Pending is not approved hiatus');
+  assert.equal((await new DatabaseCatalogRepository(db).read()).festivals.find(f => f.slug === slug)!.editionLifecycle, undefined);
   assert.equal((await stage(db, input())).id, row.id);
   assert.equal(await db.editionLifecycleProposalSnapshot.count(), 1);
   assert.deepEqual(await db.festivalEdition.findMany(), before); // also no 2028 auto-creation
@@ -336,4 +345,25 @@ test('approved public proof remains fail-closed beneath a newer pending revision
     assert.equal((await serveOfflineCatalog(req(), () => readOfflineCatalog(tx))).status, 200);
     throw rollback;
   }, { isolationLevel: 'RepeatableRead' }), e => e === rollback);
+});
+
+
+test('actual main catalogue projects approved notice/current artists but never rewrites raw or archive facts', async () => {
+  const archive = await db.festivalEdition.create({ data: { festivalId, year: 2026, recordState: 'ARCHIVED', status: 'CONFIRMED', ticketStatus: 'UNKNOWN', completeness: 'COMPLETE', sourceUpdatedAt: new Date(time), startDate: new Date('2026-08-25') } });
+  const before = await db.festivalEdition.findMany();
+  try {
+    const result = await new DatabaseCatalogRepository(db).read();
+    const f = result.festivals.find(f => f.slug === slug)!;
+    assert.deepEqual(f.editionLifecycle, await publicRead(db, editionId));
+    assert.equal(f.startDate, '2027-08-25'); assert.equal(f.ticketStatus, 'unknown');
+    assert.deepEqual(f.headliners, ['Lifecycle Synthetic Artist']);
+    assert.equal(result.artists.some(a => a.name === 'Lifecycle Synthetic Artist'), false);
+    assert.equal(result.editions.find(e => e.slug === slug && e.editionYear === 2026)!.editionLifecycle, undefined);
+    assert.doesNotMatch(JSON.stringify(f), /contentHash|actorId|auditId|eligibleForReview/);
+    const latest = await db.editionLifecycleProposalSnapshot.findFirstOrThrow({ where: { editionId }, orderBy: { observedAt: 'desc' } });
+    await db.editionLifecycleProposalSnapshot.update({ where: { id: latest.id }, data: { httpStatus: 403 } });
+    try { await assert.rejects(new DatabaseCatalogRepository(db).read()); }
+    finally { await db.editionLifecycleProposalSnapshot.update({ where: { id: latest.id }, data: { httpStatus: latest.httpStatus } }); }
+    assert.deepEqual(await db.festivalEdition.findMany(), before);
+  } finally { await db.festivalEdition.delete({ where: { id: archive.id } }); }
 });

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient, Prisma } from "@prisma/client";
 import { z } from "zod";
-import { lifecycleProposalSchema as schema, publicEditionLifecycleSchema } from "../domain/edition-lifecycle-review";
+import { lifecycleProposalSchema as schema, publicEditionLifecycleSchema } from "../domain/edition-lifecycle-review.ts";
 import { observeRockEnSeineHiatus, ROCK_EN_SEINE_HOME } from "./adapters/rock-en-seine-hiatus.ts";
 
 const version = "rock-en-seine-hiatus-v1";
