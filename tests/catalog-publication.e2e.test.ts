@@ -854,3 +854,43 @@ test("I-Days collected ticket-only changes cannot bypass persisted secondary-pro
   assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{id:stored.id}})).reviewState,"PENDING");
  }
 });
+
+
+test("I-Days direct ticketsUrl-only publication validates durable proof and atomically rejects drift",async()=>{
+ const oldUrl="https://www.idays.it/old-tickets";
+ for(const drift of ["none","missing","value","source","timestamp"]){
+  const edition=await db.festivalEdition.findFirstOrThrow({where:{festival:{slug:"idays"},recordState:"CURRENT"}});
+  await db.festivalEdition.update({where:{id:edition.id},data:{ticketStatus:"AVAILABLE",ticketsUrl:oldUrl}});
+  const source=parserSource("idays",{url:"https://www.idays.it/tickets",strategies:["html_fallback"]});
+  const html=await readFile(new URL("./fixtures/idays/tickets-2027.html",import.meta.url),"utf8");
+  const calls:string[]=[];
+  const fetched=await fetchSource(source,{maxAttempts:1,fetchImpl:async url=>{
+   calls.push(String(url));return new Response(html,{headers:{"content-type":"text/html"}});
+  }});
+  assert.deepEqual(calls,[source.url]);assert(fetched.response.ok);
+  const candidate=extractFestivalCandidate(await fetched.response.text(),source,new Date().toISOString());
+  assert.equal(candidate.ticketSupplement,undefined);
+  const current=(await readCatalog({database:db})).festivals.find(f=>f.slug==="idays")!;
+  const value=evaluateCandidate(current,candidate);assert(value.publishable);assert.equal(value.changes.length,1);assert.equal(value.changes[0].field,"ticketsUrl");
+  const attempt=await persist(value),stored=await db.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}});
+  const where={candidateId:stored.id,field:"ticketsUrl"};
+  if(drift==="missing")await db.ingestionEvidence.deleteMany({where});
+  if(drift==="value")await db.ingestionEvidence.updateMany({where,data:{observedValue:oldUrl}});
+  if(drift==="source")await db.ingestionEvidence.updateMany({where,data:{sourceUrl:"https://foreign.example/tickets"}});
+  if(drift==="timestamp")await db.ingestionEvidence.updateMany({where,data:{observedAt:new Date("2020-01-01")}});
+  const counts=()=>Promise.all([db.artist.count(),db.lineupEntry.count(),db.catalogPublication.count(),db.catalogPlaylistRefresh.count()]);
+  const before=await counts();
+  if(drift==="none"){
+   const publication=await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix});assert(publication);
+   assert.equal((await readCatalog({database:db})).festivals.find(f=>f.slug==="idays")!.ticketsUrl,source.url);
+   assert.equal((await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}))?.id,publication.id);
+   assert.deepEqual(await counts(),[before[0],before[1],before[2]+1,before[3]]);
+  }else{
+   await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/I-Days ticket publication requires matching persisted/);
+   assert.deepEqual(await counts(),before);
+   const after=(await readCatalog({database:db})).festivals.find(f=>f.slug==="idays")!;
+   assert.equal(after.ticketsUrl,oldUrl);assert.equal(after.ticketStatus,"available");
+   assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{id:stored.id}})).reviewState,"PENDING");
+  }
+ }
+});

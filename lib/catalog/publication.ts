@@ -340,7 +340,7 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
       throw new Error("Impericon publication requires matching persisted official announcement evidence");
     // Inventory-only updates must carry the same persisted field/value/time
     // proof as combined artist updates; no lineup diff is needed to hit this gate.
-    if (input.result.festivalSlug === "idays" && input.result.changes.some(change => change.field === "ticketStatus")
+    if (input.result.festivalSlug === "idays" && input.result.changes.some(change => ["ticketStatus", "ticketsUrl"].includes(change.field))
       && !input.result.changes.filter(change => ["ticketStatus","ticketsUrl"].includes(change.field)).every(verifiedSupplementTicketChange))
       throw new Error("I-Days ticket publication requires matching persisted official inventory evidence");
     const idaysLineup = input.result.festivalSlug === "idays" &&

@@ -114,3 +114,14 @@ test('Ticketmaster ancillary-only controls cannot borrow ordinary concert admiss
   assert.equal(c.ticketStatus,undefined);assert(c.warnings.some(w=>/review required/.test(w)));
  }
 });
+
+
+test('all Italian month labels bind ordinary admission to the exact Ticketmaster date',()=>{
+ const months=['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+ for(const [index,month] of months.entries()){
+  const number=String(index+1).padStart(2,'0');
+  const html=`<section id="13-${month}"><p>L'acquisto del biglietto garantisce l'accesso al festival per l'intera giornata.</p></section><section><a href="https://www.ticketmaster.it/biglietti/show-13-${number}-2027/event/abc">Acquista</a></section>`;
+  assert.equal(parse(html,{url:current.ticketsUrl}).ticketStatus,'available',month);
+  for(const invalid of [html.replace(`13-${number}-2027`,'13-06-2026'),html.replace(`13-${month}`,`13-unknown`),html.replace('www.ticketmaster.it','evil.test')])assert.equal(parse(invalid,{url:current.ticketsUrl}).ticketStatus,undefined,month);
+ }
+});

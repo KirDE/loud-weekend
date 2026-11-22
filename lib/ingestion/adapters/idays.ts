@@ -31,11 +31,11 @@ export function observeIdaysTicketStock(html: string, year: number): { status?: 
     const node = selection.clone(); node.find("*").prepend(" ").append(" ");
     return text(node.text());
   };
-  const months: Record<string,string> = {giugno:"06",luglio:"07",settembre:"09"};
+  const months: Record<string,string> = {gennaio:"01",febbraio:"02",marzo:"03",aprile:"04",maggio:"05",giugno:"06",luglio:"07",agosto:"08",settembre:"09",ottobre:"10",novembre:"11",dicembre:"12"};
   for (const element of sections.toArray()) {
     const intro = $(element), label = copy($(element)), id = intro.attr("id") ?? "";
-    const date = id.match(/^(\d{1,2})-(giugno|luglio|settembre)$/);
-    if (!date || !/l'acquisto del biglietto garantisce l'accesso al festival per l'intera giornata/i.test(label)) continue;
+    const date = id.match(/^(\d{1,2})-([a-z]+)$/);
+    if (!date || !Object.hasOwn(months, date[2]) || !/l'acquisto del biglietto garantisce l'accesso al festival per l'intera giornata/i.test(label)) continue;
     const ordinaryCopy = label.replace(/Per questo show\s+i posti riservati nell'area dedicata alle persone con disabilità sono terminati\./gi," ");
     if (/\b(?:sold\s*out|esaurit[oi]|terminati|non (?:sono )?disponibili)\b/i.test(ordinaryCopy)) continue;
     // Actual source structure: dated concert intro, then its adjacent vendor
