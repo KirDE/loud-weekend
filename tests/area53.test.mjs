@@ -9,7 +9,7 @@ const parse=(h=html,s={})=>extractFestivalCandidate(h,{...source,...s},'2026-11-
 const c=parse();
 const current={slug:'area53',editionYear:2027,city:'Leoben',status:'tba',ticketStatus:'unknown',headliners:[],lineup:[]};
 test('full unmodified homepage extracts 14 current edition headings, not stale image alt, gallery or contest',()=>{
- assert.equal(c.lineup.length,14);assert.equal(c.lineup[0],'Edguy');assert.ok(!c.lineup.includes('In Flames'));assert.ok(!c.lineup.includes('EMBERS COLLIDE'));assert.equal(c.headliners,undefined);assert.equal(c.startDate,undefined);assert.equal(c.status,'partial');assert.deepEqual(c.warnings,[]);
+ assert.equal(c.lineup.length,14);assert.equal(c.lineup[0],'Edguy');assert.ok(c.lineup.includes('Gutalax'));assert.ok(!c.lineup.includes('Guatalax'));assert.ok(!c.lineup.includes('In Flames'));assert.ok(!c.lineup.includes('EMBERS COLLIDE'));assert.equal(c.headliners,undefined);assert.equal(c.startDate,undefined);assert.equal(c.status,'partial');assert.deepEqual(c.warnings,[]);
 });
 test('wrong edition, origin, mixed year, missing closing boundary, missing heading and duplicates fail closed',()=>{
  for(const [h,s] of [[html,{editionYear:2028}],[html,{url:'https://evil.test/'}],[html.replace('/images/2027/Lineup%20Update%202/edguy.jpg','/images/2026/old.jpg'),{}],[html.split('<div id="news"')[0],{}],[html.replace('>Edguy</h2>','></h2>'),{}],[html.replace('>Edguy</h2>','>HammerFall</h2>'),{}]])assert.equal(parse(h,s).lineup,undefined);

@@ -14,7 +14,10 @@ export function area53(input: string, source: FestivalSource) {
     const heading = card[2].match(/<h2\b[^>]*class="[^"]*\bel-title\b[^"]*"[^>]*>([^<]+)<\/h2>/i)?.[1];
     const image = card[2].match(/<img\b[^>]*\bsrc="([^ "]+)"/i)?.[1];
     if (!heading || !image?.startsWith(`/images/${source.editionYear}/`)) return undefined;
-    const name = heading.replace(/&amp;/g, '&').trim();
+    const label = heading.replace(/&amp;/g, '&').trim();
+    // Official guatala.jpg visibly names GUTALAX; its card heading has a typo.
+    // Normalize that source spelling to reuse the existing artist identity.
+    const name = label === 'Guatalax' ? 'Gutalax' : label;
     if (!name || name.length > 100 || /[<>]|&(?:#|[a-z]+;)|\p{C}|\b(?:tba|20\d{2})\b/iu.test(name) || lineup.some(n => n.toLowerCase() === name.toLowerCase())) return undefined;
     lineup.push(name);
   }
