@@ -109,3 +109,12 @@ test('hidden, stale, duplicate or foreign ticket inventory cannot establish curr
  for(const document of cases) assert.equal(parse(document).ticketStatus,undefined);
  assert.equal(parse(html,{...source,url:'https://other.example/'}).ticketStatus,undefined);
 });
+
+test('minified element boundaries preserve a valid standard four-day pass',()=>{
+ const minified=html.replace(/>\s+</g,'><');
+ assert.equal(parse(minified).ticketStatus,'available');
+ assert.deepEqual(parse(minified).warnings,[]);
+ const currentCard=minified.match(/<article[^]*?Na stání[^]*?<\/article>/)[0];
+ const noDuration=minified.replace(currentCard,currentCard.replace('4 dny','1 den')+'<small>4 dny archived promotion</small>');
+ assert.equal(parse(noDuration).ticketStatus,undefined);
+});

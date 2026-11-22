@@ -83,7 +83,7 @@ export function extractMastersOfRockCandidate(html: string, source: FestivalSour
     return candidate;
   }
   const cards = section.find("article.mor-price-card").filter((_, element) =>
-    /^Na stání(?:\s|$)/iu.test(text($(element).find("h3").text())) && /\b4 dny\b/iu.test(text($(element).text())));
+    /^Na stání(?:\s|$)/iu.test(text($(element).find("h3").text())) && $(element).find(".mor-price-note").toArray().some(note => /\b4 dny\b/iu.test(text($.html(note)))));
   if (cards.length !== 1) {
     candidate.warnings.push("Masters of Rock standard full-pass product is missing or ambiguous");
     return candidate;
