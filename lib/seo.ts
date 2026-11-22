@@ -1,5 +1,7 @@
 import type { Festival } from "@/lib/domain/festival";
 
+import { editionOnHiatus } from "./edition-lifecycle.ts";
+
 export const SITE_ORIGIN = "https://loudweekend.eu";
 export const CATALOG_UPDATED_AT = "2026-09-01T15:18:00.000Z";
 
@@ -9,6 +11,8 @@ export function canonicalPath(path: string) {
 }
 
 export function festivalMusicEvent(item: Festival) {
+  // A paused edition is not a scheduled event, sale or confirmed replacement.
+  if (editionOnHiatus(item)) return null;
   const hasVerifiedDates = Boolean(item.startDate);
   const availability = item.ticketStatus === "available"
     ? "https://schema.org/InStock"

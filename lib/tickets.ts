@@ -1,9 +1,11 @@
 import type { Festival } from "@/lib/domain/festival";
+import { editionOnHiatus } from "./edition-lifecycle.ts";
 
-type TicketLabel = "officialTickets" | "ticketsLow" | "ticketsNotOnSale" | "ticketsSoldOut" | "ticketsSalesEnded" | "ticketsUnavailable" | "ticketsUnknown";
-export type TicketPresentation = { status: Festival["ticketStatus"]; href?: string; label: TicketLabel };
+type TicketLabel = "editionHiatus" | "officialTickets" | "ticketsLow" | "ticketsNotOnSale" | "ticketsSoldOut" | "ticketsSalesEnded" | "ticketsUnavailable" | "ticketsUnknown";
+export type TicketPresentation = { status: Festival["ticketStatus"] | "hiatus"; href?: string; label: TicketLabel };
 
 export function ticketPresentation(item: Festival): TicketPresentation {
+  if (editionOnHiatus(item)) return { status: "hiatus", label: "editionHiatus" };
   const href = item.ticketsUrl || undefined;
   // A missing link cannot prove a sellout. Keep known negative states truthful,
   // but do not advertise an actionable offer without an official destination.

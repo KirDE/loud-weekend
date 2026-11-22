@@ -163,3 +163,26 @@ mutation beneath a pending revision. The reader performs no writes. This service
 is deliberately not called by DatabaseCatalogRepository or a public route until
 all detail/cards/comparison/filter/SEO/CTA consumers respect the separate lifecycle.
 Current UI therefore remains unchanged; this is not browser/public delivery proof.
+
+## Consumer prerequisite: ticket actions and SEO (not yet catalogue-wired)
+
+`Festival.editionLifecycle` is an optional approved-only notice, independent of
+raw canonical ticket/date fields. Shared `editionOnHiatus` validates its strict
+public schema and exact festival/year/source binding, rejecting malformed or
+transferred notices. Missing notice remains unknown lifecycle, not a new active
+status. The database catalogue still does NOT attach this field.
+
+The shared ticket presentation gives a hiatus its own EN/DE/RU label, with no
+purchase link, regardless of any old ticket enum/URL. The available-ticket filter
+therefore excludes it. Both the actual detail ticket block and comparison cell
+use this presentation; the latter no longer treats every URL as available stock.
+MusicEvent generation returns null for a paused edition, and both default and
+localized detail routes omit its JSON-LD entirely. No scheduled/cancelled event,
+old inventory or 2028 replacement is inferred. Raw dates/statuses are untouched.
+
+21 targeted tests cover all seven ticket states with/without links across three
+languages in actual detail/comparison renders, strict target/schema failures,
+absence semantics, SEO suppression and prior ticket/SEO regressions. This is
+server-rendered component proof, NOT browser/mobile proof. Date cards, calendar,
+planning exports and descriptive lifecycle notices still need integration before
+attaching approved lifecycle data to the actual catalogue.

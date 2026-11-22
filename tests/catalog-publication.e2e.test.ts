@@ -659,7 +659,7 @@ test("explicit ticket states survive reviewed publication and canonical public r
       assert.equal(item.ticketStatus, status);
       const linked = { ...item, ticketsUrl: "https://festival.example.test/tickets" };
       assert.equal(ticketPresentation(linked).status, status);
-      assert.equal(festivalMusicEvent(linked).offers?.availability === "https://schema.org/SoldOut", status === "sold_out");
+      assert.equal(festivalMusicEvent(linked)?.offers?.availability === "https://schema.org/SoldOut", status === "sold_out");
       const stored = await db.catalogPublication.findUniqueOrThrow({ where: { id: publication.id } });
       assert.deepEqual(stored.fields, ["ticketStatus"]);
       assert.equal((stored.evidence as any).sourceEvidence.url, linked.ticketsUrl);
