@@ -1,3 +1,4 @@
+import { HEAVY_WIDGET_API, HEAVY_STOCK, HEAVY_STOCK_DOCUMENTS, heavyRenderAction, reduceHeavyStockDocument } from "./heavy-ticket-stock.ts";
 import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters/full-rewind.ts';
@@ -549,6 +550,33 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
     // source overrides or authorization headers on a public ticket destination.
+    if (ticketUrl === HEAVY_STOCK) {
+      // The official public embed's first step returns only the initial stock
+      // document. No quantity/customer/cart/reservation/order action is sent.
+      const meta = await fetchSourceWithoutTicketSupplement({ ...source, url: HEAVY_WIDGET_API,
+        headers: { accept: "application/json", "accept-language": "en-GB" }, fetchUrl: undefined, followLinkPattern: undefined, strategies: ["html_fallback"] }, options);
+      attempts += meta.attempts;
+      if (!meta.response.ok) return { response: meta.response, attempts };
+      if (meta.response.url && meta.response.url !== HEAVY_WIDGET_API) throw new Error("Heavy public widget metadata redirected");
+      if (!/^application\/json\b/i.test(meta.response.headers.get("content-type") ?? "")) throw new Error("Heavy public widget metadata media type changed");
+      const action = heavyRenderAction(JSON.parse(await boundedTicketText(meta.response)));
+      attempts += 1;
+      // One read-only document-render POST, no blind retry. Never forward the
+      // primary's authorization/cookies or follow a token-bearing redirect.
+      const render = await (options.fetchImpl ?? fetch)(HEAVY_STOCK, { method: "POST", redirect: "error", signal: AbortSignal.timeout(20_000),
+        headers: { accept: "text/html", "content-type": "application/x-www-form-urlencoded", "user-agent": "LoudWeekendBot/1.1 (+https://loudweekend.eu/; public festival-data monitor)" },
+        body: new URLSearchParams({ token: action.token }).toString() });
+      if (!render.ok) return { response: render, attempts };
+      if (render.url && render.url !== HEAVY_STOCK) throw new Error("Heavy public initial render redirected");
+      if (!/^text\/html\b|^application\/xhtml\+xml\b/i.test(render.headers.get("content-type") ?? "")) throw new Error("Heavy public initial render media type changed");
+      const html = JSON.stringify({ kind: HEAVY_STOCK_DOCUMENTS, apiUrl: HEAVY_WIDGET_API, renderUrl: HEAVY_STOCK,
+        meta: action.meta, html: reduceHeavyStockDocument(await boundedTicketText(render)) });
+      // No issued token, session/hidden form data or whole provider page leaves
+      // this fetcher in the normalized/persisted source envelope.
+      const response = new Response(JSON.stringify({ kind: TICKET_SUPPLEMENT, body, ticket: { url: ticketUrl, html } }), { headers: { "content-type": "application/json" } });
+      Object.defineProperty(response, "url", { value: source.url });
+      return { response, attempts };
+    }
     const ticket = await fetchSourceWithoutTicketSupplement({ ...source, url: ticketUrl, headers: undefined,
       fetchUrl: undefined, followLinkPattern: undefined, strategies: ["html_fallback"] }, options);
     attempts += ticket.attempts;

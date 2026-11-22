@@ -1,3 +1,4 @@
+import {heavyStockResponse} from "./support/heavy-stock-fixture.ts";
 import test from 'node:test';import assert from 'node:assert/strict';import{readFileSync}from'node:fs';
 import{extractFestivalCandidate}from'../lib/ingestion/extract.ts';import{evaluateCandidate}from'../lib/ingestion/policy.ts';
 const saved=JSON.parse(readFileSync(new URL('./fixtures/official-markup/heavy-weekend-reviewed.json',import.meta.url),'utf8'));
@@ -30,7 +31,7 @@ test('short labeled homepage card cannot bypass evidence by omitting linked docu
 test('live fetch hashes actual logo bytes; corruption retains review, exact asset URL only',async()=>{
  const {fetchSource}=await import('../lib/ingestion/fetch.ts');
  for(const corrupt of [false,true]) {const calls=[];
-  const r=await fetchSource(source,{maxAttempts:1,fetchImpl:async url=>{calls.push(url);if(url===source.url)return new Response(base.home);if(url===base.documents.find(d=>d.logo)?.logo.url)return new Response(corrupt?'changed bytes':logo);return new Response(base.documents.find(d=>d.url===url).html);}});
+  const r=await fetchSource(source,{maxAttempts:1,fetchImpl:async url=>{calls.push(url);const stock=heavyStockResponse(url);if(stock)return stock;if(url===source.url)return new Response(base.home);if(url===base.documents.find(d=>d.logo)?.logo.url)return new Response(corrupt?'changed bytes':logo);return new Response(base.documents.find(d=>d.url===url).html);}});
   const c=extractFestivalCandidate(await r.response.text(),source,'2026-11-17T22:00:00Z');
   if(corrupt)assert.deepEqual(c.evidence,[]);else assert.ok(c.lineup.includes(credit));assert.equal(calls.filter(u=>u.includes('cdn.prod')).length,1);
  }
