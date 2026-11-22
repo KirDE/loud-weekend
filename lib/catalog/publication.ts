@@ -300,24 +300,54 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
       input.result.candidate.evidence.some((e) => e.field === sourceField && e.sourceUrl === input.result.sourceUrl) &&
       candidate.evidence.some((e) => e.field === sourceField && e.sourceUrl === input.result.sourceUrl);
     if (rockharzPublication && !verifiedSource) throw new Error("Rockharz publication requires matching verified source evidence");
+    // A reviewed secondary ticket page may prove inventory, but never
+    // substitute for primary announcement or artist evidence.
+    const verifiedSupplementTicketChange = (change: IngestionResult["changes"][number]) => {
+      if (!["ticketStatus","ticketsUrl"].includes(change.field)) return false;
+      const observed = input.result.candidate, stored = candidate.normalized as unknown as FestivalCandidate;
+      if (!stored || observed.festivalSlug !== input.result.festivalSlug || stored.festivalSlug !== observed.festivalSlug
+        || observed.sourceUrl !== input.result.sourceUrl || stored.sourceUrl !== observed.sourceUrl
+        || candidate.attempt.requestedUrl !== observed.sourceUrl || observed.ticketStatus !== "available" || stored.ticketStatus !== "available"
+        || observed.observedEditionYears.length !== 1 || observed.observedEditionYears[0] !== applied.edition.year
+        || !Array.isArray(stored.observedEditionYears) || stored.observedEditionYears.length !== 1 || stored.observedEditionYears[0] !== applied.edition.year) return false;
+      let proofUrl: string | undefined;
+      if (observed.festivalSlug === "idays" && ["https://www.idays.it/","https://www.idays.it/line-up"].includes(observed.sourceUrl)
+        && observed.ticketsUrl === "https://www.idays.it/tickets") proofUrl = observed.ticketsUrl;
+      if (observed.festivalSlug === "impericon" && observed.sourceUrl === "https://www.impericon.com/pages/festival") {
+        try {
+          const url = new URL(observed.ticketsUrl ?? "");
+          const product = url.pathname.match(/^\/products\/(\d{1,2})-(\d{1,2})-(\d{2})-(20\d{2})-\d{1,2}-preisstufe-weekend-ticket$/);
+          if (url.origin === "https://www.impericon.com" && !url.username && !url.password && !url.search && !url.hash && product
+            && Number(product[4]) === applied.edition.year && same(stored.startDate,observed.startDate) && same(stored.endDate,observed.endDate) && observed.startDate === product[4]+"-"+product[3]+"-"+product[1].padStart(2,"0")
+            && observed.endDate === product[4]+"-"+product[3]+"-"+product[2].padStart(2,"0")) proofUrl = url.href + ".js";
+        } catch { /* Only a reviewed dated weekend product can supply stock. */ }
+      }
+      if (!proofUrl) return false;
+      const field = change.field as "ticketStatus" | "ticketsUrl", value = observed[field], at = Date.parse(observed.fetchedAt);
+      return value !== undefined && same(value,change.after) && same(stored[field],value) && same(stored.ticketsUrl,observed.ticketsUrl)
+        && Number.isFinite(at) && observed.fetchedAt === input.result.fetchedAt && stored.fetchedAt === observed.fetchedAt
+        && observed.evidence.some(e => e.field === field && e.sourceUrl === proofUrl && Date.parse(e.observedAt) === at)
+        && candidate.evidence.some(e => e.field === field && e.sourceUrl === proofUrl && same(e.observedValue,value) && e.observedAt.getTime() === at);
+    };
     const impericonPublication = input.result.festivalSlug === "impericon" && input.result.sourceUrl === "https://www.impericon.com/pages/festival";
     if (impericonPublication && !(candidate.festivalSlug === "impericon" && applied.edition.year === expectedYear &&
       input.result.candidate.observedEditionYears.length === 1 && input.result.candidate.observedEditionYears[0] === expectedYear &&
       candidate.attempt.requestedUrl === input.result.sourceUrl && input.result.candidate.sourceUrl === input.result.sourceUrl &&
       input.result.candidate.artistListMode === "additive" && input.result.candidate.lineupScope === "announcement" &&
-      input.result.changes.every(({ field }) => ["startDate", "endDate", "headliners", "lineup", "status"].includes(field) &&
-        candidate.evidence.some(e => e.field === field && e.sourceUrl === input.result.sourceUrl) &&
-        input.result.candidate.evidence.some(e => e.field === field && e.sourceUrl === input.result.sourceUrl))))
+      input.result.changes.every(change => verifiedSupplementTicketChange(change) || (["startDate", "endDate", "headliners", "lineup", "status"].includes(change.field) &&
+        candidate.evidence.some(e => e.field === change.field && e.sourceUrl === input.result.sourceUrl) &&
+        input.result.candidate.evidence.some(e => e.field === change.field && e.sourceUrl === input.result.sourceUrl)))))
       throw new Error("Impericon publication requires matching persisted official announcement evidence");
     const idaysLineup = input.result.festivalSlug === "idays" &&
       input.result.changes.some(({ field }) => field === "lineup" || field === "headliners");
     if (idaysLineup && !(isIdaysAnnouncement(input.result.candidate, applied.edition.year) &&
       candidate.festivalSlug === "idays" && candidate.attempt.requestedUrl === input.result.sourceUrl &&
       input.result.candidate.sourceUrl === input.result.sourceUrl &&
-      input.result.changes.every(({ field, kind }) =>
-        (!["lineup", "headliners"].includes(field) || ["artist_added", "headliner_added"].includes(kind)) &&
-        candidate.evidence.some(e => e.field === field && e.sourceUrl === input.result.sourceUrl) &&
-        input.result.candidate.evidence.some(e => e.field === field && e.sourceUrl === input.result.sourceUrl))))
+      input.result.changes.every(change => verifiedSupplementTicketChange(change) || (change.field !== "ticketStatus" &&
+        (change.field !== "ticketsUrl" || change.after === "https://www.idays.it/tickets") &&
+        (!["lineup", "headliners"].includes(change.field) || ["artist_added", "headliner_added"].includes(change.kind)) &&
+        candidate.evidence.some(e => e.field === change.field && e.sourceUrl === input.result.sourceUrl) &&
+        input.result.candidate.evidence.some(e => e.field === change.field && e.sourceUrl === input.result.sourceUrl)))))
       throw new Error("I-Days publication requires matching persisted official addition evidence");
     const graspopLineup=input.result.festivalSlug==='graspop' && input.result.changes.some(({field})=>['lineup','headliners'].includes(field));
     if(graspopLineup && !(isGraspopAnnouncement(input.result.candidate,applied.edition.year) &&
