@@ -1,3 +1,4 @@
+import { ticketSupplementUrl, ticketSupplementPurchaseUrl } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
@@ -252,6 +253,35 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     if (!same(expected, persisted)) throw new Error("Persisted ingestion diff does not match publication request");
     const expectedYear = input.result.candidate.observedEditionYears.length === 1 ? input.result.candidate.observedEditionYears[0] : candidate.sourceYear ?? undefined;
     if (!expectedYear && input.result.changes.some(({ field }) => field === "lineup" || field === "headliners")) throw new Error("Cannot publish a lineup without one verified edition year");
+    // Secondary ticket observations are publishable only with the same exact
+    // source, edition, value and durable evidence that passed the producer.
+    // Do not extend the separate Impericon/I-Days publication paths here (#497).
+    const observed = input.result.candidate;
+    const stored = candidate.normalized as unknown as FestivalCandidate;
+    if (observed.ticketSupplement || stored.ticketSupplement) {
+      const registeredSource = { festivalSlug: input.result.festivalSlug,
+        url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
+        strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true };
+      const ticketUrl = ticketSupplementUrl(registeredSource);
+      const purchaseUrl = ticketSupplementPurchaseUrl(registeredSource);
+      const provenance = { sourceUrl: input.result.sourceUrl, ticketUrl, editionYear: expectedYear };
+      const valid = ticketUrl && same(observed.ticketSupplement, provenance) && same(stored.ticketSupplement, provenance) && candidate.festivalSlug === input.result.festivalSlug &&
+        candidate.attempt.requestedUrl === input.result.sourceUrl &&
+        observed.sourceUrl === input.result.sourceUrl && stored.sourceUrl === observed.sourceUrl &&
+        stored.festivalSlug === observed.festivalSlug && observed.festivalSlug === candidate.festivalSlug &&
+        same(observed.observedEditionYears, [expectedYear]) && same(stored.observedEditionYears, [expectedYear]) &&
+        observed.ticketsUrl === purchaseUrl && stored.ticketsUrl === purchaseUrl &&
+        same(stored.ticketStatus, observed.ticketStatus) &&
+        ["ticketStatus", "ticketsUrl"].every(field => {
+          const value = observed[field as "ticketStatus" | "ticketsUrl"];
+          return observed.evidence.some(e => e.field === field && e.sourceUrl === ticketUrl && e.excerpt?.trim() &&
+            candidate.evidence.some(saved => saved.field === field && saved.sourceUrl === ticketUrl &&
+              same(saved.observedValue, value) && saved.excerpt === e.excerpt &&
+              saved.observedAt.toISOString() === new Date(e.observedAt).toISOString()));
+        }) && input.result.changes.filter(c => ["ticketStatus", "ticketsUrl"].includes(c.field))
+          .every(c => same(c.after, observed[c.field as "ticketStatus" | "ticketsUrl"]));
+      if (!valid) throw new Error("Ticket supplement publication requires matching persisted official ticket evidence");
+    }
     const applied = await applyFestivalChanges(db, { festivalSlug: input.result.festivalSlug, expectedYear, changes: input.result.changes, strictBefore: true, observedAt: new Date(input.result.fetchedAt) });
     // Rockharz 2027 publications retain exact edition/source/field and persisted
     // evidence guards. Verified lineup changes use the normal provider queue.
@@ -289,7 +319,7 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
           const product = url.pathname.match(/^\/products\/(\d{1,2})-(\d{1,2})-(\d{2})-(20\d{2})-\d{1,2}-preisstufe-weekend-ticket$/);
           if (url.origin === "https://www.impericon.com" && !url.username && !url.password && !url.search && !url.hash && product
             && Number(product[4]) === applied.edition.year && same(stored.startDate,observed.startDate) && same(stored.endDate,observed.endDate) && observed.startDate === product[4]+"-"+product[3]+"-"+product[1].padStart(2,"0")
-            && observed.endDate === product[4]+"-"+product[3]+"-"+product[2].padStart(2,"0")) proofUrl = url.href;
+            && observed.endDate === product[4]+"-"+product[3]+"-"+product[2].padStart(2,"0")) proofUrl = url.href + ".js";
         } catch { /* Only a reviewed dated weekend product can supply stock. */ }
       }
       if (!proofUrl) return false;
@@ -443,6 +473,17 @@ export async function publishAgentFestivalResolution(
     (dateStart && dateEnd && dateStart > dateEnd)
   )
     throw new Error("Reviewed dates mismatch");
+  // Only a genuinely new edition's first reviewed roster enters the native
+  // provider queue. Existing/cancelled rosters and prior generations stay gated.
+  const initialPlaylistGeneration =
+    edition.lineup.length === 0 &&
+    ((input.facts.headliners?.length ?? 0) + (input.facts.lineup?.length ?? 0) > 0) &&
+    (input.facts.status ? input.facts.status !== "tba" : edition.status !== "TBA") &&
+    input.festivalSlug !== "full-rewind" &&
+    await db.festivalPlaylist.count({ where: { editionId: edition.id } }) === 0 &&
+    await db.catalogPublication.count({ where: {
+      festivalSlug: input.festivalSlug, editionYear: edition.year, lineupChanged: true,
+    } }) === 0;
   const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
   if (
@@ -557,11 +598,12 @@ export async function publishAgentFestivalResolution(
       reason: input.reason,
       officialEvidence: input.evidence,
       reviewPolicy: "openclaw-import-conflicts-v1",
+      providerPolicy: initialPlaylistGeneration ? "initial-lineup-generation" : "explicit-refresh-only",
     },
-    playlistRefreshDeferral: {
+    playlistRefreshDeferral: initialPlaylistGeneration ? undefined : {
       policy: "explicit-refresh-only",
       reason:
-        "Import conflict resolution is not a request to create or refresh provider playlists",
+        "Import conflict resolution is not a request to refresh existing provider playlists",
     },
   });
 }

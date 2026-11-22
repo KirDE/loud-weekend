@@ -21,6 +21,11 @@ import type { FestivalCandidate, FestivalSource, FieldEvidence } from "./types.t
 import { INGESTION_SCHEMA_VERSION } from "./types.ts";
 import {announcementCoverageWarning} from './announcement-watch.ts';
 
+const missingFormatWarnings = new Set([
+  "No JSON-LD Event was found",
+  "HTML fallback did not find explicitly marked festival fields",
+]);
+
 const supportedFields: FieldEvidence["field"][] = ["startDate", "endDate", "city", "headliners", "lineup", "ticketsUrl", "status", "ticketStatus"];
 
 function extractCatalogueCandidate(html: string, source: FestivalSource, fetchedAt: string): FestivalCandidate {
@@ -105,10 +110,6 @@ function extractConfiguredCandidate(html: string, source: FestivalSource, fetche
   // Strategies are alternatives: an absent optional format is not a review
   // failure once another strategy supplied supported field evidence. Keep
   // all semantic warnings (edition drift, cancellations, lineup quality).
-  const missingFormatWarnings = new Set([
-    "No JSON-LD Event was found",
-    "HTML fallback did not find explicitly marked festival fields",
-  ]);
   if (merged.evidence.length > 0) {
     merged.warnings = merged.warnings.filter((warning) => !missingFormatWarnings.has(warning));
   }
@@ -140,11 +141,15 @@ export function extractFestivalCandidate(html: string, source: FestivalSource, f
   candidate.evidence = candidate.evidence.filter(evidence => evidence.field !== "ticketStatus");
   if (ticket.warning) candidate.warnings.push(ticket.warning);
   if (ticket.status) {
+    candidate.ticketSupplement = { sourceUrl: source.url, ticketUrl: envelope.ticket.url, editionYear: source.editionYear };
     candidate.ticketStatus = ticket.status;
     candidate.ticketsUrl = ticket.ticketsUrl ?? envelope.ticket.url;
     candidate.observedEditionYears = [...new Set([...candidate.observedEditionYears, source.editionYear])];
     candidate.evidence = candidate.evidence.filter(evidence => evidence.field !== "ticketsUrl");
     for (const field of ["ticketStatus", "ticketsUrl"] as const) candidate.evidence.push({ field, sourceUrl: envelope.ticket.url, observedAt: fetchedAt, excerpt: ticket.excerpt });
+    // Supplemental evidence makes optional homepage formats unnecessary, but
+    // semantic, edition, source-identity and artist/provider warnings still gate.
+    candidate.warnings = candidate.warnings.filter(warning => !missingFormatWarnings.has(warning));
   }
   return candidate;
 }

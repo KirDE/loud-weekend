@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import { useLocalPlanner, type Attendance } from "./LocalPlanner";
+import { PlannerReset } from "./PlannerReset";
 import { AccountSyncPanel } from "./AccountSyncPanel";
 import { FestivalViews } from "./FestivalViews";
 import { useLanguage, type Language } from "./LanguageProvider";
@@ -33,6 +34,8 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
   const { language } = useLanguage();
   const t = plannerLabels[language];
   const p = useLocalPlanner();
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const [playlist, setPlaylist] = useState<{ status: "idle" | "creating" | "created" | "error"; message?: string; url?: string }>({ status: "idle" });
   const planned = festivals.filter(
     (f) => p.favoriteFestivals.includes(f.slug) || p.attendance[f.slug],
@@ -66,13 +69,11 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
           <h1>{t.title}</h1>
           <p>{t.intro}</p>
         </div>
-        <button className="outlineButton" onClick={p.clear}>
-          {t.clear}
-        </button>
+        <PlannerReset disabled={syncBusy || playlist.status === "creating"} onOpenChange={setResetOpen} />
       </div>
       {p.ready && (
         <>
-          <AccountSyncPanel />
+          <AccountSyncPanel disabled={resetOpen} onBusyChange={setSyncBusy} />
           <section className="plannerSection">
             <div className="sectionHeading">
               <div>
