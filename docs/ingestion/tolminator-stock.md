@@ -56,11 +56,32 @@ Its tests inject synthetic responses, including current test-only sale windows;
 they are NOT fresh seller verification. The earlier real 403 remains unresolved,
 with no blind repeated request, UA change or bypass attempt.
 
+## Ticket-only candidate and durable proof (local, unregistered)
+
+`collectTolminatorCandidate` invokes the bounded collector and emits only source,
+2027 edition, transport observation time, available status, product destination
+and two minimized field proofs. No dates, price, artists or other updates escape.
+The existing ingestion tables and canonical publisher are reused, not new storage.
+Publication requires matching caller/stored candidate, exact successful attempt,
+recent observation, only ticket changes and matching durable field value, source,
+time, excerpt and hash. Durable identity also activates the guard, preventing
+caller source/slug removal from evading it. JSONB object-key ordering is irrelevant.
+
+The synthetic DB scenario exercises actual mocked GET → candidate → existing
+persistence → publisher → public catalog, evidence IDs, replay, source/value/time/
+hash tampering, forbidden seller dates, stale updates and no provider jobs. The
+festival's official July 28–August 1 range and roster are preserved. These are
+synthetic observations, NOT a new live success; the last real HTTP 403 is unresolved.
+
 ## Remaining before source completion
 
-Preserve primary roster failures independently. Do not silently turn the current
-403 into success or switch to unrelated products. Bind source/edition/observed
-time/value to persisted proof, exercise canonical readback, idempotent replay and
-rollback on stale or tampered evidence in synthetic DB. Only then wire a reviewed
-source route and seek full exact-head CI/Codex gates in a focused PR. None of
-these remaining gates are claimed by this parser checkpoint.
+Neither producer is registered or invoked in production. The existing generic
+`persistAttempt` updates slug-wide `IngestionSourceState` even for independent
+stock-only attempts. A live supplementary route must first isolate that health
+write from primary roster health (and its consumer views), using existing source
+identity mechanisms; do NOT simply call this persistence path from a live stock
+collector. Synthetic DB tests do not authorize a production call.
+
+Then wire the reviewed source route, verify live access without bypass or blind
+retries, and obtain focused PR/exact-head full CI/Codex gates. No source completion,
+healthy primary roster, fresh availability or deployed coverage is claimed.

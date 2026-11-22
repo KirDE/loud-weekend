@@ -1,3 +1,6 @@
+import { isDeepStrictEqual } from "node:util";
+import { createHash } from "node:crypto";
+import { TOLMINATOR_PRODUCT } from "../ingestion/adapters/tolminator-stock.ts";
 import { ticketSupplementUrl, ticketSupplementPurchaseUrl } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
@@ -238,7 +241,7 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
       `;
       if (held.length !== 1) throw new Error("Ingestion source lease is no longer active");
     }
-    const candidate = await db.ingestionCandidate.findUnique({ where: { attemptId: input.attemptId }, include: { diffs: true, evidence: true, attempt: { select: { requestedUrl: true } } } });
+    const candidate = await db.ingestionCandidate.findUnique({ where: { attemptId: input.attemptId }, include: { diffs: true, evidence: true, attempt: { select: { requestedUrl: true, finalUrl: true, httpStatus: true, endedAt: true } } } });
     if (!candidate || !candidate.publishable) throw new Error("Publishable ingestion candidate was not persisted");
     if (input.sourceLease && (candidate.festivalSlug !== input.result.festivalSlug || candidate.attempt.requestedUrl !== input.result.sourceUrl)) throw new Error("Leased candidate source does not match persisted attempt");
     const sourceId = `ingestion:${candidate.id}`;
@@ -258,6 +261,34 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     // Do not extend the separate Impericon/I-Days publication paths here (#497).
     const observed = input.result.candidate;
     const stored = candidate.normalized as unknown as FestivalCandidate;
+    // Independent stock-only proposal: key off durable identity too so removing
+    // the caller's slug/source cannot bypass proof validation. Not registered
+    // with the primary roster runner or its global success/health state.
+    if ([input.result.festivalSlug, candidate.festivalSlug, observed.festivalSlug, stored.festivalSlug].includes("tolminator") ||
+      [input.result.sourceUrl, candidate.attempt.requestedUrl, observed.sourceUrl, stored.sourceUrl].includes(TOLMINATOR_PRODUCT)) {
+      const time = Date.parse(observed.fetchedAt);
+      const allowed = new Set(["schemaVersion", "festivalSlug", "sourceUrl", "fetchedAt", "observedEditionYears", "warnings", "ticketStatus", "ticketsUrl", "evidence"]);
+      const valid = input.result.festivalSlug === "tolminator" && candidate.festivalSlug === "tolminator" &&
+        observed.festivalSlug === "tolminator" && input.result.sourceUrl === TOLMINATOR_PRODUCT && observed.sourceUrl === TOLMINATOR_PRODUCT &&
+        candidate.attempt.requestedUrl === TOLMINATOR_PRODUCT && candidate.attempt.finalUrl === TOLMINATOR_PRODUCT && candidate.attempt.httpStatus === 200 &&
+        isDeepStrictEqual(stored, observed) && Object.keys(observed).every(key => allowed.has(key)) &&
+        observed.schemaVersion === 1 && same(observed.observedEditionYears, [2027]) && observed.warnings.length === 0 &&
+        observed.ticketStatus === "available" && observed.ticketsUrl === TOLMINATOR_PRODUCT &&
+        Number.isFinite(time) && time <= Date.now() + 60_000 && time >= Date.now() - 86_400_000 &&
+        input.result.fetchedAt === observed.fetchedAt && Math.abs(candidate.attempt.endedAt.getTime() - time) <= 60_000 &&
+        input.result.changes.every(change => ["ticketStatus", "ticketsUrl"].includes(change.field) && same(change.after, observed[change.field as "ticketStatus" | "ticketsUrl"])) &&
+        observed.evidence.length === 2 && candidate.evidence.length === 2 &&
+        ["ticketStatus", "ticketsUrl"].every(field => {
+          const proof = observed.evidence.filter(e => e.field === field);
+          return proof.length === 1 && proof[0].sourceUrl === TOLMINATOR_PRODUCT && proof[0].observedAt === observed.fetchedAt &&
+            typeof proof[0].excerpt === "string" && proof[0].excerpt.length > 0 && proof[0].excerpt.length <= 1800 &&
+            candidate.evidence.some(saved => saved.field === field && saved.sourceUrl === TOLMINATOR_PRODUCT &&
+              saved.excerpt === proof[0].excerpt && saved.observedAt.getTime() === time &&
+              saved.contentHash === createHash("sha256").update(proof[0].excerpt!).digest("hex") &&
+              same(saved.observedValue, observed[field as "ticketStatus" | "ticketsUrl"]));
+        });
+      if (!valid) throw new Error("Tolminator stock publication requires matching persisted ticket-only proof");
+    }
     if (observed.ticketSupplement || stored.ticketSupplement) {
       const registeredSource = { festivalSlug: input.result.festivalSlug,
         url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
