@@ -1,3 +1,4 @@
+import { prepareLogoDraft, publishAdminLogoChange } from "@/lib/catalog/admin-logo-publication";
 import { prepareArtistDraft, publishAdminArtistChange } from "@/lib/catalog/admin-artist-publication";
 import { assertAdminArtistReviewAllowed } from "@/lib/catalog/admin-artist-review";
 import { AdminChangeStatus, AdminDraftStatus, AdminResourceKind, AdminRunStatus, Prisma } from "@prisma/client";
@@ -54,11 +55,13 @@ async function draftChanges(
 ) {
   const { resourceKind, resourceKey, baseRevision } = draft;
   const artistDraft = resourceKind === AdminResourceKind.ARTIST ? await prepareArtistDraft(tx, resourceKey, values) : null;
-  const changes = artistDraft?.changes ?? Object.entries(values).map(([field, afterValue]) =>
+  const logoDraft = resourceKind === AdminResourceKind.ASSET ? await prepareLogoDraft(tx, resourceKey, values) : null;
+  const changes = artistDraft?.changes ?? logoDraft?.changes ?? Object.entries(values).map(([field, afterValue]) =>
     ({ field, beforeValue: before[field] ?? null, afterValue: afterValue ?? null }));
-  const sourceEvidence = artistDraft
-    ? { kind: "artist-draft", draftId: draft.id, artistId: artistDraft.artistId }
-    : { kind: "operator-draft", draftId: draft.id };
+  const sourceEvidence = { kind: "operator-draft", draftId: draft.id, ...(
+    artistDraft ? { kind: "artist-draft", artistId: artistDraft.artistId } :
+    logoDraft ? { kind: "logo-draft", festivalId: logoDraft.festivalId } : {}
+  ) };
   await tx.adminChange.createMany({ data: changes.map(({ field, beforeValue, afterValue }) => ({
     field, resourceKind, resourceKey, baseRevision, beforeValue: beforeValue === null ? Prisma.JsonNull : json(beforeValue),
     afterValue: afterValue === null ? Prisma.JsonNull : json(afterValue), sourceEvidence, confidence: 100, draftId: draft.id,
@@ -122,8 +125,13 @@ export async function decideChange(id: string, decision: "approve" | "reject", a
       await tx.adminChange.update({ where: { id }, data: { status: AdminChangeStatus.CONFLICT } });
       throw new Error(`Revision conflict: expected ${currentRevision}`);
     }
+    if (decision === "approve" && change.resourceKind === AdminResourceKind.PLAYLIST)
+      throw new Error("Playlist drafts are not publishable until canonical playlist review is supported");
     const artistPublication = decision === "approve" && change.resourceKind === AdminResourceKind.ARTIST
       ? await publishAdminArtistChange(tx, change)
+      : null;
+    const logoPublication = decision === "approve" && change.resourceKind === AdminResourceKind.ASSET
+      ? await publishAdminLogoChange(tx, change)
       : null;
     const status = decision === "approve" ? AdminChangeStatus.APPROVED : AdminChangeStatus.REJECTED;
     const updated = await tx.adminChange.updateMany({ where: { id, status: AdminChangeStatus.PENDING }, data: { status, decidedById: actor.id, decidedAt: new Date() } });
@@ -145,9 +153,9 @@ export async function decideChange(id: string, decision: "approve" | "reject", a
       const pending = await tx.adminChange.count({ where: { draftId: change.draftId, status: AdminChangeStatus.PENDING, NOT: { id } } });
       if (!pending) await tx.adminDraft.update({ where: { id: change.draftId }, data: { status: decision === "approve" ? AdminDraftStatus.APPLIED : AdminDraftStatus.REJECTED } });
     }
-    await tx.adminAuditEntry.create({ data: { actorId: actor.id, actorLabel: actor.email, action: decision === "approve" ? "CHANGE_APPROVED" : "CHANGE_REJECTED", resourceKind: change.resourceKind, resourceKey: change.resourceKey, beforeValue: json(change.beforeValue), afterValue: json(change.afterValue), evidence: json(change.sourceEvidence), metadata: json({ changeId: change.id, field: change.field, artistPublication, catalogPublicationId: catalogPublication?.id ?? null, playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false }) } });
+    await tx.adminAuditEntry.create({ data: { actorId: actor.id, actorLabel: actor.email, action: decision === "approve" ? "CHANGE_APPROVED" : "CHANGE_REJECTED", resourceKind: change.resourceKind, resourceKey: change.resourceKey, beforeValue: json(change.beforeValue), afterValue: json(change.afterValue), evidence: json(change.sourceEvidence), metadata: json({ changeId: change.id, field: change.field, artistPublication, logoPublication, catalogPublicationId: catalogPublication?.id ?? null, playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false }) } });
     const decided = await tx.adminChange.findUniqueOrThrow({ where: { id } });
-    return { ...decided, artistPublication, catalogPublicationId: catalogPublication?.id ?? null, playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false };
+    return { ...decided, artistPublication, logoPublication, catalogPublicationId: catalogPublication?.id ?? null, playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 

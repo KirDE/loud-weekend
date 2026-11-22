@@ -1,4 +1,6 @@
 import { createPrismaClient } from '../../lib/prisma-client.mjs';
+import { createHash } from "node:crypto";
+import sharp from "sharp";
 import { expect, test } from "@playwright/test";
 
 const db = createPrismaClient();
@@ -64,7 +66,14 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
 
   await page.getByRole("button", { name: "Links & assets" }).click();
   await page.getByLabel("Tickets URL").fill("https://tickets.example.test/wacken");
-  await page.getByLabel("Logo URL").fill("https://assets.example.test/wacken.svg");
+  const logoBytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: "#ac5" } }).png().toBuffer();
+  const logoHash = createHash("sha256").update(logoBytes).digest("hex");
+  await db.assetBlob.upsert({
+    where: { sha256: logoHash },
+    create: { sha256: logoHash, mimeType: "image/png", sizeBytes: logoBytes.length, bytes: logoBytes },
+    update: {},
+  });
+  await page.getByLabel("Reviewed logo SHA-256").fill(logoHash);
   await Promise.all([
     page.waitForResponse((response) => response.url().endsWith("/api/admin") && response.request().method() === "POST" && response.request().postData()?.includes('"resourceKind":"link"')),
     page.getByRole("button", { name: "Save links draft" }).click(),
@@ -76,7 +85,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   ]);
   await Promise.all([
     page.waitForResponse((response) => response.url().endsWith("/api/admin") && response.request().method() === "POST" && response.request().postData()?.includes('"resourceKind":"asset"')),
-    page.getByRole("button", { name: "Save asset draft" }).click(),
+    page.getByRole("button", { name: "Save logo draft" }).click(),
   ]);
 
   await page.reload();

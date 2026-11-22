@@ -1,6 +1,8 @@
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 import { createPrismaClient } from '../../lib/prisma-client.mjs';
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import sharp from "sharp";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:http";
@@ -107,7 +109,8 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal((await admin.json(`/api/admin/drafts/${draft.id}`, "PATCH", { values: { city: "Wacken Preview", status: "confirmed", country: "Germany" } })).status, 200);
   assert.equal(await db.adminChange.count({ where: { draftId: draft.id } }), 3);
   const city = await db.adminChange.findFirstOrThrow({ where: { draftId: draft.id, field: "city" } });
-  assert.equal((await admin.json(`/api/admin/changes/${city.id}`, "POST", { decision: "approve" })).status, 200);
+  const cityApproval = await admin.json(`/api/admin/changes/${city.id}`, "POST", { decision: "approve" });
+  assert.equal(cityApproval.status, 200, await cityApproval.text());
   assert.deepEqual((await db.adminResourceState.findUniqueOrThrow({ where: { resourceKind_resourceKey: { resourceKind: "FESTIVAL", resourceKey: "wacken-open-air" } } })).values, { city: "Wacken Preview" });
   assert.equal((await admin.json("/api/admin", "POST", { resourceKind: "festival", resourceKey: "wacken-open-air", baseRevision: 0, values: { city: "stale" } })).status, 409);
   const status = await db.adminChange.findFirstOrThrow({ where: { draftId: draft.id, field: "status" } });
@@ -181,6 +184,55 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal((await decideArtist(rejected.id, "reject")).status, 200);
   assert.equal((await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name, artistName);
 
+  const logoBytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: "#c05040" } }).png().toBuffer();
+  const logoHash = createHash("sha256").update(logoBytes).digest("hex");
+  await db.assetBlob.upsert({
+    where: { sha256: logoHash },
+    create: { sha256: logoHash, mimeType: "image/png", sizeBytes: logoBytes.length, bytes: logoBytes },
+    update: {},
+  });
+  const festivalRecord = await db.festival.findUniqueOrThrow({ where: { slug: "wacken-open-air" } });
+  await db.festivalLogo.deleteMany({ where: { festivalId: festivalRecord.id } });
+  const logoPath = "/api/logos/wacken-open-air.png/";
+  assert.equal((await anonymous.json(logoPath)).status, 404);
+  const invalidLogo = await admin.json("/api/admin", "POST", {
+    resourceKind: "asset", resourceKey: "wacken-open-air", baseRevision: 0, values: { logoUrl: officialSite },
+  });
+  assert.equal(invalidLogo.status, 409);
+  const logoResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "asset", resourceKey: "wacken-open-air", baseRevision: 0, values: { logoAssetHash: logoHash },
+  });
+  assert.equal(logoResponse.status, 201);
+  const logoDraft = await logoResponse.json();
+  const logoChange = await db.adminChange.findFirstOrThrow({ where: { draftId: logoDraft.id } });
+  assert.equal((await anonymous.json(logoPath)).status, 404);
+  const approvedLogo = await decideArtist(logoChange.id);
+  assert.equal(approvedLogo.status, 200);
+  assert.equal((await approvedLogo.json()).logoPublication, "published");
+  const servedLogo = await anonymous.json(logoPath);
+  assert.equal(servedLogo.status, 200);
+  assert.equal(servedLogo.headers.get("etag"), `"${logoHash}"`);
+  assert.deepEqual(Buffer.from(await servedLogo.arrayBuffer()), logoBytes);
+
+  const queueLogo = async (baseRevision) => {
+    const response = await admin.json("/api/admin", "POST", {
+      resourceKind: "asset", resourceKey: "wacken-open-air", baseRevision, values: { logoAssetHash: logoHash },
+    });
+    assert.equal(response.status, 201);
+    const { id } = await response.json();
+    return db.adminChange.findFirstOrThrow({ where: { draftId: id } });
+  };
+  const noOpLogo = await queueLogo(1);
+  assert.equal((await (await decideArtist(noOpLogo.id)).json()).logoPublication, "unchanged");
+  const staleLogo = await queueLogo(2);
+  await db.festivalLogo.delete({ where: { festivalId: festivalRecord.id } });
+  assert.equal((await decideArtist(staleLogo.id)).status, 409);
+  assert.equal((await anonymous.json(logoPath)).status, 404);
+  assert.equal((await db.adminChange.findUniqueOrThrow({ where: { id: staleLogo.id } })).status, "PENDING");
+
+  assert.equal((await decideArtist(staleLogo.id, "reject")).status, 200);
+  assert.equal((await anonymous.json(logoPath)).status, 404);
+
   const playlistResponse = await admin.json("/api/admin", "POST", { resourceKind: "playlist", resourceKey: "integration-playlist", baseRevision: 0, values: { url: "https://open.spotify.com/playlist/integration", platform: "spotify", status: "draft" } });
   assert.equal(playlistResponse.status, 201);
   const playlist = await playlistResponse.json();
@@ -191,20 +243,17 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.deepEqual(playlistSnapshot.drafts.find((item) => item.id === playlist.id).values, { url: "https://open.spotify.com/playlist/integration-updated", platform: "spotify", status: "published" });
   const playlistChanges = await db.adminChange.findMany({ where: { draftId: playlist.id }, orderBy: { field: "asc" } });
   assert.deepEqual(playlistChanges.map((change) => change.field), ["platform", "status", "url"]);
-  for (const change of playlistChanges) assert.equal((await admin.json(`/api/admin/changes/${change.id}`, "POST", { decision: "approve" })).status, 200);
-  const publishedPlaylist = await db.adminResourceState.findUniqueOrThrow({ where: { resourceKind_resourceKey: { resourceKind: "PLAYLIST", resourceKey: "integration-playlist" } } });
-  assert.equal(publishedPlaylist.revision, 3);
-  assert.deepEqual(publishedPlaylist.values, { url: "https://open.spotify.com/playlist/integration-updated", platform: "spotify", status: "published" });
-  assert.equal((await admin.json("/api/admin", "POST", { resourceKind: "playlist", resourceKey: "integration-playlist", baseRevision: 0, values: { status: "stale" } })).status, 409);
+  for (const change of playlistChanges) {
+    const response = await admin.json(`/api/admin/changes/${change.id}`, "POST", { decision: "approve" });
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /not publishable/);
+  }
+  assert.equal(await db.adminResourceState.count({ where: { resourceKind: "PLAYLIST" } }), 0);
+  assert.equal((await db.adminDraft.findUniqueOrThrow({ where: { id: playlist.id } })).status, "QUEUED");
   const disposablePlaylistResponse = await admin.json("/api/admin", "POST", { resourceKind: "playlist", resourceKey: "delete-playlist", baseRevision: 0, values: { url: "https://example.test/delete-playlist" } });
   const disposablePlaylist = await disposablePlaylistResponse.json();
   assert.equal((await admin.json(`/api/admin/drafts/${disposablePlaylist.id}`, "DELETE")).status, 200);
   assert.equal(await db.adminDraft.count({ where: { id: disposablePlaylist.id } }), 0);
-
-  const disposableResponse = await admin.json("/api/admin", "POST", { resourceKind: "asset", resourceKey: "delete-me", baseRevision: 0, values: { logoUrl: "https://example.test/logo.svg" } });
-  const disposable = await disposableResponse.json();
-  assert.equal((await admin.json(`/api/admin/drafts/${disposable.id}`, "DELETE")).status, 200);
-  assert.equal(await db.adminDraft.count({ where: { id: disposable.id } }), 0);
 
   const refresh = await admin.json("/api/admin/refresh/wacken-open-air", "POST");
   assert.equal(refresh.status, 201);
