@@ -757,3 +757,41 @@ test("explicitly configured non-supplemental Wacken JSON-LD stock retains the ex
   assert.ok(await publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }));
   assert.equal((await readCatalog({ database: db })).festivals.find(f => f.slug === source.festivalSlug)!.ticketStatus, "available");
 });
+
+async function idaysStockAddition(name:string):Promise<IngestionResult>{
+ const edition=await db.festivalEdition.findFirstOrThrow({where:{festival:{slug:"idays"},recordState:"CURRENT"}});
+ await db.festivalEdition.update({where:{id:edition.id},data:{ticketStatus:"UNKNOWN",ticketsUrl:"https://www.idays.it/"}});
+ const value=idaysResult(name), gateway="https://www.idays.it/tickets";
+ value.candidate.ticketStatus="available";value.candidate.ticketsUrl=gateway;
+ value.changes.push({kind:"tickets_changed",field:"ticketsUrl",before:"https://www.idays.it/",after:gateway,reviewRequired:false},
+   {kind:"ticket_status_changed",field:"ticketStatus",before:"unknown",after:"available",reviewRequired:false});
+ for(const field of ["ticketsUrl","ticketStatus"] as const)value.candidate.evidence.push({field,sourceUrl:gateway,observedAt:value.fetchedAt,excerpt:"Synthetic persisted official current concert admission inventory proof"});
+ return value;
+}
+test("I-Days addition and secondary ticket facts publish atomically, preserving explicit provider deferral",async()=>{
+ const value=await idaysStockAddition("Synthetic Idays Inventory "+suffix),attempt=await persist(value);
+ const before=await db.catalogPlaylistRefresh.count();
+ const publication=await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix});assert(publication);
+ const saved=(await readCatalog({database:db})).festivals.find(f=>f.slug==="idays")!;
+ assert.equal(saved.ticketStatus,"available");assert.equal(saved.ticketsUrl,"https://www.idays.it/tickets");assert(saved.headliners.includes(value.changes[0].after!));
+ assert.equal(publication.playlistRefreshRequested,false);assert.equal(await db.catalogPlaylistRefresh.count(),before);
+ assert.equal((await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}))?.id,publication.id);
+ assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}})).reviewState,"PUBLISHED");
+});
+test("I-Days secondary ticket proof cannot borrow primary artist evidence or bypass persisted stock identity",async()=>{
+ for(const drift of ["input-evidence","persisted-evidence","stored-value","foreign-proof","timestamp","unsupported-sellout"]){
+  const value=await idaysStockAddition("Synthetic Idays Stock Drift "+drift+" "+suffix);
+  if(drift==="unsupported-sellout"){value.candidate.ticketStatus="sold_out";value.changes.find(c=>c.field==="ticketStatus")!.after="sold_out";}
+  const attempt=await persist(value),c=await db.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}});
+  if(drift==="input-evidence")value.candidate.evidence=value.candidate.evidence.filter(e=>e.field!=="ticketStatus");
+  if(drift==="persisted-evidence")await db.ingestionEvidence.deleteMany({where:{candidateId:c.id,field:"ticketStatus"}});
+  if(drift==="stored-value")await db.ingestionEvidence.updateMany({where:{candidateId:c.id,field:"ticketStatus"},data:{observedValue:"unknown"}});
+  if(drift==="foreign-proof")value.candidate.evidence.filter(e=>e.field==="ticketStatus").forEach(e=>e.sourceUrl="https://elsewhere.example/tickets");
+  if(drift==="timestamp")await db.ingestionEvidence.updateMany({where:{candidateId:c.id,field:"ticketStatus"},data:{observedAt:new Date("2020-01-01T00:00:00Z")}});
+  const before={artists:await db.artist.count(),entries:await db.lineupEntry.count(),jobs:await db.catalogPlaylistRefresh.count(),pub:await db.catalogPublication.count()};
+  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/I-Days publication requires matching persisted/);
+  assert.deepEqual({artists:await db.artist.count(),entries:await db.lineupEntry.count(),jobs:await db.catalogPlaylistRefresh.count(),pub:await db.catalogPublication.count()},before);
+  assert.equal((await readCatalog({database:db})).festivals.find(f=>f.slug==="idays")!.ticketStatus,"unknown");
+  assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{id:c.id}})).reviewState,"PENDING");
+ }
+});
