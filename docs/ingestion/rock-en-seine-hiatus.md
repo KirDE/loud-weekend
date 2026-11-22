@@ -50,7 +50,7 @@ FestivalEdition fields, stock/source health, publications, notifications or
 provider jobs, nor creates2028 editions. All synthetic SQL tests run only on an
 own isolated disposable database; no production migration was applied.
 
-Remaining: reviewer queue,
+Remaining after the reviewer queue below:
 explicit edition lifecycle semantics and approved-only public EN/DE/RU read/UI,
 bounded native collector/invocation, replay/rollback and browser checks, focused
 PR/full Quality/exact-head Codex review. Pending snapshots alone do not complete
@@ -82,7 +82,7 @@ allowlist, wrong revision, expiry/supersession, persisted proof/decision tamperi
 and an actual disposable-DB trigger fault proving rollback of the audit when the
 decision insert fails. The synthetic audit actor is retained (demoted to USER)
 because deleting immutable audit history to clean tests would be incorrect.
-Still pending: reviewer UI, explicit approved-only
+Still pending after the reviewer queue below: explicit approved-only
 public lifecycle semantics/read/UI, native bounded collector/CLI, browser and PR gates.
 
 
@@ -111,3 +111,29 @@ allowlist denial, malformed/erroring/stalled streams, UTF8 and lying Content-Len
 These are not a network login, browser, mobile or production-access verification.
 HTTP approval is still only a review decision: no public lifecycle, canonical
 stock/dates/health update, notifications, or automatic 2028 edition creation.
+
+
+## Reviewer queue (local prerequisite)
+
+The authenticated `/admin` review section now receives canonical current-2027
+Rock en Seine edition IDs from the protected server page, not guessed slugs or
+browser input. `LifecycleReviewQueue` loads only the existing protected endpoint
+on an explicit click. EN/DE/RU show the 2027 pause, announced 2028 return and
+unconfirmed alternative event, source URL, observation time, minimized evidence,
+exact revision and audited decision state. This does not create a 2028 edition.
+
+Only fresh pending server-eligible revisions offer approve/reject. The POST sends
+only the decision and exact content hash; identity remains session-only. It then
+reloads the authoritative reviewer state. Conflict, denied access, malformed data,
+uncertain decision or failed reread clears actions and evidence until explicit
+reload. One in-flight operation per mounted target and a shared 10-second client
+deadline prevent duplicate clicks; the locked server remains authoritative on
+expiry, supersession and role revocation. Domain schema is shared with storage,
+not a browser import of the database service.
+
+Eleven actual component/client tests cover localized review, approval/rejection,
+exact request body, duplicate decisions, ineligibility, expiry, read errors and
+actual AdminConsole mounting. These are not browser/mobile layout verification.
+Current approval copy explicitly states that catalogue presentation is not yet
+connected. Public approved-only lifecycle, ticket/SEO handling, bounded native
+collector/CLI and full PR/CI/review/browser gates remain unfinished.

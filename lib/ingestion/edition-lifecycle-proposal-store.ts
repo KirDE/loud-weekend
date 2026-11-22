@@ -1,16 +1,11 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient, Prisma } from "@prisma/client";
 import { z } from "zod";
+import { lifecycleProposalSchema as schema } from "../domain/edition-lifecycle-review";
 import { observeRockEnSeineHiatus, ROCK_EN_SEINE_HOME } from "./adapters/rock-en-seine-hiatus.ts";
 
 const version = "rock-en-seine-hiatus-v1";
-const schema = z.object({
-  festivalSlug: z.literal("rock-en-seine"), editionYear: z.literal(2027),
-  lifecycle: z.literal("hiatus"), announcedReturnYear: z.literal(2028),
-  alternativeEvent: z.literal("under_consideration"), sourceUrl: z.literal(ROCK_EN_SEINE_HOME),
-  observedAt: z.iso.datetime({ precision: 3 }),
-  excerpt: z.literal("Rock en Seine: festival pauses in 2027 and announces a return in 2028. A different 2027 event is only under consideration, not confirmed. No ordinary 2027 ticket inventory assertion."),
-}).strict();
+
 const digest = (editionId: string, value: z.infer<typeof schema>) => createHash("sha256")
   .update(JSON.stringify({ editionId, parserVersion: version, sourceUrl: ROCK_EN_SEINE_HOME,
     finalUrl: ROCK_EN_SEINE_HOME, httpStatus: 200, proposal: value })).digest("hex");
