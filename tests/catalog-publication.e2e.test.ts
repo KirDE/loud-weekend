@@ -847,7 +847,7 @@ test("I-Days collected ticket-only changes cannot bypass persisted secondary-pro
   if(drift==="timestamp")await db.ingestionEvidence.updateMany({where:{candidateId:stored.id,field:"ticketStatus"},data:{observedAt:new Date("2020-01-01")}});
   const counts=()=>Promise.all([db.artist.count(),db.lineupEntry.count(),db.catalogPublication.count(),db.catalogPlaylistRefresh.count()]);
   const before=await counts();
-  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/I-Days ticket publication requires matching persisted/);
+  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/(?:I-Days ticket publication requires matching persisted|Ticket supplement publication requires matching persisted official ticket evidence)/);
   assert.deepEqual(await counts(),before);
   const after=(await readCatalog({database:db})).festivals.find(f=>f.slug==="idays")!;
   assert.equal(after.ticketStatus,"unknown");assert.equal(after.ticketsUrl,"https://www.idays.it/");
