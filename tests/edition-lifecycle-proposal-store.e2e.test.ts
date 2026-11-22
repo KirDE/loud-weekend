@@ -324,7 +324,7 @@ test('approved public proof remains fail-closed beneath a newer pending revision
     const tag = first.headers.get('etag')!;
     assert.equal((await serveOfflineCatalog(req(tag), readOffline)).status, 304);
     assert.doesNotMatch(await first.text(), /rock-en-seine|contentHash|actor|audit|sourceUrl|editionId/);
-    const approved = await db.editionLifecycleProposalSnapshot.findFirstOrThrow({ where: { editionId, decision: { decision: 'approve' } } });
+    const approved = await db.editionLifecycleProposalSnapshot.findFirstOrThrow({ where: { editionId, decision: { decision: 'approve' } }, orderBy: { observedAt: 'desc' } });
     const latest = await db.editionLifecycleProposalSnapshot.findFirstOrThrow({ where: { editionId }, orderBy: { observedAt: 'desc' } });
     for (const row of [approved, latest]) {
       await db.editionLifecycleProposalSnapshot.update({ where: { id: row.id }, data: { httpStatus: 403 } });
