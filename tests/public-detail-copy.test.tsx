@@ -3,6 +3,7 @@ import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ArtistDetail } from "../components/ArtistDetail";
 import { artist } from "./support/catalog";
+import { FestivalExplorer } from "../components/FestivalExplorer";
 import { FestivalDetail } from "../components/FestivalDetail";
 import { LanguageProvider, translate, type Language } from "../components/LanguageProvider";
 import { LocalPlannerProvider } from "../components/LocalPlanner";
@@ -186,5 +187,28 @@ for (const language of ["en", "de", "ru"] as const) {
     );
     assert.deepEqual([...html.matchAll(/href="\/festivals\/([^/"\s]+)\/?"/g)].map(match => match[1]), ["early-a", "early-b", "late", "unknown"]);
     assert.deepEqual(appearances, before);
+  });
+}
+
+for (const language of ["en", "de", "ru"] as const) {
+  test(`festival cards and details separate dates from announced acts in ${language}`, () => {
+    const announced = {
+      ...festival, status: "tba" as const, startDate: undefined, endDate: undefined,
+      lineup: Array.from({ length: 47 }, (_, index) => `Other Act ${index + 1}`),
+    };
+    const noActs = { ...festival, status: "partial" as const, headliners: [], lineup: [] };
+    for (const item of [announced, noActs]) {
+      const hasActs = item === announced;
+      const html = renderToStaticMarkup(
+        <LanguageProvider initialLanguage={language}><LocalPlannerProvider>
+          <FestivalExplorer festivals={[item]} />
+          <FestivalDetail item={item} festivals={[item]} artistSlugs={{}} />
+        </LocalPlannerProvider></LanguageProvider>,
+      );
+      const badge = translate(language, hasActs ? "actsAnnounced" : "noCurrentActs");
+      assert.equal(html.split(`>${badge}</span>`).length - 1, 2);
+      assert.equal(html.includes(translate(language, "datesTba")), hasActs);
+      if (hasActs) assert.ok(html.includes(`48 ${translate(language, "announcedActs")}`));
+    }
   });
 }

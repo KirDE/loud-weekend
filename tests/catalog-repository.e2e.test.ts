@@ -59,3 +59,18 @@ test("database reads do not retain a process-lifetime catalogue snapshot", async
     await db.festival.update({ where: { slug: before.festivals[0].slug }, data: { name: originalName } });
   }
 });
+
+test("cancelled artists do not count as announced in the public catalogue", async () => {
+  const entry = await db.lineupEntry.findFirstOrThrow({
+    where: { edition: { recordState: "CURRENT", festival: { slug: "synthetic-fest" } } },
+  });
+  await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "CANCELLED" } });
+  try {
+    const snapshot = await readCatalog({ database: db });
+    assert.deepEqual(snapshot.festivals[0].headliners, []);
+    assert.deepEqual(snapshot.editions.find(({ recordState }) => recordState === "current")?.headliners, []);
+    assert.deepEqual(snapshot.artists, []);
+  } finally {
+    await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "ANNOUNCED" } });
+  }
+});

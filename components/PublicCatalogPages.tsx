@@ -32,7 +32,7 @@ function usePublicCopy() {
 function EditionRow({ item, archive = false }: { item: FestivalEdition; archive?: boolean }) {
   const { t, range } = usePublicCopy();
   const count = item.headliners.length + item.lineup.length;
-  const summary = archive ? (count ? t.archivedArtists(count) : t.lineupTba) : (item.status === "tba" ? t.lineupTba : t.artistsRecorded(count));
+  const summary = count === 0 ? t.lineupTba : archive ? t.archivedArtists(count) : t.artistsRecorded(count);
   return <article className="directoryRow"><div><strong>{item.name} {item.editionYear}</strong><span>{range(item)} · {summary}</span></div><Link className="textLink" href={"/festivals/" + item.slug + "/" + item.editionYear + "/"}>{t.openEdition}</Link></article>;
 }
 

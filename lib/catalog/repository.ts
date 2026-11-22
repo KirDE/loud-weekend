@@ -27,7 +27,11 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         include: {
           festival: true,
           sources: { where: { enabled: true }, select: { deprecatedAt: true } },
-          lineup: { include: { artist: true }, orderBy: [{ billing: "asc" }, { position: "asc" }] },
+          lineup: {
+            where: { status: "ANNOUNCED" },
+            include: { artist: true },
+            orderBy: [{ billing: "asc" }, { position: "asc" }],
+          },
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
           timetable: { orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }] },
           playlists: { orderBy: { provider: "asc" } },
