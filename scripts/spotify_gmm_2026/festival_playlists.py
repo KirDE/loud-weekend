@@ -15,6 +15,34 @@ import requests
 
 from spotify_auth import auth_headers
 from spotify_repertoire import validate_profile, select_tracks as select_repertoire_tracks
+from track_policy import (
+    GLOBAL_EXCLUDES,
+    KEYWORDS_EXCLUDE,
+    TRIBUTE_NAME_HINTS,
+    MIN_TRACK_MS,
+    NON_SONG_TITLE_HINTS,
+    BAD_VERSION_DESCRIPTOR_HINTS,
+    STRICT_ARTIST_ONLY_FALLBACK,
+    LIVE_REPERTOIRE_PRIMARY_ARTISTS,
+    BLOCKED_PRIMARY_ARTIST_PREFIXES,
+    BLOCKED_PRIMARY_ARTIST_MATCHES,
+    FEATURE_CLAUSE_RE,
+    SPECIAL_ARTIST_INCLUDE,
+    clean_name,
+    simplify_name,
+    token_overlap,
+    setlist_lookup_name,
+    looks_like_tribute,
+    canonical_track_key,
+    is_feat_track,
+    is_short_or_non_song,
+    track_version_penalty,
+    artist_family_match,
+    live_repertoire_primary_match,
+    primary_artist_matches_query,
+    should_skip_track_for_artist,
+    setlist_track_sort_key,
+)
 
 SETLIST_API_KEY = os.environ.get('SETLIST_API_KEY')
 REPORT_DIR = Path('outputs/festival_playlists')
@@ -39,14 +67,6 @@ SETLIST_RETRY_CODES = {429, 500, 502, 503, 504}
 MAX_RETRY_AFTER_SECONDS = float(os.environ.get('FESTIVAL_MAX_RETRY_AFTER_SECONDS', '60'))
 _last_setlist_call = 0.0
 
-GLOBAL_EXCLUDES = {
-    'DJ Carl', 'DJ Nathachelet', 'VJ Set', 'AmÆzing Snäke', 'Deaftones', 'Chop Suey',
-    'Korn Again', 'Powerslave', 'Ultimate Ozzy', 'Slip-NOT', 'Thrash Attack', 'Rock The Fox',
-    'Pablo Honey', 'Snaggletooth', "St. Jimmy's", 'Spouky Kids', 'DJ Curo', 'DJ Crash',
-    'NIN UK', 'ROLR'
-}
-KEYWORDS_EXCLUDE = ['dj ', ' karaoke', ' tribute', ' cover band', ' aftershow', ' party set']
-TRIBUTE_NAME_HINTS = {'again', 'not', 'ozzy', 'pistols', 'attack'}
 FOLLOWERS_CACHE = {}
 ARTIST_SEARCH_CACHE = {}
 MBID_CACHE = {}
@@ -54,21 +74,7 @@ SETLIST_CACHE = {}
 TRACK_SEARCH_CACHE = {}
 PERSISTENT_SETLIST_CACHE = json.loads(SETLIST_CACHE_FILE.read_text(encoding='utf-8')) if not WORKER_STDIO and SETLIST_CACHE_FILE.exists() else {}
 PERSISTENT_MBID_CACHE = {}
-MIN_TRACK_MS = 90_000
-NON_SONG_TITLE_HINTS = {'intro', 'outro', 'interlude', 'overture'}
-BAD_VERSION_DESCRIPTOR_HINTS = {
-    'karaoke', 'orchestral', 'piano', 'queen alien', 'saltatio mortis', 'unplugged',
-}
-STRICT_ARTIST_ONLY_FALLBACK = {'Tom Morello'}
-LIVE_REPERTOIRE_PRIMARY_ARTISTS = {
-    'Tom Morello': {'Tom Morello', 'Rage Against The Machine', 'Audioslave', 'Prophets Of Rage'},
-}
-BLOCKED_PRIMARY_ARTIST_PREFIXES = {'of'}
-BLOCKED_PRIMARY_ARTIST_MATCHES = {
-    'Phantom': {'Phantom Planet'},
-}
 RECENT_SETLIST_DAYS = 365
-FEATURE_CLAUSE_RE = re.compile(r'(?:[-(\[]\s*)?\b(feat|featuring|ft)\b.*$', re.I)
 GRASPOP_DAYS = ('thursday', 'friday', 'saturday', 'sunday')
 @dataclass
 class Festival:
@@ -187,51 +193,9 @@ def spotify_get(url, params=None):
     return response.json()
 
 
-def clean_name(text: str) -> str:
-    text = unescape(text)
-    text = re.sub(r'<[^>]+>', ' ', text)
-    text = ' '.join(text.split())
-    text = re.sub(r'^(first time\s+)', '', text, flags=re.I)
-    text = re.sub(r'\s+Multiple Performances.*$', '', text, flags=re.I)
-    text = re.sub(r'\s+(Thursday|Friday|Saturday|Sunday|Monday)\s+•.*$', '', text, flags=re.I)
-    return text.strip(' •-')
 
 
-def simplify_name(name: str) -> str:
-    lowered = name.lower()
-    lowered = unescape(lowered)
-    lowered = lowered.translate(str.maketrans({'ø': 'o', 'æ': 'ae', 'œ': 'oe', 'å': 'a', 'ö': 'o', 'ä': 'a', 'ü': 'u'}))
-    lowered = unicodedata.normalize('NFKD', lowered).encode('ascii', 'ignore').decode('ascii')
-    lowered = lowered.replace('&', ' and ')
-    lowered = re.sub(r'\([^)]*\)', ' ', lowered)
-    lowered = re.sub(r'\[[^\]]*\]', ' ', lowered)
-    lowered = re.sub(r'[^a-z0-9]+', ' ', lowered)
-    lowered = re.sub(r'\b(the|a|an|of|and|feat|featuring|with|official|band|chaos|ad)\b', ' ', lowered)
-    return ' '.join(lowered.split())
 
-
-def token_overlap(a: str, b: str) -> float:
-    sa = set(simplify_name(a).split())
-    sb = set(simplify_name(b).split())
-    if not sa or not sb:
-        return 0.0
-    return len(sa & sb) / max(len(sa), len(sb))
-
-
-def setlist_lookup_name(name: str) -> str:
-    return FEATURE_CLAUSE_RE.sub('', name).strip() or name
-
-
-def looks_like_tribute(name: str) -> bool:
-    lowered = name.lower()
-    if any(keyword in lowered for keyword in KEYWORDS_EXCLUDE):
-        return True
-    # The original act is not a tribute merely because its name contains
-    # 'attack'. Keep explicit tribute keywords and every other exclusion.
-    if lowered.strip() == 'massive attack':
-        return False
-    tokens = set(simplify_name(name).split())
-    return any(token in tokens for token in TRIBUTE_NAME_HINTS if len(tokens) <= 3)
 
 
 def should_exclude(name: str, festival: Festival) -> bool:
@@ -433,112 +397,14 @@ def extract_recent_songs(setlists):
     return counts
 
 
-def canonical_track_key(name: str) -> str:
-    name = FEATURE_CLAUSE_RE.sub('', name).strip()
-    name = re.sub(r'\s*(?:[-(\[]\s*)?(?:\d{4}\s+)?remaster(?:ed)?\s*[)\]]?$', '', name, flags=re.I)
-    simplified = simplify_name(name)
-    if simplified:
-        return simplified
-
-    lowered = unicodedata.normalize('NFKC', name.lower())
-    lowered = re.sub(r'[^\w]+', ' ', lowered, flags=re.UNICODE)
-    return ' '.join(lowered.split())
 
 
-def is_feat_track(track: dict) -> bool:
-    title = (track.get('name') or '').lower()
-    return any(token in title for token in [' feat.', ' featuring ', ' ft. ', '(feat', '[feat'])
 
 
-def is_short_or_non_song(track: dict) -> bool:
-    duration = track.get('duration_ms') or 0
-    if duration < MIN_TRACK_MS:
-        return True
-    title = (track.get('name') or '').lower()
-    return any(re.search(rf'(^|[\s(:\[-]){re.escape(hint)}($|[\s:)\]-])', title) for hint in NON_SONG_TITLE_HINTS)
 
 
-def track_version_penalty(track: dict) -> int:
-    title = (track.get('name') or '').lower()
-    penalty = 0
-    if re.search(r'(\(|\[|-)\s*live\b|\blive\s+(at|from|in|on)\b', title):
-        penalty += 2
-    if re.search(r'\b(remix|acoustic|instrumental|cover)\b', title):
-        penalty += 2
-    if re.search(r'(\(|\[|-)\s*(radio\s+)?edit\b', title):
-        penalty += 2
-    if re.search(r'(\(|\[|-)\s*(radio|extended|reworked)\s+version\b', title):
-        penalty += 2
-    if 'version' in title and any(hint in title for hint in BAD_VERSION_DESCRIPTOR_HINTS):
-        penalty += 2
-    return penalty
 
 
-SPECIAL_ARTIST_INCLUDE = {}
-
-
-def artist_family_match(query_artist: str, track: dict) -> bool:
-    allowed = SPECIAL_ARTIST_INCLUDE.get(query_artist)
-    if not allowed:
-        return True
-    track_artists = {artist['name'] for artist in track.get('artists', [])}
-    return bool(track_artists & allowed)
-
-
-def live_repertoire_primary_match(query_artist: str, track: dict) -> bool:
-    allowed = LIVE_REPERTOIRE_PRIMARY_ARTISTS.get(query_artist)
-    if not allowed:
-        return False
-    primary_artist = track['artists'][0]['name'] if track.get('artists') else ''
-    return simplify_name(primary_artist) in {simplify_name(artist) for artist in allowed}
-
-
-def primary_artist_matches_query(query_artist: str, track: dict) -> bool:
-    if live_repertoire_primary_match(query_artist, track):
-        return True
-    primary_artist = track['artists'][0]['name'] if track.get('artists') else ''
-    blocked_artists = BLOCKED_PRIMARY_ARTIST_MATCHES.get(query_artist, set())
-    if simplify_name(primary_artist) in {simplify_name(artist) for artist in blocked_artists}:
-        return False
-    query_base = setlist_lookup_name(query_artist)
-    raw_query_tokens = re.findall(r'[a-z0-9]+', query_artist.lower())
-    raw_primary_tokens = re.findall(r'[a-z0-9]+', primary_artist.lower())
-    if (
-        len(raw_query_tokens) == 1
-        and len(raw_primary_tokens) > 1
-        and raw_primary_tokens[0] in BLOCKED_PRIMARY_ARTIST_PREFIXES
-    ):
-        return False
-    query_tokens = simplify_name(query_base).split()
-    primary_tokens = simplify_name(primary_artist).split()
-    if len(query_tokens) == 1 and len(primary_tokens) > 1 and query_tokens[0] != primary_tokens[0]:
-        return False
-    overlap = token_overlap(query_base, primary_artist)
-    if len(query_tokens) > 1 and len(primary_tokens) > 1 and overlap <= 0.5:
-        return False
-    return overlap >= 0.45
-
-
-def should_skip_track_for_artist(query_artist: str, track: dict, lineup_artist: str | None = None) -> str | None:
-    title = (track.get('name') or '').lower()
-    primary_artist = track['artists'][0]['name'] if track.get('artists') else ''
-    if is_short_or_non_song(track):
-        return 'too_short_or_non_song'
-    strict_artist = next(
-        (artist for artist in (lineup_artist, query_artist) if artist in STRICT_ARTIST_ONLY_FALLBACK),
-        None,
-    )
-    if strict_artist and not live_repertoire_primary_match(strict_artist, track) and simplify_name(primary_artist) != simplify_name(strict_artist):
-        return 'strict_primary_artist_required'
-    if not primary_artist_matches_query(query_artist, track):
-        return 'primary_artist_mismatch'
-    if not artist_family_match(query_artist, track):
-        return 'artist_family_mismatch'
-    if track_version_penalty(track) >= 2:
-        return 'bad_version'
-    if 'from "' in title or 'from (' in title:
-        return 'soundtrack_style_version'
-    return None
 
 
 def spotify_search_track(artist, track, lineup_artist: str | None = None):
@@ -661,10 +527,6 @@ def explain_track_choice(track: dict, source: str, artist: str, trigger: str) ->
         'version_penalty': track_version_penalty(track),
     }
 
-
-def setlist_track_sort_key(item: tuple[int, int, str, dict]) -> tuple:
-    popularity, play_count, song, track = item
-    return (-play_count, -popularity, is_feat_track(track), song.lower())
 
 
 def build_playlist(festival: Festival, user_id: str, *, persist_report=True, discovery_checkpoint=None, discovery_budget=None):

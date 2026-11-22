@@ -1,3 +1,4 @@
+import { load } from "cheerio";
 import type { FestivalCandidate, FestivalSource, FieldEvidence } from "../types.ts";
 import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 
@@ -73,18 +74,47 @@ export function extractMysticCandidate(document: string, source: FestivalSource,
       c.warnings.push(MYSTIC_ARTIST_REVIEW);
     } else c.warnings.push("Mystic current artist list or explicit headliner billing is missing");
   }
-  const purchase = [...html.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)].find(a => {
-    const link = href(a[0]); if (!link) return false;
-    let target: URL; try { target = new URL(link, source.url); } catch { return false; }
-    return target.protocol === "https:" && target.hostname === "tickets.mysticfestival.pl" &&
-      plain(a[1]).includes(`Mystic Festival ${source.editionYear}`) && /Kup bilet/i.test(plain(a[1]));
+  // Ticket claims use their own visible DOM scope. Artist extraction above is
+  // deliberately unchanged; archived, hidden and contradictory ticket banners
+  // must not turn the current festival's stock into a guessed sellout.
+  const $ = load(document);
+  $("script, style, noscript, template, nav, footer, [hidden], [inert], [aria-hidden='true']").remove();
+  $("[style]").each((_, element) => {
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();
   });
-  if (purchase) {
-    // Catalogue policy uses the already trusted festival home as gateway, not
-    // an unconfigured ticket host; no provider or source configuration writes.
-    add("ticketsUrl", url.origin + "/", purchase[0]);
-    if (banners.some(text => /bilety\b[^.!]*\bwyprzedane\b/i.test(text))) add("ticketStatus", "sold_out", banners.join("; "));
-    else if (banners.some(text => /bilety\b[^.!]*\b(?:już\s+)?w sprzedaży\b/i.test(text))) add("ticketStatus", "available", banners.join("; "));
+  const visibleRanges = new Set($(".elementor-heading-title").toArray().flatMap(element =>
+    [...plain($(element).text()).matchAll(/\b(\d{1,2})\s*[-–—]\s*(\d{1,2})\.(\d{2})\.(20\d{2})\b/g)]
+      .map(m => `${m[4]}-${m[3]}-${m[1].padStart(2, "0")}/${m[4]}-${m[3]}-${m[2].padStart(2, "0")}`)));
+  if (visibleRanges.size !== 1 || !visibleRanges.has(`${startDate}/${endDate}`)) {
+    c.warnings.push("Mystic ticket inventory requires visible current-edition date evidence");
+    return c;
+  }
+  const purchase = $("a[href]").filter((_, element) => {
+    const link = $(element);
+    let target: URL; try { target = new URL(link.attr("href") ?? "", source.url); } catch { return false; }
+    return target.protocol === "https:" && target.hostname === "tickets.mysticfestival.pl"
+      && !target.username && !target.password && !target.port
+      && !link.is("[disabled], [aria-disabled='true']")
+      && link.parents("[disabled], [aria-disabled='true']").length === 0
+      && plain(link.text()).includes(`Mystic Festival ${source.editionYear}`)
+      && /Kup bilet/i.test(plain(link.text()));
+  }).first();
+  if (purchase.length) {
+    // Preserve the reviewed festival-home gateway; do not configure a new host
+    // or start any ticket-provider/artist-provider job.
+    add("ticketsUrl", url.origin + "/", $.html(purchase));
+    const stockBanners = $("span.elementor-icon-box-title").toArray()
+      .map(element => plain($(element).text()))
+      .filter(value => [...value.matchAll(/\b20\d{2}\b/g)].every(m => Number(m[0]) === source.editionYear));
+    const soldOut = stockBanners.filter(value => /bilety\b[^.!]*\bwyprzedane\b/i.test(value));
+    const onSale = stockBanners.filter(value => /bilety\b[^.!]*\b(?:już\s+)?w sprzedaży\b/i.test(value));
+    if (soldOut.length && onSale.length) {
+      c.warnings.push("Mystic current ticket banners conflict; retain verified availability for review");
+    } else if (soldOut.length) {
+      add("ticketStatus", "sold_out", soldOut.join("; "));
+    } else if (onSale.length) {
+      add("ticketStatus", "available", onSale.join("; "));
+    }
   }
   return c;
 }
