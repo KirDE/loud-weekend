@@ -19,9 +19,17 @@ export async function collectRockEnSeineHiatus(fetchImpl: typeof fetch = fetch) 
         headers: { accept: 'text/html', 'cache-control': 'no-cache',
           'user-agent': 'LoudWeekendBot/1.1 (+https://loudweekend.eu/; public festival-data monitor)' },
       });
+      const contentType = response.headers.get('content-type') ?? '';
+      // Parse declarations before comparing: a negative lookahead can backtrack
+      // over whitespace and incorrectly reject a valid padded UTF-8 value.
+      const charsets = [...contentType.matchAll(/;\s*charset\b([^;]*)/gi)];
+      const utf8 = charsets.every(([, parameter]) => {
+        const value = parameter.match(/^\s*=\s*(?:"([^"]*)"|([^"\s;]+))\s*$/);
+        return value !== null && (value[1] ?? value[2]).trim().toLowerCase() === 'utf-8';
+      });
       if (response.status !== 200 || response.url !== ROCK_EN_SEINE_HOME
-        || !/^text\/html(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '')
-        || /charset\s*=\s*(?!utf-8(?:\s*;|$))/i.test(response.headers.get('content-type') ?? '')
+        || !/^text\/html(?:\s*;|$)/i.test(contentType)
+        || !utf8
         || !response.body) throw new Error('Lifecycle source HTTP/identity/type mismatch');
       reader = response.body.getReader();
       const chunks: Uint8Array[] = []; let size = 0;

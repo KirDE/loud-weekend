@@ -42,3 +42,20 @@ test('one shared deadline bounds stalled fetch and stalled body', async t => {
   t.mock.timers.tick(20_000); await rejectedBody;
   assert.equal(cancelled, true);
 });
+
+test('UTF-8 charset parameters accept quotes, case, whitespace and parameter order', async () => {
+  for (const contentType of ['text/html', 'text/html; charset="UTF-8"',
+    'text/html; charset= utf-8', 'text/html; charset = " utf-8 " ',
+    'text/html; boundary=x; CHARSET = UTF-8; other=y']) {
+    const result = await collect(async () => response(html, { headers: { 'content-type': contentType } }));
+    assert.equal(result.proposal.lifecycle, 'hiatus', contentType);
+  }
+});
+test('invalid, conflicting or non-UTF-8 declarations still fail closed', async () => {
+  for (const contentType of ['text/html; charset="latin1"', 'text/html; charset= latin1',
+    'text/html; charset=', 'text/html; charset', 'text/html; charset="UTF-8',
+    'text/html; charset="UTF-8"junk', 'text/html; charset=utf-8; charset=latin1']) {
+    await assert.rejects(collect(async () => response(html, { headers: { 'content-type': contentType } })),
+      /HTTP\/identity\/type mismatch/, contentType);
+  }
+});
