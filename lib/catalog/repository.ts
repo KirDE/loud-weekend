@@ -1,5 +1,7 @@
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
-import type { PrismaClient } from "@prisma/client";
+import { announcedArtists } from "../festival-lineup.ts";
+import { readApprovedEditionLifecycleInSnapshot } from "../ingestion/edition-lifecycle-proposal-store.ts";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import type { ArtistProfile } from "../domain/artist.ts";
 import type { FestivalEdition } from "../domain/edition.ts";
 import type { Festival, PlaylistStatus } from "../domain/festival.ts";
@@ -22,8 +24,12 @@ export class DatabaseCatalogRepository implements CatalogRepository {
   constructor(client: PrismaClient) { this.client = client; }
 
   async read(): Promise<CatalogSnapshot> {
+    return this.client.$transaction(tx => this.readSnapshot(tx), { isolationLevel: "RepeatableRead" });
+  }
+
+  private async readSnapshot(tx: Prisma.TransactionClient): Promise<CatalogSnapshot> {
     const [editionRows, artistRows] = await Promise.all([
-      this.client.festivalEdition.findMany({
+      tx.festivalEdition.findMany({
         include: {
           festival: true,
           sources: { where: { enabled: true }, select: { deprecatedAt: true } },
@@ -34,7 +40,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         },
         orderBy: [{ year: "asc" }, { festival: { catalogOrder: "asc" } }],
       }),
-      this.client.artist.findMany({
+      tx.artist.findMany({
         include: {
           identities: { orderBy: { position: "asc" } },
           links: { orderBy: { position: "asc" } },
@@ -45,10 +51,18 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     ]);
     if (!editionRows.length || !artistRows.length) throw new Error("database catalogue is empty or incomplete");
 
+    const lifecycles = new Map<string, NonNullable<Festival["editionLifecycle"]>>();
+    for (const row of editionRows) {
+      if (row.recordState === "CURRENT") {
+        const notice = await readApprovedEditionLifecycleInSnapshot(tx, row.id);
+        if (notice) lifecycles.set(row.id, notice);
+      }
+    }
     const editions: FestivalEdition[] = editionRows.map((row) => {
       const headliners = row.lineup.filter(({ billing }) => billing === "HEADLINER").map(({ artist }) => artist.name);
       const lineup = row.lineup.filter(({ billing }) => billing === "LINEUP").map(({ artist }) => artist.name);
       return {
+        ...(lifecycles.has(row.id) ? { editionLifecycle: lifecycles.get(row.id)! } : {}),
         slug: row.festival.slug, name: row.festival.name, country: row.festival.country,
         countryCode: row.festival.countryCode, city: row.festival.city ?? undefined,
         startDate: dateOnly(row.startDate), endDate: dateOnly(row.endDate), dateLabel: row.dateLabel ?? undefined,
@@ -77,7 +91,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       };
     });
     const currentEditions = editions.filter(({ recordState }) => recordState === "current");
-    const currentArtistNames = new Set(currentEditions.flatMap(({ headliners, lineup }) => [...headliners, ...lineup]));
+    const currentArtistNames = new Set(currentEditions.flatMap(edition => announcedArtists(edition)));
     const festivalsFromDatabase: Festival[] = currentEditions.map((edition) => {
       const { recordState: _recordState, snapshotAt: _snapshotAt, provenance: _provenance, ...festival } = edition;
       const row = editionRows.find(({ festival: item, year }) => item.slug === edition.slug && year === edition.editionYear)!;

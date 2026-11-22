@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { readApprovedEditionLifecycleInSnapshot } from "../ingestion/edition-lifecycle-proposal-store.ts";
 
-// Explicit allowlist: no source metadata, internal IDs, artist profiles or URLs.
+// Internal ID is only for approved proof lookup; the public allowlist below
+// excludes IDs, source metadata, artist profiles, URLs and review details.
 const offlineSelect = {
+  id: true,
   festival: { select: { slug: true, name: true } },
   startDate: true,
   endDate: true,
@@ -12,12 +15,12 @@ const offlineSelect = {
 } satisfies Prisma.FestivalEditionSelect;
 
 type OfflineEdition = Prisma.FestivalEditionGetPayload<{ select: typeof offlineSelect }>;
-type OfflineDatabase = Pick<PrismaClient, "festivalEdition">;
+type OfflineSnapshot = Pick<Prisma.TransactionClient, "festivalEdition" | "editionLifecycleProposalSnapshot">;
+type OfflineDatabase = PrismaClient | OfflineSnapshot;
 const compare = (left: string, right: string) => left < right ? -1 : left > right ? 1 : 0;
 const dateOnly = (date: Date | null) => date?.toISOString().slice(0, 10) ?? null;
 
 export function projectOfflineCatalog(rows: readonly OfflineEdition[]) {
-  if (!rows.length) throw new Error("Offline catalogue unavailable");
   const festivals = rows.map((row) => ({
     slug: row.festival.slug,
     name: row.festival.name,
@@ -42,11 +45,24 @@ export function projectOfflineCatalog(rows: readonly OfflineEdition[]) {
 
 export async function readOfflineCatalog(database?: OfflineDatabase) {
   const client = database ?? (await import("../db.ts")).db;
-  const rows = await client.festivalEdition.findMany({
-    where: { year: 2027, recordState: "CURRENT" },
-    select: offlineSelect,
-  });
-  return projectOfflineCatalog(rows);
+  const read = async (tx: OfflineSnapshot) => {
+    const rows = await tx.festivalEdition.findMany({
+      where: { year: 2027, recordState: "CURRENT" }, select: offlineSelect,
+    });
+    if (!rows.length) throw new Error("Offline catalogue unavailable");
+    const scheduled = [];
+    for (const row of rows) {
+      // Approved historical notice, not fresh inventory. Pending/rejected do not
+      // suppress events; damaged latest/approved proof throws (HTTP 503).
+      if (await readApprovedEditionLifecycleInSnapshot(tx, row.id)) continue;
+      scheduled.push(row);
+    }
+    // A nonempty catalogue with every edition paused is a valid empty schedule.
+    return projectOfflineCatalog(scheduled);
+  };
+  return "$transaction" in client
+    ? client.$transaction(read, { isolationLevel: "RepeatableRead" })
+    : read(client);
 }
 
 export async function serveOfflineCatalog(

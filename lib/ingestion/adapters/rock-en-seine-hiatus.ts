@@ -47,3 +47,17 @@ export function observeRockEnSeineHiatus(
     excerpt: "Rock en Seine: festival pauses in 2027 and announces a return in 2028. A different 2027 event is only under consideration, not confirmed. No ordinary 2027 ticket inventory assertion.",
   };
 }
+
+/** Reviewed source contract: all festival-specific proof expectations live here. */
+export const rockEnSeineLifecycleSource = {
+  parserVersion: "rock-en-seine-hiatus-v1",
+  sourceUrl: ROCK_EN_SEINE_HOME,
+  observe: observeRockEnSeineHiatus,
+  validate(proposal: unknown) {
+    const p = proposal as RockEnSeineHiatusProposal;
+    if (p.festivalSlug !== "rock-en-seine" || p.editionYear !== 2027 || p.lifecycle !== "hiatus"
+      || p.announcedReturnYear !== 2028 || p.alternativeEvent !== "under_consideration"
+      || p.sourceUrl !== ROCK_EN_SEINE_HOME
+      || p.excerpt !== "Rock en Seine: festival pauses in 2027 and announces a return in 2028. A different 2027 event is only under consideration, not confirmed. No ordinary 2027 ticket inventory assertion.") fail();
+  },
+};

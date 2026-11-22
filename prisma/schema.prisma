@@ -193,6 +193,7 @@ model User {
   reviewedSubmissions       FestivalSubmission[]       @relation("SubmissionReviewer")
   submissionAuditEntries    FestivalSubmissionAudit[]
   emailVerificationTokens   EmailVerificationToken[]
+  lifecycleDecisions        EditionLifecycleReviewDecision[]
   passkeys                  Passkey[]
 }
 
@@ -323,6 +324,7 @@ model FestivalEdition {
   timetable       TimetablePerformance[]
   playlists       FestivalPlaylist[]
   sources         FestivalSource[]
+  lifecycleProposals EditionLifecycleProposalSnapshot[]
 
   @@unique([festivalId, year])
   @@index([year, recordState])
@@ -587,6 +589,7 @@ model AdminAuditEntry {
   detail       Json?
   createdAt    DateTime           @default(now())
   actor        User?              @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  lifecycleDecision EditionLifecycleReviewDecision?
 
   @@index([createdAt])
   @@index([resourceKind, resourceKey, createdAt])
@@ -901,4 +904,36 @@ model OperationalState {
   leaseOwner     String?
   leaseExpiresAt DateTime?
   updatedAt      DateTime @updatedAt
+}
+
+// Pending edition-lifecycle observations. No canonical lifecycle/approval implied.
+model EditionLifecycleProposalSnapshot {
+  id            String @id @default(cuid())
+  editionId     String
+  sourceUrl     String
+  finalUrl      String
+  httpStatus    Int
+  observedAt    DateTime @db.Timestamptz(3)
+  contentHash   String @db.Char(64)
+  parserVersion String
+  proposal      Json
+  createdAt     DateTime @default(now())
+  edition       FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  decision      EditionLifecycleReviewDecision?
+
+  @@unique([editionId, observedAt])
+}
+
+model EditionLifecycleReviewDecision {
+  id          String @id @default(cuid())
+  snapshotId  String @unique
+  contentHash String @db.Char(64)
+  decision    String
+  actorId     String
+  auditId     String @unique
+  createdAt   DateTime @default(now())
+  snapshot    EditionLifecycleProposalSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  actor       User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  audit       AdminAuditEntry @relation(fields: [auditId], references: [id], onDelete: Restrict)
 }

@@ -4,7 +4,7 @@ import type { Language } from "@/components/LanguageProvider";
 import { FestivalDetail } from "@/components/FestivalDetail";
 import { supportedLanguages } from "@/lib/catalog/public";
 import { getCatalog } from "@/lib/catalog/repository";
-import { festivalMusicEvent } from "@/lib/seo";
+import { festivalDescription, festivalMusicEvent } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 export const dynamicParams = true;
@@ -14,7 +14,7 @@ export async function generateMetadata({ params }: { params: Promise<{ lang: str
   const { festivals } = await getCatalog();
   const festival = festivals.find((item) => item.slug === slug);
   if (!festival || !supportedLanguages.includes(lang as Language)) return {};
-  return { title: festival.name, alternates: { canonical: `/${lang}/festivals/${festival.slug}/`, languages: { "x-default": `/festivals/${festival.slug}/`, en: `/en/festivals/${festival.slug}/`, de: `/de/festivals/${festival.slug}/`, ru: `/ru/festivals/${festival.slug}/` } } };
+  return { title: festival.name, description: festivalDescription(festival, lang as Language), alternates: { canonical: `/${lang}/festivals/${festival.slug}/`, languages: { "x-default": `/festivals/${festival.slug}/`, en: `/en/festivals/${festival.slug}/`, de: `/de/festivals/${festival.slug}/`, ru: `/ru/festivals/${festival.slug}/` } } };
 }
 
 export default async function LocalizedFestivalPage({ params }: { params: Promise<{ lang: string; slug: string }> }) {
@@ -25,5 +25,5 @@ export default async function LocalizedFestivalPage({ params }: { params: Promis
   if (!item) notFound();
   const event = festivalMusicEvent(item);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
-  return <><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(event).replace(/</g, "\\u003c") }} /><FestivalDetail item={item} festivals={festivals} artistSlugs={artistSlugs} artistPopularity={Object.fromEntries(artists.map((artist) => [artist.name, artist.spotifyStats?.popularity ?? null]))} playlist={playlists[item.slug]} /></>;
+  return <>{event && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(event).replace(/</g, "\\u003c") }} />}<FestivalDetail item={item} festivals={festivals} artistSlugs={artistSlugs} artistPopularity={Object.fromEntries(artists.map((artist) => [artist.name, artist.spotifyStats?.popularity ?? null]))} playlist={playlists[item.slug]} /></>;
 }

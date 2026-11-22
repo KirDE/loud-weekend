@@ -83,7 +83,7 @@ async function usableCatalog(response) {
   try {
     const body = await response.clone().json();
     return body.schemaVersion === 1 && body.editionYear === 2027 &&
-      Array.isArray(body.festivals) && body.festivals.length > 0;
+      Array.isArray(body.festivals);
   } catch { return false; }
 }
 

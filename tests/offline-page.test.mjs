@@ -47,10 +47,15 @@ test("offline page clearly handles first offline visit, HTTP failure and invalid
     async () => { throw new TypeError("offline"); },
     async () => new Response(null, { status: 503 }),
     async () => new Response("not JSON"),
-    async () => new Response('{"schemaVersion":1,"festivals":[]}'),
   ]) {
     const { status, catalog } = await render(fetchImpl);
     assert.match(status.textContent, /No saved festival data/);
     assert.equal(catalog.children.length, 0);
   }
+});
+
+ test("valid empty schedule is distinct from missing catalogue data", async () => {
+  const { status, catalog } = await render(async () => new Response('{"schemaVersion":1,"festivals":[]}'));
+  assert.match(status.textContent, /No scheduled festivals/);
+  assert.equal(catalog.children[0].children.length, 0);
 });

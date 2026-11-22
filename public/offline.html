@@ -23,7 +23,7 @@
       const response = await fetch("/api/offline/catalog/", { credentials: "omit", cache: "no-cache" });
       if (!response.ok) throw new Error("Catalogue unavailable");
       const data = await response.json();
-      if (data.schemaVersion !== 1 || !Array.isArray(data.festivals) || !data.festivals.length) throw new Error("Catalogue unavailable");
+      if (data.schemaVersion !== 1 || !Array.isArray(data.festivals)) throw new Error("Catalogue unavailable");
       const fragment = document.createDocumentFragment();
       for (const festival of data.festivals) {
         const heading = document.createElement("h2");
@@ -46,7 +46,9 @@
         }
       }
       catalog.replaceChildren(fragment);
-      status.textContent = "Saved public festival and timetable data. Reconnect to check for updates.";
+      status.textContent = data.festivals.length
+        ? "Saved public festival and timetable data. Reconnect to check for updates."
+        : "No scheduled festivals in the saved catalogue. Reconnect to check for updates.";
     } catch {
       status.textContent = "No saved festival data is available. Open Loud Weekend online to save it for your next visit.";
     }

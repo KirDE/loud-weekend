@@ -6,7 +6,10 @@ import { useLocalPlanner, type Attendance } from "./LocalPlanner";
 import { PlannerReset } from "./PlannerReset";
 import { AccountSyncPanel } from "./AccountSyncPanel";
 import { FestivalViews } from "./FestivalViews";
-import { useLanguage, type Language } from "./LanguageProvider";
+import { calendarEligible, calendarFile } from "@/lib/planning";
+import { announcedArtists } from "@/lib/festival-lineup";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
+import { useLanguage, translate, type Language } from "./LanguageProvider";
 
 type PlannerLabels = {
   eyebrow: string; title: string; intro: string; clear: string; calendar: string;
@@ -44,15 +47,15 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
     p.playlistFestivals.includes(f.slug),
   );
   const artists = Array.from(
-    new Set(selected.flatMap((f) => [...f.headliners, ...f.lineup])),
+    new Set(selected.flatMap(announcedArtists)),
   ).sort();
   const dated = planned
-    .filter((f) => f.startDate)
+    .filter(calendarEligible)
     .sort((a, b) => a.startDate!.localeCompare(b.startDate!));
   async function createPlaylist() {
     setPlaylist({ status: "creating", message: t.creating });
     try {
-      const response = await fetch("/api/spotify/selection-playlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ artists, festivals: selected.map((festival) => festival.name) }) });
+      const response = await fetch("/api/spotify/selection-playlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ artists, festivals: selected.filter(festival => !editionOnHiatus(festival)).map((festival) => festival.name) }) });
       const result = await response.json() as { error?: string; playlistUrl?: string; trackCount?: number; unresolved?: string[] };
       if (!response.ok || !result.playlistUrl) throw new Error(t.playlistFailed);
       setPlaylist({ status: "created", url: result.playlistUrl, message: t.playlistCreated(result.trackCount || 0, result.unresolved?.length || 0) });
@@ -91,7 +94,7 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
               {planned.map((f) => (
                 <article key={f.slug}>
                   <div>
-                    <small>{f.startDate || t.datesTba}</small>
+                    <small>{editionOnHiatus(f) ? translate(language, "editionHiatus") : f.startDate || t.datesTba}</small>
                     <Link href={`/festivals/${f.slug}/`}>
                       <strong>{f.name}</strong>
                     </Link>
@@ -110,9 +113,9 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
                     }
                   >
                     <option value="">{t.noStatus}</option>
-                    <option value="going">{t.going}</option>
-                    <option value="maybe">{t.maybe}</option>
-                    <option value="not-going">{t.notGoing}</option>
+                    <option value="going" disabled={editionOnHiatus(f)}>{t.going}</option>
+                    <option value="maybe" disabled={editionOnHiatus(f)}>{t.maybe}</option>
+                    <option value="not-going" disabled={editionOnHiatus(f)}>{t.notGoing}</option>
                   </select>
                 </article>
               ))}
@@ -187,27 +190,4 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
       )}
     </div>
   );
-}
-function calendarFile(items: Festival[]) {
-  const out = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Loud Weekend//Trip Planner//EN",
-    "CALSCALE:GREGORIAN",
-  ];
-  for (const f of items) {
-    const end = new Date(`${f.endDate || f.startDate}T12:00:00Z`);
-    end.setUTCDate(end.getUTCDate() + 1);
-    out.push(
-      "BEGIN:VEVENT",
-      `UID:${f.slug}-2027@festival-radar`,
-      `DTSTART;VALUE=DATE:${f.startDate!.replaceAll("-", "")}`,
-      `DTEND;VALUE=DATE:${end.toISOString().slice(0, 10).replaceAll("-", "")}`,
-      `SUMMARY:${f.name}`,
-      `LOCATION:${f.city || f.country}`,
-      `URL:${f.officialUrl}`,
-      "END:VEVENT",
-    );
-  }
-  return [...out, "END:VCALENDAR"].join("\r\n");
 }
