@@ -77,3 +77,15 @@ The older 13/59, 18/59 and 26/59 files are historical snapshots and stay unchang
 | Tuska Festival | [#482](https://github.com/KirDE/loud-weekend/pull/482) | clean 14d8680 | pending source to publication acceptance |
 | Vainstream Rockfest | No verified proposal | — | pending source to publication acceptance |
 | Wacken Open Air | [#482](https://github.com/KirDE/loud-weekend/pull/482) | clean 14d8680 | offline source publication readback replay tamper checks |
+
+## Additional read-only rechecks
+
+Vainstream, Greenfield and Rock for People ticket destinations returned HTTP
+403 on 2026-11-22. Hurricane and Southside official shops timed out. These
+failures establish no ticket stock or sellout; no access bypass or provider
+writes were performed. Last-good inventory must be retained. Their positive
+stock implementations remain unverified, not silently counted as complete.
+
+The historical 18/59 observation is archived separately as
+[ticket-status-proposals-20261117T2348.md](ticket-status-proposals-20261117T2348.md),
+without overwriting the current parent rollout's integration guidance.

@@ -632,7 +632,11 @@
         "state": "pending_source_to_publication_acceptance",
         "evidence": null
       },
-      "remainingWork": "Readable FAQ is not current inventory."
+      "remainingWork": "Current official ticket destination 403: live inventory could not be verified. Readable FAQ is not current inventory.",
+      "readOnlyRecheck20261122": {
+        "status": 403,
+        "conclusion": "Inventory unverified; retain last good data. No access bypass or provider writes performed."
+      }
     },
     {
       "slug": "heavy-weekend",
@@ -674,7 +678,11 @@
         "state": "pending_source_to_publication_acceptance",
         "evidence": null
       },
-      "remainingWork": "Current-year on-sale news/price is not yet verified against actual current admission purchase controls."
+      "remainingWork": "Current official ticket destination timeout: live inventory could not be verified. Current-year on-sale news/price is not yet verified against actual current admission purchase controls.",
+      "readOnlyRecheck20261122": {
+        "status": "timeout",
+        "conclusion": "Inventory unverified; retain last good data. No access bypass or provider writes performed."
+      }
     },
     {
       "slug": "idays",
@@ -1078,7 +1086,11 @@
         "state": "pending_source_to_publication_acceptance",
         "evidence": null
       },
-      "remainingWork": "Partial capacity sold and tier changes coexist with on-sale copy; source-specific admission control/stock proof still needed."
+      "remainingWork": "Current official ticket destination 403: live inventory could not be verified. Partial capacity sold and tier changes coexist with on-sale copy; source-specific admission control/stock proof still needed.",
+      "readOnlyRecheck20261122": {
+        "status": 403,
+        "conclusion": "Inventory unverified; retain last good data. No access bypass or provider writes performed."
+      }
     },
     {
       "slug": "rock-im-park",
@@ -1231,7 +1243,11 @@
         "state": "pending_source_to_publication_acceptance",
         "evidence": null
       },
-      "remainingWork": "Readability exposes search chrome without inventory; treat as incomplete extraction, not a healthy stock check."
+      "remainingWork": "Current official ticket destination timeout: live inventory could not be verified. Readability exposes search chrome without inventory; treat as incomplete extraction, not a healthy stock check.",
+      "readOnlyRecheck20261122": {
+        "status": "timeout",
+        "conclusion": "Inventory unverified; retain last good data. No access bypass or provider writes performed."
+      }
     },
     {
       "slug": "summer-breeze",
@@ -1344,7 +1360,11 @@
         "state": "pending_source_to_publication_acceptance",
         "evidence": null
       },
-      "remainingWork": "Current regular products coexist with sold-out early-bird tiers. Raw product stock/control proof not yet audited; no global sellout inference."
+      "remainingWork": "Current official ticket destination 403: live inventory could not be verified. Current regular products coexist with sold-out early-bird tiers. Raw product stock/control proof not yet audited; no global sellout inference.",
+      "readOnlyRecheck20261122": {
+        "status": 403,
+        "conclusion": "Inventory unverified; retain last good data. No access bypass or provider writes performed."
+      }
     },
     {
       "slug": "wacken-open-air",

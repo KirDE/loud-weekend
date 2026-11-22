@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "scope": "59 public current-edition records, observed 2026-11-17; not production parser configuration; follow-up PR verification is explicitly unmerged and is not code present on this documentation branch or production acceptance",
+  "scope": "59 public current-edition records, observed 2026-11-17; not production parser configuration",
   "catalogueSource": "https://loudweekend.eu/api/offline/catalog/",
   "festivals": [
     {
@@ -29,8 +29,7 @@
       },
       "coverage": "pending_audit",
       "verifiedStates": [],
-      "test": null,
-      "auditNote": "2026-11-17 23:42 UTC: official /en/tickets returned HTTP 200 and current ticket-page title, but readable extraction omitted admission controls. HTTP success/title alone cannot establish stock; source-specific product fixture remains pending."
+      "test": null
     },
     {
       "slug": "alpen-flair",
@@ -42,19 +41,9 @@
         "httpStatus": 200,
         "error": null
       },
-      "coverage": "verified_in_followup_pr",
-      "verifiedStates": [
-        "available"
-      ],
-      "test": "tests/ingestion-alpen-flair.test.mjs",
-      "followUp": {
-        "pullRequest": "https://github.com/KirDE/loud-weekend/pull/485",
-        "headSha": "9d63be8f6e9d5df82c62d2390b4219acd4e5a777",
-        "codeReview": "completed_no_findings",
-        "qualityRun": "https://github.com/KirDE/loud-weekend/actions/runs/44200969884",
-        "qualityConclusion": "success",
-        "merged": false
-      }
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
     },
     {
       "slug": "barcelona-rock-fest",
@@ -66,19 +55,9 @@
         "httpStatus": 200,
         "error": null
       },
-      "coverage": "verified_in_followup_pr",
-      "verifiedStates": [
-        "available"
-      ],
-      "test": "tests/barcelona-banner.test.mjs",
-      "followUp": {
-        "pullRequest": "https://github.com/KirDE/loud-weekend/pull/486",
-        "headSha": "0096af2d95891722f37ec5ea0456936dc48844c1",
-        "codeReview": "completed_no_findings",
-        "qualityRun": "https://github.com/KirDE/loud-weekend/actions/runs/44201108254",
-        "qualityConclusion": "success",
-        "merged": false
-      }
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
     },
     {
       "slug": "bloodstock",
@@ -222,20 +201,9 @@
         "httpStatus": 200,
         "error": null
       },
-      "coverage": "verified_in_followup_pr",
-      "verifiedStates": [
-        "available",
-        "unavailable"
-      ],
-      "test": "tests/full-rewind.test.mjs",
-      "followUp": {
-        "pullRequest": "https://github.com/KirDE/loud-weekend/pull/487",
-        "headSha": "276f51d68922a2d45090916aacfc7f65bd1fb924",
-        "codeReview": "completed_no_findings",
-        "qualityRun": "https://github.com/KirDE/loud-weekend/actions/runs/44201716124",
-        "qualityConclusion": "success",
-        "merged": false
-      }
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
     },
     {
       "slug": "graspop",
@@ -333,15 +301,7 @@
       },
       "coverage": "pending_audit",
       "verifiedStates": [],
-      "test": null,
-      "followUp": {
-        "pullRequest": "https://github.com/KirDE/loud-weekend/pull/488",
-        "headSha": "818dfdf7cd9e10a8f822f238ee18f1d33d67997f",
-        "codeReview": "pending",
-        "qualityConclusion": "pending",
-        "merged": false
-      },
-      "auditNote": "Actual reduced official Shopify weekend product source captured; code proposal awaits clean review and CI, not included in verified count."
+      "test": null
     },
     {
       "slug": "inferno",
@@ -429,19 +389,9 @@
         "httpStatus": 200,
         "error": null
       },
-      "coverage": "verified_in_followup_pr",
-      "verifiedStates": [
-        "available"
-      ],
-      "test": "tests/ingestion-masters-of-rock.test.mjs",
-      "followUp": {
-        "pullRequest": "https://github.com/KirDE/loud-weekend/pull/484",
-        "headSha": "d15842192e98ce5e733c2aa5f1b39b3719160ccd",
-        "codeReview": "completed_no_findings",
-        "qualityRun": "https://github.com/KirDE/loud-weekend/actions/runs/44198835440",
-        "qualityConclusion": "success",
-        "merged": false
-      }
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
     },
     {
       "slug": "mera-luna",
@@ -495,19 +445,9 @@
         "httpStatus": 200,
         "error": null
       },
-      "coverage": "verified_in_followup_pr",
-      "verifiedStates": [
-        "available"
-      ],
-      "test": "tests/ingestion-mystic-markup.test.mjs",
-      "followUp": {
-        "pullRequest": "https://github.com/KirDE/loud-weekend/pull/483",
-        "headSha": "738741fd14d2059f9d360c1c45e959d3d2ab9194",
-        "codeReview": "completed_no_findings",
-        "qualityRun": "https://github.com/KirDE/loud-weekend/actions/runs/44198126325",
-        "qualityConclusion": "success",
-        "merged": false
-      }
+      "coverage": "pending_audit",
+      "verifiedStates": [],
+      "test": null
     },
     {
       "slug": "nova-rock",
@@ -799,8 +739,7 @@
       },
       "coverage": "pending_audit",
       "verifiedStates": [],
-      "test": null,
-      "auditNote": "2026-11-17 23:42 UTC: read-only /billetter request returned HTTP 403 Cloudflare block. This is an access failure, not inventory evidence; remains pending."
+      "test": null
     },
     {
       "slug": "southside",
@@ -927,8 +866,5 @@
       ],
       "test": "tests/ticket-supplements.test.mjs"
     }
-  ],
-  "rolloutAsOf": "2026-11-17T23:48:00Z",
-  "verifiedProposalCount": 18,
-  "pendingCount": 41
+  ]
 }
