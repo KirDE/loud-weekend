@@ -42,15 +42,15 @@ the latest record fails both pending read and subsequent staging, with no older
 healthy fallback. Current edition/source drift fails closed. This is an
 application append-only service, not a database immutability/access-control claim.
 
-`readPendingRockEnSeineHiatus` is an INTERNAL reviewer read, not an authenticated
-HTTP endpoint or public catalogue projection. It returns `pending` until an exact-revision audited decision exists;
+`readPendingRockEnSeineHiatus` is an internal reviewer service, now exposed only
+through an authenticated reviewer GET (not a public catalogue projection). It returns `pending` until an exact-revision audited decision exists;
 `eligibleForReview` is false for decided evidence or outside24h/60s-future bounds.
 No approval is inferred, including from the absence of evidence. Neither service modifies
 FestivalEdition fields, stock/source health, publications, notifications or
 provider jobs, nor creates2028 editions. All synthetic SQL tests run only on an
 own isolated disposable database; no production migration was applied.
 
-Remaining: audited exact-revision reviewer decisions and authenticated endpoint,
+Remaining: reviewer queue,
 explicit edition lifecycle semantics and approved-only public EN/DE/RU read/UI,
 bounded native collector/invocation, replay/rollback and browser checks, focused
 PR/full Quality/exact-head Codex review. Pending snapshots alone do not complete
@@ -59,7 +59,7 @@ the source and must never be presented as a cancellation/stock publication.
 ## Internal audited decision prerequisite
 
 `decideRockEnSeineHiatus` is an internal service, NOT an HTTP endpoint or public
-publication. Its future caller must authenticate a session, validate origin and
+publication. Its HTTP caller must authenticate a session, validate origin and
 pass the session actor only. No body-supplied actor may be forwarded. Within one
 transaction the service rechecks persisted ADMIN/EDITOR role and ADMIN_EMAILS
 allowlist under a shared user-row lock, locks the edition, validates source/target
@@ -82,5 +82,32 @@ allowlist, wrong revision, expiry/supersession, persisted proof/decision tamperi
 and an actual disposable-DB trigger fault proving rollback of the audit when the
 decision insert fails. The synthetic audit actor is retained (demoted to USER)
 because deleting immutable audit history to clean tests would be incorrect.
-Still pending: protected session/origin HTTP API, reviewer UI, explicit approved-only
+Still pending: reviewer UI, explicit approved-only
 public lifecycle semantics/read/UI, native bounded collector/CLI, browser and PR gates.
+
+
+## Protected reviewer HTTP boundary
+
+- GET `/api/admin/edition-lifecycle/editions/[id]` returns the latest validated
+  snapshot/revision and audited review state to `currentAdmin()` only. Missing
+  evidence is 404; invalid persisted evidence is 409, never healthy empty state.
+- POST `/api/admin/edition-lifecycle/snapshots/[id]` first validates the exact
+  trusted origin, then the current session's EDITOR/ADMIN role and configured
+  ADMIN_EMAILS allowlist. Only `decision` and `expectedContentHash` are accepted;
+  actor identity comes exclusively from the session. The locked service rechecks
+  authority at write time, including on replay.
+- JSON body is bounded to 4096 actual bytes and a shared five-second stream
+  deadline, with fatal UTF8 validation. Missing/foreign origins, extra fields,
+  body-supplied actors, bad hashes, malformed JSON and incomplete/oversized bodies
+  cannot reach the decision service. Conflicts produce 409, no DB diagnostics.
+- Responses (including errors) use `private, no-store`. Successful POST exposes
+  only snapshot ID and decision, not the internal actor or audit record.
+
+Tests execute the actual Next handler modules in-process, injecting only session
+and database/service boundaries. A disposable-DB regression runs actual handlers,
+real currentAdmin with an injected session reader, real decision/audit/readback,
+repeat decisions and a role-revocation race. Separate tests cover anonymous reads,
+allowlist denial, malformed/erroring/stalled streams, UTF8 and lying Content-Length.
+These are not a network login, browser, mobile or production-access verification.
+HTTP approval is still only a review decision: no public lifecycle, canonical
+stock/dates/health update, notifications, or automatic 2028 edition creation.

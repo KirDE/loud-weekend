@@ -193,3 +193,69 @@ test('new rejected observation does not silently inherit previous approval', asy
   // Fixture actor retained: immutable audit deliberately prevents deleting it.
   await db.user.update({ where: { id: actorId }, data: { role: 'USER' } });
 });
+
+
+test('actual lifecycle handlers→currentAdmin→DB decision/audit/read/replay and revoked-role conflict', async () => {
+  const { loadReviewRoute, loadCurrentAdmin } = await import('./support/lifecycle-review-routes.mjs');
+  const { requestHasTrustedOrigin } = await import('../lib/request-origin.ts');
+  const priorAllow = process.env.ADMIN_EMAILS;
+  const priorApp = process.env.APP_URL;
+  process.env.ADMIN_EMAILS = email;
+  process.env.APP_URL = 'https://lifecycle.example.invalid';
+  await db.user.update({ where: { id: actorId }, data: { role: 'EDITOR' } });
+  let present = true;
+  const currentAdmin = await loadCurrentAdmin(async () => present ? db.user.findUnique({ where: { id: actorId } }) : null);
+  const deps = {
+    '@/lib/admin-access': { currentAdmin }, '@/lib/db': { db },
+    '@/lib/request-origin': { requestHasTrustedOrigin },
+    '@/lib/ingestion/edition-lifecycle-proposal-store': { readPendingRockEnSeineHiatus: read, decideRockEnSeineHiatus: decide },
+  };
+  const get = (await loadReviewRoute('editions', deps)).GET;
+  const post = (await loadReviewRoute('snapshots', deps)).POST;
+  const getRequest = new Request('https://lifecycle.example.invalid/review');
+  const editionContext = { params: Promise.resolve({ id: editionId }) };
+  const context = (id: string) => ({ params: Promise.resolve({ id }) });
+  const request = (body: unknown, origin = 'https://lifecycle.example.invalid') => new Request('https://lifecycle.example.invalid/review', {
+    method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  try {
+    const before = await db.festivalEdition.findMany();
+    const n = await db.adminAuditEntry.count();
+    const row = await stage(db, input(103));
+    const payload = { decision: 'approve', expectedContentHash: row.contentHash };
+    const pending = await get(getRequest, editionContext);
+    assert.equal(pending.status, 200);
+    assert.equal(pending.headers.get('cache-control'), 'private, no-store');
+    assert.equal((await pending.json()).reviewState, 'pending');
+    present = false;
+    assert.equal((await get(getRequest, editionContext)).status, 403);
+    assert.equal((await post(request(payload), context(row.id))).status, 403);
+    present = true;
+    assert.equal((await post(request(payload, 'https://foreign.invalid'), context(row.id))).status, 403);
+    assert.equal((await post(request({ ...payload, actorId: 'forged' }), context(row.id))).status, 400);
+    assert.equal((await post(request({ ...payload, expectedContentHash: '0'.repeat(64) }), context(row.id))).status, 409);
+    assert.equal(await db.adminAuditEntry.count(), n);
+    const approved = await post(request(payload), context(row.id));
+    assert.equal(approved.status, 200);
+    assert.deepEqual(await approved.json(), { snapshotId: row.id, decision: 'approve' });
+    assert.equal((await (await get(getRequest, editionContext)).json()).reviewState, 'approved');
+    assert.equal((await post(request(payload), context(row.id))).status, 200);
+    assert.equal(await db.adminAuditEntry.count(), n + 1);
+    const stored = await db.editionLifecycleReviewDecision.findUniqueOrThrow({ where: { snapshotId: row.id }, include: { audit: true } });
+    assert.equal(stored.audit.actorId, actorId);
+    // Session passed its check, but authority is revoked before the locked store recheck.
+    const racedPost = (await loadReviewRoute('snapshots', { ...deps, '@/lib/admin-access': { currentAdmin: async () => {
+      const actor = await currentAdmin();
+      await db.user.update({ where: { id: actorId }, data: { role: 'USER' } });
+      return actor;
+    } } })).POST;
+    assert.equal((await racedPost(request(payload), context(row.id))).status, 409);
+    assert.equal((await get(getRequest, editionContext)).status, 403);
+    assert.equal(await db.adminAuditEntry.count(), n + 1);
+    assert.deepEqual(await db.festivalEdition.findMany(), before);
+  } finally {
+    await db.user.update({ where: { id: actorId }, data: { role: 'USER' } });
+    if (priorAllow === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = priorAllow;
+    if (priorApp === undefined) delete process.env.APP_URL; else process.env.APP_URL = priorApp;
+  }
+});
