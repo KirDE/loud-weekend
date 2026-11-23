@@ -35,6 +35,10 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
         throw new Error(t.failed);
       }
       if (kind === "collections" && document) readCollections(document.payload);
+      if (kind === "saved-filters" && document) {
+        const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
+        if (!filters || typeof filters !== "object" || Array.isArray(filters)) throw new Error(t.failed);
+      }
       return [kind, document] as const;
     }));
     return Object.fromEntries(entries.filter(([, document]) => document)) as Partial<Record<Kind, Document>>;
