@@ -101,3 +101,45 @@ for (const [states, expected] of [
         candidate.evidence.some((e) => e.field === "ticketStatus" && e.sourceUrl === source.url),
       );
   });
+
+test("invalid or incomplete JSON-LD dates cannot establish an event edition", () => {
+  for (const invalidDate of [
+    "2027-02-29",
+    "2027-13-01",
+    "2027-01-01garbage",
+    "2027-07-01T99:00:00Z",
+    "2027",
+  ]) {
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      "@type": "MusicEvent",
+      startDate: invalidDate,
+      endDate: "2027-07-03",
+      offers: { availability: "https://schema.org/SoldOut" },
+    })}</script>`;
+    const candidate = extractJsonLdCandidate(html, source, "2026-11-17T00:00:00Z");
+    assert.equal(candidate.startDate, undefined, invalidDate);
+    assert.deepEqual(candidate.observedEditionYears, [], invalidDate);
+    assert.ok(
+      candidate.warnings.includes("JSON-LD Event contains an invalid start date"),
+      invalidDate,
+    );
+  }
+});
+
+test("a malformed same-year event does not outrank a dated event or make it ambiguous", () => {
+  const html = `<script type="application/ld+json">${JSON.stringify([
+    { "@type": "MusicEvent", startDate: "2027-02-29", offers: { availability: "SoldOut" } },
+    {
+      "@type": "MusicEvent",
+      startDate: "2027-07-02T23:30:00-04:00",
+      endDate: "2027-07-34",
+      offers: { availability: "InStock" },
+    },
+  ])}</script>`;
+  const candidate = extractJsonLdCandidate(html, source, "2026-11-17T00:00:00Z");
+  assert.equal(candidate.startDate, "2027-07-02");
+  assert.deepEqual(candidate.observedEditionYears, [2027]);
+  assert.equal(candidate.ticketStatus, "available");
+  assert.equal(candidate.endDate, undefined);
+  assert.deepEqual(candidate.warnings, ["JSON-LD Event contains an invalid end date"]);
+});
