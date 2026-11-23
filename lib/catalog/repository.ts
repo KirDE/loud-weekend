@@ -92,6 +92,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
               start: performance.start,
               artist: performance.artistName,
               timeZone: performance.timeZone ?? "UTC",
+              sourcePerformanceId: performance.sourcePerformanceId ?? undefined,
               window:
                 performance.startsAt && performance.endsAt
                   ? {
@@ -140,6 +141,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
               start: performance.start,
               artist: performance.artistName,
               timeZone: performance.timeZone ?? "UTC",
+              sourcePerformanceId: performance.sourcePerformanceId ?? undefined,
               window:
                 performance.startsAt && performance.endsAt
                   ? {
