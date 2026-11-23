@@ -47,6 +47,8 @@ import {
   type DiscoveryArtist,
 } from "@/lib/discovery-artists";
 import { DiscoveryArtistPicker } from "./DiscoveryArtistPicker";
+import { DiscoverySearch } from "./DiscoverySearch";
+import type { SuggestionArtist } from "@/lib/discovery-suggestions";
 import {
   defaultDiscoveryPreferences,
   discoveryDistances,
@@ -60,10 +62,12 @@ export function FestivalExplorer({
   festivals,
   discoveryLineups,
   matchingArtists,
+  suggestionArtists,
 }: {
   festivals: Festival[];
   discoveryLineups?: DiscoveryLineups;
   matchingArtists?: readonly DiscoveryArtist[];
+  suggestionArtists?: readonly SuggestionArtist[];
 }) {
   const { locale, t } = useLanguage();
   const planner = useLocalPlanner();
@@ -249,28 +253,14 @@ export function FestivalExplorer({
   return (
     <section className="explorer">
       <div className="filterBar">
-        <div className="search" data-ready={filtersReady}>
-          <span aria-hidden="true">⌕</span>
-          <input
-            ref={searchRef}
-            aria-label={t("filterSearch")}
-            value={query}
-            onChange={(event) => updateFilters({ query: event.target.value })}
-            placeholder={t("search")}
-          />
-          {query && (
-            <button
-              type="button"
-              aria-label={t("clearSearch")}
-              onClick={() => {
-                updateFilters({ query: "" });
-                searchRef.current?.focus();
-              }}
-            >
-              <span aria-hidden="true">✕</span>
-            </button>
-          )}
-        </div>
+        <DiscoverySearch
+          query={query}
+          ready={filtersReady}
+          festivals={festivals}
+          artists={suggestionArtists}
+          inputRef={searchRef}
+          onChange={(query) => updateFilters({ query })}
+        />
         <select
           aria-label={t("countries")}
           value={country}
