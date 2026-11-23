@@ -18,13 +18,15 @@ export function DiscoverySearch({ query, ready, festivals, artists, inputRef, on
   const [open, setOpen] = useState(false);
   const [settled, setSettled] = useState("");
   const panel = useRef<HTMLDivElement>(null);
+  const focusOnOpen = useRef(false);
   const index = useMemo(() => discoverySuggestionIndex(festivals, artists ?? []), [festivals, artists]);
   useEffect(() => {
     const timer = window.setTimeout(() => setSettled(query), 160);
     return () => window.clearTimeout(timer);
   }, [query]);
 
-  const active = open && settled === query && query.trim().length >= 2 && query.length <= 80;
+  const canSuggest = settled === query && query.trim().length >= 2 && query.length <= 80;
+  const active = open && canSuggest;
   const matches = useMemo(() => discoverySuggestions(active ? settled : "", index, locale), [active, settled, index, locale]);
   const groups = [
     { title: t("artistSuggestions"), items: matches.artists },
@@ -43,9 +45,14 @@ export function DiscoverySearch({ query, ready, festivals, artists, inputRef, on
         inputRef.current?.focus();
         setOpen(false);
       }
-      if (event.key === "ArrowDown" && event.target === inputRef.current && active && anyMatches) {
+      if (event.key === "ArrowDown" && event.target === inputRef.current && canSuggest) {
+        if (open && !anyMatches) return;
         event.preventDefault();
-        panel.current?.querySelector<HTMLElement>("a,button")?.focus();
+        if (open) panel.current?.querySelector<HTMLElement>("a,button")?.focus();
+        else {
+          focusOnOpen.current = true;
+          setOpen(true);
+        }
       }
     }}>
     <span aria-hidden="true">⌕</span>
@@ -53,7 +60,13 @@ export function DiscoverySearch({ query, ready, festivals, artists, inputRef, on
       onChange={event => { setOpen(true); onChange(event.target.value); }} placeholder={t("search")} />
     {query && <button type="button" className="clearDiscoverySearch" aria-label={t("clearSearch")}
       onClick={() => { onChange(""); inputRef.current?.focus(); }}><span aria-hidden="true">✕</span></button>}
-    {active && <div className="discoverySuggestions" ref={panel} aria-label={t("searchSuggestions")}>
+    {active && <div className="discoverySuggestions" ref={node => {
+      panel.current = node;
+      if (node && focusOnOpen.current) {
+        focusOnOpen.current = false;
+        node.querySelector<HTMLElement>("a,button")?.focus();
+      }
+    }} aria-label={t("searchSuggestions")}>
       {!anyMatches && <p role="status">{t("noSearchSuggestions")}</p>}
       {groups.map(group => group.items.length > 0 && <section key={group.title} aria-label={group.title}>
         <strong>{group.title}</strong>
