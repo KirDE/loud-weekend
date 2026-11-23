@@ -3,9 +3,17 @@ import { expect, test } from "@playwright/test";
 test.use({ serviceWorkers: "block" });
 
 async function switchWithoutNavigation(page, language, selector = ".languagePicker select") {
-  await expect.poll(() => page.locator(selector).evaluate((element) => Object.keys(element).some((key) => key.startsWith("__reactProps")))).toBe(true);
+  await expect
+    .poll(() =>
+      page
+        .locator(selector)
+        .evaluate((element) => Object.keys(element).some((key) => key.startsWith("__reactProps"))),
+    )
+    .toBe(true);
   const url = page.url();
-  await page.evaluate(() => { window.__languageDocument = "same-document"; });
+  await page.evaluate(() => {
+    window.__languageDocument = "same-document";
+  });
   await page.locator(selector).selectOption(language);
   await expect(page.locator("html")).toHaveAttribute("lang", language);
   expect(page.url()).toBe(url);
@@ -13,12 +21,19 @@ async function switchWithoutNavigation(page, language, selector = ".languagePick
   expect(await page.evaluate(() => localStorage.getItem("festival-radar-language"))).toBe(language);
 }
 
-test("[no-db] prefixed switch preserves query/hash and preference survives reload and navigation", async ({ page }) => {
-  await page.route("**/api/**", (route) => route.fulfill({status:401,contentType:"application/json",body:"{}"}));
+test("[no-db] prefixed switch preserves query/hash and preference survives reload and navigation", async ({
+  page,
+}) => {
+  await page.route("**/api/**", (route) =>
+    route.fulfill({ status: 401, contentType: "application/json", body: "{}" }),
+  );
   await page.goto("/en/submit/?filter=keep&filter=second#main-content");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   for (const language of ["de", "ru", "en", "ru"]) await switchWithoutNavigation(page, language);
-  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://loudweekend.eu/en/submit/");
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+    "href",
+    "https://loudweekend.eu/en/submit/",
+  );
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Предложить фестиваль");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "ru");
@@ -31,8 +46,12 @@ test("[no-db] prefixed switch preserves query/hash and preference survives reloa
   await expect(page.locator(".languagePicker select")).toHaveValue("ru");
 });
 
-test("[no-db] brand and submission navigation stay bare after a language choice", async ({ page }) => {
-  await page.route("**/api/**", (route) => route.fulfill({ status: 401, contentType: "application/json", body: "{}" }));
+test("[no-db] brand and submission navigation stay bare after a language choice", async ({
+  page,
+}) => {
+  await page.route("**/api/**", (route) =>
+    route.fulfill({ status: 401, contentType: "application/json", body: "{}" }),
+  );
   await page.goto("/de/submit/?source=header#main-content");
   await switchWithoutNavigation(page, "ru");
   await expect(page.locator("a.brand")).toHaveAttribute("href", "/");
@@ -47,7 +66,9 @@ test("[no-db] brand and submission navigation stay bare after a language choice"
   await page.locator(".submissionForm [name=officialUrl]").fill("https://example.test/");
   await page.locator(".submissionForm [name=year]").fill("2027");
   await page.getByRole("button", { name: "Отправить редакции" }).click();
-  await expect(page.locator(".submissionForm [role=status]")).toContainText("Не удалось отправить.");
+  await expect(page.locator(".submissionForm [role=status]")).toContainText(
+    "Не удалось отправить.",
+  );
   await page.getByRole("button", { name: "Аккаунт" }).click();
   await expect(page.getByRole("tab", { name: "Войти" })).toBeVisible();
   await page.goBack();
@@ -55,26 +76,43 @@ test("[no-db] brand and submission navigation stay bare after a language choice"
   await expect(page.locator(".languagePicker select")).toHaveValue("ru");
 });
 
-for (const [routeLanguage, selectedLanguage, planLabel] of [["de", "ru", "Мой план"], ["ru", "de", "Mein Plan"]]) {
-  test("brand click from /" + routeLanguage + "/ detail keeps the selected " + selectedLanguage + " language on bare routes", async ({ page }) => {
-    await page.goto("/" + routeLanguage + "/festivals/synthetic-fest/");
-    const origin = new URL(page.url()).origin;
-    await switchWithoutNavigation(page, selectedLanguage);
-    await page.locator("a.brand").click();
-    await expect(page).toHaveURL(origin + "/");
-    await expect(page.locator("html")).toHaveAttribute("lang", selectedLanguage);
-    await expect(page.locator(".languagePicker select")).toHaveValue(selectedLanguage);
-    await page.getByRole("navigation").getByRole("link", { name: planLabel, exact: true }).click();
-    await expect(page).toHaveURL(origin + "/planner/");
-    await expect(page.locator("html")).toHaveAttribute("lang", selectedLanguage);
-    await page.reload();
-    await expect(page.locator(".languagePicker select")).toHaveValue(selectedLanguage);
-    await expect(page.locator("html")).toHaveAttribute("lang", selectedLanguage);
-  });
+for (const [routeLanguage, selectedLanguage, planLabel] of [
+  ["de", "ru", "Мой план"],
+  ["ru", "de", "Mein Plan"],
+]) {
+  test(
+    "brand click from /" +
+      routeLanguage +
+      "/ detail keeps the selected " +
+      selectedLanguage +
+      " language on bare routes",
+    async ({ page }) => {
+      await page.goto("/" + routeLanguage + "/festivals/synthetic-fest/");
+      const origin = new URL(page.url()).origin;
+      await switchWithoutNavigation(page, selectedLanguage);
+      await page.locator("a.brand").click();
+      await expect(page).toHaveURL(origin + "/");
+      await expect(page.locator("html")).toHaveAttribute("lang", selectedLanguage);
+      await expect(page.locator(".languagePicker select")).toHaveValue(selectedLanguage);
+      await page
+        .getByRole("navigation")
+        .getByRole("link", { name: planLabel, exact: true })
+        .click();
+      await expect(page).toHaveURL(origin + "/planner/");
+      await expect(page.locator("html")).toHaveAttribute("lang", selectedLanguage);
+      await page.reload();
+      await expect(page.locator(".languagePicker select")).toHaveValue(selectedLanguage);
+      await expect(page.locator("html")).toHaveAttribute("lang", selectedLanguage);
+    },
+  );
 }
 
-test("[no-db] fresh prefixed links honor their locale and bare HTML reads the preference cookie", async ({ page }) => {
-  await page.route("**/api/**", (route) => route.fulfill({status:401,contentType:"application/json",body:"{}"}));
+test("[no-db] fresh prefixed links honor their locale and bare HTML reads the preference cookie", async ({
+  page,
+}) => {
+  await page.route("**/api/**", (route) =>
+    route.fulfill({ status: 401, contentType: "application/json", body: "{}" }),
+  );
   await page.goto("/de/submit/");
   await expect(page.locator("html")).toHaveAttribute("lang", "de");
   await page.waitForFunction(() => document.cookie.includes("festival-radar-language=de"));
@@ -88,45 +126,72 @@ test("[no-db] fresh prefixed links honor their locale and bare HTML reads the pr
   expect(response.headers()["set-cookie"]).toBeUndefined();
 });
 
-test("[no-db] blocked language-preference storage still restores from the cookie", async ({ page }) => {
-  await page.route("**/api/**", (route) => route.fulfill({status:401,contentType:"application/json",body:"{}"}));
+test("[no-db] blocked language-preference storage still restores from the cookie", async ({
+  page,
+}) => {
+  await page.route("**/api/**", (route) =>
+    route.fulfill({ status: 401, contentType: "application/json", body: "{}" }),
+  );
   await page.addInitScript(() => {
     const storage = window.localStorage;
     const get = storage.getItem.bind(storage);
     const set = storage.setItem.bind(storage);
-    storage.getItem = (key) => key === "festival-radar-language" ? (() => { throw new Error("Preference storage blocked"); })() : get(key);
-    storage.setItem = (key, value) => key === "festival-radar-language" ? (() => { throw new Error("Preference storage blocked"); })() : set(key, value);
+    storage.getItem = (key) =>
+      key === "festival-radar-language"
+        ? (() => {
+            throw new Error("Preference storage blocked");
+          })()
+        : get(key);
+    storage.setItem = (key, value) =>
+      key === "festival-radar-language"
+        ? (() => {
+            throw new Error("Preference storage blocked");
+          })()
+        : set(key, value);
   });
   await page.goto("/en/submit/?keep=query#main-content");
   const url = page.url();
   await page.locator(".languagePicker select").selectOption("de");
-  await expect(page.locator("html")).toHaveAttribute("lang","de");
+  await expect(page.locator("html")).toHaveAttribute("lang", "de");
   expect(page.url()).toBe(url);
   await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("lang","de");
+  await expect(page.locator("html")).toHaveAttribute("lang", "de");
 });
 
-test("prefixed planner switching preserves the plan, query and hash on reload and navigation", async ({ page }) => {
+test("prefixed planner switching preserves the plan, query and hash on reload and navigation", async ({
+  page,
+}) => {
   await page.goto("/en/planner/?filter=keep#main-content");
   await page.waitForFunction(() => document.cookie.includes("festival-radar-language=en"));
-  await switchWithoutNavigation(page,"de");
-  await expect(page.getByRole("heading",{level:1})).toHaveText("Dein Plan für 2027");
+  await switchWithoutNavigation(page, "de");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Dein Plan für 2027");
   await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("lang","de");
-  await page.getByRole("navigation").getByRole("link",{name:"Benachrichtigungen",exact:true}).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "de");
+  await page
+    .getByRole("navigation")
+    .getByRole("link", { name: "Benachrichtigungen", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/notifications\/$/);
-  await expect(page.locator("html")).toHaveAttribute("lang","de");
+  await expect(page.locator("html")).toHaveAttribute("lang", "de");
 });
 
-
 test("[no-db] localStorage restores the choice when cookie access is blocked", async ({ page }) => {
-  await page.route("**/api/**", (route) => route.fulfill({status:401,contentType:"application/json",body:"{}"}));
-  await page.addInitScript(() => Object.defineProperty(document,"cookie",{
-    get:()=>{throw new Error("Cookies blocked");},set:()=>{throw new Error("Cookies blocked");},
-  }));
+  await page.route("**/api/**", (route) =>
+    route.fulfill({ status: 401, contentType: "application/json", body: "{}" }),
+  );
+  await page.addInitScript(() =>
+    Object.defineProperty(document, "cookie", {
+      get: () => {
+        throw new Error("Cookies blocked");
+      },
+      set: () => {
+        throw new Error("Cookies blocked");
+      },
+    }),
+  );
   await page.goto("/en/submit/?keep=query#main-content");
-  await switchWithoutNavigation(page,"ru");
+  await switchWithoutNavigation(page, "ru");
   await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("lang","ru");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ru");
   await expect(page).toHaveURL(/\/en\/submit\/\?keep=query#main-content$/);
 });

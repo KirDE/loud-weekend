@@ -13,6 +13,8 @@ export function parsePlannerState(value: string): Partial<PlannerState> {
   const parsed = JSON.parse(value) as Partial<PlannerState>;
   return {
     ...parsed,
-    playlistFestivals: Array.isArray(parsed.playlistFestivals) ? parsed.playlistFestivals.filter((item): item is string => typeof item === "string") : [],
+    playlistFestivals: Array.isArray(parsed.playlistFestivals)
+      ? parsed.playlistFestivals.filter((item): item is string => typeof item === "string")
+      : [],
   };
 }

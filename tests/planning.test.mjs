@@ -3,9 +3,18 @@ import test from "node:test";
 import { calendarFile, calendarUrls } from "../lib/planning.ts";
 
 const festival = {
-  slug: "test-fest", name: "Test, Rock; Fest", country: "Germany", countryCode: "DE",
-  city: "Köln", startDate: "2027-06-04", endDate: "2027-06-06", headliners: [], lineup: [],
-  officialUrl: "https://example.com/fest", status: "confirmed", editionYear: 2027,
+  slug: "test-fest",
+  name: "Test, Rock; Fest",
+  country: "Germany",
+  countryCode: "DE",
+  city: "Köln",
+  startDate: "2027-06-04",
+  endDate: "2027-06-06",
+  headliners: [],
+  lineup: [],
+  officialUrl: "https://example.com/fest",
+  status: "confirmed",
+  editionYear: 2027,
 };
 
 test("calendar export uses an exclusive end date and escaped text", () => {
