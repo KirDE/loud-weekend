@@ -7,7 +7,12 @@ export default async function SharedPlan({ params }: { params: Promise<{ slug: s
     where: { slug: (await params).slug },
     include: { document: true },
   });
-  if (!link || (link.expiresAt && link.expiresAt <= new Date())) notFound();
+  if (
+    !link ||
+    link.document.kind === "SEASON_ATTENDANCE" ||
+    (link.expiresAt && link.expiresAt <= new Date())
+  )
+    notFound();
   const payload = link.document.payload as { attendance?: Record<string, string> };
   return (
     <SharedPlanContent

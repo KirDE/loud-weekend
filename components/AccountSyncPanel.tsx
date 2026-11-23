@@ -1,16 +1,18 @@
 "use client";
 import { useEffect, useState } from "react";
 import { readCollections, mergeCollections } from "@/lib/collections";
+import { readSeasonAttendance } from "@/lib/planner-storage";
 import { useLanguage } from "./LanguageProvider";
 import { emptyPlannerState, type PlannerState, useLocalPlanner } from "./LocalPlanner";
-type Kind = "favorites" | "collections" | "saved-filters" | "plans";
+type Kind = "favorites" | "collections" | "saved-filters" | "plans" | "season-attendance";
 type Document = { id: string; payload: unknown; revision: number; updatedAt: string };
 type Conflict = { kind: Kind; local: unknown; remote: Document };
-const kinds: Kind[] = ["favorites", "collections", "saved-filters", "plans"];
+const kinds: Kind[] = ["favorites", "collections", "saved-filters", "plans", "season-attendance"];
 const labels = {
   en: {
     title: "Account sync",
     local: "Your local plan remains available while signed out.",
+    season: "Attendance from other seasons stays private and is not included in public plan links.",
     migrate: "Merge this device into my account",
     replace: "Use account data on this device",
     sync: "Sync now",
@@ -37,6 +39,8 @@ const labels = {
   de: {
     title: "Konto-Synchronisierung",
     local: "Dein lokaler Plan bleibt ohne Anmeldung verfügbar.",
+    season:
+      "Teilnahmeangaben aus anderen Saisons bleiben privat und erscheinen nicht in öffentlichen Plan-Links.",
     migrate: "Dieses Gerät mit meinem Konto zusammenführen",
     replace: "Kontodaten auf diesem Gerät verwenden",
     sync: "Jetzt synchronisieren",
@@ -63,6 +67,7 @@ const labels = {
   ru: {
     title: "Синхронизация аккаунта",
     local: "Без входа локальный план останется доступен.",
+    season: "Отметки об участии в других сезонах остаются личными и не видны по публичным ссылкам.",
     migrate: "Объединить данные устройства с аккаунтом",
     replace: "Использовать данные аккаунта на устройстве",
     sync: "Синхронизировать",
@@ -93,6 +98,7 @@ function payloads(p: ReturnType<typeof useLocalPlanner>): Record<Kind, unknown> 
     collections: readCollections({ playlistFestivals: p.playlistFestivals }),
     "saved-filters": { savedFilters: p.savedFilters },
     plans: { attendance: p.attendance },
+    "season-attendance": { seasonAttendance: p.seasonAttendance ?? {} },
   };
 }
 function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
@@ -103,6 +109,9 @@ function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
     playlistFestivals: readCollections(documents.collections?.payload).playlistFestivals,
     ...value("saved-filters"),
     ...value("plans"),
+    seasonAttendance: documents["season-attendance"]
+      ? readSeasonAttendance(value("season-attendance").seasonAttendance)
+      : undefined,
   };
 }
 function mergePayload(kind: Kind, remote: unknown, local: unknown) {
@@ -118,6 +127,13 @@ function mergePayload(kind: Kind, remote: unknown, local: unknown) {
       ),
     };
   if (kind === "collections") return mergeCollections(remote, local);
+  if (kind === "season-attendance")
+    return {
+      seasonAttendance: {
+        ...readSeasonAttendance(a.seasonAttendance),
+        ...readSeasonAttendance(b.seasonAttendance),
+      },
+    };
   if (kind === "plans") return { attendance: { ...a.attendance, ...b.attendance } };
   return { ...a, ...b };
 }
@@ -139,54 +155,73 @@ export function AccountSyncPanel({
     setBusyState(value);
     onBusyChange?.(value);
   }
-  async function load() {
-    try {
-      const me = await fetch("/api/auth/me", { cache: "no-store" });
-      if (!me.ok) {
-        setUser(null);
-        setDocs({});
-        return;
-      }
-      setUser((await me.json()).user);
-      setDocs({});
-      const entries = await Promise.all(
-        kinds.map(async (kind) => {
-          const response = await fetch("/api/sync/" + kind, { cache: "no-store" });
-          if (!response.ok) throw new Error(t.failed);
-          const document = (await response.json()).document as Document | null;
-          if (kind === "collections" && document) readCollections(document.payload);
-          return [kind, document] as const;
-        }),
-      );
-      setDocs(Object.fromEntries(entries.filter(([, document]) => document)));
-    } catch {
-      setStatus(t.failed);
-    }
-  }
+  const syncHeaders = (accountId: string) => ({ "X-Sync-Account": accountId });
 
   useEffect(() => {
+    let active: AbortController | undefined;
+    async function load() {
+      active?.abort();
+      const { signal } = (active = new AbortController());
+      setUser(null);
+      setDocs({});
+      setConflict(null);
+      setShareUrl("");
+      setStatus("");
+      try {
+        const me = await fetch("/api/auth/me", { cache: "no-store", signal });
+        if (!me.ok) return;
+        const { user: account } = (await me.json()) as { user: { id: string; email: string } };
+        const entries = await Promise.all(
+          kinds.map(async (kind) => {
+            const response = await fetch("/api/sync/" + kind, {
+              cache: "no-store",
+              headers: syncHeaders(account.id),
+              signal,
+            });
+            if (!response.ok) throw new Error(t.failed);
+            const document = (await response.json()).document as Document | null;
+            if (kind === "collections" && document) readCollections(document.payload);
+            return [kind, document] as const;
+          }),
+        );
+        if (signal.aborted) return;
+        setDocs(Object.fromEntries(entries.filter(([, document]) => document)));
+        setUser(account);
+      } catch {
+        if (!signal.aborted) setStatus(t.failed);
+      }
+    }
     void load();
     const listener = () => void load();
     window.addEventListener("loud-weekend-authenticated", listener);
-    return () => window.removeEventListener("loud-weekend-authenticated", listener);
+    window.addEventListener("loud-weekend-signed-out", listener);
+    return () => {
+      active?.abort();
+      window.removeEventListener("loud-weekend-authenticated", listener);
+      window.removeEventListener("loud-weekend-signed-out", listener);
+    };
   }, []);
   async function put(kind: Kind, payload: unknown, revision: number) {
+    if (!user) throw new Error(t.failed);
+    const accountId = user.id;
     const response = await fetch(`/api/sync/${kind}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ payload, revision }),
+      body: JSON.stringify({ payload, revision, accountId }),
     });
-    const body = await response.json();
     if (response.status === 409) {
-      const latest = await fetch(`/api/sync/${kind}`, { cache: "no-store" }).then((value) =>
-        value.json(),
-      );
-      setConflict({ kind, local: payload, remote: latest.document });
+      const latest = await fetch(`/api/sync/${kind}`, {
+        cache: "no-store",
+        headers: syncHeaders(accountId),
+      });
+      if (!latest.ok) throw new Error(t.failed);
+      setConflict({ kind, local: payload, remote: (await latest.json()).document });
       throw new Error("conflict");
     }
     if (!response.ok) throw new Error(t.failed);
-    setDocs((current) => ({ ...current, [kind]: body.document }));
-    return body.document as Document;
+    const { document } = await response.json();
+    setDocs((current) => ({ ...current, [kind]: document }));
+    return document as Document;
   }
   async function synchronize(mode: "merge" | "remote" | "normal" = "normal") {
     setBusy(true);
@@ -201,6 +236,7 @@ export function AccountSyncPanel({
       const local = payloads(planner),
         next = { ...docs };
       for (const kind of kinds) {
+        if (kind === "season-attendance" && !next[kind] && !planner.seasonAttendance) continue;
         const content =
           mode === "merge" && next[kind]
             ? mergePayload(kind, next[kind]!.payload, local[kind])
@@ -221,19 +257,24 @@ export function AccountSyncPanel({
     if (!conflict) return;
     setBusy(true);
     try {
-      if (useLocal) await put(conflict.kind, conflict.local, conflict.remote.revision);
-      else {
+      if (useLocal) {
+        await put(conflict.kind, conflict.local, conflict.remote.revision);
+      } else {
         const next = { ...docs, [conflict.kind]: conflict.remote };
         setDocs(next);
-        if (conflict.kind === "collections")
+        if (conflict.kind === "season-attendance") {
           planner.replace({
-            favoriteFestivals: planner.favoriteFestivals,
-            favoriteArtists: planner.favoriteArtists,
-            attendance: planner.attendance,
-            savedFilters: planner.savedFilters,
+            ...payloadFromDevice(),
+            seasonAttendance: plannerFrom(next).seasonAttendance,
+          });
+        } else if (conflict.kind === "collections") {
+          planner.replace({
+            ...payloadFromDevice(),
             playlistFestivals: readCollections(conflict.remote.payload).playlistFestivals,
           });
-        else planner.replace(plannerFrom(next));
+        } else {
+          planner.replace({ ...plannerFrom(next), seasonAttendance: undefined });
+        }
       }
       setConflict(null);
       setStatus(t.current);
@@ -243,6 +284,18 @@ export function AccountSyncPanel({
       setBusy(false);
     }
   }
+
+  function payloadFromDevice(): PlannerState {
+    return {
+      favoriteFestivals: planner.favoriteFestivals,
+      favoriteArtists: planner.favoriteArtists,
+      attendance: planner.attendance,
+      seasonAttendance: planner.seasonAttendance,
+      savedFilters: planner.savedFilters,
+      playlistFestivals: planner.playlistFestivals,
+    };
+  }
+
   async function share() {
     setBusy(true);
     setStatus("");
@@ -309,7 +362,7 @@ export function AccountSyncPanel({
       <section className="plannerSection accountSync">
         <h2>{t.title}</h2>
         <p>{t.local}</p>
-        <strong>{t.login}</strong>
+        <strong>{status || t.login}</strong>
       </section>
     );
   return (
@@ -335,6 +388,7 @@ export function AccountSyncPanel({
           {t.sync}
         </button>
       </div>
+      <p>{t.season}</p>
       {conflict && (
         <div className="syncConflict" role="alert">
           <strong>{t.conflict}</strong>

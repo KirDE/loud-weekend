@@ -113,7 +113,7 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
         setState((current) => ({
           ...emptyPlannerState,
           ...next,
-          seasonAttendance: current.seasonAttendance,
+          seasonAttendance: next.seasonAttendance ?? current.seasonAttendance,
         })),
       merge: (next: Partial<PlannerState>) =>
         setState((current) => ({

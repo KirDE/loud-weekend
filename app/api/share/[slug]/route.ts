@@ -6,7 +6,11 @@ export async function GET(_: Request, context: { params: Promise<{ slug: string 
     where: { slug: (await context.params).slug },
     include: { document: true },
   });
-  if (!link || (link.expiresAt && link.expiresAt <= new Date()))
+  if (
+    !link ||
+    link.document.kind === "SEASON_ATTENDANCE" ||
+    (link.expiresAt && link.expiresAt <= new Date())
+  )
     return error("Share link not found.", 404);
   return Response.json({
     kind: link.document.kind,

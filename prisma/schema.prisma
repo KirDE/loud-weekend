@@ -11,6 +11,7 @@ enum SyncKind {
   COLLECTIONS
   SAVED_FILTERS
   FESTIVAL_PLANS
+  SEASON_ATTENDANCE
 }
 
 enum NotificationChannel {
