@@ -258,3 +258,33 @@ test("publication refuses alias-driven cross-billing changes and global collisio
     /Ambiguous artist identity/,
   );
 });
+
+test("a canonical addition accepts an unambiguous alias in both raw observations", async () => {
+  const name = "Other Identity";
+  const alias = "Other Recorded Billing";
+  const artist = await db.artist.update({
+    where: { slug: "archived-other" },
+    data: { name, aliases: [alias] },
+  });
+  try {
+    const value = result(alias);
+    value.changes[0].after = name;
+    const attempt = await persist(value);
+    const publication = await publishIngestionResult(db, {
+      attemptId: attempt.id,
+      result: value,
+      sourceCommit: "alias-test",
+    });
+    assert.ok(publication);
+    const entry = await db.lineupEntry.findFirstOrThrow({
+      where: { artistId: artist.id, edition: { festival: { slug: value.festivalSlug } } },
+    });
+    assert.equal(entry.billing, "HEADLINER");
+    const saved = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    assert.deepEqual(saved.normalized.headliners, [alias]);
+  } finally {
+    await seedCatalog(db, catalogSeed);
+  }
+});
