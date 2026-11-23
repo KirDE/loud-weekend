@@ -150,12 +150,22 @@ export function parseOfflineTrip(value) {
       !(value.location === null || shortText(value.location)) || !instant(value.updatedAt) ||
       !Array.isArray(value.timetable) || value.timetable.length > 800) return null;
   const timetable = [];
+  const validTimeZones = new Set();
   for (const row of value.timetable) {
     if (!row || !isoDate(row.date) || typeof row.start !== "string" || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(row.start) ||
         !shortText(row.stage) || !shortText(row.artist) || !shortText(row.timeZone) || !instant(row.checkedAt) ||
         !["scheduled", "cancelled"].includes(row.status)) return null;
     // Copies stored before the server checked edition bounds may contain extra rows.
     if ((value.startDate && row.date < value.startDate) || (value.endDate && row.date > value.endDate)) continue;
+    if (!validTimeZones.has(row.timeZone)) {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: row.timeZone });
+      } catch {
+        // Keep legacy trip details, but never show a performance with an invalid time zone.
+        continue;
+      }
+      validTimeZones.add(row.timeZone);
+    }
     timetable.push({
       date: row.date, start: row.start, stage: row.stage, artist: row.artist,
       timeZone: row.timeZone, status: row.status, checkedAt: row.checkedAt,

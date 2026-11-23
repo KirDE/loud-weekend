@@ -85,7 +85,7 @@ test("asset eviction keeps the installed trip shell, module and public catalogue
 
 test("worker activation removes only obsolete caches for its scope", async () => {
   const obsolete = "festival-radar-public-v9";
-  const current = "festival-radar-public-v11";
+  const current = "festival-radar-public-v12";
   const keys = new Set([obsolete, current, obsolete + ":%2Fradar", "unrelated-app-cache"]);
   const { listeners } = await loadWorker({ cachesImpl: {
     keys: async () => [...keys],
