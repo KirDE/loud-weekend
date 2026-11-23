@@ -1,7 +1,8 @@
 import type { Festival } from "./domain/festival";
 
-export function festivalMapPoint(festival: Festival): [number, number] | undefined {
-  const point = festival.coordinates;
+export function festivalMapPoint(festival: Festival) {
+  const { venue } = festival;
+  const point = venue ?? festival.coordinates;
   if (!point) return;
   const { latitude, longitude } = point;
   // The map uses Web Mercator. Do not silently clamp points outside its extent.
@@ -11,6 +12,6 @@ export function festivalMapPoint(festival: Festival): [number, number] | undefin
     Number.isFinite(longitude) &&
     Math.abs(longitude) <= 180
   ) {
-    return [longitude, latitude];
+    return { coordinates: [longitude, latitude] as [number, number], venue };
   }
 }

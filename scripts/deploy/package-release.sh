@@ -20,6 +20,7 @@ cp scripts/add-artist-aliases.mjs scripts/ingest-festivals.mjs\
  scripts/drain-ingestion-notifications.mjs scripts/export-ingestion-review-queue.mjs "$stage/app/scripts/"
 cp scripts/configure-spotify-repertoire.ts "$stage/app/scripts/"
 cp scripts/import-event-receiver.mjs "$stage/app/scripts/"
+cp scripts/import-venue.mjs "$stage/app/scripts/"
 cp scripts/db-due-tick.mjs scripts/report-db-due-health.mjs scripts/report-db-due-run.mjs "$stage/app/scripts/"
 cp scripts/bootstrap-parser-repairs.mjs scripts/import-agent-client.mjs\
  scripts/refresh-spotify-stats.mjs scripts/audit-catalog.ts scripts/import-timetable.mjs\
@@ -81,3 +82,5 @@ grep -Fxq 'app/scripts/deploy/provider-timers.sh' "$archive_contents"
 grep -Fxq 'app/scripts/deploy/check-python-release.sh' "$archive_contents"
 
 grep -Fxq 'app/scripts/add-artist-aliases.mjs' "$archive_contents"
+grep -Fxq 'app/scripts/import-venue.mjs' "$archive_contents"
+grep -Fxq 'app/lib/catalog/venue-import.ts' "$archive_contents"

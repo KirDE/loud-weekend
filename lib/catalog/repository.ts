@@ -1,3 +1,4 @@
+import { publicFestivalVenue } from "./festival-venues.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
 import type { PrismaClient } from "@prisma/client";
 import type { ArtistProfile } from "../domain/artist.ts";
@@ -30,6 +31,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       this.client.festivalEdition.findMany({
         include: {
           festival: true,
+          venue: true,
           sources: { where: { enabled: true }, select: { deprecatedAt: true } },
           lineup: { include: { artist: true }, orderBy: [{ billing: "asc" }, { position: "asc" }] },
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
@@ -85,6 +87,12 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           row.festival.latitude === null || row.festival.longitude === null
             ? undefined
             : { latitude: row.festival.latitude, longitude: row.festival.longitude },
+        venue: publicFestivalVenue(row.venue, {
+          editionYear: row.year,
+          city: row.festival.city ?? undefined,
+          countryCode: row.festival.countryCode,
+          officialUrl: row.festival.officialUrl,
+        }),
         timetable: row.timetable.length
           ? row.timetable.map((performance) => ({
               date: dateOnly(performance.date)!,

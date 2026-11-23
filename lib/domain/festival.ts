@@ -10,6 +10,14 @@ export type TimetableEntry = {
   observedAt: string;
 };
 
+export type FestivalVenue = {
+  name: string;
+  source: string;
+  checkedOn: string;
+  latitude: number;
+  longitude: number;
+};
+
 export type Festival = {
   slug: string;
   name: string;
@@ -34,6 +42,7 @@ export type Festival = {
   updatedAt: string;
   genres: string[];
   coordinates?: { latitude: number; longitude: number };
+  venue?: FestivalVenue;
   timetable?: TimetableEntry[];
 };
 
