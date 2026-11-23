@@ -7,10 +7,12 @@ export function artistOrthographyVariants(name: string) {
   // Expand each position independently: opening/closing quotes may be mixed.
   let spellings = [""];
   for (const character of stem) {
-    spellings = spellings.flatMap(prefix =>
-      (character === "'" ? ["'", "’", "‘"] : [character]).map(value => prefix + value));
+    spellings = spellings.flatMap((prefix) =>
+      (character === "'" ? ["'", "’", "‘"] : [character]).map((value) => prefix + value),
+    );
     // Untrusted source text must not cause exponential query growth. Fail closed.
-    if (spellings.length > 1024) throw new Error("Ambiguous artist identity: excessive apostrophe variants");
+    if (spellings.length > 1024)
+      throw new Error("Ambiguous artist identity: excessive apostrophe variants");
   }
-  return spellings.flatMap(spelling => [spelling, spelling + "."]);
+  return spellings.flatMap((spelling) => [spelling, spelling + "."]);
 }

@@ -8,7 +8,12 @@ export function festivalLogoKey(slug: string, name: string) {
 }
 
 export function festivalLogoInitials(name: string) {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]).join("");
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("");
 }
 
 export function createFestivalLogoState(slug: string, basePath = ""): FestivalLogoState {
