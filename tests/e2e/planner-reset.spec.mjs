@@ -93,3 +93,29 @@ test("undo merges the backup without removing selections made after reset", asyn
   await page.getByRole("button", { name: copy.en.undo }).click();
   await expect.poll(async () => (await state(page)).playlistFestivals.slice().sort()).toEqual(["synthetic-fest", "synthetic-south"]);
 });
+
+test("backup, reset and undo include edition running orders without writing the account", async ({ page }) => {
+  const writes = await setup(page, true);
+  const current = "festival-radar-timetable-v1:synthetic-fest:2027";
+  const archive = "festival-radar-timetable-v1:synthetic-fest:2026";
+  const unrelated = "festival-radar-timetable-v1:settings";
+  await page.goto("/en/planner/");
+  await page.evaluate(({ current, archive, unrelated }) => {
+    localStorage.setItem(current, '["show-1"]');
+    localStorage.setItem(archive, '["archived-show"]');
+    localStorage.setItem(unrelated, "keep");
+  }, { current, archive, unrelated });
+  await page.getByRole("button", { name: copy.en.clear, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  const href = await dialog.getByRole("link", { name: copy.en.backup }).getAttribute("href");
+  expect(JSON.parse(decodeURIComponent(href.split(",")[1])).runningOrders).toEqual({
+    [current]: ["show-1"], [archive]: ["archived-show"],
+  });
+  await dialog.getByRole("button", { name: copy.en.reset, exact: true }).click();
+  expect(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [current, archive, unrelated])).toEqual([null, null, "keep"]);
+  await page.evaluate(key => localStorage.setItem(key, '["new-show"]'), current);
+  await page.getByRole("button", { name: copy.en.undo }).click();
+  expect(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [current, archive, unrelated]))
+    .toEqual(['["new-show","show-1"]', '["archived-show"]', "keep"]);
+  expect(writes()).toBe(0);
+});
