@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
+import type { PublicFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { FestivalOverview } from "./FestivalOverview";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
@@ -22,12 +23,14 @@ export function FestivalDetail({
   festivals,
   artistSlugs,
   playlist,
+  overview,
   artistPopularity = {},
 }: {
   item: Festival;
   festivals: Festival[];
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
+  overview?: PublicFestivalOverview;
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
   const { locale, t } = useLanguage();
@@ -147,7 +150,7 @@ export function FestivalDetail({
           </div>
         )}
       </div>
-      <FestivalOverview festival={item} />
+      <FestivalOverview overview={overview} />
       <section className="lineupSection">
         <div className="sectionHeading">
           <div>

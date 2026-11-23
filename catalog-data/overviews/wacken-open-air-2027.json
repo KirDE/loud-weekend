@@ -1,0 +1,16 @@
+{
+  "festivalSlug": "wacken-open-air",
+  "editionYear": 2027,
+  "city": "Wacken",
+  "countryCode": "DE",
+  "organizerHost": "wacken.com",
+  "checkedOn": "2026-11-23",
+  "sources": [
+    "https://www.wacken.com/de/rechtliches/agb-2027/"
+  ],
+  "summary": {
+    "en": "A four-day metal festival on the open-air grounds in Wacken, Schleswig-Holstein. The event covers the main and side stages, Wackinger Village and Bullhead City.",
+    "de": "Ein viertägiges Metal-Festival auf dem Freigelände in Wacken, Schleswig-Holstein. Zum Festival gehören Haupt- und Nebenbühnen, das Wackinger Village und die Bullhead City.",
+    "ru": "Четырёхдневный метал-фестиваль на открытой площадке в Вакене, земля Шлезвиг-Гольштейн. Помимо основных и дополнительных сцен, фестиваль включает Wackinger Village и Bullhead City."
+  }
+}

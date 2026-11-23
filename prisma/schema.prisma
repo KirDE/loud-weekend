@@ -324,8 +324,23 @@ model FestivalEdition {
   playlists       FestivalPlaylist[]
   sources         FestivalSource[]
 
+  overview        EditionOverview?
+
   @@unique([festivalId, year])
   @@index([year, recordState])
+}
+
+model EditionOverview {
+  editionId     String          @id
+  city          String
+  countryCode   String
+  organizerHost String
+  checkedOn     DateTime        @db.Date
+  sourceUrls    String[]
+  summaryEn     String
+  summaryDe     String
+  summaryRu     String
+  edition       FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
 }
 
 model Artist {

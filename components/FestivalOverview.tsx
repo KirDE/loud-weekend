@@ -1,7 +1,6 @@
 "use client";
 
-import type { Festival } from "@/lib/domain/festival";
-import { festivalOverview } from "@/lib/catalog/festival-overviews";
+import type { PublicFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { useLanguage } from "./LanguageProvider";
 
 const labels = {
@@ -10,9 +9,8 @@ const labels = {
   ru: { title: "О фестивале", source: "Официальный источник", checked: "Источники проверены" },
 };
 
-export function FestivalOverview({ festival }: { festival: Festival }) {
+export function FestivalOverview({ overview }: { overview?: PublicFestivalOverview }) {
   const { language, locale } = useLanguage();
-  const overview = festivalOverview(festival);
   if (!overview) return null;
   const copy = labels[language];
   const date = new Date(`${overview.checkedOn}T00:00:00Z`);
