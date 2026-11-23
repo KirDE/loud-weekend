@@ -1,3 +1,4 @@
+import { readArtistSelection, type ArtistMatchMode } from "./discovery-artists.ts";
 import { discoverySorts, type DiscoverySort } from "./discovery-sort.ts";
 import { defaultDiscoveryDates, readDiscoveryDates, type DiscoveryDates } from "./discovery-dates.ts";
 import type { Coordinates } from "./festival-discovery.ts";
@@ -22,6 +23,8 @@ export type DiscoveryPreferences = DiscoveryDates & {
   origin: keyof typeof discoveryOrigins;
   maxDistance: string;
   sort: DiscoverySort;
+  artistSelection?: string[];
+  artistMatch?: ArtistMatchMode;
 };
 
 export const defaultDiscoveryPreferences: DiscoveryPreferences = {
@@ -41,6 +44,8 @@ export function readDiscoveryPreferences(value: unknown): DiscoveryPreferences {
   const fields = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
   return {
     ...readDiscoveryDates(fields),
+    ...(Array.isArray(fields.artistSelection) ? { artistSelection: readArtistSelection(fields.artistSelection) } : {}),
+    ...(fields.artistMatch === "any" || fields.artistMatch === "all" ? { artistMatch: fields.artistMatch } : {}),
     query: typeof fields.query === "string" ? fields.query : defaultDiscoveryPreferences.query,
     country: typeof fields.country === "string" && /^[A-Z]{2}$/.test(fields.country) ? fields.country : defaultDiscoveryPreferences.country,
     announcedOnly: fields.announcedOnly === true,

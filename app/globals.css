@@ -1462,3 +1462,16 @@ a:focus-visible, select:focus-visible, summary:focus-visible {
 .discoveryOrder { display: flex; justify-content: flex-end; margin-block: 12px 0; }
 .discoveryOrder label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .discoveryOrder select { max-width: 100%; }
+
+.discoveryArtistChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+}
+
+.discoveryArtistChoices li { min-width: 0; }
+.discoveryArtistChoices button { max-width: 100%; overflow-wrap: anywhere; }
+.discoveryArtistPicker input { max-width: 100%; width: 100%; }
+.artistMatchSummary { color: var(--muted); overflow-wrap: anywhere; }

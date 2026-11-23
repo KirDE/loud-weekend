@@ -33,6 +33,7 @@ export function DiscoveryShare({ filters, favorites }: { filters: DiscoveryPrefe
   return <details className="discoveryDates">
     <summary>{t("shareDiscovery")}</summary>
     <p>{t("shareDiscoveryPrivacy")}</p>
+    {!!filters.artistSelection?.length && <p>{t("shareMatchArtists")}</p>}
     {filters.query && filters.query.length <= 120 && <label className="discoveryWeekend">
       <input type="checkbox" checked={includeText} onChange={event => setConsentedText(event.target.checked ? filters.query : "")} />
       {t("shareDiscoveryText")}
