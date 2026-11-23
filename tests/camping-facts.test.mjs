@@ -1,23 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { campingFacts, campingRecords } from "../lib/catalog/camping-facts.ts";
+import { campingSourceHost } from "../lib/catalog/camping-facts.ts";
+import { importReviewedCamping } from "../lib/catalog/camping-import.ts";
 
-for (const record of campingRecords) {
-  test(`camping facts require the exact published edition and organizer: ${record.slug}`, () => {
-    const officialUrl = `https://www.${record.organizer}/`;
-    const fixture = { slug: record.slug, city: record.city, editionYear: record.year, officialUrl };
-    assert.equal(campingFacts(fixture), record);
-    assert.equal(new URL(record.source).hostname.replace(/^www\./, ""), record.organizer);
-    for (const change of [{ editionYear: 2026 }, { editionYear: undefined }, { city: "Unknown" },
-      { slug: "another-event" }, { officialUrl: "https://festival.example.test" }, { officialUrl: "invalid" }]) {
-      assert.equal(campingFacts({ ...fixture, ...change }), undefined);
-    }
-    for (const fact of record.facts) {
-      if (fact.field === "arrival") {
-        assert.equal(fact.earliestDate.slice(0, 4), String(record.year));
-      } else {
-        assert.ok(["en", "de", "ru"].every(lang => fact.description[lang]));
-      }
-    }
-  });
-}
+test("camping source identity requires credential-free HTTPS on the normal port", () => {
+  assert.equal(campingSourceHost("https://www.organizer.example/camping"), "organizer.example");
+  for (const url of ["not a URL", "http://organizer.example", "https://user@organizer.example", "https://organizer.example:444"]) {
+    assert.equal(campingSourceHost(url), undefined);
+  }
+});
+
+test("reviewed camping inputs reject foreign sources, invalid dates and duplicate fields before DB access", async () => {
+  const arrival = { field: "arrival", earliestDate: "2027-08-05" };
+  const record = {
+    festivalSlug: "fixture", editionYear: 2027, city: "Fixture City", countryCode: "DE",
+    organizerHost: "organizer.example", sourceUrl: "https://organizer.example/camping",
+    checkedOn: "2026-11-23", facts: [arrival],
+  };
+  await assert.rejects(importReviewedCamping(null, { ...record, sourceUrl: "https://unrelated.example" }), /primary source/);
+  await assert.rejects(importReviewedCamping(null, { ...record, facts: [{ ...arrival, earliestDate: "2027-02-29" }] }), /Invalid ISO date/);
+  await assert.rejects(importReviewedCamping(null, { ...record, facts: [arrival, arrival] }), /appear once/);
+});

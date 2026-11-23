@@ -15,6 +15,7 @@
     "test:ingestion-review-queue": "node --test tests/ingestion-review-queue.test.mjs",
     "ingest": "node scripts/ingest-festivals.mjs",
     "timetables:import": "node scripts/import-timetable.mjs",
+    "camping:import": "tsx scripts/import-camping.mjs",
     "enrich:artists": "node scripts/enrich-artists.mjs",
     "test:artist-enrichment": "node --experimental-strip-types --test tests/artist-enrichment-publication.test.mjs tests/artist-enrichment.test.mjs",
     "test:artist-enrichment-db": "node --experimental-strip-types --test tests/artist-enrichment-publication.e2e.test.mjs",

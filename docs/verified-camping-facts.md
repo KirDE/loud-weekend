@@ -1,7 +1,9 @@
-# Verified campsite facts
+# Reviewed camping and accessibility
 
-The public camping section uses reviewed edition entries in `lib/catalog/camping-facts.ts`. Update entries by code review. For every change, check the organizer's explicit information for that edition and record the review date. The section is omitted if the catalogue slug, edition year, city, or organizer no longer matches.
+Camping facts are stored in PostgreSQL per exact festival edition and field. Public pages show only imported facts matching the catalogue's edition, city, country and HTTPS organizer identity. Unsupported fields are omitted, and dates are date-only values. They are not stock, pricing or whole-site accessibility claims.
 
-The entries distinguish general campsite opening from an individual travel slot. They do not imply availability, price, routing, or facilities not listed by the organizer. Wacken's accessibility entry describes a designated camping area, not a certification of the whole site. Alcatraz's electrical hookups apply to motorhome pitches only.
+## Review and import
 
-This is an initial set of detail-page facts. Cross-festival comparison, the operational editorial workflow, and additional transport and facility fields are separate work.
+Place organizer-reviewed inputs in `catalog-data/camping/`. The source must explicitly support the edition and every supplied fact; provide EN, DE and RU text, or an ISO date for earliest campsite arrival. Preserve the source URL and the date it was checked.
+
+After the schema migration is applied, preview with `npm run camping:import -- --input=<path>`. An authorized import uses the same command with `--apply`. The command requires an explicit database connection, refuses archived editions and older reviews, and updates only the named fields in one transaction. Without an import the section stays hidden. Inputs are not loaded by the web application.

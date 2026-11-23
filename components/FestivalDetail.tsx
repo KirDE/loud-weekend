@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
+import type { PublicCampingFact } from "@/lib/catalog/camping-facts";
 import { FestivalCamping } from "./FestivalCamping";
 import { useLanguage } from "./LanguageProvider";
 import { PlanningTools } from "./PlanningTools";
@@ -23,11 +24,13 @@ export function FestivalDetail({
   artistSlugs,
   playlist,
   artistPopularity = {},
+  campingFacts = [],
 }: {
   item: Festival;
   festivals: Festival[];
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
+  campingFacts?: readonly PublicCampingFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
   const { locale, t } = useLanguage();
@@ -199,7 +202,7 @@ export function FestivalDetail({
         )}
       </section>
       <PlanningTools item={item} festivals={festivals} />
-      <FestivalCamping festival={item} />
+      <FestivalCamping facts={campingFacts} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
         <p>{t("catalogUpdated", { date: prettyDate(item.updatedAt.slice(0, 10)) })}</p>
