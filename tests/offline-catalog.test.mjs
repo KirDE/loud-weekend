@@ -90,7 +90,9 @@ test("public content changes invalidate old validators without timestamp updates
   assert.equal(projectOfflineCatalog([row], 2027).timetableStatus, "not-published");
 });
 
-test("DB query selects only current-season public fields; missing/failed DB fails closed even with wildcard", async () => {
+test("DB query selects only current-season public fields; missing/failed DB fails closed even with wildcard", async (t) => {
+  const now = new Date("2026-11-23T12:00:00.000Z");
+  t.mock.timers.enable({ apis: ["Date"], now });
   let query;
   const findFirst = async (args) => {
     assert.deepEqual(args, { where: { recordState: "CURRENT" }, orderBy: { year: "desc" }, select: { year: true } });
@@ -103,7 +105,7 @@ test("DB query selects only current-season public fields; missing/failed DB fail
   assert.deepEqual(query.where, { year: 2029, recordState: "CURRENT" });
   assert.deepEqual(Object.keys(query.select), ["festival", "startDate", "endDate", "timetable"]);
   assert.deepEqual(query.select.timetable.where, {
-    timeZone: { not: null }, sourceUrl: { not: null }, observedAt: { not: null },
+    timeZone: { not: null }, sourceUrl: { not: null }, observedAt: { lte: now },
   });
   for (const findMany of [async () => [], async () => { throw new Error("secret connection error"); }]) {
     const response = await serveOfflineCatalog(request("*"), () => readOfflineCatalog({ festivalEdition: { findFirst, findMany } }));
