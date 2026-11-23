@@ -1,15 +1,19 @@
 /* Loud Weekend public-only service worker. DB catalogue freshness uses its ETag. */
-const CACHE_VERSION = "festival-radar-public-v4";
-const CATALOG = "/api/offline/catalog";
+const BASE = new URL(self.registration?.scope ?? self.location.origin).pathname.replace(/\/$/, "");
+const CACHE_SCOPE = BASE ? `:${encodeURIComponent(BASE)}` : "";
+const CACHE_VERSION = `festival-radar-public-v5${CACHE_SCOPE}`;
+const CATALOG = `${BASE}/api/offline/catalog`;
+const TRIP_MODULE = `${BASE}/offline-trips.mjs`;
 const MAX_ENTRIES = 80;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const OFFLINE_PAGE = "/offline.html";
+const OFFLINE_PAGE = `${BASE}/offline.html`;
 const PRECACHE = [
   OFFLINE_PAGE,
-  "/manifest.webmanifest",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/icons/icon-maskable-512.png",
+  TRIP_MODULE,
+  `${BASE}/manifest.webmanifest`,
+  `${BASE}/icons/icon-192.png`,
+  `${BASE}/icons/icon-512.png`,
+  `${BASE}/icons/icon-maskable-512.png`,
 ];
 
 function sameOrigin(url) {
@@ -144,7 +148,10 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_VERSION).map((key) => caches.delete(key))))
+    .then((keys) => Promise.all(keys.filter((key) =>
+      key !== CACHE_VERSION && /^festival-radar-public-v\d+/.test(key) &&
+      key.replace(/^festival-radar-public-v\d+/, "") === CACHE_SCOPE
+    ).map((key) => caches.delete(key))))
     .then(() => self.clients.claim()));
 });
 
@@ -152,13 +159,21 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (sameOrigin(url) && (url.pathname === CATALOG || url.pathname === `${CATALOG}/`) &&
+  if (!sameOrigin(url) || (BASE && !url.pathname.startsWith(BASE + "/"))) return;
+  const localPath = url.pathname.slice(BASE.length);
+  if (url.pathname === TRIP_MODULE && !url.search) {
+    event.respondWith(caches.open(CACHE_VERSION).then(async (cache) =>
+      await cache.match(TRIP_MODULE) ?? fetch(request)
+    ));
+    return;
+  }
+  if ((url.pathname === CATALOG || url.pathname === `${CATALOG}/`) &&
       !url.search && request.mode !== "navigate" &&
       !request.headers?.has("authorization") && !request.headers?.has("cookie")) {
     event.respondWith(catalogResponse());
     return;
   }
-  if (!sameOrigin(url) || isPrivatePath(url.pathname)) return;
+  if (isPrivatePath(localPath)) return;
 
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).catch(async () => {
@@ -169,7 +184,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (!isPublicAsset(url)) return;
+  if (!isPublicAsset({ pathname: localPath })) return;
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_VERSION);
     const cached = await freshCached(cache, request);

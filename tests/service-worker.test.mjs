@@ -41,7 +41,7 @@ test("install stamps the offline shell and warms a revision-aware DB catalogue t
   }
   assert.equal((await cache.match(CATALOG_URL)).headers.get("etag"), `"${revisionA}"`);
   online = false;
-  for (const path of ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon-maskable-512.png"]) {
+  for (const path of ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon-maskable-512.png", "/offline-trips.mjs"]) {
     const response = await dispatch(listeners, new Request(`https://festivals.test${path}`));
     assert.equal(await response.text(), "public shell or asset", `${path} remains available offline`);
   }
@@ -288,7 +288,7 @@ test("install succeeds without static snapshots when the DB catalogue is unavail
     await installed;
     assert.deepEqual(fetchedPaths.sort(), [
       "/api/offline/catalog/", "/icons/icon-192.png", "/icons/icon-512.png",
-      "/icons/icon-maskable-512.png", "/manifest.webmanifest", "/offline.html",
+      "/icons/icon-maskable-512.png", "/manifest.webmanifest", "/offline.html", "/offline-trips.mjs",
     ].sort());
     assert.equal(await cache.match("/offline/festivals-2027-v1.json"), undefined);
     assert.ok(await cache.match("/offline.html"));
