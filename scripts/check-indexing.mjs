@@ -146,12 +146,15 @@ export async function checkIndexing(origin = site) {
     const canonical = $('link[rel="canonical"]');
     assert.equal(canonical.length, 1, `expected a single canonical on ${path}`);
     assert.equal(canonical.attr("href"), site + path, `canonical mismatch on ${path}`);
+    const robotsDirectives = $(
+      'meta[name="robots" i], meta[name="googlebot" i], meta[name="bingbot" i]',
+    )
+      .map((_, node) => $(node).attr("content"))
+      .get()
+      .join(",");
     assert.doesNotMatch(
-      $('meta[name="robots"], meta[name="googlebot"], meta[name="bingbot"]')
-        .map((_, node) => $(node).attr("content"))
-        .get()
-        .join(","),
-      noIndex,
+      robotsDirectives,
+      /(?:^|,)\s*(?:noindex|none)\s*(?:,|$)/i,
       `not indexable: ${path}`,
     );
     for (const [lang, target] of entries.get(path)) {
