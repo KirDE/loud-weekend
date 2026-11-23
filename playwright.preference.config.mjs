@@ -7,7 +7,13 @@ export default defineConfig({
   grep: /\[no-db\]/,
   workers: 1,
   timeout: 30_000,
-  use: { baseURL: "http://127.0.0.1:3246", serviceWorkers: "block", launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {} },
+  use: {
+    baseURL: "http://127.0.0.1:3246",
+    serviceWorkers: "block",
+    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE }
+      : {},
+  },
   webServer: {
     command: "node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3246",
     url: "http://127.0.0.1:3246/en/submit/",

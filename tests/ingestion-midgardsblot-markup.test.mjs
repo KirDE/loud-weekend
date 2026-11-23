@@ -18,18 +18,32 @@ test("Midgardsblot extracts only the official 2027 date and location", () => {
   assert.equal(candidate.city, "Borre");
   assert.deepEqual(candidate.observedEditionYears, [2027]);
   assert.equal(candidate.headliners, undefined);
-  assert.equal(candidate.lineup, undefined, "the still-labelled 2026 lineup must not leak into 2027");
+  assert.equal(
+    candidate.lineup,
+    undefined,
+    "the still-labelled 2026 lineup must not leak into 2027",
+  );
   assert.deepEqual(candidate.warnings, []);
-  assert.deepEqual(candidate.evidence.map(({ field }) => field), ["startDate", "endDate", "city"]);
+  assert.deepEqual(
+    candidate.evidence.map(({ field }) => field),
+    ["startDate", "endDate", "city"],
+  );
 });
 
 test("Midgardsblot fails closed when the edition marker changes", () => {
   const source = getFestivalSource("midgardsblot");
-  const candidate = extractFestivalCandidate(officialBundle.replace("2027 | Borre", "2026 | Borre"), source, "2026-09-26T15:30:00Z");
+  const candidate = extractFestivalCandidate(
+    officialBundle.replace("2027 | Borre", "2026 | Borre"),
+    source,
+    "2026-09-26T15:30:00Z",
+  );
   const current = { ...festival, slug: "midgardsblot" };
   assert.ok(current);
   assert.deepEqual(candidate.observedEditionYears, [2026]);
   const result = evaluateCandidate(current, candidate);
   assert.equal(result.publishable, false);
-  assert.match(result.reviewReasons.join("\n"), /Candidate edition 2026 does not match catalogue edition 2027/);
+  assert.match(
+    result.reviewReasons.join("\n"),
+    /Candidate edition 2026 does not match catalogue edition 2027/,
+  );
 });
