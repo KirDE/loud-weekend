@@ -310,7 +310,16 @@ export function AdminConsole({
                     reference={item.reference}
                     year={item.year}
                     editions={editionOptions}
-                    initialLink={item.editionLink}
+                    link={item.editionLink}
+                    onLinked={(editionLink) =>
+                      setSubmissions((items) =>
+                        items.map((submission) =>
+                          submission.reference === item.reference
+                            ? { ...submission, editionLink }
+                            : submission,
+                        ),
+                      )
+                    }
                   />
                 )}
               </article>

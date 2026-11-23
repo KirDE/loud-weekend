@@ -13,7 +13,7 @@ test("approved requests link exact known editions with a single actor audit and 
 }) => {
   const headers = { origin: baseURL };
   const input = {
-    name: "Synthetic Existing Festival Handoff",
+    name: `Synthetic Existing Festival Handoff ${crypto.randomUUID()}`,
     year: 2027,
     officialUrl: "https://festival.example.test/edition/",
   };
@@ -54,6 +54,20 @@ test("approved requests link exact known editions with a single actor audit and 
   const before = await page.request.get("/api/offline/catalog");
   expect(before.status()).toBe(200);
   expect((await link("missing-edition")).status()).toBe(409);
+  await page.goto("/admin/");
+  await page.getByRole("button", { name: "Festival submissions" }).click();
+  const card = page.getByRole("article").filter({ hasText: input.name });
+  await card.getByLabel("Existing edition").selectOption("synthetic-fest");
+  await card.getByRole("button", { name: "Link existing edition" }).click();
+  await expect(card.getByRole("link", { name: "synthetic-fest · 2027" })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Festival submissions" })
+    .locator("..")
+    .getByRole("button")
+    .first()
+    .click();
+  await page.getByRole("button", { name: "Festival submissions" }).click();
+  await expect(card.getByRole("link", { name: "synthetic-fest · 2027" })).toBeVisible();
   for (const response of await Promise.all([link(), link()])) expect(response.status()).toBe(200);
   expect((await link("synthetic-alpine")).status()).toBe(409);
   const audit = await db.festivalSubmissionAudit.findMany({
@@ -66,7 +80,7 @@ test("approved requests link exact known editions with a single actor audit and 
   });
   await page.goto("/admin/");
   await page.getByRole("button", { name: "Festival submissions" }).click();
-  const edition = page.getByRole("link", { name: "synthetic-fest · 2027" });
+  const edition = card.getByRole("link", { name: "synthetic-fest · 2027" });
   await expect(edition).toHaveAttribute("href", "/festivals/synthetic-fest/2027/");
   const unchanged = await page.request.get("/api/offline/catalog");
   expect(unchanged.status()).toBe(200);

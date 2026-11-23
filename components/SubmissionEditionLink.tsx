@@ -37,16 +37,17 @@ export function SubmissionEditionLink({
   reference,
   year,
   editions,
-  initialLink,
+  link,
+  onLinked,
 }: {
   reference: string;
   year: number;
   editions: { slug: string; name: string; year: number }[];
-  initialLink?: LinkedEdition | null;
+  link?: LinkedEdition | null;
+  onLinked: (link: LinkedEdition) => void;
 }) {
   const { language } = useLanguage();
   const copy = labels[language];
-  const [link, setLink] = useState(initialLink);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const options = editions.filter((edition) => edition.year === year);
@@ -63,7 +64,7 @@ export function SubmissionEditionLink({
         body: JSON.stringify({ slug }),
       });
       if (!response.ok) throw new Error("Edition link failed");
-      setLink(await response.json());
+      onLinked(await response.json());
     } catch {
       setFailed(true);
     } finally {
