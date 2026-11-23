@@ -143,3 +143,30 @@ test("a malformed same-year event does not outrank a dated event or make it ambi
   assert.equal(candidate.endDate, undefined);
   assert.deepEqual(candidate.warnings, ["JSON-LD Event contains an invalid end date"]);
 });
+
+test("a reversed event interval cannot prove the selected edition", () => {
+  const reversed = {
+    "@type": "MusicEvent",
+    startDate: "2027-07-03",
+    endDate: "2027-07-01",
+    offers: { availability: "SoldOut" },
+  };
+  const wrap = (events) => `<script type="application/ld+json">${JSON.stringify(events)}</script>`;
+  const date = "2026-11-17T00:00:00Z";
+  const candidate = extractJsonLdCandidate(wrap([reversed]), source, date);
+  assert.deepEqual(candidate.observedEditionYears, []);
+  assert.equal(candidate.ticketStatus, undefined);
+  assert.deepEqual(candidate.evidence, []);
+  assert.ok(candidate.warnings.includes("JSON-LD Event end date precedes its start date"));
+
+  const crossYear = {
+    "@type": "MusicEvent",
+    startDate: "2027-12-31",
+    endDate: "2028-01-02",
+    offers: { availability: "InStock" },
+  };
+  const valid = extractJsonLdCandidate(wrap([reversed, crossYear]), source, date);
+  assert.deepEqual(valid.observedEditionYears, [2027]);
+  assert.equal(valid.ticketStatus, "available");
+  assert.equal(valid.endDate, "2028-01-02");
+});
