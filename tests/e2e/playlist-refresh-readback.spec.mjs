@@ -85,6 +85,7 @@ test("only the latest requested-provider failure is shown without replacing the 
       coverageEvidence: {
         matchedArtists: 8,
         eligibleArtists: 21,
+        unmatchedReasons: { noEligibleTrack: 12, duplicateTrack: 1 },
         recordedAt: "2026-11-19T10:00:00.000Z",
       },
     });
@@ -113,9 +114,19 @@ test("only the latest requested-provider failure is shown without replacing the 
       "playlist_worker_failed stage=youtube_apply reason=youtube_provider_quota_exceeded",
     );
     const failed = [
-      ["en", "Latest refresh failed"],
-      ["de", "Letzte Aktualisierung fehlgeschlagen"],
-      ["ru", "Последнее обновление не удалось"],
+      ["en", "Latest refresh failed", "No eligible track found", "Matching track already included"],
+      [
+        "de",
+        "Letzte Aktualisierung fehlgeschlagen",
+        "Kein passender Titel gefunden",
+        "Passender Titel bereits enthalten",
+      ],
+      [
+        "ru",
+        "Последнее обновление не удалось",
+        "Не найден подходящий трек",
+        "Подходящий трек уже добавлен",
+      ],
     ];
     await page.goto(`/en/festivals/${slug}/`);
     await expect(page.getByText(failed[0][1], { exact: true })).toHaveCount(0);
@@ -137,7 +148,7 @@ test("only the latest requested-provider failure is shown without replacing the 
       "FAILED",
       "playlist_worker_failed stage=youtube_apply reason=youtube_provider_quota_exceeded",
     );
-    for (const [locale, status] of failed) {
+    for (const [locale, status, noMatch, duplicate] of failed) {
       const localized = await browser.newContext({ viewport: { width: 320, height: 720 }, locale });
       try {
         const detail = await localized.newPage();
@@ -145,6 +156,11 @@ test("only the latest requested-provider failure is shown without replacing the 
         await expect(detail.getByText(status, { exact: true })).toHaveCount(1);
         const youtube = detail.locator("a[href*='music.youtube.com/playlist']");
         await expect(youtube.getByText(status, { exact: true })).toBeVisible();
+        await expect(youtube.getByText(`${noMatch}: 12`, { exact: true })).toBeVisible();
+        await expect(youtube.getByText(`${duplicate}: 1`, { exact: true })).toBeVisible();
+        await expect(detail.locator("a[href*='open.spotify.com/playlist']")).not.toContainText(
+          noMatch,
+        );
         await expect(youtube.locator("time")).toHaveAttribute(
           "datetime",
           "2026-11-19T10:00:00.000Z",
@@ -181,6 +197,7 @@ test("only the latest requested-provider failure is shown without replacing the 
     await page.reload();
     await expect(page.getByText(failed[0][1], { exact: true })).toHaveCount(0);
     await expect(youtube).toContainText("Artists reported: 8");
+    await expect(youtube).not.toContainText("No eligible track found");
   } finally {
     await db.operationalState.deleteMany({ where: { key: { in: keys } } });
     await db.catalogPlaylistRefresh.deleteMany({ where: { publicationId: { in: ids } } });

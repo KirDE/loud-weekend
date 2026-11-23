@@ -77,6 +77,7 @@ export async function publishYoutubeCheckpoint(
               {
                 matchedArtists: result.artists,
                 eligibleArtists: plan.eligibleArtists,
+                ...(plan.unmatchedReasons && { unmatchedReasons: plan.unmatchedReasons }),
               },
               syncedAt,
             ),

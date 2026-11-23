@@ -5,6 +5,11 @@ import { useLanguage } from "./LanguageProvider";
 
 const copy = {
   en: {
+    reasons: {
+      noEligibleTrack: "No eligible track found",
+      duplicateTrack: "Matching track already included",
+      lookupIncomplete: "Lookup incomplete",
+    },
     unknown: "Verified coverage unavailable",
     reported: "Artists reported",
     tracks: "Tracks",
@@ -15,6 +20,11 @@ const copy = {
     complete: "All eligible artists matched",
   },
   de: {
+    reasons: {
+      noEligibleTrack: "Kein passender Titel gefunden",
+      duplicateTrack: "Passender Titel bereits enthalten",
+      lookupIncomplete: "Suche unvollständig",
+    },
     unknown: "Keine verifizierten Angaben zur Abdeckung",
     reported: "Erfasste Künstler",
     tracks: "Titel",
@@ -26,6 +36,11 @@ const copy = {
     complete: "Alle berücksichtigten Künstler zugeordnet",
   },
   ru: {
+    reasons: {
+      noEligibleTrack: "Не найден подходящий трек",
+      duplicateTrack: "Подходящий трек уже добавлен",
+      lookupIncomplete: "Поиск не завершён",
+    },
     unknown: "Подтверждённый охват неизвестен",
     reported: "Указано артистов",
     tracks: "Треки",
@@ -61,6 +76,15 @@ export function PlaylistCoverageLabel({
         · {t.tracks}: {format(coverage.tracks)}
       </span>
       {verified && <span>{missing ? `${t.unmatched}: ${format(missing)}` : t.complete}</span>}
+      {verified?.unmatchedReasons &&
+        (Object.keys(t.reasons) as (keyof typeof t.reasons)[]).map((reason) => {
+          const count = verified.unmatchedReasons?.[reason];
+          return count ? (
+            <span key={reason}>
+              {t.reasons[reason]}: {format(count)}
+            </span>
+          ) : null;
+        })}
       <span>
         {t.recorded}:{" "}
         <time dateTime={coverage.recordedAt}>{date.format(new Date(coverage.recordedAt))}</time>
