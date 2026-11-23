@@ -77,7 +77,7 @@ test("public content changes invalidate old validators without timestamp updates
   let etag = (await serveOfflineCatalog(request(), read)).headers.get("etag");
   for (const mutate of [
     () => { row.festival.name = "Changed"; },
-    () => { row.startDate = new Date("2027-06-05"); },
+    () => { row.startDate = new Date("2027-06-03"); },
     () => { row.timetable[0].start = "21:00"; },
     () => { row.timetable = []; },
   ]) {
