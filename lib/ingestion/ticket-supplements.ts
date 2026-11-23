@@ -1,4 +1,5 @@
-import { ALCATRAZ_STOCK, ALCATRAZ_PURCHASE, observeAlcatrazStock } from "./alcatraz-ticket-stock.ts";
+import { observeAlcatrazStock } from "./alcatraz-ticket-stock.ts";
+import { getAlcatrazProof, alcatrazStockUrl, alcatrazPurchaseUrl } from "./alcatraz-ticket-proof.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
 
@@ -11,7 +12,8 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review")) return;
   let url: URL; try { url = new URL(source.url); } catch { return; }
   if (url.protocol !== "https:" || url.username || url.password || url.port || url.search || url.hash) return;
-  if (source.festivalSlug === "alcatraz" && source.editionYear === 2027 && ["https://www.alcatraz.be/", "https://www.alcatraz.be/en/"].includes(url.href)) return ALCATRAZ_STOCK;
+  const alcatrazProof = getAlcatrazProof(source);
+  if (alcatrazProof) return alcatrazStockUrl(alcatrazProof);
   if (source.festivalSlug === "full-rewind" && url.href === "https://full-rewind.de/" && source.strategies.includes("official_markup")
     && Number.isInteger(source.editionYear) && source.editionYear >= 2027 && source.editionYear <= 2100)
     return "https://full-rewind.de/products/full-rewind-weekend-ticket-" + source.editionYear + ".js";
@@ -25,7 +27,8 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
 export function ticketSupplementPurchaseUrl(source: FestivalSource): string | undefined {
   const stockUrl = ticketSupplementUrl(source);
   if (!stockUrl) return;
-  if (stockUrl === ALCATRAZ_STOCK) return ALCATRAZ_PURCHASE;
+  const alcatrazProof = getAlcatrazProof(source);
+  if (alcatrazProof) return alcatrazPurchaseUrl(alcatrazProof);
   return source.festivalSlug === "full-rewind" ? `https://full-rewind.de/collections/tickets-${source.editionYear}` : stockUrl;
 }
 
@@ -36,7 +39,8 @@ export function isTicketSupplementUrl(source: FestivalSource, actual: string): b
 export function observeTicketSupplement(html: string, source: FestivalSource, url: string, dates?: Pick<FestivalCandidate, "startDate" | "endDate"> & { fetchedAt?: string }): TicketObservation {
   const fail = (reason: string): TicketObservation => ({ excerpt: "", warning: `Official ${source.festivalSlug} ticket source requires review: ${reason}` });
   if (!isTicketSupplementUrl(source, url) || html.length > 2_000_000) return fail("source identity or size changed");
-  if (source.festivalSlug === "alcatraz") return observeAlcatrazStock(html, dates);
+  const alcatrazProof = getAlcatrazProof(source);
+  if (alcatrazProof) return observeAlcatrazStock(html, alcatrazProof, dates);
   if (source.festivalSlug === "full-rewind") {
     const year = source.editionYear;
     try {

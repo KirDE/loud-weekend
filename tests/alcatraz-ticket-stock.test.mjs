@@ -4,11 +4,11 @@ import {readFileSync} from 'node:fs';
 import {fetchSource} from '../lib/ingestion/fetch.ts';
 import {extractFestivalCandidate} from '../lib/ingestion/extract.ts';
 import {observeTicketSupplement,ticketSupplementUrl,ticketSupplementPurchaseUrl} from '../lib/ingestion/ticket-supplements.ts';
-import {ALCATRAZ_STOCK,ALCATRAZ_PURCHASE,ALCATRAZ_SHOP} from '../lib/ingestion/alcatraz-ticket-stock.ts';
+import {ALCATRAZ_STOCK,ALCATRAZ_PURCHASE,ALCATRAZ_SHOP,alcatrazProof} from './fixtures/ticket-status/alcatraz-reviewed-proof.ts';
 import {parserSource} from './support/parser-source.ts';
 const fixture=readFileSync(new URL('./fixtures/ticket-status/alcatraz-public-stock.json',import.meta.url),'utf8');
 const home=readFileSync(new URL('./fixtures/official-markup/alcatraz-current-banner.html',import.meta.url),'utf8');
-const source=parserSource('alcatraz',{url:'https://www.alcatraz.be/',strategies:['json_ld_event','html_fallback']});
+const source=parserSource('alcatraz',{url:'https://www.alcatraz.be/',alcatrazProof,strategies:['json_ld_event','html_fallback']});
 const dates={startDate:'2027-08-05',endDate:'2027-08-08',fetchedAt:'2026-11-22T12:50:00Z'};
 const pass=p=>Object.values(p.tickets).find(t=>t?.name==='Combi - Wave 3');
 test('Alcatraz: actual public ordinary Combi Wave 3 available despite sold-out early waves/VIP',()=>{

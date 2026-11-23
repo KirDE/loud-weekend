@@ -63,3 +63,9 @@ GET, with no copied user cookies or primary authorization headers.
 This is one more source proposal, not deployed catalogue coverage. Together
 with five proposals in #509 the potential proposal ledger is35/60, leaving25
 without a verified implementation; do not count pending gates as completion.
+
+The reviewed provider identity and edition dates are read from PostgreSQL
+(`ReviewedTicketProof`), keyed by festival, exact primary URL and edition.
+The publisher independently checks the same binding before accepting ticket
+evidence. An edition without a reviewed binding does not fetch this supplement.
+The migration carries forward only the already reviewed source record.
