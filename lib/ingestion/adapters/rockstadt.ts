@@ -94,32 +94,34 @@ export function rockstadt(html: string, source: FestivalSource) {
   $("[style]").each((_, element) => {
     if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();
   });
+  const disabled = ".disabled, .sold-out, .unavailable";
+  const blocked = (element: ReturnType<typeof $>) => element.is(disabled) || element.parents(disabled).length > 0;
   const widgets = $(".order-form-widget.can-book").filter((_, element) => {
     const w = $(element);
     return w.attr("data-return-url") === url && w.attr("data-is-order-form-widget") === "true"
-      && !w.is(".disabled, .sold-out, .unavailable") && !w.parents(".disabled, .sold-out, .unavailable").length;
+      && !blocked(w);
   });
   const forms = widgets.length === 1 ? widgets.find("form") : $("");
   const form = forms.first();
   const formReady = forms.length === 1 && form.attr("data-is-order-form") === "true"
     && form.attr("action") === "https://bilete.rockstadtextremefest.ro/widgetOrderForm/bookEvent/"
     && form.attr("method")?.toLowerCase() === "post" && form.attr("data-disable-submit") === "0"
-    && !form.is(".disabled, .sold-out, .unavailable");
+    && !blocked(form);
   const admission = formReady && form.find("div[data-is-tariff='1']").toArray().some(element => {
     const tariff = $(element), id = tariff.attr("data-tariff-id") ?? "", price = Number(tariff.attr("data-tariff-sell-price"));
     // Teen-only/restricted passes are not evidence of purchasable ordinary
     // adult entry. Parking, merch and sibling tariff quantities are excluded.
     if (!/^\d+$/.test(id) || !/^Abonament\b.*Acces General/i.test(tariff.attr("data-tariff-name") ?? "")
       || !Number.isFinite(price) || price <= 0 || tariff.attr("data-tariff-sell-currency") !== "RON"
-      || tariff.is(".sold-out, .disabled, .unavailable") || tariff.parents(".sold-out, .disabled, .unavailable").length) return false;
+      || blocked(tariff)) return false;
     return tariff.find("input[data-is-ticket-nr='1']").toArray().some(element => {
       const input = $(element), max = Number(input.attr("data-max-nr-tickets"));
-      return input.attr("data-tariff-id") === id && Number.isSafeInteger(max) && max > 0;
+      return !blocked(input) && input.attr("data-tariff-id") === id && Number.isSafeInteger(max) && max > 0;
     });
   });
   const submit = formReady && form.find("button[data-is-order-form-submit='true']").filter((_, element) => {
     const button = $(element);
-    return button.attr("type") === "submit" && text(button.text()) === "Comandă bilete";
+    return !blocked(button) && button.attr("type") === "submit" && text(button.text()) === "Comandă bilete";
   }).length === 1;
   const sale = Boolean(admission && submit);
   return { editionYear: 2027, startDate: "2027-07-26", endDate: "2027-07-30", city: "Ghimbav (Brașov)", lineup: names,

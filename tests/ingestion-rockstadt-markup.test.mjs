@@ -234,3 +234,11 @@ test('a matching quantity outside the ordinary tariff cannot supply inventory pr
  const h=fixture.replace(original,'').replace('</form>',original+'</form>');
  const c=extract(h);assert.equal(c.ticketStatus,undefined);assert(c.warnings.some(w=>w.includes('inventory requires review')));
 });
+
+test("a visibly disabled checkout button cannot establish Rockstadt stock", () => {
+  const page = fixture.replace('data-is-order-form-submit="true"', 'data-is-order-form-submit="true" class="disabled"');
+  const candidate = extract(page);
+  assert.equal(candidate.ticketStatus, undefined);
+  assert.deepEqual(candidate.lineup, artists);
+  assert.ok(candidate.warnings.some(warning => warning.includes("inventory requires review")));
+});
