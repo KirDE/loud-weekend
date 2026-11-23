@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { withFestivalStockDates } from "../ingestion/festival-stock-dates.ts";
+import { getProvinssiDates, withFestivalStockDates, type ProvinssiStockDates } from "../ingestion/festival-stock-dates.ts";
 import { ticketSupplementUrl, ticketSupplementPurchaseUrl, ticketSupplementScope } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
@@ -263,10 +263,12 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     // Summer's shared POST proof must not be bypassed by stripping both markers,
     // including ticket-URL-only updates approved by an untrusted caller.
     const summerTicketChange = input.result.festivalSlug === "summer-punch" && input.result.changes.some(c => ["ticketStatus", "ticketsUrl"].includes(c.field));
+    let provinssiDates: ProvinssiStockDates | undefined;
     if (observed.ticketSupplement || stored.ticketSupplement || summerTicketChange || input.result.festivalSlug === "provinssi" && input.result.changes.some(c => c.field === "ticketStatus")) {
       const registeredSource = await withFestivalStockDates(db, { festivalSlug: input.result.festivalSlug,
         url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
         strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true });
+      provinssiDates = getProvinssiDates(registeredSource);
       const ticketUrl = ticketSupplementUrl(registeredSource);
       const purchaseUrl = ticketSupplementPurchaseUrl(registeredSource);
       const scope = ticketSupplementScope(registeredSource);
@@ -375,11 +377,13 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     if ((downloadLineup || input.result.changes.some(c => c.field === "completeness")) && !verifiedDownloadAnnouncement)
       throw new Error("Download publication requires verified official announcement evidence");
     const provinssiPublication = input.result.festivalSlug === 'provinssi';
+    const provinssiStockDatesMatch = provinssiDates !== undefined && applied.edition.year === provinssiDates.editionYear
+      && observed.startDate === provinssiDates.startDate && observed.endDate === provinssiDates.endDate;
     const verifiedProvinssiAnnouncement = provinssiPublication && candidate.festivalSlug === 'provinssi' &&
       candidate.attempt.requestedUrl === PROVINSSI_HOME && input.result.sourceUrl === PROVINSSI_HOME &&
       isProvinssiAnnouncement(input.result.candidate, applied.edition.year) &&
       isProvinssiAnnouncement(candidate.normalized as unknown as FestivalCandidate, applied.edition.year) &&
-      (!observed.ticketSupplement || observed.startDate === '2027-07-01' && observed.endDate === '2027-07-03') &&
+      (!observed.ticketSupplement || provinssiStockDatesMatch) &&
       input.result.changes.every(({field,kind}) => (['ticketStatus','ticketsUrl'].includes(field) && observed.ticketSupplement && stored.ticketSupplement) || (['startDate','endDate','city','lineup','ticketsUrl','status'].includes(field) &&
         (field !== 'lineup' || kind === 'artist_added') &&
         candidate.evidence.some(e => e.field === field && e.sourceUrl === PROVINSSI_HOME &&
@@ -387,10 +391,9 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
       ['startDate','endDate','city','lineup','ticketsUrl','status'].every(field =>
         same((candidate.normalized as Record<string,unknown>)[field], (input.result.candidate as unknown as Record<string,unknown>)[field]));
     const verifiedProvinssiStockOnly = provinssiPublication && candidate.festivalSlug === "provinssi" &&
-      candidate.attempt.requestedUrl === PROVINSSI_HOME && input.result.sourceUrl === PROVINSSI_HOME && applied.edition.year === 2027 &&
+      candidate.attempt.requestedUrl === PROVINSSI_HOME && input.result.sourceUrl === PROVINSSI_HOME && provinssiStockDatesMatch &&
       observed.ticketSupplement && stored.ticketSupplement && input.result.changes.length > 0 &&
       input.result.changes.every(c => ["ticketStatus","ticketsUrl"].includes(c.field)) &&
-      observed.startDate === "2027-07-01" && observed.endDate === "2027-07-03" &&
       [observed,stored].every(c => c.artistListMode === "additive" && c.lineupScope === "announcement" && c.headliners === undefined && c.status === "partial") &&
       ["startDate","endDate","city","lineup","status"].every(field =>
         same((stored as unknown as Record<string,unknown>)[field],(observed as unknown as Record<string,unknown>)[field]) &&
