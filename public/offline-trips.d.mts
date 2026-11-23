@@ -10,6 +10,7 @@ type Label = "heading" | "save" | "update" | "remove" | "open" | "saved" | "remo
   | "stale" | "savedAt" | "checkedAt" | "performanceChecked" | "dates" | "place" | "timetable" | "cancelled" | "empty";
 
 export const offlineTripCopy: Record<Language, Record<Label, string>>;
+export function fetchOfflineTrip(basePath: string, slug: string, year: number): Promise<OfflineTrip>;
 export function offlineTripKey(slug: string, year: number): string;
 export function parseOfflineTrip(value: unknown): OfflineTrip | null;
 export function readOfflineTrip(storage: Storage, slug: string, year: number): OfflineTripRecord | null;

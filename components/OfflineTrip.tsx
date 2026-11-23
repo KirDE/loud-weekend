@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { offlineTripCopy, offlineTripKey, parseOfflineTrip, readOfflineTrip, saveOfflineTrip, type OfflineTrip, type OfflineTripRecord } from "@/public/offline-trips.mjs";
+import { fetchOfflineTrip, offlineTripCopy, offlineTripKey, readOfflineTrip, saveOfflineTrip, type OfflineTrip, type OfflineTripRecord } from "@/public/offline-trips.mjs";
 import { useLanguage } from "./LanguageProvider";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -31,15 +31,9 @@ export function OfflineTripDownload({ slug, year }: { slug: string; year: number
     setBusy(true);
     setNotice(null);
     try {
-      let trip: OfflineTrip | null;
+      let trip: OfflineTrip;
       try {
-        const response = await fetch(`${basePath}/api/offline/trips/${encodeURIComponent(slug)}/${year}/`, {
-          credentials: "omit", cache: "no-store", redirect: "error", headers: { Accept: "application/json" },
-          signal: AbortSignal.timeout(15_000),
-        });
-        if (response.status !== 200 || !/^application\/json(?:;|$)/i.test(response.headers.get("content-type") || "")) return setNotice("unavailable");
-        trip = parseOfflineTrip(await response.json());
-        if (!trip || trip.slug !== slug || trip.year !== year) return setNotice("unavailable");
+        trip = await fetchOfflineTrip(basePath, slug, year);
       } catch {
         return setNotice("unavailable");
       }

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#171712">
   <title>Loud Weekend · Offline</title>
-  <style>body{font:18px system-ui;margin:0;background:#f2efe7;color:#171712}main{max-width:42rem;margin:8vh auto;padding:2rem}a{color:inherit}li{margin:.6rem 0}h2{margin-top:2rem}article{border-top:1px solid #989385;margin-top:1rem}h2,h3,p,li{overflow-wrap:anywhere}button{font:inherit;padding:.35rem .5rem}</style>
+  <style>body{font:18px system-ui;margin:0;background:#f2efe7;color:#171712}main{max-width:42rem;margin:8vh auto;padding:2rem}a{color:inherit}li{margin:.6rem 0}h2{margin-top:2rem}article{border-top:1px solid #989385;margin-top:1rem}h2,h3,p,li{overflow-wrap:anywhere}button{font:inherit;padding:.35rem .5rem}.trip-actions{display:flex;flex-wrap:wrap;gap:.5rem}.trip-status:empty{margin:0}</style>
 </head>
 <body>
 <main>
@@ -61,7 +61,7 @@
 <script type="module">
   const worker = navigator.serviceWorker?.controller?.scriptURL;
   const base = worker ? new URL(".", worker).pathname : location.pathname.replace(/offline\.html$/, "");
-  const { offlineTripCopy, offlineTripKey, listOfflineTrips } = await import(`${base}offline-trips.mjs`);
+  const { fetchOfflineTrip, offlineTripCopy, offlineTripKey, listOfflineTrips, readOfflineTrip, saveOfflineTrip } = await import(`${base}offline-trips.mjs`);
   const language = (() => {
     try {
       const saved = localStorage.getItem("festival-radar-language");
@@ -84,6 +84,25 @@
     node.textContent = text;
     return node;
   }
+  function renderDetails(details, { savedAt, trip }) {
+    details.replaceChildren();
+    details.append(
+      element("h3", `${trip.name} ${trip.year}`),
+      element("p", `${copy.savedAt}: ${dateTime.format(new Date(savedAt))} · ${copy.checkedAt}: ${dateTime.format(new Date(trip.updatedAt))}`),
+      element("p", [...new Set([trip.startDate, trip.endDate].filter(Boolean))].map((value) => date.format(new Date(value))).join(" – ") || copy.dates),
+    );
+    if (trip.location) details.append(element("p", `${copy.place}: ${trip.location}`));
+    if (trip.timetable.length) {
+      const schedule = document.createElement("ul");
+      for (const row of trip.timetable) {
+        const status = row.status === "cancelled" ? ` · ${copy.cancelled}` : "";
+        schedule.append(element("li", `${date.format(new Date(row.date))} · ${row.start} (${row.timeZone}) · ${row.stage} · ${row.artist}${status} · ${copy.performanceChecked}: ${dateTime.format(new Date(row.checkedAt))}`));
+      }
+      details.append(schedule);
+    } else {
+      details.append(element("p", copy.timetable));
+    }
+  }
   function showTrips() {
     try {
       const records = listOfflineTrips(localStorage);
@@ -91,32 +110,68 @@
       list.replaceChildren(element("p", copy.stale));
       for (const { savedAt, trip } of records) {
         const card = document.createElement("article");
-        card.append(
-          element("h3", `${trip.name} ${trip.year}`),
-          element("p", `${copy.savedAt}: ${dateTime.format(new Date(savedAt))} · ${copy.checkedAt}: ${dateTime.format(new Date(trip.updatedAt))}`),
-          element("p", [...new Set([trip.startDate, trip.endDate].filter(Boolean))].map((value) => date.format(new Date(value))).join(" – ") || copy.dates),
-        );
-        if (trip.location) card.append(element("p", `${copy.place}: ${trip.location}`));
-        if (trip.timetable.length) {
-          const schedule = document.createElement("ul");
-          for (const row of trip.timetable) {
-            const status = row.status === "cancelled" ? ` · ${copy.cancelled}` : "";
-            schedule.append(element("li", `${date.format(new Date(row.date))} · ${row.start} (${row.timeZone}) · ${row.stage} · ${row.artist}${status} · ${copy.performanceChecked}: ${dateTime.format(new Date(row.checkedAt))}`));
-          }
-          card.append(schedule);
-        } else {
-          card.append(element("p", copy.timetable));
-        }
+        const details = document.createElement("div");
+        const actions = document.createElement("div");
+        actions.className = "trip-actions";
+        const notice = element("p", "");
+        notice.setAttribute("role", "status");
+        notice.className = "trip-status";
+        const key = offlineTripKey(trip.slug, trip.year);
+        const update = element("button", copy.update + ": " + trip.name);
+        update.type = "button";
         const remove = element("button", copy.remove + ": " + trip.name);
         remove.type = "button";
+        function removeCard() {
+          const hadFocus = card.contains(document.activeElement);
+          card.remove();
+          if (!list.querySelector("article")) list.replaceChildren(element("p", copy.empty));
+          if (hadFocus) list.querySelector("button")?.focus();
+        }
+        function display(record) {
+          renderDetails(details, record);
+          update.textContent = copy.update + ": " + record.trip.name;
+          remove.textContent = copy.remove + ": " + record.trip.name;
+        }
+        update.addEventListener("click", async () => {
+          if (update.getAttribute("aria-disabled") === "true") return;
+          update.setAttribute("aria-disabled", "true");
+          notice.textContent = copy.pending;
+          try {
+            const previous = localStorage.getItem(key);
+            if (!previous) return removeCard();
+            let fresh;
+            try {
+              fresh = await fetchOfflineTrip(base.slice(0, -1), trip.slug, trip.year);
+            } catch {
+              notice.textContent = copy.unavailable;
+              return;
+            }
+            // Do not restore a copy that was removed or changed while downloading.
+            if (localStorage.getItem(key) !== previous) {
+              if (!card.isConnected) return;
+              const current = readOfflineTrip(localStorage, trip.slug, trip.year);
+              if (!current) return removeCard();
+              display(current);
+              notice.textContent = "";
+              return;
+            }
+            display(saveOfflineTrip(localStorage, fresh));
+            notice.textContent = copy.saved;
+          } catch {
+            notice.textContent = copy.storage;
+          } finally {
+            update.removeAttribute("aria-disabled");
+          }
+        });
+        renderDetails(details, { savedAt, trip });
         remove.addEventListener("click", () => {
           try {
-            localStorage.removeItem(offlineTripKey(trip.slug, trip.year));
-            showTrips();
-            group.querySelector("button")?.focus();
-          } catch { card.append(element("p", copy.storage)); }
+            localStorage.removeItem(key);
+            removeCard();
+          } catch { notice.textContent = copy.storage; }
         });
-        card.append(remove);
+        actions.append(update, remove);
+        card.append(details, actions, notice);
         list.append(card);
       }
     } catch {
