@@ -3,7 +3,7 @@ import { createPrismaClient } from "../../lib/prisma-client.mjs";
 import { campingRecords } from "../../lib/catalog/camping-facts.ts";
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 
-test("validated edition camping facts are accessible in every locale", async ({ page, baseURL }) => {
+test("validated edition camping facts are accessible in every locale", async ({ browser }) => {
   requireLocalDisposableDatabase(process.env.DATABASE_URL);
   const db = createPrismaClient();
   const inserted = [];
@@ -25,27 +25,32 @@ test("validated edition camping facts are accessible in every locale", async ({ 
     }
 
     for (const [lang, heading] of Object.entries({ en: "Camping and on-site facilities", de: "Camping und Ausstattung", ru: "Кемпинг и удобства" })) {
-      await page.context().addCookies([{ name: "festival-radar-language", value: lang, url: baseURL }]);
-      if (page.url() !== "about:blank") await page.evaluate(() => localStorage.removeItem("festival-radar-language"));
-      await page.setViewportSize({ width: 320, height: 760 });
-      for (const record of campingRecords) {
-        await page.goto(`/${lang}/festivals/${record.slug}/`);
-        const panel = page.getByRole("region", { name: heading });
-        await expect(panel.locator("dd")).toHaveCount(record.facts.length);
-        await expect(panel.locator(`a[href="${record.source}"]`)).toBeVisible();
-        await expect(panel.locator(`time[datetime="${record.checkedOn}"]`)).toBeVisible();
-        const arrival = record.facts.find(fact => fact.field === "arrival").earliestDate;
-        await expect(panel.locator(`time[datetime="${arrival}"]`)).toBeVisible();
-        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+      const context = await browser.newContext({ viewport: { width: 320, height: 760 } });
+      try {
+        const page = await context.newPage();
+        for (const record of campingRecords) {
+          await page.goto(`/${lang}/festivals/${record.slug}/`);
+          const panel = page.getByRole("region", { name: heading });
+          await expect(panel.locator("dd")).toHaveCount(record.facts.length);
+          await expect(panel.locator(`a[href="${record.source}"]`)).toBeVisible();
+          await expect(panel.locator(`time[datetime="${record.checkedOn}"]`)).toBeVisible();
+          const arrival = record.facts.find(fact => fact.field === "arrival").earliestDate;
+          await expect(panel.locator(`time[datetime="${arrival}"]`)).toBeVisible();
+          expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+        }
+        await page.goto(`/${lang}/festivals/synthetic-fest/`);
+        await expect(page.getByRole("region", { name: heading })).toHaveCount(0);
+        if (lang === "ru") {
+          const first = campingRecords[0];
+          await db.festivalEdition.updateMany({ where: { festivalId: inserted[0], year: first.year }, data: { year: first.year + 1 } });
+          await page.goto(`/${lang}/festivals/${first.slug}/`);
+          await expect(page.getByRole("heading", { name: "Edition fixture Wacken", exact: true })).toBeVisible();
+          await expect(page.getByRole("region", { name: heading })).toHaveCount(0);
+        }
+      } finally {
+        await context.close();
       }
-      await page.goto(`/${lang}/festivals/synthetic-fest/`);
-      await expect(page.getByRole("region", { name: heading })).toHaveCount(0);
     }
-
-    const first = campingRecords[0];
-    await db.festivalEdition.updateMany({ where: { festivalId: inserted[0], year: first.year }, data: { year: first.year + 1 } });
-    await page.goto(`/ru/festivals/${first.slug}/`);
-    await expect(page.getByRole("region", { name: "Кемпинг и удобства" })).toHaveCount(0);
   } finally {
     if (inserted.length) await db.festival.deleteMany({ where: { id: { in: inserted } } });
     await db.$disconnect();
