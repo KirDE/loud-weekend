@@ -40,6 +40,7 @@ export function DiscoverySearch({ query, ready, festivals, artists, inputRef, on
   return <div className="search discoverySearch" data-ready={ready}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}
     onKeyDown={event => {
+      if (event.nativeEvent.isComposing) return;
       if (event.key === "Escape" && open) {
         event.preventDefault();
         inputRef.current?.focus();
