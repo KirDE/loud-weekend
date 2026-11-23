@@ -21,6 +21,8 @@ import {
 } from "@/lib/festival-dates";
 import { announcedArtists, hasAnnouncedLineup, lineupPreviewArtists } from "@/lib/festival-lineup";
 
+const RESULT_BATCH_SIZE = 48;
+
 const origins: Record<string, { label: string; coordinates: Coordinates }> = {
   berlin: { label: "Berlin, Germany", coordinates: { latitude: 52.52, longitude: 13.405 } },
   cologne: { label: "Cologne, Germany", coordinates: { latitude: 50.9375, longitude: 6.9603 } },
@@ -36,10 +38,18 @@ const origins: Record<string, { label: string; coordinates: Coordinates }> = {
 };
 
 export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
-  const { locale, t } = useLanguage();
+  const { language, locale, t } = useLanguage();
   const planner = useLocalPlanner();
   const [query, setQuery] = useState(planner.savedFilters.query);
   const searchRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const nextFocusIndex = useRef<number | null>(null);
+  const [expanded, setExpanded] = useState<{ results: Festival[]; limit: number }>();
+  const showMore = {
+    en: "Show more festivals",
+    de: "Mehr Festivals anzeigen",
+    ru: "Показать ещё фестивали",
+  }[language];
   const [country, setCountry] = useState(planner.savedFilters.country);
   const [announcedOnly, setAnnouncedOnly] = useState(planner.savedFilters.announcedOnly);
   const [month, setMonth] = useState(planner.savedFilters.month);
@@ -101,6 +111,20 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
       maxDistance,
     ],
   );
+  const cardLimit = expanded?.results === visible ? expanded.limit : RESULT_BATCH_SIZE;
+  const shownCount = Math.min(cardLimit, visible.length);
+  const moreCount = Math.min(RESULT_BATCH_SIZE, visible.length - shownCount);
+  useEffect(() => {
+    if (nextFocusIndex.current === null) return;
+    gridRef.current?.children[nextFocusIndex.current]
+      ?.querySelector<HTMLAnchorElement>("a")
+      ?.focus();
+    nextFocusIndex.current = null;
+  }, [cardLimit]);
+  const revealNextResults = () => {
+    nextFocusIndex.current = shownCount;
+    setExpanded({ results: visible, limit: shownCount + moreCount });
+  };
   const compared = festivals.filter((item) => selected.includes(item.slug));
   const overlap = lineupOverlap(compared);
   const toggleSelected = (item: Festival) =>
@@ -353,12 +377,13 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
       )}
       <div className="resultMeta">
         <span>
+          {shownCount < visible.length && `${shownCount} / `}
           {visible.length} {t("festivals")}
         </span>
         <span>{t("lastReview")}</span>
       </div>
-      <div className="festivalGrid">
-        {visible.map((item) => {
+      <div className="festivalGrid" ref={gridRef}>
+        {visible.slice(0, shownCount).map((item) => {
           const isSelected = selected.includes(item.slug);
           const previewArtists = lineupPreviewArtists(item);
           const artistCount = announcedArtists(item).length;
@@ -409,6 +434,13 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
           );
         })}
       </div>
+      {moreCount > 0 && (
+        <div className="moreFestivalResults">
+          <button type="button" className="outlineButton" onClick={revealNextResults}>
+            {showMore} ({moreCount})
+          </button>
+        </div>
+      )}
       {!visible.length && (
         <div className="empty">
           <strong>{t("noMatches")}</strong>

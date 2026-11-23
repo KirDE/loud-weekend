@@ -1157,6 +1157,12 @@ main {
   font-weight: 700;
 }
 
+.moreFestivalResults {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
 .festivalGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
