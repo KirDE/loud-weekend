@@ -24,7 +24,6 @@ export async function readSocialPreview(
     where: { festival: { slug }, year, recordState: { in: ["CURRENT", "ARCHIVED"] } },
     select: {
       year: true,
-      status: true,
       startDate: true,
       endDate: true,
       festival: { select: { name: true } },
@@ -50,7 +49,7 @@ export async function readSocialPreview(
   const detail = festivalPreviewDate(
     edition.year,
     language,
-    edition.status !== "TBA" && hasStart
+    hasStart
       ? {
           startDate: date(edition.startDate),
           endDate: hasEnd ? date(edition.endDate) : undefined,

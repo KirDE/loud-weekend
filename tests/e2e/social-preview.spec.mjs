@@ -68,7 +68,7 @@ test("public festival and artist URLs advertise distinct localized, cacheable pr
         editions: {
           create: {
             year: 2027,
-            status: "CONFIRMED",
+            status: "TBA",
             ticketStatus: "UNKNOWN",
             recordState: "CURRENT",
             completeness: "PARTIAL",
