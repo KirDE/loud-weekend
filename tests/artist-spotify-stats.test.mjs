@@ -314,6 +314,7 @@ test("repository projects serializable Spotify stats and suppresses a stale or u
     timetable: [],
     provenance: [],
     playlists: [],
+    playlistLinks: [],
   };
   const repository = new DatabaseCatalogRepository({
     artist: { findMany: async () => [f.artist] },

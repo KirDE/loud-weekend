@@ -24,6 +24,7 @@ export type Festival = {
   officialUrl: string;
   ticketsUrl?: string;
   playlistUrl?: string;
+  reviewedPlaylistLinks?: { spotify?: string; youtube_music?: string };
   sourceDeprecated?: boolean;
   sourceDeprecatedAt?: string;
   status: "confirmed" | "partial" | "tba";

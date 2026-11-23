@@ -57,7 +57,9 @@ export function AdminConsole({
   const [festivalDraft, setFestivalDraft] = useState<Record<string, string>>({});
   const [assetDraft, setAssetDraft] = useState<Record<string, string>>({});
   const [operator, setOperator] = useState<Operator | null>(null);
-  const [playlistDraft, setPlaylistDraft] = useState<Record<string, string>>({});
+  const [playlistProvider, setPlaylistProvider] = useState<"spotify" | "youtube_music">("spotify");
+  const [playlistDraft, setPlaylistDraft] = useState<string | undefined>();
+  const reviewedPlaylistUrl = selected?.reviewedPlaylistLinks?.[playlistProvider];
   const [openLog, setOpenLog] = useState<string | null>(null);
   const { language, setLanguage, ta } = useLanguage();
   const matchingArtists = useMemo(
@@ -120,7 +122,7 @@ export function AdminConsole({
   const save = async (
     resourceKind: "festival" | "artist" | "link" | "asset" | "playlist",
     resourceKey: string,
-    values: Record<string, string>,
+    values: Record<string, string | null>,
   ) => {
     const snapshotResponse = await fetch("/api/admin");
     const snapshot = await snapshotResponse.json();
@@ -493,7 +495,7 @@ export function AdminConsole({
                   onChange={(event) => {
                     setSelectedSlug(event.target.value);
                     setAssetDraft({});
-                    setPlaylistDraft({});
+                    setPlaylistDraft(undefined);
                   }}
                 >
                   {festivals.map((item) => (
@@ -556,49 +558,54 @@ export function AdminConsole({
             <div>
               <div className="adminPanel">
                 <h3>Playlist editor</h3>
-                <p>Playlist drafts can be saved, but cannot yet be published.</p>
-                <label>
-                  Playlist URL
-                  <input
-                    type="url"
-                    defaultValue={selected.playlistUrl}
-                    placeholder="https://open.spotify.com/playlist/…"
-                    onChange={(event) =>
-                      setPlaylistDraft((value) => ({ ...value, url: event.target.value }))
-                    }
-                  />
-                </label>
                 <label>
                   Platform
                   <select
-                    defaultValue="spotify"
-                    onChange={(event) =>
-                      setPlaylistDraft((value) => ({ ...value, platform: event.target.value }))
-                    }
+                    value={playlistProvider}
+                    onChange={(event) => {
+                      setPlaylistProvider(
+                        event.target.value === "youtube_music" ? "youtube_music" : "spotify",
+                      );
+                      setPlaylistDraft(undefined);
+                    }}
                   >
                     <option value="spotify">Spotify</option>
                     <option value="youtube_music">YouTube Music</option>
                   </select>
                 </label>
                 <label>
-                  Publication status
-                  <select
-                    defaultValue="published"
-                    onChange={(event) =>
-                      setPlaylistDraft((value) => ({ ...value, status: event.target.value }))
-                    }
-                  >
-                    <option value="published">Published</option>
-                    <option value="draft">Draft</option>
-                    <option value="disabled">Disabled</option>
-                  </select>
+                  Playlist URL
+                  <input
+                    type="url"
+                    value={playlistDraft ?? reviewedPlaylistUrl ?? ""}
+                    onChange={(event) => setPlaylistDraft(event.target.value)}
+                  />
                 </label>
                 <button
-                  disabled={!Object.keys(playlistDraft).length}
-                  onClick={() => save("playlist", selected.slug, playlistDraft)}
+                  disabled={!selected.editionYear || !playlistDraft?.trim()}
+                  onClick={() =>
+                    save(
+                      "playlist",
+                      `${selected.slug}:${selected.editionYear}:${playlistProvider}`,
+                      { url: playlistDraft?.trim() ?? null },
+                    )
+                  }
                 >
                   Save playlist draft
                 </button>
+                {reviewedPlaylistUrl && selected.editionYear && (
+                  <button
+                    onClick={() =>
+                      save(
+                        "playlist",
+                        `${selected.slug}:${selected.editionYear}:${playlistProvider}`,
+                        { url: null },
+                      )
+                    }
+                  >
+                    Queue removal of reviewed link
+                  </button>
+                )}
               </div>
               <div className="adminPanel assetPreview">
                 <h3>Validation</h3>

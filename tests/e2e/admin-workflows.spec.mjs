@@ -120,7 +120,9 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
     ),
     page.getByRole("button", { name: "Save links draft" }).click(),
   ]);
-  await page.getByLabel("Playlist URL").fill("https://open.spotify.com/playlist/e2e");
+  await page
+    .getByLabel("Playlist URL")
+    .fill("https://open.spotify.com/playlist/e2e0000000000000000000");
   await Promise.all([
     page.waitForResponse(
       (response) =>
