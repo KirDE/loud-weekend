@@ -38,7 +38,8 @@ export type Festival = {
 };
 
 export type PlaylistCoverage = {
-  matchedArtists: number;
+  reportedArtists: number;
+  verified?: { matchedArtists: number; eligibleArtists: number };
   tracks: number;
   recordedAt: string;
 };

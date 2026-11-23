@@ -71,12 +71,22 @@ test("only the latest requested-provider failure is shown without replacing the 
       artistCount: 110,
       trackCount: 220,
       syncedAt: new Date("2026-11-18T10:00:00Z"),
+      coverageEvidence: {
+        matchedArtists: 103,
+        eligibleArtists: 110,
+        recordedAt: "2026-11-18T10:00:00.000Z",
+      },
     });
     await playlist("youtube_music", {
       url: "https://music.youtube.com/playlist?list=PLSyntheticReadback0123456789",
       artistCount: 8,
       trackCount: 14,
       syncedAt: new Date("2026-11-19T10:00:00Z"),
+      coverageEvidence: {
+        matchedArtists: 8,
+        eligibleArtists: 21,
+        recordedAt: "2026-11-19T10:00:00.000Z",
+      },
     });
     const original = await publish(
       ["spotify", "youtube_music"],
@@ -109,6 +119,12 @@ test("only the latest requested-provider failure is shown without replacing the 
     ];
     await page.goto(`/en/festivals/${slug}/`);
     await expect(page.getByText(failed[0][1], { exact: true })).toHaveCount(0);
+    const spotify = page.locator("a[href*='open.spotify.com/playlist']");
+    await expect(spotify).toContainText("Artists matched: 103 / 110");
+    await expect(spotify).toContainText("Without a verified match: 7");
+    const youtube = page.locator("a[href*='music.youtube.com/playlist']");
+    await expect(youtube).toContainText("Artists matched: 8 / 21");
+    await expect(youtube).toContainText("Without a verified match: 13");
 
     const youtubeJob = await publish(
       ["youtube_music"],
@@ -164,16 +180,17 @@ test("only the latest requested-provider failure is shown without replacing the 
     });
     await page.reload();
     await expect(page.getByText(failed[0][1], { exact: true })).toHaveCount(0);
+    await expect(youtube).toContainText("Artists reported: 8");
   } finally {
     await db.operationalState.deleteMany({ where: { key: { in: keys } } });
     await db.catalogPlaylistRefresh.deleteMany({ where: { publicationId: { in: ids } } });
     // Publication records are append-only in the disposable fixture database.
     await db.festivalPlaylist.deleteMany({ where: { id: { in: added } } });
-    for (const { id, url, artistCount, trackCount, syncedAt } of previous) {
-      await db.festivalPlaylist.update({
-        where: { id },
-        data: { url, artistCount, trackCount, syncedAt },
-      });
+    for (const { id, url, artistCount, trackCount, syncedAt, coverageEvidence } of previous) {
+      const evidence = coverageEvidence === null ? null : JSON.stringify(coverageEvidence);
+      await db.$executeRaw`UPDATE "FestivalPlaylist" SET url = ${url}, "artistCount" = ${artistCount},
+        "trackCount" = ${trackCount}, "syncedAt" = ${syncedAt}, "coverageEvidence" = ${evidence}::jsonb
+        WHERE id = ${id}`;
     }
     await db.$disconnect();
   }

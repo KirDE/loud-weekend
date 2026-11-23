@@ -450,6 +450,7 @@ model FestivalPlaylist {
   artistCount Int?
   trackCount  Int?
   syncedAt    DateTime?
+  coverageEvidence Json?
   edition     FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
 
   @@unique([editionId, provider])

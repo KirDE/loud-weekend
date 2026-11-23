@@ -15,6 +15,7 @@ export type YoutubePlan = {
   videoIds: string[];
   artists: number;
   sourceTracks: number;
+  eligibleArtists?: number;
 };
 export type YoutubeInsert = {
   playlistId: string;
@@ -63,7 +64,11 @@ export function validateYoutubePlan(value: unknown): asserts value is YoutubePla
     !Number.isSafeInteger(plan.artists) ||
     plan.artists < 1 ||
     !Number.isSafeInteger(plan.sourceTracks) ||
-    plan.sourceTracks < plan.videoIds.length
+    plan.sourceTracks < plan.videoIds.length ||
+    (plan.eligibleArtists !== undefined &&
+      (!Number.isSafeInteger(plan.eligibleArtists) ||
+        plan.eligibleArtists < plan.artists ||
+        plan.eligibleArtists > Math.min(plan.sourceTracks, 1000)))
   )
     throw new Error("Invalid YouTube plan");
 }

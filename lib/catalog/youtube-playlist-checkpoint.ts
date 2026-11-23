@@ -1,4 +1,5 @@
-import type { PrismaClient } from "@prisma/client";
+import { coverageEvidence } from "../playlist-coverage.ts";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { withPlaylistRefreshLease, type PlaylistLease } from "./playlist-queue.ts";
 import {
   YOUTUBE_URL,
@@ -63,11 +64,22 @@ export async function publishYoutubeCheckpoint(
     // the same edition's durable creation identity, under this lease.
     if (bindingUrl !== expected && bindingUrl !== result.url)
       throw Error("YouTube binding changed");
+    const syncedAt = new Date();
     const data = {
       url: result.url,
       artistCount: result.artists,
       trackCount: result.tracks,
-      syncedAt: new Date(),
+      syncedAt,
+      coverageEvidence:
+        plan.eligibleArtists === undefined
+          ? Prisma.DbNull
+          : coverageEvidence(
+              {
+                matchedArtists: result.artists,
+                eligibleArtists: plan.eligibleArtists,
+              },
+              syncedAt,
+            ),
     };
     if (current) {
       const updated = await tx.festivalPlaylist.updateMany({

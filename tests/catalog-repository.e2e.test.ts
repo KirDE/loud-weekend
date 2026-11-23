@@ -131,7 +131,7 @@ test("provider playlist coverage reads the current edition and independent measu
   assert.equal(playlist.spotifyUrl, undefined);
   assert.equal(playlist.youtubeMusicUrl, youtubeUrl);
   assert.deepEqual(playlist.coverage?.youtubeMusic, {
-    matchedArtists: 8,
+    reportedArtists: 8,
     tracks: 14,
     recordedAt: firstSync.toISOString(),
   });
@@ -150,7 +150,7 @@ test("provider playlist coverage reads the current edition and independent measu
   playlist = await get();
   assert.equal(playlist.spotifyUrl, currentSpotifyUrl);
   assert.deepEqual(playlist.coverage?.spotify, {
-    matchedArtists: 110,
+    reportedArtists: 110,
     tracks: 220,
     recordedAt: secondSync.toISOString(),
   });

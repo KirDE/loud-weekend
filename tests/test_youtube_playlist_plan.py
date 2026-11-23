@@ -832,6 +832,7 @@ class YoutubePlanTests(unittest.TestCase):
         self.assertEqual(plan["videoIds"], VIDEOS[:2])
         self.assertEqual(plan["expectedUrl"], "")
         self.assertEqual(plan["sourceTracks"], 3)
+        self.assertEqual(plan["eligibleArtists"], 1)
 
     def test_cli_failure_is_sanitized(self):
         script = Path(__file__).parents[1] / "scripts/spotify_gmm_2026/youtube_playlist_plan.py"
