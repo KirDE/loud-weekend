@@ -14,9 +14,16 @@ export function editionDateProblem(year: number | undefined, start: unknown, end
   const endYear = isCalendarDate(end) ? Number(end.slice(0, 4)) : undefined;
   // Editions are keyed by the start year. A dated December–January range
   // can cross New Year; an end date alone cannot establish that rollover.
-  const newYearRollover = startYear === year && endYear === year + 1 &&
-    isCalendarDate(start) && start.slice(5, 7) === "12" &&
-    isCalendarDate(end) && end.slice(5, 7) === "01";
-  if ((startYear !== undefined && startYear !== year) || (endYear !== undefined && endYear !== year && !newYearRollover))
+  const newYearRollover =
+    startYear === year &&
+    endYear === year + 1 &&
+    isCalendarDate(start) &&
+    start.slice(5, 7) === "12" &&
+    isCalendarDate(end) &&
+    end.slice(5, 7) === "01";
+  if (
+    (startYear !== undefined && startYear !== year) ||
+    (endYear !== undefined && endYear !== year && !newYearRollover)
+  )
     return "Festival dates must match the edition year";
 }

@@ -33,7 +33,12 @@ export async function POST(request: Request) {
       supportedAlgorithmIDs: PASSKEY_ALGORITHMS,
       timeout: 60_000,
     });
-    await setPasskeyCeremony({ kind: "registration", challenge: options.challenge, email, userId: options.user.id });
+    await setPasskeyCeremony({
+      kind: "registration",
+      challenge: options.challenge,
+      email,
+      userId: options.user.id,
+    });
     return Response.json({ options });
   } catch {
     return error("Passkey registration is unavailable.", 503);

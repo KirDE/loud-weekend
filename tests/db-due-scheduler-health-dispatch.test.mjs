@@ -1,5 +1,29 @@
-import test from 'node:test';import assert from 'node:assert/strict';
-import {validateSchedulerHealth} from '../scripts/validate-db-due-scheduler-health.mjs';
-const sha='a'.repeat(40),record={tickMissing:0,tickStale:0,fetchError:0,drainError:0,dueTimerEnabled:'enabled',dueTimerActive:'active',dueServiceActive:'inactive'};
-const marker=r=>Buffer.from('DB_DUE_SCHEDULER_HEALTH '+JSON.stringify(r)+'\n');
-test('current scheduler health accepts only the exact bounded protocol',()=>{assert.equal(validateSchedulerHealth(marker(record),sha),marker(record).toString());for(const input of [Buffer.alloc(0),Buffer.from('private transport text'),Buffer.concat([marker(record),Buffer.from('x')]),marker({...record,extra:'private'}),marker({...record,dueTimerEnabled:'private'}),marker({...record,tickMissing:1,tickStale:0}),marker({...record,dueTimerEnabled:'missing'})])assert.throws(()=>validateSchedulerHealth(input,sha));assert.throws(()=>validateSchedulerHealth(marker(record),'bad'));assert.throws(()=>validateSchedulerHealth(Buffer.alloc(2049),sha));});
+import test from "node:test";
+import assert from "node:assert/strict";
+import { validateSchedulerHealth } from "../scripts/validate-db-due-scheduler-health.mjs";
+const sha = "a".repeat(40),
+  record = {
+    tickMissing: 0,
+    tickStale: 0,
+    fetchError: 0,
+    drainError: 0,
+    dueTimerEnabled: "enabled",
+    dueTimerActive: "active",
+    dueServiceActive: "inactive",
+  };
+const marker = (r) => Buffer.from("DB_DUE_SCHEDULER_HEALTH " + JSON.stringify(r) + "\n");
+test("current scheduler health accepts only the exact bounded protocol", () => {
+  assert.equal(validateSchedulerHealth(marker(record), sha), marker(record).toString());
+  for (const input of [
+    Buffer.alloc(0),
+    Buffer.from("private transport text"),
+    Buffer.concat([marker(record), Buffer.from("x")]),
+    marker({ ...record, extra: "private" }),
+    marker({ ...record, dueTimerEnabled: "private" }),
+    marker({ ...record, tickMissing: 1, tickStale: 0 }),
+    marker({ ...record, dueTimerEnabled: "missing" }),
+  ])
+    assert.throws(() => validateSchedulerHealth(input, sha));
+  assert.throws(() => validateSchedulerHealth(marker(record), "bad"));
+  assert.throws(() => validateSchedulerHealth(Buffer.alloc(2049), sha));
+});
