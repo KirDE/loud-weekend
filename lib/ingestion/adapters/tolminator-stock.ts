@@ -7,6 +7,16 @@ import type { TicketObservation } from "../ticket-supplements.ts";
 export const TOLMINATOR_PRODUCT =
   "https://tolminator.mojekarte.si/si/" +
   "tolminator-2027-festivalska-vstopnica-predprodaja-1-210-eur/vstopnice-1235366.html";
+const stockEdition = 2027;
+
+export function isTolminatorStockRoute(url: string | null | undefined): boolean {
+  return url === TOLMINATOR_PRODUCT;
+}
+
+export function matchesTolminatorStockEdition(slug: string, years: readonly number[]): boolean {
+  return slug === "tolminator" && years.length === 1 && years[0] === stockEdition;
+}
+
 const purchaseAction = "https://tolminator.mojekarte.si/si/basket/add/1235366";
 const timestamp = z.iso.datetime({ offset: true });
 const ordinaryTitle =
@@ -29,8 +39,8 @@ export function observeTolminatorStock(
   });
   const now = Date.parse(observedAt);
   if (
-    url !== TOLMINATOR_PRODUCT ||
-    year !== 2027 ||
+    !isTolminatorStockRoute(url) ||
+    year !== stockEdition ||
     !Number.isFinite(now) ||
     Buffer.byteLength(html, "utf8") > 2_000_000
   )

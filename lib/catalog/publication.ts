@@ -1,6 +1,9 @@
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
-import { TOLMINATOR_PRODUCT } from "../ingestion/adapters/tolminator-stock.ts";
+import {
+  isTolminatorStockRoute,
+  matchesTolminatorStockEdition,
+} from "../ingestion/adapters/tolminator-stock.ts";
 import {
   ticketSupplementUrl,
   ticketSupplementPurchaseUrl,
@@ -510,7 +513,7 @@ export async function publishIngestionResult(
           candidate.attempt.finalUrl,
           observed.sourceUrl,
           stored.sourceUrl,
-        ].includes(TOLMINATOR_PRODUCT)
+        ].some(isTolminatorStockRoute)
       ) {
         const time = Date.parse(observed.fetchedAt);
         const allowed = new Set([
@@ -525,21 +528,22 @@ export async function publishIngestionResult(
           "evidence",
         ]);
         const valid =
-          input.result.festivalSlug === "tolminator" &&
-          candidate.festivalSlug === "tolminator" &&
-          observed.festivalSlug === "tolminator" &&
-          input.result.sourceUrl === TOLMINATOR_PRODUCT &&
-          observed.sourceUrl === TOLMINATOR_PRODUCT &&
-          candidate.attempt.requestedUrl === TOLMINATOR_PRODUCT &&
-          candidate.attempt.finalUrl === TOLMINATOR_PRODUCT &&
+          [input.result.festivalSlug, candidate.festivalSlug, observed.festivalSlug].every((slug) =>
+            matchesTolminatorStockEdition(slug, observed.observedEditionYears),
+          ) &&
+          [
+            input.result.sourceUrl,
+            observed.sourceUrl,
+            candidate.attempt.requestedUrl,
+            candidate.attempt.finalUrl,
+            observed.ticketsUrl,
+          ].every(isTolminatorStockRoute) &&
           candidate.attempt.httpStatus === 200 &&
           isDeepStrictEqual(stored, observed) &&
           Object.keys(observed).every((key) => allowed.has(key)) &&
           observed.schemaVersion === 1 &&
-          same(observed.observedEditionYears, [2027]) &&
           observed.warnings.length === 0 &&
           observed.ticketStatus === "available" &&
-          observed.ticketsUrl === TOLMINATOR_PRODUCT &&
           Number.isFinite(time) &&
           time <= Date.now() + 60_000 &&
           time >= Date.now() - 86_400_000 &&
@@ -556,7 +560,7 @@ export async function publishIngestionResult(
             const proof = observed.evidence.filter((e) => e.field === field);
             return (
               proof.length === 1 &&
-              proof[0].sourceUrl === TOLMINATOR_PRODUCT &&
+              isTolminatorStockRoute(proof[0].sourceUrl) &&
               proof[0].observedAt === observed.fetchedAt &&
               typeof proof[0].excerpt === "string" &&
               proof[0].excerpt.length > 0 &&
@@ -564,7 +568,7 @@ export async function publishIngestionResult(
               candidate.evidence.some(
                 (saved) =>
                   saved.field === field &&
-                  saved.sourceUrl === TOLMINATOR_PRODUCT &&
+                  isTolminatorStockRoute(saved.sourceUrl) &&
                   saved.excerpt === proof[0].excerpt &&
                   saved.observedAt.getTime() === time &&
                   saved.contentHash ===
