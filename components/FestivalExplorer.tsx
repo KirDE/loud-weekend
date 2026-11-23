@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { FestivalLocationMap } from "./FestivalLocationMap";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
@@ -357,6 +358,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         </span>
         <span>{t("lastReview")}</span>
       </div>
+      <FestivalLocationMap festivals={visible} optIn />
       <div className="festivalGrid">
         {visible.map((item) => {
           const isSelected = selected.includes(item.slug);
