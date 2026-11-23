@@ -13,6 +13,8 @@ export type CatalogSnapshot = Readonly<{
   playlists: Readonly<Record<string, PlaylistStatus>>;
   freshness: CatalogFreshness;
 }>;
+type CatalogReadOptions = { includeFreshness?: boolean; requireTimetableEvidence?: boolean };
+
 export interface CatalogRepository {
   read(): Promise<CatalogSnapshot>;
 }
@@ -28,7 +30,10 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     this.client = client;
   }
 
-  async read({ includeFreshness = false } = {}): Promise<CatalogSnapshot> {
+  async read({
+    includeFreshness = false,
+    requireTimetableEvidence = false,
+  }: CatalogReadOptions = {}): Promise<CatalogSnapshot> {
     const now = new Date();
     const [editionRows, artistRows, freshnessEvidence] = await Promise.all([
       this.client.festivalEdition.findMany({
@@ -37,7 +42,17 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           sources: { where: { enabled: true }, select: { deprecatedAt: true } },
           lineup: { include: { artist: true }, orderBy: [{ billing: "asc" }, { position: "asc" }] },
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
-          timetable: { orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }] },
+          timetable: {
+            // Legacy display defaults are not evidence for data-quality coverage.
+            ...(requireTimetableEvidence && {
+              where: {
+                sourceUrl: { not: null },
+                observedAt: { not: null },
+                timeZone: { not: null },
+              },
+            }),
+            orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }],
+          },
           playlists: { orderBy: { provider: "asc" } },
         },
         orderBy: [{ year: "asc" }, { festival: { catalogOrder: "asc" } }],
@@ -247,15 +262,13 @@ export class DatabaseCatalogRepository implements CatalogRepository {
   }
 }
 
-export async function readCatalog(
-  options: { database?: PrismaClient; includeFreshness?: boolean } = {},
-): Promise<CatalogSnapshot> {
-  const database = options.database ?? (await import("../db.ts")).db;
-  return new DatabaseCatalogRepository(database).read({
-    includeFreshness: options.includeFreshness,
-  });
+export async function readCatalog({
+  database,
+  ...options
+}: CatalogReadOptions & { database?: PrismaClient } = {}): Promise<CatalogSnapshot> {
+  return new DatabaseCatalogRepository(database ?? (await import("../db.ts")).db).read(options);
 }
 
-export function getCatalog(options?: { includeFreshness?: boolean }) {
+export function getCatalog(options?: CatalogReadOptions) {
   return readCatalog(options);
 }
