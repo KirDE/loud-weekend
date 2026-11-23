@@ -391,3 +391,45 @@ test("keeping this device in a merge conflict also preserves the merged account 
   const { document } = await (await page.request.get(favoritesUrl)).json();
   expect(document.payload.favoriteFestivals.sort()).toEqual(["account-festival", "device-festival"]);
 });
+
+test("an invalid account write acknowledgement cannot replace device choices", async ({ page, baseURL }) => {
+  await page.addInitScript(key => {
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, JSON.stringify({ favoriteFestivals: ["device-festival"] }));
+    }
+  }, storageKey);
+  const credentials = { email: `discovery-write-ack-${randomUUID()}@example.test`, password: "synthetic merge test password" };
+  expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
+  const favoritesUrl = "/api/sync/favorites/";
+  expect((await page.request.put(favoritesUrl, {
+    headers: { origin: new URL(baseURL).origin },
+    data: { revision: 0, payload: { favoriteFestivals: ["account-festival"], favoriteArtists: [] } },
+  })).status()).toBe(201);
+  const { document } = await (await page.request.get(favoritesUrl)).json();
+  const loaded = page.waitForResponse(response =>
+    response.url().includes(favoritesUrl) && response.request().method() === "GET");
+  await page.goto("/en/planner/");
+  expect((await loaded).status()).toBe(200);
+  const merge = page.getByRole("button", { name: "Merge this device into my account", exact: true });
+  const favoritesRoute = "**/api/sync/favorites*";
+  const validNext = { ...document, revision: document.revision + 1 };
+  const invalidDocuments = [
+    { ...validNext, payload: { favoriteFestivals: [false] } },
+    { ...validNext, kind: "FESTIVAL_PLANS" },
+    { ...validNext, id: "different-account-document" },
+    document,
+  ];
+  for (const invalid of invalidDocuments) {
+    await page.route(favoritesRoute, route => route.request().method() === "PUT"
+      ? route.fulfill({ json: { document: invalid } }) : route.continue());
+    await merge.click();
+    await expect(page.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
+    await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)).favoriteFestivals, storageKey))
+      .toEqual(["device-festival"]);
+    await page.unroute(favoritesRoute);
+  }
+  await merge.click();
+  await expect(page.getByText("Everything is synchronized.")).toBeVisible();
+  const saved = await (await page.request.get(favoritesUrl)).json();
+  expect(saved.document.payload.favoriteFestivals.sort()).toEqual(["account-festival", "device-festival"]);
+});

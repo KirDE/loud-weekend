@@ -9,6 +9,9 @@ type Kind = "favorites" | "collections" | "saved-filters" | "plans";
 type Document = { id: string; payload: unknown; revision: number; updatedAt: string };
 type Conflict = { kind: Kind; remote: Document; mergeLocal: boolean };
 const kinds: Kind[] = ["favorites", "collections", "saved-filters", "plans"];
+const documentKinds: Record<Kind, string> = {
+  favorites: "FAVORITES", collections: "COLLECTIONS", "saved-filters": "SAVED_FILTERS", plans: "FESTIVAL_PLANS",
+};
 const favoritesPayload = z.object({
   favoriteFestivals: z.array(z.string()).optional(),
   favoriteArtists: z.array(z.string()).optional(),
@@ -66,18 +69,26 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
   const planner = useLocalPlanner(); const { language, locale } = useLanguage(); const t = labels[language];
   const [user, setUser] = useState<{ id: string; email: string } | null>(null); const [docs, setDocs] = useState<Partial<Record<Kind, Document>>>({}); const [busy, setBusyState] = useState(false); const [status, setStatus] = useState(""); const [conflict, setConflict] = useState<Conflict | null>(null); const [shareUrl, setShareUrl] = useState(""); const [expiry, setExpiry] = useState("");
   function setBusy(value: boolean) { setBusyState(value); onBusyChange?.(value); }
+  async function parseDocument(kind: Kind, response: Response) {
+    const document = (await response.json().catch(() => null))?.document as
+      (Document & { kind?: string; userId?: string }) | null | undefined;
+    if (document === null) return null;
+    if (!document || typeof document.id !== "string" || !document.id ||
+      !Number.isSafeInteger(document.revision) || document.revision < 1 ||
+      document.payload === undefined || document.kind !== documentKinds[kind]) {
+      throw new Error(t.failed);
+    }
+    if (kind === "collections") readCollections(document.payload);
+    if (kind === "favorites" && !favoritesPayload.safeParse(document.payload).success) throw new Error(t.failed);
+    if (kind === "plans" && !plansPayload.safeParse(document.payload).success) throw new Error(t.failed);
+    if (kind === "saved-filters" && !savedFiltersPayload.safeParse(document.payload).success) throw new Error(t.failed);
+    return document;
+  }
+
   async function readDocument(kind: Kind) {
     const response = await fetch("/api/sync/" + kind, { cache: "no-store" });
     if (!response.ok) throw new Error(t.failed);
-    const { document } = await response.json() as { document?: Document | null };
-    if (document !== null && (!document || typeof document.id !== "string" || !Number.isInteger(document.revision) || document.payload === undefined)) {
-      throw new Error(t.failed);
-    }
-    if (kind === "collections" && document) readCollections(document.payload);
-    if (kind === "favorites" && document && !favoritesPayload.safeParse(document.payload).success) throw new Error(t.failed);
-    if (kind === "plans" && document && !plansPayload.safeParse(document.payload).success) throw new Error(t.failed);
-    if (kind === "saved-filters" && document && !savedFiltersPayload.safeParse(document.payload).success) throw new Error(t.failed);
-    return document;
+    return parseDocument(kind, response);
   }
 
   async function readDocuments() {
@@ -95,7 +106,8 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
   }
 
   useEffect(() => { void load(); const listener = () => void load(); window.addEventListener("loud-weekend-authenticated", listener); return () => window.removeEventListener("loud-weekend-authenticated", listener); }, []);
-  async function put(kind: Kind, payload: unknown, revision: number, mergeLocal = false) {
+  async function put(kind: Kind, payload: unknown, base?: Document, mergeLocal = false) {
+    const revision = base?.revision ?? 0;
     const response = await fetch(`/api/sync/${kind}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ payload, revision }) });
     if (response.status === 409) {
       const latest = await readDocument(kind);
@@ -104,7 +116,9 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
       throw new Error("conflict");
     }
     if (!response.ok) throw new Error(t.failed);
-    const { document } = await response.json() as { document: Document };
+    const document = await parseDocument(kind, response);
+    if (!document || document.userId !== user?.id || document.revision !== revision + 1 ||
+      (base && document.id !== base.id)) throw new Error(t.failed);
     setDocs((current) => ({ ...current, [kind]: document }));
     return document;
   }
@@ -130,7 +144,7 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
       for (const kind of kinds) {
         const remote = docs[kind];
         const content = mode === "merge" && remote ? mergePayload(kind, remote.payload, local[kind]) : local[kind];
-        const saved = await put(kind, content, remote?.revision ?? 0, mode === "merge");
+        const saved = await put(kind, content, remote, mode === "merge");
         if (mode === "merge") Object.assign(merged, plannerFields(kind, saved));
       }
       setStatus(t.current);
@@ -150,7 +164,7 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
       if (useLocal) {
         const local = payloads(planner)[kind];
         const content = mergeLocal ? mergePayload(kind, remote.payload, local) : local;
-        const saved = await put(kind, content, remote.revision, mergeLocal);
+        const saved = await put(kind, content, remote, mergeLocal);
         if (mergeLocal) planner.merge(plannerFields(kind, saved), planner);
       } else {
         const latest = await readDocument(kind);
@@ -167,14 +181,14 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
     }
   }
 
-  async function share() { setBusy(true); setStatus(""); try { let plan = docs.plans; if (!plan) plan = await put("plans", payloads(planner).plans, 0); const response = await fetch("/api/share", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ documentId: plan.id, expiresAt: expiry ? new Date(`${expiry}T23:59:59.999Z`).toISOString() : null }) }); const body = await response.json(); if (!response.ok) throw new Error(t.failed); setShareUrl(`${location.origin}/share/${body.share.slug}/`); } catch (reason) { setStatus(reason instanceof Error ? reason.message : t.failed); } finally { setBusy(false); } }
+  async function share() { setBusy(true); setStatus(""); try { let plan = docs.plans; if (!plan) plan = await put("plans", payloads(planner).plans); const response = await fetch("/api/share", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ documentId: plan.id, expiresAt: expiry ? new Date(`${expiry}T23:59:59.999Z`).toISOString() : null }) }); const body = await response.json(); if (!response.ok) throw new Error(t.failed); setShareUrl(`${location.origin}/share/${body.share.slug}/`); } catch (reason) { setStatus(reason instanceof Error ? reason.message : t.failed); } finally { setBusy(false); } }
   async function spotifySync() {
     setBusy(true);setStatus("");setConflict(null);
     try {
       // Preserve unsynchronized device selection first, under the same revision
       // checks as normal sync. A conflict aborts before calling the provider.
       const selection=mergeCollections(docs.collections?.payload,payloads(planner).collections);
-      const saved=await put("collections",selection,docs.collections?.revision??0,true);
+      const saved=await put("collections",selection,docs.collections,true);
       planner.merge({playlistFestivals:readCollections(saved.payload).playlistFestivals});
       const response=await fetch("/api/spotify/sync",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({revision:saved.revision})});
       if(response.status===409){
