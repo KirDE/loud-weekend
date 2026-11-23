@@ -50,6 +50,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
   let robotsMeta = '<meta name="robots" content="index, max-image-preview:none">';
   let wrapCanonical = false;
   let wrapAlternates = false;
+  let bodyLinks = "";
   const server = createServer((request, response) => {
     const path = request.url;
     if (path === "/robots.txt") {
@@ -63,8 +64,9 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
       if (path === "/de/" && robotsHeader) response.setHeader("X-Robots-Tag", robotsHeader);
       const canonical = `<link rel="canonical" href="${site}${path}">`;
       const metadata = (value, wrap) => wrap && path === "/de/" ? `<template>${value}</template>` : value;
+      const misplaced = path === "/de/" ? bodyLinks : "";
       response.writeHead(200, { "content-type": "text/html" }).end(
-        `<!doctype html><html lang="${lang}"><head>${metadata(canonical, wrapCanonical)}${metadata(links, wrapAlternates)}${path === "/de/" ? robotsMeta : ""}</head></html>`);
+        `<!doctype html><html lang="${lang}"><head>${misplaced === "canonical" ? "" : metadata(canonical, wrapCanonical)}${misplaced === "alternate" ? "" : metadata(links, wrapAlternates)}${path === "/de/" ? robotsMeta : ""}</head><body>${misplaced === "canonical" ? canonical : misplaced === "alternate" ? links : ""}</body></html>`);
     } else {
       response.writeHead(404).end();
     }
@@ -94,6 +96,16 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
     } finally {
       wrapCanonical = false;
       wrapAlternates = false;
+    }
+  });
+  await t.test("does not count canonical or hreflang links in the document body", async () => {
+    try {
+      bodyLinks = "canonical";
+      await assert.rejects(checkIndexing(origin), /expected a single canonical on \/de\//);
+      bodyLinks = "alternate";
+      await assert.rejects(checkIndexing(origin), /missing\/duplicate x-default alternate on \/de\//);
+    } finally {
+      bodyLinks = "";
     }
   });
   await t.test("ignores robots directives inside inert templates", async () => {

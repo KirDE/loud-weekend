@@ -7,6 +7,10 @@ const site = "https://loudweekend.eu";
 const namespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
 const languages = ["x-default", "en", "de", "ru"];
 const crawlers = ["Googlebot", "Bingbot"];
+const monitor = "LoudWeekendIndexingCheck/1.0";
+// Next.js serves blocking head metadata for Bingbot. Keep the monitor
+// identifiable while requesting that HTML-only crawler representation.
+const htmlMonitor = monitor + " (Bingbot metadata compatibility)";
 const fixedPaths = ["/", "/en/", "/de/", "/ru/", "/submit/", "/archive/"];
 const routeClasses = [
   /^\/festivals\/[^/]+\/$/,
@@ -25,7 +29,7 @@ const noIndexHeader = /(?:^|,)\s*(?:(?!max-image-preview\s*:)[\w-]+\s*:\s*)?(?:n
 async function get(origin, path, mime, limit) {
   const response = await fetch(new URL(path, origin), {
     redirect: "manual", signal: AbortSignal.timeout(10_000),
-    headers: { "User-Agent": "LoudWeekendIndexingCheck/1.0" },
+    headers: { "User-Agent": mime.includes("text/html") ? htmlMonitor : monitor },
   });
   const type = response.headers.get("content-type")?.split(";")[0];
   if (response.status !== 200 || !mime.includes(type) || !response.body) {
@@ -150,14 +154,14 @@ export async function checkIndexing(origin = site) {
     const $ = load(html);
     const lang = /^\/(en|de|ru)\//.exec(path)?.[1];
     if (lang) assert.equal($("html").attr("lang"), lang, `document language mismatch on ${path}`);
-    const canonical = $('link[rel="canonical"]').filter(outsideTemplate);
+    const canonical = $('head link[rel="canonical"]').filter(outsideTemplate);
     assert.equal(canonical.length, 1, `expected a single canonical on ${path}`);
     assert.equal(canonical.attr("href"), site + path, `canonical mismatch on ${path}`);
     const robotsDirectives = $('meta[name="robots" i], meta[name="googlebot" i], meta[name="bingbot" i]')
       .filter(outsideTemplate).map((_, node) => $(node).attr("content")).get().join(",");
     assert.doesNotMatch(robotsDirectives, /(?:^|,)\s*(?:noindex|none)\s*(?:,|$)/i, `not indexable: ${path}`);
     for (const [lang, target] of entries.get(path)) {
-      const link = $(`link[rel="alternate"][hreflang="${lang}"]`).filter(outsideTemplate);
+      const link = $(`head link[rel="alternate"][hreflang="${lang}"]`).filter(outsideTemplate);
       assert.equal(link.length, 1, `missing/duplicate ${lang} alternate on ${path}`);
       assert.equal(link.attr("href"), site + target, `alternate mismatch on ${path}`);
     }
