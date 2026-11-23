@@ -1,6 +1,20 @@
 import { z } from "zod";
 import type { Festival, TimetableEntry } from "./domain/festival.ts";
 
+export function timetableLocalDateTime(instant: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "longOffset",
+  }).formatToParts(new Date(instant));
+  const { year, month, day, hour, minute, timeZoneName: offset } = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return { date: `${year}-${month}-${day}`, time: `${hour}:${minute}`, offset };
+}
+
+const timetableInstant = z.iso.datetime({ offset: true }).refine(
+  value => Number.isFinite(Date.parse(value)) && Date.parse(value) % 60_000 === 0,
+  "performance times must use whole minutes",
+);
+
 export const timetableEntrySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
     const parsed = new Date(`${value}T00:00:00Z`);
@@ -15,7 +29,20 @@ export const timetableEntrySchema = z.object({
   status: z.enum(["scheduled", "cancelled"]),
   sourceUrl: z.string().url().refine((value) => value.startsWith("https://"), "sourceUrl must use HTTPS"),
   observedAt: z.string().datetime({ offset: true }),
-});
+  window: z.object({ startsAt: timetableInstant, endsAt: timetableInstant }).strict().optional(),
+}).refine(entry => {
+  if (!entry.window) return true;
+  if (entry.status !== "scheduled") return false;
+  const { startsAt, endsAt } = entry.window;
+  const duration = Date.parse(endsAt) - Date.parse(startsAt);
+  if (duration <= 0 || duration > 24 * 60 * 60_000) return false;
+  try {
+    const local = timetableLocalDateTime(startsAt, entry.timeZone);
+    return local.date === entry.date && local.time === entry.start;
+  } catch {
+    return false;
+  }
+}, { path: ["window"], message: "a scheduled window must match the local start and end within 24 hours" });
 
 export const timetableDocumentSchema = z.object({
   schemaVersion: z.literal(1),
