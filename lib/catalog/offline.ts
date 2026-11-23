@@ -3,17 +3,17 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { offlineTimetableSelect, offlineTimetableWhere, projectOfflinePerformance } from "./offline-timetable.ts";
 
 // Only fields used by the public projection or its schedule validation are read.
-const offlineSelect = {
+const offlineSelect = () => ({
   festival: { select: { slug: true, name: true } },
   startDate: true,
   endDate: true,
   timetable: {
-    where: offlineTimetableWhere,
+    where: offlineTimetableWhere(),
     select: offlineTimetableSelect,
   },
-} satisfies Prisma.FestivalEditionSelect;
+} satisfies Prisma.FestivalEditionSelect);
 
-type OfflineEdition = Prisma.FestivalEditionGetPayload<{ select: typeof offlineSelect }>;
+type OfflineEdition = Prisma.FestivalEditionGetPayload<{ select: ReturnType<typeof offlineSelect> }>;
 type OfflineDatabase = Pick<PrismaClient, "festivalEdition">;
 const compare = (left: string, right: string) => left < right ? -1 : left > right ? 1 : 0;
 const dateOnly = (date: Date | null) => date?.toISOString().slice(0, 10) ?? null;
@@ -51,7 +51,7 @@ export async function readOfflineCatalog(database?: OfflineDatabase) {
   if (!season) throw new Error("Offline catalogue unavailable");
   const rows = await client.festivalEdition.findMany({
     where: { year: season.year, recordState: "CURRENT" },
-    select: offlineSelect,
+    select: offlineSelect(),
   });
   return projectOfflineCatalog(rows, season.year);
 }

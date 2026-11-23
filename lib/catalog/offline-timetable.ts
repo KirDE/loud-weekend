@@ -1,10 +1,10 @@
 import { timetableEntrySchema } from "../timetables.ts";
 
-export const offlineTimetableWhere = {
+export const offlineTimetableWhere = () => ({
   timeZone: { not: null },
   sourceUrl: { not: null },
-  observedAt: { not: null },
-} as const;
+  observedAt: { lte: new Date() },
+} as const);
 
 export const offlineTimetableSelect = {
   date: true, stage: true, start: true, artistName: true, timeZone: true, status: true,

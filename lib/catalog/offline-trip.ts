@@ -13,7 +13,7 @@ export async function readPublishedOfflineTrip(slug: string, year: number, datab
       startDate: true, endDate: true, sourceUpdatedAt: true,
       timetable: {
         // Older rows without explicit schedule evidence must not inherit a default time zone or checked time.
-        where: offlineTimetableWhere,
+        where: offlineTimetableWhere(),
         take: maximumScheduleRows + 1,
         orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }],
         select: offlineTimetableSelect,
