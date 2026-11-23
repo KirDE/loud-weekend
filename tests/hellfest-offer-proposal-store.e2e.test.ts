@@ -186,6 +186,10 @@ test('explicit review: authorization, exact revision, atomic audit, concurrent r
     await decideHellfestOffers(db, reject);
     assert.equal((await readPendingHellfestOffers(db, editionId))!.reviewState, 'rejected');
     assert.deepEqual((await publicItem()).ticketOffers, publicOffers);
+    await db.festivalEdition.update({ where: { id: editionId }, data: { recordState: 'ARCHIVED' } });
+    const archived = (await new DatabaseCatalogRepository(db).read()).editions.find(e => e.slug === slug)!;
+    assert.equal(archived.ticketOffers, undefined, 'the batch reader excludes archived approvals');
+    await db.festivalEdition.update({ where: { id: editionId }, data: { recordState: 'CURRENT', updatedAt: before!.updatedAt } });
     assert.equal((await readApprovedHellfestOffers(db, editionId))!.id, row.id);
     assert.equal(await db.adminAuditEntry.count({ where: { actorId: actor.id } }), 2);
     // Mutated approval proof must fail, never fall back to another snapshot.

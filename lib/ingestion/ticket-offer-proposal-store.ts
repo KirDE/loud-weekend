@@ -1,11 +1,9 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient, Prisma } from "@prisma/client";
 import { z } from "zod";
-import { hellfestProposalSchema as schema } from "../domain/ticket-offer-review.ts";
-import { extractHellfestOfferProposals } from "./adapters/hellfest-offers.ts";
+import { ticketOfferProposalSchema as schema } from "../domain/ticket-offer-review.ts";
+import { extractHellfestOfferProposals, HELLFEST_OFFER_SOURCE as sourceUrl, HELLFEST_OFFER_PARSER as version, isHellfestOfferTarget } from "./adapters/hellfest-offers.ts";
 
-const sourceUrl = "https://hellfest.fr/";
-const version = "hellfest-offer-proposals-v1";
 const digest = (value: z.infer<typeof schema>) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 /** Durable REVIEW ONLY staging. No catalog writes, source health refresh,
@@ -20,7 +18,7 @@ export async function stageHellfestOffers(db: PrismaClient, input: {
     const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "FestivalEdition" WHERE "id" = ${input.editionId} FOR UPDATE`;
     if (locked.length !== 1) throw new Error("Unknown target edition");
     const edition = await tx.festivalEdition.findUniqueOrThrow({ where: { id: input.editionId }, include: { festival: true } });
-    if (edition.festival.slug !== "hellfest" || edition.recordState !== "CURRENT" || edition.festival.officialUrl !== sourceUrl) {
+    if (edition.recordState !== "CURRENT" || !isHellfestOfferTarget(edition.festival.slug, edition.festival.officialUrl)) {
       throw new Error("Hellfest target identity mismatch");
     }
     const value = schema.parse(extractHellfestOfferProposals({ ...input, editionYear: edition.year }));
@@ -32,6 +30,7 @@ export async function stageHellfestOffers(db: PrismaClient, input: {
     if (prior) {
       const saved = schema.parse(prior.proposal);
       if (prior.sourceUrl !== sourceUrl || prior.parserVersion !== version || saved.editionYear !== edition.year ||
+          saved.festivalSlug !== edition.festival.slug || saved.sourceUrl !== sourceUrl ||
           saved.observedAt !== prior.observedAt.toISOString() || digest(saved) !== prior.contentHash) {
         throw new Error("Persisted tier proposal proof mismatch");
       }
@@ -65,7 +64,7 @@ function validateSnapshot(row: Awaited<ReturnType<PrismaClient["ticketOfferPropo
 }) {
   const value = schema.parse(row.proposal);
   if (row.parserVersion !== version || row.sourceUrl !== sourceUrl || row.edition.festival.slug !== value.festivalSlug ||
-      row.edition.festival.officialUrl !== sourceUrl || row.edition.recordState !== "CURRENT" ||
+      value.sourceUrl !== row.sourceUrl || !isHellfestOfferTarget(value.festivalSlug, row.edition.festival.officialUrl) || row.edition.recordState !== "CURRENT" ||
       row.edition.year !== value.editionYear || row.observedAt.toISOString() !== value.observedAt || digest(value) !== row.contentHash) {
     throw new Error("Persisted tier proposal proof mismatch");
   }
@@ -89,7 +88,7 @@ export async function decideHellfestOffers(db: PrismaClient, input: {
     const initial = await tx.ticketOfferProposalSnapshot.findUniqueOrThrow({ where: { id: input.snapshotId } });
     await tx.$queryRaw`SELECT "id" FROM "FestivalEdition" WHERE "id" = ${initial.editionId} FOR UPDATE`;
     const row = await tx.ticketOfferProposalSnapshot.findUniqueOrThrow({ where: { id: input.snapshotId }, include: { edition: { include: { festival: true } } } });
-    validateSnapshot(row);
+    const proposal = validateSnapshot(row);
     if (row.contentHash !== input.expectedContentHash) throw new Error("Tier review revision conflict");
     const prior = await tx.ticketOfferReviewDecision.findUnique({ where: { snapshotId: row.id } });
     if (prior) {
@@ -105,7 +104,7 @@ export async function decideHellfestOffers(db: PrismaClient, input: {
     } });
     await tx.adminAuditEntry.create({ data: {
       actorId: actor.id, actorLabel: actor.id, action: input.decision === "approve" ? "TICKET_OFFERS_APPROVED" : "TICKET_OFFERS_REJECTED",
-      resourceKind: "FESTIVAL", resourceKey: "hellfest", target: row.id,
+      resourceKind: "FESTIVAL", resourceKey: proposal.festivalSlug, target: row.id,
       evidence: { contentHash: row.contentHash, sourceUrl: row.sourceUrl, observedAt: row.observedAt.toISOString() },
       metadata: { decisionId: result.id, editionId: row.editionId },
     } });
@@ -123,7 +122,26 @@ export async function readApprovedHellfestOffers(db: PrismaClient, editionId: st
     where: { editionId, decision: { is: { decision: "approve" } } }, orderBy: { observedAt: "desc" },
     include: { decision: true, edition: { include: { festival: true } } },
   });
-  if (!row) return null;
+  return row ? projectApprovedOffer(row) : null;
+}
+
+/** Load the latest approved proposal only for the requested current editions. */
+export async function readApprovedTicketOffers(db: PrismaClient, editionIds: string[]) {
+  if (!editionIds.length) return [];
+  const rows = await db.ticketOfferProposalSnapshot.findMany({
+    where: { editionId: { in: editionIds }, edition: { recordState: "CURRENT" }, decision: { is: { decision: "approve" } } },
+    distinct: ["editionId"], orderBy: { observedAt: "desc" },
+    include: { decision: true, edition: { include: { festival: true } } },
+  });
+  return rows.flatMap(row => {
+    const approved = projectApprovedOffer(row);
+    return approved ? [{ editionId: row.editionId, proposal: approved.proposal }] : [];
+  });
+}
+
+function projectApprovedOffer(row: Parameters<typeof validateSnapshot>[0] & {
+  decision: { contentHash: string; createdAt: Date } | null;
+}) {
   const proposal = validateSnapshot(row);
   if (!row.decision || row.decision.contentHash !== row.contentHash) throw new Error("Persisted tier decision proof mismatch");
   const age = Date.now() - row.observedAt.getTime();

@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { stageHellfestOffers } from "./ticket-offer-proposal-store.ts";
 
-const url = "https://hellfest.fr/";
+import { HELLFEST_OFFER_SOURCE as url } from "./adapters/hellfest-offers.ts";
 const maxBytes = 2_000_000;
 
 /** One ordinary public GET, no redirects, retries, seller calls or credentials.

@@ -125,7 +125,7 @@ and existing append-only AdminAuditEntry write commit atomically; injected audit
 failure rolls back both. Actor labels use internal IDs, not email copies. Pending
 readback now returns the actual pending/approved/rejected state.
 
-`readApprovedHellfestOffers` selects only explicitly approved snapshots and
+The catalogue reads approved offer snapshots by current edition ID, without a festival-specific filter. The Hellfest adapter owns the source identity; readback selects only explicitly approved snapshots and
 revalidates edition/source/parser/value/hash and decision hash. New pending or
 rejected observations cannot replace the previous approved one. Corrupt approved
 proof errors instead of falling back; approval older than 24h or >60s in the

@@ -1,7 +1,13 @@
 import { load } from "cheerio";
 import type { TicketOfferProposal, TicketOfferProposalBatch } from "../../domain/ticket-offer-proposal.ts";
 
-const sourceUrl = "https://hellfest.fr/";
+export const HELLFEST_OFFER_SOURCE = "https://hellfest.fr/";
+export const HELLFEST_OFFER_PARSER = "hellfest-offer-proposals-v1";
+const festivalSlug = "hellfest";
+
+export function isHellfestOfferTarget(slug: string, officialUrl: string | null) {
+  return slug === festivalSlug && officialUrl === HELLFEST_OFFER_SOURCE;
+}
 const compact = (value: string) => value.replace(/\s+/g, " ").trim();
 
 /** Independent review-only extraction. Not registered with the ingestion runner.
@@ -11,10 +17,10 @@ const compact = (value: string) => value.replace(/\s+/g, " ").trim();
 export function extractHellfestOfferProposals(input: {
   html: string; finalUrl: string; status: number; editionYear: number; observedAt: string;
 }): TicketOfferProposalBatch {
-  const result: TicketOfferProposalBatch = { festivalSlug: "hellfest", editionYear: input.editionYear,
-    sourceUrl, observedAt: input.observedAt, offers: [], warnings: [] };
+  const result: TicketOfferProposalBatch = { festivalSlug, editionYear: input.editionYear,
+    sourceUrl: HELLFEST_OFFER_SOURCE, observedAt: input.observedAt, offers: [], warnings: [] };
   const fail = (message: string) => { result.warnings.push(message); return result; };
-  if (input.status !== 200 || input.finalUrl !== sourceUrl) return fail("Hellfest official response identity/status mismatch");
+  if (input.status !== 200 || input.finalUrl !== HELLFEST_OFFER_SOURCE) return fail("Hellfest official response identity/status mismatch");
   if (!Number.isInteger(input.editionYear) || input.editionYear < 2000 || input.editionYear > 2100 ||
       !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(input.observedAt) ||
       !Number.isFinite(Date.parse(input.observedAt)) || new Date(input.observedAt).toISOString() !== input.observedAt) {
@@ -63,8 +69,8 @@ export function extractHellfestOfferProposals(input: {
     else if (priceText.toLowerCase() !== "à venir") return fail("Hellfest tier price unsupported");
     const saleDateText = compact(card.find(".home__ticket-card-date").text()) || null;
     if ((saleDateText?.length ?? 0) > 120) return fail("Hellfest sale date text exceeds bounds");
-    offers.push({ key: `hellfest-${input.editionYear}-${kind}`, kind, label, status, price, saleDateText,
-      sourceUrl, observedAt: input.observedAt, excerpt: compact(card.text()).slice(0, 500) });
+    offers.push({ key: `${festivalSlug}-${input.editionYear}-${kind}`, kind, label, status, price, saleDateText,
+      sourceUrl: HELLFEST_OFFER_SOURCE, observedAt: input.observedAt, excerpt: compact(card.text()).slice(0, 500) });
   }
   result.offers = offers;
   return result;

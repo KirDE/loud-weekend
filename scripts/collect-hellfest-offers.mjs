@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { fetchHellfestOfferObservation } from '../lib/ingestion/hellfest-offer-collector.ts';
-import { extractHellfestOfferProposals } from '../lib/ingestion/adapters/hellfest-offers.ts';
-import { hellfestProposalSchema } from '../lib/domain/ticket-offer-review.ts';
+import { extractHellfestOfferProposals, isHellfestOfferTarget } from '../lib/ingestion/adapters/hellfest-offers.ts';
+import { ticketOfferProposalSchema } from '../lib/domain/ticket-offer-review.ts';
 import { stageHellfestOffers } from '../lib/ingestion/ticket-offer-proposal-store.ts';
 
 export const usage = 'npm run tickets:collect-hellfest -- --year=YYYY [--stage-pending --edition-id=ID]\nDefault: read-only preview, no DB connection. Staging requires explicit DATABASE_URL and an existing matching current edition. Never approves, migrates or changes global ticket status.';
@@ -32,10 +32,10 @@ export async function runCollection(args, { db, fetchImpl } = {}) {
     // Check target before external work; store rechecks under its edition lock.
     const edition = await db.festivalEdition.findUnique({ where: { id: options.editionId }, include: { festival: true } });
     if (!edition || edition.year !== options.year || edition.recordState !== 'CURRENT' ||
-        edition.festival.slug !== 'hellfest' || edition.festival.officialUrl !== 'https://hellfest.fr/') throw new Error('Target mismatch');
+        !isHellfestOfferTarget(edition.festival.slug, edition.festival.officialUrl)) throw new Error('Target mismatch');
   }
   const observation = await fetchHellfestOfferObservation({ fetchImpl });
-  const proposal = hellfestProposalSchema.parse(extractHellfestOfferProposals({ ...observation, editionYear: options.year }));
+  const proposal = ticketOfferProposalSchema.parse(extractHellfestOfferProposals({ ...observation, editionYear: options.year }));
   if (!options.stage) return { mode: 'preview', writes: false, proposal };
   const row = await stageHellfestOffers(db, { ...observation, editionId: options.editionId });
   return { mode: 'staged_for_review', snapshotId: row.id, contentHash: row.contentHash, observedAt: row.observedAt.toISOString() };

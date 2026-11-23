@@ -1,4 +1,4 @@
-import { readApprovedHellfestOffers } from "../ingestion/ticket-offer-proposal-store.ts";
+import { readApprovedTicketOffers } from "../ingestion/ticket-offer-proposal-store.ts";
 import type { PublicTicketOffers } from "../domain/ticket-offer-proposal.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
 import type { PrismaClient } from "@prisma/client";
@@ -47,16 +47,12 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     ]);
     if (!editionRows.length || !artistRows.length) throw new Error("database catalogue is empty or incomplete");
 
-    // Only current Hellfest uses this reviewed view. No extra lookup for other
-    // festivals or historical editions; never expose pending/internal evidence.
+    const currentIds = editionRows.filter(row => row.recordState === "CURRENT").map(row => row.id);
     const approvedTiers = new Map<string, PublicTicketOffers>();
-    for (const row of editionRows.filter(row => row.festival.slug === "hellfest" && row.recordState === "CURRENT")) {
-      const approved = await readApprovedHellfestOffers(this.client, row.id);
-      if (approved) {
-        const { editionYear, sourceUrl, observedAt, offers } = approved.proposal;
-        approvedTiers.set(row.id, { editionYear, sourceUrl, observedAt,
-          offers: offers.map(({ key, kind, status, price, saleDateText }) => ({ key, kind, status, price, saleDateText })) });
-      }
+    for (const { editionId, proposal } of await readApprovedTicketOffers(this.client, currentIds)) {
+      const { editionYear, sourceUrl, observedAt, offers } = proposal;
+      approvedTiers.set(editionId, { editionYear, sourceUrl, observedAt,
+        offers: offers.map(({ key, kind, status, price, saleDateText }) => ({ key, kind, status, price, saleDateText })) });
     }
     const editions: FestivalEdition[] = editionRows.map((row) => {
       const headliners = row.lineup.filter(({ billing }) => billing === "HEADLINER").map(({ artist }) => artist.name);
