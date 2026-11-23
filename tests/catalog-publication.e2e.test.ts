@@ -287,7 +287,7 @@ test("ingestion saves a compound billing as one addition without replacing exist
   );
 });
 
-test("automatic ingestion and ordinary admin edits cannot reinstate a cancelled identity", async () => {
+test("admin roster edits preserve retained and cancelled rows without reinstating cancelled identities", async () => {
   const cancelled = await db.lineupEntry.findFirstOrThrow({
     where: {
       edition: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
@@ -334,10 +334,41 @@ test("automatic ingestion and ordinary admin edits cannot reinstate a cancelled 
     );
     assert.ok(before);
     assert.ok(!before.lineup.includes(cancelled.artist.name));
-    const name = `Synthetic Reviewed Replacement ${suffix}`;
-    assert.ok(await edit([...before.lineup, name]));
-    const inserted = await db.artist.findFirstOrThrow({ where: { name } });
-    createdArtists.push(inserted.slug);
+    const names = [
+      `Synthetic Reviewed Replacement ${suffix}`,
+      `Synthetic Reviewed Guest ${suffix}`,
+    ];
+    assert.ok(await edit([...before.lineup, ...names]));
+    const activeBefore = await db.lineupEntry.findMany({
+      where: { editionId: cancelled.editionId, billing: "LINEUP", status: "ANNOUNCED" },
+      orderBy: { position: "asc" },
+      include: { artist: true },
+    });
+    createdArtists.push(
+      ...activeBefore
+        .filter(({ artist }) => names.includes(artist.name))
+        .map(({ artist }) => artist.slug),
+    );
+    const reversed = [...activeBefore].reverse();
+    assert.ok(await edit(reversed.map(({ artist }) => artist.name)));
+    const activeAfter = await db.lineupEntry.findMany({
+      where: { editionId: cancelled.editionId, billing: "LINEUP", status: "ANNOUNCED" },
+      orderBy: { position: "asc" },
+    });
+    assert.deepEqual(
+      activeAfter.map(({ id }) => id),
+      reversed.map(({ id }) => id),
+    );
+    const remaining = reversed.filter(({ artist }) => artist.name !== names[0]);
+    assert.ok(await edit(remaining.map(({ artist }) => artist.name)));
+    const afterRemoval = await db.lineupEntry.findMany({
+      where: { editionId: cancelled.editionId, billing: "LINEUP", status: "ANNOUNCED" },
+      orderBy: { position: "asc" },
+    });
+    assert.deepEqual(
+      afterRemoval.map(({ id }) => id),
+      remaining.map(({ id }) => id),
+    );
     const retained = await db.lineupEntry.findUniqueOrThrow({ where: { id: cancelled.id } });
     assert.equal(retained.status, "CANCELLED");
     assert.equal(retained.position, cancelled.position);

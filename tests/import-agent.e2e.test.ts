@@ -164,6 +164,9 @@ test("verified resolution commits audit/provenance once, replays safely and enqu
 });
 test("billing promotion is atomic and keeps artist identity, completeness and provider boundaries", async () => {
   const c = await claim();
+  const original = await db.lineupEntry.findFirstOrThrow({
+    where: { editionId: c.current.editionId!, artist: { slug: "sample-artist" } },
+  });
   const receipt = await resolveCase(c, {
     action: "apply",
     reason: checked.reason,
@@ -181,6 +184,10 @@ test("billing promotion is atomic and keeps artist identity, completeness and pr
   });
   assert.equal(edition.completeness, "PARTIAL");
   assert.equal(edition.lineup.find((l) => l.artist.name === "Sample Artist")?.billing, "LINEUP");
+  assert.equal(
+    edition.lineup.find((entry) => entry.artistId === original.artistId)?.id,
+    original.id,
+  );
   assert.equal(
     edition.lineup.find((l) => l.artist.name === "Verified New Headliner")?.billing,
     "HEADLINER",
