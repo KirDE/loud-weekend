@@ -56,7 +56,7 @@ export function DiscoverySearch({ query, ready, festivals, artists, inputRef, on
       }
     }}>
     <span aria-hidden="true">⌕</span>
-    <input ref={inputRef} aria-label={t("filterSearch")} value={query} onFocus={() => setOpen(true)}
+    <input ref={inputRef} aria-label={t("filterSearch")} value={query} onFocus={() => setOpen(true)} onClick={() => setOpen(true)}
       onChange={event => { setOpen(true); onChange(event.target.value); }} placeholder={t("search")} />
     {query && <button type="button" className="clearDiscoverySearch" aria-label={t("clearSearch")}
       onClick={() => { onChange(""); inputRef.current?.focus(); }}><span aria-hidden="true">✕</span></button>}
