@@ -1,4 +1,3 @@
-import { withFestivalStockDates } from "../lib/ingestion/festival-stock-dates.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ticketProducerPublication } from "./support/ticket-producer-publication.ts";
@@ -8,8 +7,8 @@ import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
 import { parserSource } from "./support/parser-source.ts";
 const baseSource = parserSource("summer-punch", { url:"https://summerpunchfestival.pl/" });
 const home = readFileSync(new URL("./fixtures/official-markup/summer-punch-full.html",import.meta.url),"utf8");
-ticketProducerPublication({slug:baseSource.festivalSlug, produce:async (archived, db)=>{
-  const source=await withFestivalStockDates(db,baseSource);
+ticketProducerPublication({slug:baseSource.festivalSlug, produce:async (archived)=>{
+  const source=baseSource;
   const fetched=await fetchSource(source,{maxAttempts:1,fetchImpl:async url=>{
     if(url!==source.url){const r=summerStockResponse(url);assert.ok(r,"unexpected stock request");return r;}
     const r=new Response(archived?home.replaceAll("2027","2026"):home);Object.defineProperty(r,"url",{value:source.url});return r;

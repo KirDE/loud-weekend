@@ -1,7 +1,5 @@
 import type { Festival } from "../domain/festival.ts";
 
-import type { ProvinssiStockDates, SummerStockDates } from "./festival-stock-dates.ts";
-
 export const INGESTION_SCHEMA_VERSION = 1 as const;
 export type RefreshPolicy = "daily" | "every_3_days" | "weekly" | "archived";
 export type ParserStrategy = "json_ld_event" | "html_fallback" | "official_markup" | "manual_review";
@@ -18,8 +16,6 @@ export type FestivalSource = {
   followLinkPattern?: string;
   headers?: Record<string, string>;
   manualReviewReason?: string;
-  summerDates?: SummerStockDates;
-  provinssiDates?: ProvinssiStockDates;
 };
 
 export type FieldEvidence = {

@@ -43,7 +43,7 @@ Roadburn uses the same API, but its official buy link still points to `/offsale`
 while API ordinary inventory is positive. That conflict is **not** resolved by
 this implementation and must not produce automatic availability.
 
-Reviewed edition dates, provider event labels and fixed schedule assertions are
-loaded from PostgreSQL by exact festival, source and edition. Missing bindings
-do not trigger a supplement request. The existing explicit provider routes and
-ordinary rate identities continue to constrain the public stock contract.
+No production seed or proof table supplies the seller dates. The adapter derives
+them from the public response and compares them with the independently parsed
+organizer dates before persisting the normal stock evidence. Missing or
+contradictory observations withhold the stock update.

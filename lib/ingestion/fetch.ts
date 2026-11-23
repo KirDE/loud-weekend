@@ -1,6 +1,5 @@
-import { getProvinssiDates, getSummerDates } from "./festival-stock-dates.ts";
-import { fetchProvinssiStock } from "./provinssi-ticket-stock.ts";
-import { fetchSummerStock } from "./summer-ticket-stock.ts";
+import { PROVINSSI_STOCK, fetchProvinssiStock } from "./provinssi-ticket-stock.ts";
+import { SUMMER_STOCK, fetchSummerStock } from "./summer-ticket-stock.ts";
 import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters/full-rewind.ts';
@@ -552,12 +551,10 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
     // source overrides or authorization headers on a public ticket destination.
-    const provinssiDates = getProvinssiDates(source);
-    const summerDates = getSummerDates(source);
-    if (provinssiDates || summerDates) {
-      const stock = await (provinssiDates
-        ? fetchProvinssiStock(provinssiDates, options.fetchImpl)
-        : fetchSummerStock(summerDates!, options.fetchImpl));
+    if (ticketUrl === PROVINSSI_STOCK || ticketUrl === SUMMER_STOCK) {
+      const stock = await (ticketUrl === PROVINSSI_STOCK
+        ? fetchProvinssiStock(options.fetchImpl)
+        : fetchSummerStock(options.fetchImpl));
       attempts += stock.attempts;
       const response = new Response(JSON.stringify({kind:TICKET_SUPPLEMENT,body,ticket:{url:ticketUrl,html:stock.html}}),{headers:{"content-type":"application/json"}});
       Object.defineProperty(response,"url",{value:source.url});

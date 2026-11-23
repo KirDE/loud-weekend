@@ -1,5 +1,5 @@
+import { PROVINSSI_STOCK, provinssiStockDatePrefix } from "../ingestion/provinssi-ticket-stock.ts";
 import { isDeepStrictEqual } from "node:util";
-import { getProvinssiDates, withFestivalStockDates, type ProvinssiStockDates } from "../ingestion/festival-stock-dates.ts";
 import { ticketSupplementUrl, ticketSupplementPurchaseUrl, ticketSupplementScope } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
@@ -263,12 +263,10 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     // Summer's shared POST proof must not be bypassed by stripping both markers,
     // including ticket-URL-only updates approved by an untrusted caller.
     const summerTicketChange = input.result.festivalSlug === "summer-punch" && input.result.changes.some(c => ["ticketStatus", "ticketsUrl"].includes(c.field));
-    let provinssiDates: ProvinssiStockDates | undefined;
     if (observed.ticketSupplement || stored.ticketSupplement || summerTicketChange || input.result.festivalSlug === "provinssi" && input.result.changes.some(c => c.field === "ticketStatus")) {
-      const registeredSource = await withFestivalStockDates(db, { festivalSlug: input.result.festivalSlug,
+      const registeredSource = { festivalSlug: input.result.festivalSlug,
         url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
-        strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true });
-      provinssiDates = getProvinssiDates(registeredSource);
+        strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true };
       const ticketUrl = ticketSupplementUrl(registeredSource);
       const purchaseUrl = ticketSupplementPurchaseUrl(registeredSource);
       const scope = ticketSupplementScope(registeredSource);
@@ -377,8 +375,16 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     if ((downloadLineup || input.result.changes.some(c => c.field === "completeness")) && !verifiedDownloadAnnouncement)
       throw new Error("Download publication requires verified official announcement evidence");
     const provinssiPublication = input.result.festivalSlug === 'provinssi';
-    const provinssiStockDatesMatch = provinssiDates !== undefined && applied.edition.year === provinssiDates.editionYear
-      && observed.startDate === provinssiDates.startDate && observed.endDate === provinssiDates.endDate;
+    const provinssiStockDatesMatch = provinssiPublication && typeof observed.startDate === "string" && typeof observed.endDate === "string"
+      && observed.evidence.some(e => e.field === "ticketStatus" && e.sourceUrl === PROVINSSI_STOCK
+        && e.excerpt?.startsWith(provinssiStockDatePrefix(observed.startDate!, observed.endDate!)))
+      && (["startDate", "endDate"] as const).every(dateField => {
+        const value = observed[dateField];
+        const resultingDate = input.result.changes.find(change => change.field === dateField)?.after ?? isoDate(applied.edition[dateField]);
+        return typeof value === "string" && value.startsWith(`${applied.edition.year}-`) && value === resultingDate && value === stored[dateField] &&
+          observed.evidence.some(e => e.field === dateField && e.sourceUrl === PROVINSSI_HOME) &&
+          candidate.evidence.some(e => e.field === dateField && e.sourceUrl === PROVINSSI_HOME && same(e.observedValue, value));
+      });
     const verifiedProvinssiAnnouncement = provinssiPublication && candidate.festivalSlug === 'provinssi' &&
       candidate.attempt.requestedUrl === PROVINSSI_HOME && input.result.sourceUrl === PROVINSSI_HOME &&
       isProvinssiAnnouncement(input.result.candidate, applied.edition.year) &&
