@@ -14,7 +14,16 @@ async function runWithResponse(body, status = "200") {
   await mkdir(bin);
   await mkdir(runtime);
   const curl = path.join(bin, "curl");
-  await writeFile(curl, `#!/usr/bin/env bash\nset -euo pipefail\noutput=""\nwhile (($#)); do\n  if [[ "$1" == --output ]]; then output="$2"; shift 2; else shift; fi\ndone\nprintf '%s' '${body}' > "$output"\nprintf '%s' '${status}'\n`);
+  await writeFile(
+    curl,
+    '#!/usr/bin/env bash\nset -euo pipefail\noutput=""\nwhile (($#))' +
+      '; do\n  if [[ "$1" == --output ]]; then output="$2"; shift 2;' +
+      " else shift; fi\ndone\nprintf '%s' '" +
+      `${body}` +
+      "' > \"$output\"\nprintf '%s' '" +
+      `${status}` +
+      "'\n",
+  );
   await chmod(curl, 0o755);
   const stateFile = path.join(directory, "state.json");
   const result = spawnSync("bash", [runnerPath], {
@@ -54,7 +63,9 @@ test("production owns analytics retention scheduling", async () => {
 });
 
 test("production retention runner persists a successful validated read-back", async () => {
-  const { result, state } = await runWithResponse('{"deletedAggregateRows":2,"cutoff":"2026-06-03T00:00:00.000Z","retentionDays":90}');
+  const { result, state } = await runWithResponse(
+    '{"deletedAggregateRows":2,"cutoff":"2026-06-03T00:00:00.000Z","retentionDays":90}',
+  );
   assert.equal(result.status, 0, result.stderr);
   assert.equal(state.ok, true);
   assert.equal(state.deletedAggregateRows, 2);
@@ -70,7 +81,9 @@ test("production retention runner fails closed and records HTTP failure without 
 });
 
 test("production retention runner rejects malformed success responses", async () => {
-  const { result, state } = await runWithResponse('{"deletedAggregateRows":-1,"cutoff":"invalid","retentionDays":0}');
+  const { result, state } = await runWithResponse(
+    '{"deletedAggregateRows":-1,"cutoff":"invalid","retentionDays":0}',
+  );
   assert.equal(result.status, 1);
   assert.equal(state.ok, false);
   assert.match(result.stderr, /invalid analytics retention response/);

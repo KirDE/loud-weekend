@@ -46,8 +46,7 @@ export async function callAgent(config, method = "GET", body, mode) {
   }
   const bytes = await response.text();
   if (bytes.length > 2000000) throw new Error("Agent API response too large");
-  if (response.status === 404)
-    throw new Error("Agent API HTTP 404 request failed");
+  if (response.status === 404) throw new Error("Agent API HTTP 404 request failed");
   let value;
   try {
     value = JSON.parse(bytes);
@@ -59,9 +58,7 @@ export async function callAgent(config, method = "GET", body, mode) {
       "Agent API HTTP " +
         response.status +
         " " +
-        (["stale", "busy", "invalid"].includes(value.error)
-          ? value.error
-          : "request failed"),
+        (["stale", "busy", "invalid"].includes(value.error) ? value.error : "request failed"),
     );
   return value;
 }
@@ -70,8 +67,7 @@ export function watcherDecision(observation, previous = {}, now = Date.now()) {
     return { fire: false, state: { ...previous, awaitingDeployment: true } };
   if (observation.missing) observation = { error: true };
   if (observation.error) {
-    const fire =
-      !previous.error || now - Number(previous.lastFire ?? 0) >= 3600000;
+    const fire = !previous.error || now - Number(previous.lastFire ?? 0) >= 3600000;
     return {
       fire,
       state: {
@@ -128,7 +124,7 @@ async function main() {
       throw new Error("Invalid arguments");
     options[flag.slice(2)] = args.shift();
   }
-  if ((["list", "claim", "repair-claim"].includes(command)) && !options.out)
+  if (["list", "claim", "repair-claim"].includes(command) && !options.out)
     throw new Error("Private --out required for case data");
   if (options.out) {
     const parent = await stat(dirname(options.out));
@@ -153,22 +149,47 @@ async function main() {
       : {};
     let observation;
     try {
-      observation = await callAgent(config, "GET", undefined, options.queue === "repairs" ? "repairs-signal" : "signal");
+      observation = await callAgent(
+        config,
+        "GET",
+        undefined,
+        options.queue === "repairs" ? "repairs-signal" : "signal",
+      );
       result = watcherDecision(observation, previous);
     } catch (error) {
       result = watcherDecision(
-        error.message.includes("HTTP 404")
-          ? { missing: true }
-          : { error: true },
+        error.message.includes("HTTP 404") ? { missing: true } : { error: true },
         previous,
       );
     }
   } else if (command === "signal")
-    result = await callAgent(config, "GET", undefined, options.queue === "repairs" ? "repairs-signal" : "signal");
-  else if (command === "list") result = await callAgent(config, "GET", undefined, options.queue === "repairs" ? "repairs" : undefined);
-  else if (command === "repair-claim") result = await callAgent(config, "POST", {operation:"repair_claim",repairId:options.repair});
-  else if (command === "repair-finish") { const claim = await privateJson(options.claim); result = await callAgent(config,"POST",{operation:"repair_finish",repairId:claim.repairId,leaseToken:claim.leaseToken,result:await privateJson(options.decision)}); }
-  else if (command === "claim")
+    result = await callAgent(
+      config,
+      "GET",
+      undefined,
+      options.queue === "repairs" ? "repairs-signal" : "signal",
+    );
+  else if (command === "list")
+    result = await callAgent(
+      config,
+      "GET",
+      undefined,
+      options.queue === "repairs" ? "repairs" : undefined,
+    );
+  else if (command === "repair-claim")
+    result = await callAgent(config, "POST", {
+      operation: "repair_claim",
+      repairId: options.repair,
+    });
+  else if (command === "repair-finish") {
+    const claim = await privateJson(options.claim);
+    result = await callAgent(config, "POST", {
+      operation: "repair_finish",
+      repairId: claim.repairId,
+      leaseToken: claim.leaseToken,
+      result: await privateJson(options.decision),
+    });
+  } else if (command === "claim")
     result = await callAgent(config, "POST", {
       operation: "claim",
       sourceId: options.source,
@@ -211,10 +232,7 @@ async function main() {
     throw new Error("Private --out required for case data");
   else console.log(JSON.stringify(result));
 }
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch((error) => {
     console.error(error.message);
     process.exitCode = 1;
