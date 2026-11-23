@@ -17,6 +17,7 @@ export const emptyPlannerState: PlannerState = {
   playlistFestivals: [],
   savedFilters: { query: "", country: "all", announcedOnly: false, month: "all", ticketsOnly: false },
 };
+const plannerStorageKey = "festival-radar-planner-v1";
 const Context = createContext<
   | (PlannerState & {
       ready: boolean;
@@ -27,7 +28,7 @@ const Context = createContext<
       setSavedFilters: (value: PlannerState["savedFilters"]) => void;
       replace: (value: PlannerState) => void;
       merge: (value: Partial<PlannerState>) => void;
-      clear: () => void;
+      clear: (clearRelatedData: () => void) => void;
     })
   | null
 >(null);
@@ -40,16 +41,17 @@ export function LocalPlannerProvider({
   const [ready, setReady] = useState(false);
   useEffect(() => {
     try {
-      const value = localStorage.getItem("festival-radar-planner-v1");
+      const value = localStorage.getItem(plannerStorageKey);
       if (value) setState({ ...emptyPlannerState, ...parsePlannerState(value) });
     } catch {
-      localStorage.removeItem("festival-radar-planner-v1");
+      localStorage.removeItem(plannerStorageKey);
     }
     setReady(true);
   }, []);
   useEffect(() => {
-    if (ready)
-      localStorage.setItem("festival-radar-planner-v1", serializePlannerState(state));
+    if (!ready) return;
+    const serialized = serializePlannerState(state);
+    if (localStorage.getItem(plannerStorageKey) !== serialized) localStorage.setItem(plannerStorageKey, serialized);
   }, [ready, state]);
   const toggle = (a: string[], v: string) =>
     a.includes(v) ? a.filter((x) => x !== v) : [...a, v];
@@ -88,7 +90,18 @@ export function LocalPlannerProvider({
         playlistFestivals: Array.from(new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])])),
         savedFilters: { ...current.savedFilters, ...(next.savedFilters || {}) },
       })),
-      clear: () => setState(emptyPlannerState),
+      clear: (clearRelatedData: () => void) => {
+        const previous = localStorage.getItem(plannerStorageKey);
+        localStorage.setItem(plannerStorageKey, serializePlannerState(emptyPlannerState));
+        try {
+          clearRelatedData();
+        } catch (error) {
+          if (previous === null) localStorage.removeItem(plannerStorageKey);
+          else localStorage.setItem(plannerStorageKey, previous);
+          throw error;
+        }
+        setState(emptyPlannerState);
+      },
     }),
     [ready, state],
   );

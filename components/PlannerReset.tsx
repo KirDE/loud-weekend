@@ -42,9 +42,10 @@ export function PlannerReset({ disabled = false, onOpenChange }: { disabled?: bo
   function reset() {
     try {
       const current = browserRunningOrderSnapshot(localStorage);
-      clearBrowserRunningOrders(localStorage, current);
-      setBackup({ ...snapshot(planner), runningOrders: current });
-      planner.clear();
+      const previous = { ...snapshot(planner), runningOrders: current };
+      planner.clear(() => clearBrowserRunningOrders(localStorage, current));
+      setBackup(previous);
+      setFailed(false);
       window.dispatchEvent(new Event(timetablePlanChanged));
       return true;
     } catch {

@@ -22,15 +22,17 @@ export function browserRunningOrderSnapshot(storage: Storage) {
 }
 
 export function clearBrowserRunningOrders(storage: Storage, snapshot: Record<string, string[]>) {
-  const cleared: string[] = [];
+  const cleared = new Map<string, string>();
   try {
     for (const key of Object.keys(snapshot)) {
       if (!ownedPlanKey(key)) continue;
+      const raw = storage.getItem(key);
+      if (raw === null) continue;
       storage.removeItem(key);
-      cleared.push(key);
+      cleared.set(key, raw);
     }
   } catch (error) {
-    restoreBrowserRunningOrders(storage, Object.fromEntries(cleared.map(key => [key, snapshot[key]])));
+    for (const [key, raw] of cleared) storage.setItem(key, raw);
     throw error;
   }
 }

@@ -119,3 +119,50 @@ test("backup, reset and undo include edition running orders without writing the 
     .toEqual(['["new-show","show-1"]', '["archived-show"]', "keep"]);
   expect(writes()).toBe(0);
 });
+
+test("failed planner persistence keeps the local plan and running orders", async ({ page }) => {
+  const writes = await setup(page, true);
+  const runningOrder = "festival-radar-timetable-v1:synthetic-fest:2027";
+  await page.goto("/en/planner/");
+  await page.getByRole("button", { name: copy.en.clear, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await page.evaluate(runningOrder => {
+    localStorage.setItem(runningOrder, '["show-1"]');
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (name, value) {
+      if (this === localStorage) throw new DOMException("Write denied", "QuotaExceededError");
+      return setItem.call(this, name, value);
+    };
+  }, runningOrder);
+  await dialog.getByRole("button", { name: copy.en.reset, exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("Browser storage could not be updated.");
+  expect(await state(page)).toEqual(saved);
+  expect(await page.evaluate(key => localStorage.getItem(key), runningOrder)).toBe('["show-1"]');
+  await expect(page.getByRole("button", { name: copy.en.undo })).toHaveCount(0);
+  expect(writes()).toBe(0);
+});
+
+test("a failed running-order removal rolls back the entire reset", async ({ page }) => {
+  const writes = await setup(page, false);
+  const first = "festival-radar-timetable-v1:synthetic-fest:2026";
+  const second = "festival-radar-timetable-v1:synthetic-fest:2027";
+  await page.goto("/en/planner/");
+  await page.getByRole("button", { name: copy.en.clear, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await page.evaluate(({ first, second }) => {
+    localStorage.setItem(first, ' [ "show-1" ] ');
+    localStorage.setItem(second, '["show-2"]');
+    const removeItem = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (name) {
+      if (this === localStorage && name === second) throw new DOMException("Removal denied", "SecurityError");
+      return removeItem.call(this, name);
+    };
+  }, { first, second });
+  await dialog.getByRole("button", { name: copy.en.reset, exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("Browser storage could not be updated.");
+  expect(await state(page)).toEqual(saved);
+  expect(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [first, second]))
+    .toEqual([' [ "show-1" ] ', '["show-2"]']);
+  await expect(page.getByRole("button", { name: copy.en.undo })).toHaveCount(0);
+  expect(writes()).toBe(0);
+});
