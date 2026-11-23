@@ -208,3 +208,46 @@ test("signing out removes the private account view but keeps device choices", as
  await expect(choice).toBeChecked();
  expect(await selection()).toEqual(saved);
 });
+
+test("a failed account baseline can be retried without starting any writes", async ({ page }) => {
+ const docs = new Map([["collections", {
+   id: "existing-collection", userId, kind: documentKinds.collections, revision: 4,
+   updatedAt: "2026-11-17T22:00:00.000Z",
+   payload: { schemaVersion: 1, playlistFestivals: [], spotify: null },
+ }]]);
+ let failed = true;
+ const writes = [];
+ await page.route("**/api/auth/me**", route => route.fulfill({ json: {
+   user: { id: userId, email: "browser-collections@example.test" },
+ } }));
+ await page.route("**/api/sync/**", async route => {
+   const request = route.request();
+   const kind = new URL(request.url()).pathname.split("/").filter(Boolean).at(-1);
+   const previous = docs.get(kind);
+   if (request.method() === "GET") {
+     if (kind === "collections" && failed) return route.fulfill({ status: 503 });
+     return route.fulfill({ json: { document: previous ?? null } });
+   }
+   const { payload, revision } = request.postDataJSON();
+   writes.push([kind, revision]);
+   expect(revision).toBe(previous?.revision ?? 0);
+   const document = { id: previous?.id ?? kind, userId, kind: documentKinds[kind], payload, revision: revision + 1 };
+   docs.set(kind, document);
+   return route.fulfill({ json: { document } });
+ });
+ await page.goto("/en/planner/");
+ const panel = page.locator(".accountSync");
+ const sync = panel.getByRole("button", { name: copy.en.sync, exact: true });
+ await expect(panel.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
+ await expect(sync).toBeDisabled();
+ await expect(panel.getByRole("button", { name: copy.en.import, exact: true })).toBeDisabled();
+ expect(writes).toEqual([]);
+
+ failed = false;
+ await panel.getByRole("button", { name: "Retry account sync setup" }).click();
+ await expect(sync).toBeEnabled();
+ expect(writes).toEqual([]);
+ await sync.click();
+ await expect(panel.getByText("Everything is synchronized.")).toBeVisible();
+ expect(writes).toEqual([["favorites", 0], ["collections", 4], ["saved-filters", 0], ["plans", 0]]);
+});
