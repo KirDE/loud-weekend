@@ -10,6 +10,7 @@ import {
   releaseAgentIssue,
   resolveAgentIssue,
 } from "../../lib/ingestion/agent-issues.ts";
+import { prepareImportEvent, verifyDispatchEvent } from "../../lib/ingestion/import-events.ts";
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 
 const headings = {
@@ -266,17 +267,31 @@ test("Graspop arrival comes from the reviewed organizer observation", async ({ p
     earlier.setUTCDate(earlier.getUTCDate() - 8);
     const arrivalScope = { edition: { festivalId } };
     await db.editionArrivalFact.updateMany({ where: arrivalScope, data: { checkedOn: earlier } });
-    await db.operationalState.update({
-      where: { key: revised.key },
-      data: { payload: { status: "resolved", retryAt: earlier.toISOString() } },
-    });
     const observedAgain = await stageArrivalFixture(db, item, pages);
     expect(observedAgain.issueId).toBe(revised.issueId);
+    const eventKey = "import-event-" + observedAgain.attempt.id + "-" + observedAgain.sourceId;
+    const queued = await db.operationalState.findUniqueOrThrow({ where: { key: eventKey } });
+    const until = new Date(result.retryAt);
+    const before = new Date(until.getTime() - 1);
+    expect(await prepareImportEvent(db, queued.payload, before)).toEqual({ defer: until });
+    const dispatch = await prepareImportEvent(db, queued.payload, until);
+    expect(dispatch.event).toMatchObject({
+      kind: "source",
+      sourceId: observedAgain.sourceId,
+      issueId: observedAgain.issueId,
+    });
+    await db.operationalState.update({
+      where: { key: revised.key },
+      data: { payload: { ...result, retryAt: earlier.toISOString() } },
+    });
+    const due = await prepareImportEvent(db, queued.payload);
+    expect(await verifyDispatchEvent(db, due.event)).toEqual({ ready: true, obsolete: false });
     const check = approve(await claimAgentIssue(db, observedAgain.sourceId, observedAgain.issueId));
     const freshness = await resolveAgentIssue(db, check);
     expect(freshness.publicationId).toBeNull();
     expect(freshness.arrivalPublished).toBe(false);
     expect(await resolveAgentIssue(db, check)).toEqual(freshness);
+    expect(await verifyDispatchEvent(db, due.event)).toEqual({ ready: false, obsolete: true });
     const observationDay = observedAgain.candidate.arrival.facts[0].checkedOn;
     const refreshed = await db.editionArrivalFact.findMany({ where: arrivalScope });
     expect(refreshed.map(({ checkedOn }) => checkedOn.toISOString().slice(0, 10))).toEqual([
