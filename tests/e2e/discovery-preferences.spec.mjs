@@ -113,6 +113,49 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
       )
       .toEqual(activeFilters);
     await expect(secondPage.locator(".festivalCard")).toHaveCount(0);
+
+    // Leave the second device on the same planner page while the first device saves.
+    await secondPage.goto("/en/planner/");
+    const pull = secondPage.getByRole("button", {
+      name: "Use account data on this device",
+      exact: true,
+    });
+    await expect(pull).toBeEnabled();
+    const latest = { ...activeFilters, ticketsOnly: false };
+    const { document: previous } = await (
+      await page.request.get("/api/sync/saved-filters/")
+    ).json();
+    expect(
+      (
+        await page.request.put("/api/sync/saved-filters/", {
+          headers: { origin: new URL(page.url()).origin },
+          data: { revision: previous.revision, payload: { savedFilters: latest } },
+        })
+      ).status(),
+    ).toBe(200);
+
+    // A failed document read must not replace any local data.
+    const filtersRoute = "**/api/sync/saved-filters*";
+    for (const response of [{ status: 503 }, { json: {} }]) {
+      await secondPage.route(filtersRoute, (route) => route.fulfill(response));
+      await pull.click();
+      await expect(secondPage.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
+      await expect
+        .poll(() =>
+          secondPage.evaluate(
+            (key) => JSON.parse(localStorage.getItem(key)).savedFilters,
+            storageKey,
+          ),
+        )
+        .toEqual(activeFilters);
+      await secondPage.unroute(filtersRoute);
+    }
+
+    await pull.click();
+    await expect(secondPage.getByText("Everything is synchronized.")).toBeVisible();
+    await secondPage.goto("/en/");
+    await expectFilters(secondPage, latest);
+    await expect(secondPage.locator(".festivalCard h2")).toHaveText(["Synthetic Fest"]);
   } finally {
     await secondDevice.close();
   }
