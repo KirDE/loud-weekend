@@ -5,6 +5,7 @@ import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { isDownloadAnnouncement } from "../ingestion/adapters/download.ts";
 import {
+  AdminRunStatus,
   ArtistIdentityState,
   CatalogPublicationSource,
   FestivalStatus,
@@ -450,13 +451,23 @@ export async function publishAdminFestivalChange(db: Prisma.TransactionClient, i
   const sourceId = `admin:${input.change.id}`;
   const existing = await db.catalogPublication.findUnique({ where: { sourceId } });
   if (existing) return { ...existing, playlistRefreshRequested: existing.lineupChanged };
+  let observedAt = new Date();
+  if (input.change.parserRunId) {
+    const run = await db.adminParserRun.findUnique({ where: { id: input.change.parserRunId } });
+    if (!run?.finishedAt || run.festivalSlug !== input.change.resourceKey ||
+      (run.status !== AdminRunStatus.SUCCEEDED && run.status !== AdminRunStatus.PARTIAL) ||
+      run.finishedAt < run.startedAt || run.finishedAt > observedAt) {
+      throw new Error("Admin change has no completed source check for this festival");
+    }
+    observedAt = run.finishedAt;
+  }
   const afterValue = input.change.field === "lineup" || input.change.field === "headliners"
     ? stringList(input.change.afterValue, input.change.field)
     : input.change.afterValue;
   const applied = await applyFestivalChanges(db, {
     festivalSlug: input.change.resourceKey,
     changes: [{ field: input.change.field, before: input.change.beforeValue, after: afterValue }],
-    strictBefore: Boolean(input.change.parserRunId), observedAt: new Date(),
+    strictBefore: Boolean(input.change.parserRunId), observedAt,
   });
   return createPublication(db, {
     source: CatalogPublicationSource.ADMIN, sourceId, festivalSlug: input.change.resourceKey,
