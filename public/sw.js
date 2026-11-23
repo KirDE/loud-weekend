@@ -112,8 +112,9 @@ function catalogFestival(row) {
 function validCatalog(body) {
   // Only persist the known public projection, never extra response fields.
   if (!hasFields(body, ["schemaVersion", "dataVersion", "editionYear", "generatedAt", "timetableStatus", "festivals"]) ||
-      body.schemaVersion !== 1 || body.dataVersion !== "festivals-2027-v1" ||
-      body.editionYear !== 2027 || body.generatedAt !== null ||
+      body.schemaVersion !== 1 || !Number.isInteger(body.editionYear) ||
+      body.editionYear < 1000 || body.editionYear > 9999 ||
+      body.dataVersion !== `festivals-${body.editionYear}-v1` || body.generatedAt !== null ||
       !Array.isArray(body.festivals) || !body.festivals.length || !body.festivals.every(catalogFestival)) return false;
   const hasTimetable = body.festivals.some((festival) => festival.timetable.length);
   return body.timetableStatus === (hasTimetable ? "published" : "not-published");

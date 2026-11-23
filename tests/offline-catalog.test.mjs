@@ -20,7 +20,7 @@ function edition(slug = "sample") {
 test("safe existing projection, stable bytes and strong ETag; row order and metadata do not affect revision", async () => {
   const rows = [edition("z"), edition("a")];
   rows[0].timetable.push({ ...rows[0].timetable[0], artistName: "Other", status: "CANCELLED" });
-  const read = () => Promise.resolve(projectOfflineCatalog(rows));
+  const read = () => Promise.resolve(projectOfflineCatalog(rows, 2027));
   const first = await serveOfflineCatalog(request(), read);
   const body = await first.text();
   const expectedHash = createHash("sha256").update(body).digest("hex");
@@ -54,7 +54,7 @@ test("safe existing projection, stable bytes and strong ETag; row order and meta
 
 test("conditional GET supports weak/list/wildcard validators after a fresh read", async () => {
   let reads = 0;
-  const read = async () => { reads++; return projectOfflineCatalog([edition()]); };
+  const read = async () => { reads++; return projectOfflineCatalog([edition()], 2027); };
   const first = await serveOfflineCatalog(request(), read);
   const etag = first.headers.get("etag");
   for (const tag of [etag, `W/${etag}`, `"other", W/${etag}`, "*"]) {
@@ -73,7 +73,7 @@ test("conditional GET supports weak/list/wildcard validators after a fresh read"
 
 test("public content changes invalidate old validators without timestamp updates", async () => {
   const row = edition();
-  const read = async () => projectOfflineCatalog([row]);
+  const read = async () => projectOfflineCatalog([row], 2027);
   let etag = (await serveOfflineCatalog(request(), read)).headers.get("etag");
   for (const mutate of [
     () => { row.festival.name = "Changed"; },
@@ -87,20 +87,26 @@ test("public content changes invalidate old validators without timestamp updates
     assert.notEqual(response.headers.get("etag"), etag);
     etag = response.headers.get("etag");
   }
-  assert.equal(projectOfflineCatalog([row]).timetableStatus, "not-published");
+  assert.equal(projectOfflineCatalog([row], 2027).timetableStatus, "not-published");
 });
 
-test("DB query selects only current 2027 public fields; missing/failed DB fails closed even with wildcard", async () => {
+test("DB query selects only current-season public fields; missing/failed DB fails closed even with wildcard", async () => {
   let query;
-  const database = { festivalEdition: { findMany: async (args) => { query = args; return [edition()]; } } };
-  await readOfflineCatalog(database);
-  assert.deepEqual(query.where, { year: 2027, recordState: "CURRENT" });
+  const findFirst = async (args) => {
+    assert.deepEqual(args, { where: { recordState: "CURRENT" }, orderBy: { year: "desc" }, select: { year: true } });
+    return { year: 2029 };
+  };
+  const database = { festivalEdition: { findFirst, findMany: async (args) => { query = args; return [edition()]; } } };
+  const payload = await readOfflineCatalog(database);
+  assert.equal(payload.editionYear, 2029);
+  assert.equal(payload.dataVersion, "festivals-2029-v1");
+  assert.deepEqual(query.where, { year: 2029, recordState: "CURRENT" });
   assert.deepEqual(Object.keys(query.select), ["festival", "startDate", "endDate", "timetable"]);
   assert.deepEqual(query.select.timetable.where, {
     timeZone: { not: null }, sourceUrl: { not: null }, observedAt: { not: null },
   });
   for (const findMany of [async () => [], async () => { throw new Error("secret connection error"); }]) {
-    const response = await serveOfflineCatalog(request("*"), () => readOfflineCatalog({ festivalEdition: { findMany } }));
+    const response = await serveOfflineCatalog(request("*"), () => readOfflineCatalog({ festivalEdition: { findFirst, findMany } }));
     assert.equal(response.status, 503);
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.equal(response.headers.get("etag"), null);
@@ -116,7 +122,7 @@ test("actual GET route reads DB on each call and never returns 304 during DB fai
   let fail = false;
   let reads = 0;
   const previous = globalThis.prisma;
-  globalThis.prisma = { festivalEdition: { findMany: async () => {
+  globalThis.prisma = { festivalEdition: { findFirst: async () => ({ year: 2027 }), findMany: async () => {
     reads++;
     if (fail) throw new Error("DB unavailable");
     return rows;
