@@ -5,7 +5,6 @@ import { headers } from "next/headers";
 import type { Language } from "@/components/LanguageProvider";
 import { LanguageProvider } from "@/components/LanguageProvider";
 import { LocalPlannerProvider } from "@/components/LocalPlanner";
-import { SiteFooter, SiteHeader } from "@/components/SiteChrome";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { PrivacyAnalytics } from "@/components/PrivacyAnalytics";
 import { AppShell } from "@/components/AppShell";
@@ -25,20 +24,19 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Loud Weekend 2027",
-    description: "European rock and metal festivals: dates, lineups, tickets, playlists and setlists.",
+    description:
+      "European rock and metal festivals: dates, lineups, tickets, playlists and setlists.",
     type: "website",
   },
 };
 
 export const viewport: Viewport = { themeColor: "#171712" };
 
-export default async function RootLayout({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const theme = (await cookies()).get("lw_theme")?.value === "dark" ? "dark" : "light";
   const requested = (await headers()).get("x-festival-locale");
   const language: Language = requested === "de" || requested === "ru" ? requested : "en";
-  const skip = { en: "Skip to content", de: "Zum Inhalt springen", ru: "Перейти к содержимому" }[language];
+
   return (
     <html lang={language} data-theme={theme}>
       <body>

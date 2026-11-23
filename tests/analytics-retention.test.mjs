@@ -12,19 +12,39 @@ test("retention configuration accepts only whole days in the supported range", (
 });
 
 test("cutoff is an exclusive UTC day boundary", () => {
-  assert.equal(analyticsCutoff(90, new Date("2026-09-01T23:59:59Z")).toISOString(), "2026-06-03T00:00:00.000Z");
+  assert.equal(
+    analyticsCutoff(90, new Date("2026-09-01T23:59:59Z")).toISOString(),
+    "2026-06-03T00:00:00.000Z",
+  );
 });
 
 test("pruning uses the exclusive cutoff and reports deleted rows", async () => {
   let received;
-  const db = { analyticsDaily: { async deleteMany(args) { received = args; return { count: 2 }; } } };
+  const db = {
+    analyticsDaily: {
+      async deleteMany(args) {
+        received = args;
+        return { count: 2 };
+      },
+    },
+  };
   const result = await pruneAnalytics(db, "90", new Date("2026-09-01T12:00:00Z"));
   assert.deepEqual(received, { where: { day: { lt: new Date("2026-06-03T00:00:00.000Z") } } });
-  assert.deepEqual(result, { deletedAggregateRows: 2, cutoff: "2026-06-03T00:00:00.000Z", retentionDays: 90 });
+  assert.deepEqual(result, {
+    deletedAggregateRows: 2,
+    cutoff: "2026-06-03T00:00:00.000Z",
+    retentionDays: 90,
+  });
 });
 
 test("zero-deletion pruning is successful and idempotent", async () => {
-  const db = { analyticsDaily: { async deleteMany() { return { count: 0 }; } } };
+  const db = {
+    analyticsDaily: {
+      async deleteMany() {
+        return { count: 0 };
+      },
+    },
+  };
   assert.equal((await pruneAnalytics(db, "30")).deletedAggregateRows, 0);
   assert.equal((await pruneAnalytics(db, "30")).deletedAggregateRows, 0);
 });

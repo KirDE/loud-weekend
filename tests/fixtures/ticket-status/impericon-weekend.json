@@ -1,0 +1,24 @@
+{
+  "title": "25/26.06.2027 2. Preisstufe - Weekend Ticket",
+  "handle": "25-26-06-2027-2-preisstufe-weekend-ticket",
+  "url": "/products/25-26-06-2027-2-preisstufe-weekend-ticket",
+  "vendor": "Impericon Festival",
+  "type": "Hardtickets",
+  "available": true,
+  "price": 17990,
+  "requires_selling_plan": false,
+  "variants": [
+    {
+      "title": "Default Title",
+      "name": "25/26.06.2027 2. Preisstufe - Weekend Ticket",
+      "available": true,
+      "price": 17990,
+      "requires_selling_plan": false,
+      "quantity_rule": {
+        "min": 1,
+        "max": null,
+        "increment": 1
+      }
+    }
+  ]
+}

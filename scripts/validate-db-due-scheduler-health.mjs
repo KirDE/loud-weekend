@@ -1,25 +1,38 @@
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL } from "node:url";
 
 // Exact order and spelling reject duplicate keys, extra fields, lines and any
 // raw transport output. Reconstruct only after the whole record is validated.
 export function validateSchedulerHealth(input, sha) {
   if (!/^[0-9a-f]{40}$/.test(sha) || !Buffer.isBuffer(input) || input.length > 2048) {
-    throw new Error('scheduler diagnostic rejected');
+    throw new Error("scheduler diagnostic rejected");
   }
-  const text = input.toString('utf8');
-  const pattern = /^DB_DUE_SCHEDULER_HEALTH \{"tickMissing":[01],"tickStale":[01],"fetchError":[01],"drainError":[01],"dueTimerEnabled":"(?:enabled|disabled|missing|error)","dueTimerActive":"(?:inactive|active|failed|missing|error)","dueServiceActive":"(?:inactive|active|failed|missing|error)"\}\n$/;
+  const text = input.toString("utf8");
+  const pattern = new RegExp(
+    '^DB_DUE_SCHEDULER_HEALTH \\{"tickMissing":[01],"tickStale":[0' +
+      '1],"fetchError":[01],"drainError":[01],"dueTimerEnabled":"(?' +
+      ':enabled|disabled|missing|error)","dueTimerActive":"(?:inact' +
+      'ive|active|failed|missing|error)","dueServiceActive":"(?:ina' +
+      'ctive|active|failed|missing|error)"\\}\\n$',
+    "",
+  );
   const match = pattern.exec(text);
   // JS $ can match before a final newline; byte equality also rules out invalid
   // UTF-8 replacement, trailing data, or a second final newline.
-  if (!match || match[0] !== text || !Buffer.from(text).equals(input)) throw new Error('scheduler diagnostic rejected');
-  const record = JSON.parse(text.slice('DB_DUE_SCHEDULER_HEALTH '.length));
-  if ((record.tickMissing === 1 && (record.tickStale !== 1 || record.fetchError !== 0 || record.drainError !== 0))
-    || ((record.dueTimerEnabled === 'missing') !== (record.dueTimerActive === 'missing'))) throw new Error('scheduler diagnostic rejected');
-  return 'DB_DUE_SCHEDULER_HEALTH ' + JSON.stringify(record) + '\n';
+  if (!match || match[0] !== text || !Buffer.from(text).equals(input))
+    throw new Error("scheduler diagnostic rejected");
+  const record = JSON.parse(text.slice("DB_DUE_SCHEDULER_HEALTH ".length));
+  if (
+    (record.tickMissing === 1 &&
+      (record.tickStale !== 1 || record.fetchError !== 0 || record.drainError !== 0)) ||
+    (record.dueTimerEnabled === "missing") !== (record.dueTimerActive === "missing")
+  )
+    throw new Error("scheduler diagnostic rejected");
+  return "DB_DUE_SCHEDULER_HEALTH " + JSON.stringify(record) + "\n";
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const chunks = []; let size = 0;
+  const chunks = [];
+  let size = 0;
   try {
     for await (const chunk of process.stdin) {
       size += chunk.length;
@@ -29,7 +42,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (process.argv.length !== 3) throw new Error();
     process.stdout.write(validateSchedulerHealth(Buffer.concat(chunks), process.argv[2]));
   } catch {
-    process.stderr.write('scheduler diagnostic rejected\n');
+    process.stderr.write("scheduler diagnostic rejected\n");
     process.exitCode = 1;
   }
 }
