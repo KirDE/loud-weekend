@@ -1,8 +1,11 @@
+import type { PrismaClient } from "@prisma/client";
 import { parseOfflineTrip } from "../../public/offline-trips.mjs";
 import { offlineTimetableSelect, offlineTimetableWhere, projectOfflinePerformance } from "./offline-timetable.ts";
 
-export async function readPublishedOfflineTrip(slug: string, year: number) {
-  const { db } = await import("../db.ts");
+const maximumScheduleRows = 800;
+
+export async function readPublishedOfflineTrip(slug: string, year: number, database?: Pick<PrismaClient, "festivalEdition">) {
+  const db = database ?? (await import("../db.ts")).db;
   const edition = await db.festivalEdition.findFirst({
     where: { festival: { slug }, year, recordState: { in: ["CURRENT", "ARCHIVED"] } },
     select: {
@@ -11,13 +14,15 @@ export async function readPublishedOfflineTrip(slug: string, year: number) {
       timetable: {
         // Older rows without explicit schedule evidence must not inherit a default time zone or checked time.
         where: offlineTimetableWhere,
-        take: 801,
+        take: maximumScheduleRows + 1,
         orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }],
         select: offlineTimetableSelect,
       },
     },
   });
   if (!edition) return null;
+  // A saturated query may have omitted valid performances after the sentinel.
+  if (edition.timetable.length > maximumScheduleRows) throw new Error("Public trip timetable exceeds the download limit");
   const { name, city, country } = edition.festival;
   const date = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
   const trip = parseOfflineTrip({
