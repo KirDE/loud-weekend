@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/api";
 import { db } from "@/lib/db";
 import {
   acceptGroupTripInvite,
+  addGroupTripComment,
   createGroupTrip,
   deleteGroupTrip,
   GroupTripError,
@@ -10,6 +11,7 @@ import {
   leaveGroupTrip,
   listGroupTrips,
   readGroupTrip,
+  removeGroupTripComment,
   revokeGroupTripInvite,
   setGroupTripVote,
 } from "@/lib/group-trips";
@@ -31,6 +33,13 @@ const action = z.discriminatedUnion("kind", [
     editionId: id,
     choice: z.enum(["GOING", "MAYBE", "NOT_GOING"]).nullable(),
   }),
+  z.strictObject({
+    kind: z.literal("comment"),
+    tripId: id,
+    editionId: id,
+    body: z.string().trim().min(1).max(500),
+  }),
+  z.strictObject({ kind: z.literal("remove-comment"), tripId: id, commentId: id }),
   z.strictObject({ kind: z.literal("leave"), tripId: id }),
   z.strictObject({ kind: z.literal("delete"), tripId: id }),
 ]);
@@ -107,6 +116,12 @@ export async function POST(request: Request) {
         break;
       case "vote":
         await setGroupTripVote(db, user.id, input.tripId, input.editionId, input.choice);
+        break;
+      case "comment":
+        await addGroupTripComment(db, user.id, input.tripId, input.editionId, input.body);
+        break;
+      case "remove-comment":
+        await removeGroupTripComment(db, user.id, input.tripId, input.commentId);
         break;
       case "leave":
         await leaveGroupTrip(db, user.id, input.tripId);

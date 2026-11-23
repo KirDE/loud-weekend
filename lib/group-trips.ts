@@ -4,6 +4,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 const maxOwnedTrips = 15;
 const maxOptions = 12;
 const maxInvites = 30;
+const maxCommentsPerEdition = 50;
 const inviteLifetime = 7 * 24 * 60 * 60 * 1000;
 type InviteRole = "VIEWER" | "VOTER";
 type Vote = "GOING" | "MAYBE" | "NOT_GOING";
@@ -136,6 +137,7 @@ export function revokeGroupTripInvite(
     });
     if (invite.claimedById) {
       await tx.groupTripVote.deleteMany({ where: { tripId, voterId: invite.claimedById } });
+      await tx.groupTripComment.deleteMany({ where: { tripId, authorId: invite.claimedById } });
     }
     await tx.groupTripAudit.create({ data: { tripId, action: "REVOKED" } });
   });
@@ -186,6 +188,10 @@ export function readGroupTrip(db: PrismaClient, userId: string, tripId: string) 
         editionId: true,
         edition: { select: { year: true, festival: { select: { slug: true, name: true } } } },
         votes: { where: { voterId: userId }, select: { choice: true } },
+        comments: {
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: { id: true, authorId: true, body: true, createdAt: true },
+        },
       },
     });
     const counts = await tx.groupTripVote.groupBy({
@@ -221,11 +227,18 @@ export function readGroupTrip(db: PrismaClient, userId: string, tripId: string) 
       title: trip.title,
       role,
       ...ownerDetails,
-      options: options.map(({ editionId, edition, votes }) => ({
+      options: options.map(({ editionId, edition, votes, comments }) => ({
         editionId,
         ...edition.festival,
         year: edition.year,
         ownVote: votes[0]?.choice ?? null,
+        comments: comments.map(({ id, authorId, body, createdAt }) => ({
+          id,
+          body,
+          createdAt,
+          own: authorId === userId,
+          canRemove: role === "OWNER" || authorId === userId,
+        })),
         tally: Object.fromEntries(
           counts
             .filter((count) => count.editionId === editionId)
@@ -267,6 +280,7 @@ export function leaveGroupTrip(db: PrismaClient, userId: string, tripId: string)
     });
     if (!revoked.count) throw new GroupTripError("missing");
     await tx.groupTripVote.deleteMany({ where: { tripId, voterId: userId } });
+    await tx.groupTripComment.deleteMany({ where: { tripId, authorId: userId } });
     await tx.groupTripAudit.create({ data: { tripId, action: "REVOKED" } });
   });
 }
@@ -276,5 +290,49 @@ export function deleteGroupTrip(db: PrismaClient, ownerId: string, tripId: strin
     const trip = await lockTrip(tx, tripId);
     if (trip.ownerId !== ownerId) throw new GroupTripError("missing");
     await tx.groupTrip.delete({ where: { id: tripId } });
+  });
+}
+
+export function addGroupTripComment(
+  db: PrismaClient,
+  userId: string,
+  tripId: string,
+  editionId: string,
+  value: string,
+) {
+  const body = value.trim();
+  if (!body || body.length > 500) throw new GroupTripError("invalid");
+  return db.$transaction(async (tx) => {
+    const trip = await lockTrip(tx, tripId);
+    const role = await tripRole(tx, trip, userId);
+    if (role !== "OWNER" && role !== "VOTER") throw new GroupTripError("missing");
+    if (
+      !(await tx.groupTripOption.findUnique({ where: { tripId_editionId: { tripId, editionId } } }))
+    ) {
+      throw new GroupTripError("missing");
+    }
+    if (
+      (await tx.groupTripComment.count({ where: { tripId, editionId } })) >= maxCommentsPerEdition
+    ) {
+      throw new GroupTripError("limit");
+    }
+    await tx.groupTripComment.create({ data: { tripId, editionId, authorId: userId, body } });
+  });
+}
+
+export function removeGroupTripComment(
+  db: PrismaClient,
+  userId: string,
+  tripId: string,
+  commentId: string,
+) {
+  return db.$transaction(async (tx) => {
+    const trip = await lockTrip(tx, tripId);
+    const role = await tripRole(tx, trip, userId);
+    if (role !== "OWNER" && role !== "VOTER") throw new GroupTripError("missing");
+    const removed = await tx.groupTripComment.deleteMany({
+      where: { id: commentId, tripId, ...(role !== "OWNER" && { authorId: userId }) },
+    });
+    if (!removed.count) throw new GroupTripError("missing");
   });
 }

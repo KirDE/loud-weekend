@@ -3437,6 +3437,7 @@ summary:focus-visible {
 }
 
 .groupTrips :where(input),
+.groupTrips :where(textarea),
 .groupTrips :where(select),
 .groupTrips :where(button) {
   min-height: 44px;
@@ -3446,4 +3447,9 @@ summary:focus-visible {
 
 .groupTripOptions {
   padding-left: 20px;
+}
+
+.groupTripComment {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

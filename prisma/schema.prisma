@@ -185,6 +185,7 @@ model User {
   ownedTrips                GroupTrip[]
   tripAccess                GroupTripInvite[]
   tripVotes                 GroupTripVote[]
+  tripComments              GroupTripComment[]
   spotify                   SpotifyConnection?
   notificationPreferences   NotificationPreference[]
   notificationSubscriptions NotificationSubscription[]
@@ -944,6 +945,7 @@ model GroupTripOption {
   trip      GroupTrip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
   edition   FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
   votes     GroupTripVote[]
+  comments  GroupTripComment[]
 
   @@id([tripId, editionId])
   @@index([editionId])
@@ -985,4 +987,18 @@ model GroupTripAudit {
   trip      GroupTrip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
   @@index([tripId, createdAt])
+}
+
+model GroupTripComment {
+  id        String          @id @default(cuid())
+  tripId    String
+  editionId String
+  authorId  String
+  body      String          @db.VarChar(500)
+  createdAt DateTime        @default(now())
+  option    GroupTripOption @relation(fields: [tripId, editionId], references: [tripId, editionId], onDelete: Cascade)
+  author    User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, editionId, createdAt])
+  @@index([authorId])
 }
