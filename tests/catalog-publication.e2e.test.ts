@@ -98,6 +98,31 @@ test.after(async () => {
   await db.$disconnect();
 });
 
+test("publication requires the persisted festival, source and observed edition", async () => {
+  const value = result(`Scope verification ${suffix}`);
+  const attempt = await persist(value);
+  const publicationCount = await db.catalogPublication.count();
+  const queueCount = await db.catalogPlaylistRefresh.count();
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: value.festivalSlug }, recordState: "CURRENT" },
+  });
+  const variants = [
+    { ...value, festivalSlug: "rockharz" },
+    { ...value, sourceUrl: "https://other.example.test/" },
+    { ...value, candidate: { ...value.candidate, observedEditionYears: [2026] } },
+  ];
+  for (const variant of variants) {
+    await assert.rejects(publishIngestionResult(db, {
+      attemptId: attempt.id, result: variant, sourceCommit: suffix,
+    }), /publication scope does not match/);
+  }
+  const candidate = await db.ingestionCandidate.findUniqueOrThrow({ where: { attemptId: attempt.id } });
+  assert.equal(candidate.reviewState, "PENDING");
+  assert.equal(await db.catalogPublication.count(), publicationCount);
+  assert.equal(await db.catalogPlaylistRefresh.count(), queueCount);
+  assert.equal(await db.lineupEntry.count({ where: { editionId: edition.id, artist: { name: value.candidate.lineup![0] } } }), 0);
+});
+
 test("commits catalog rows, candidate state, audit snapshot and playlist request together", async () => {
   const artist = `Catalog Transaction ${suffix}`;
   const value = result(artist);
@@ -419,7 +444,7 @@ test("I-Days provenance drift and identity collisions roll back without catalog 
     if(drift==="requested-url") persisted.sourceUrl="https://www.idays.it/line-up";
     const attempt=await persist(persisted);
     const before={artists:await db.artist.count(),entries:await db.lineupEntry.count(),jobs:await db.catalogPlaylistRefresh.count(),publications:await db.catalogPublication.count()};
-    await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/I-Days publication requires|Ambiguous billing|Artist slug collision/);
+    await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/I-Days publication requires|Ambiguous billing|Artist slug collision|publication scope does not match/);
     assert.deepEqual({artists:await db.artist.count(),entries:await db.lineupEntry.count(),jobs:await db.catalogPlaylistRefresh.count(),publications:await db.catalogPublication.count()},before);
     assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}})).reviewState,"PENDING");
   }
@@ -454,7 +479,7 @@ test('Graspop provenance, edition, mode, persisted-value, requested-source and r
   if(drift==='requested-source')stored.sourceUrl='https://www.graspop.be/en/';
   const attempt=await persist(stored);
   const counts=async()=>({artists:await db.artist.count(),entries:await db.lineupEntry.count(),jobs:await db.catalogPlaylistRefresh.count(),publications:await db.catalogPublication.count()});const before=await counts();
-  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/Graspop publication requires|Candidate edition 2026 does not match catalogue edition 2027/);
+  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/Graspop publication requires|Candidate edition 2026 does not match catalogue edition 2027|publication scope does not match/);
   assert.deepEqual(await counts(),before);assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{attemptId:attempt.id}})).reviewState,'PENDING');
  }
 });
@@ -634,7 +659,7 @@ test('Provinssi provenance drift rolls back catalogue, completeness and provider
   if(drift==='requested-url') await db.ingestionAttempt.update({where:{id:attempt.id},data:{requestedUrl:'https://untrusted.example/'}});
   const counts=()=>Promise.all([db.lineupEntry.count(),db.catalogPublication.count(),db.catalogPlaylistRefresh.count(),db.festivalEdition.findMany({where:{festival:{slug:'provinssi'}}})]);
   const before=await counts();
-  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/Provinssi publication requires|Candidate edition 2026/);
+  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/Provinssi publication requires|Candidate edition 2026|publication scope does not match/);
   assert.deepEqual(await counts(),before);
  }
 });
@@ -736,7 +761,7 @@ for (const slug of ["wacken-open-air", "download"]) {
       if (mutation === "request") await db.ingestionAttempt.update({ where: { id: saved.id }, data: { requestedUrl: "https://foreign.example.test/" } });
       if (mutation === "provenance") delete clean.candidate.ticketSupplement;
       const before = await db.catalogPublication.count();
-      await assert.rejects(publishIngestionResult(db, { attemptId: saved.id, result: clean, sourceCommit: suffix }), /persisted official ticket evidence/, mutation);
+      await assert.rejects(publishIngestionResult(db, { attemptId: saved.id, result: clean, sourceCommit: suffix }), /persisted official ticket evidence|publication scope does not match/, mutation);
       assert.equal(await db.catalogPublication.count(), before, mutation);
       assert.equal((await current()).ticketStatus, "unknown", mutation);
       assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
@@ -790,7 +815,7 @@ test("I-Days secondary ticket proof cannot borrow primary artist evidence or byp
   if(drift==="foreign-proof")value.candidate.evidence.filter(e=>e.field==="ticketStatus").forEach(e=>e.sourceUrl="https://elsewhere.example/tickets");
   if(drift==="timestamp")await db.ingestionEvidence.updateMany({where:{candidateId:c.id,field:"ticketStatus"},data:{observedAt:new Date("2020-01-01T00:00:00Z")}});
   const before={artists:await db.artist.count(),entries:await db.lineupEntry.count(),jobs:await db.catalogPlaylistRefresh.count(),pub:await db.catalogPublication.count()};
-  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/I-Days (?:ticket )?publication requires matching persisted/);
+  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/I-Days (?:ticket )?publication requires matching persisted|publication scope does not match/);
   assert.deepEqual({artists:await db.artist.count(),entries:await db.lineupEntry.count(),jobs:await db.catalogPlaylistRefresh.count(),pub:await db.catalogPublication.count()},before);
   assert.equal((await readCatalog({database:db})).festivals.find(f=>f.slug==="idays")!.ticketStatus,"unknown");
   assert.equal((await db.ingestionCandidate.findUniqueOrThrow({where:{id:c.id}})).reviewState,"PENDING");
@@ -847,7 +872,7 @@ test("I-Days collected ticket-only changes cannot bypass persisted secondary-pro
   if(drift==="timestamp")await db.ingestionEvidence.updateMany({where:{candidateId:stored.id,field:"ticketStatus"},data:{observedAt:new Date("2020-01-01")}});
   const counts=()=>Promise.all([db.artist.count(),db.lineupEntry.count(),db.catalogPublication.count(),db.catalogPlaylistRefresh.count()]);
   const before=await counts();
-  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/(?:I-Days ticket publication requires matching persisted|Ticket supplement publication requires matching persisted official ticket evidence)/);
+  await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/(?:I-Days ticket publication requires matching persisted|Ticket supplement publication requires matching persisted official ticket evidence)|publication scope does not match/);
   assert.deepEqual(await counts(),before);
   const after=(await readCatalog({database:db})).festivals.find(f=>f.slug==="idays")!;
   assert.equal(after.ticketStatus,"unknown");assert.equal(after.ticketsUrl,"https://www.idays.it/");
@@ -886,7 +911,7 @@ test("I-Days direct ticketsUrl-only publication validates durable proof and atom
    assert.equal((await publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}))?.id,publication.id);
    assert.deepEqual(await counts(),[before[0],before[1],before[2]+1,before[3]]);
   }else{
-   await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/I-Days ticket publication requires matching persisted/);
+   await assert.rejects(publishIngestionResult(db,{attemptId:attempt.id,result:value,sourceCommit:suffix}),/I-Days ticket publication requires matching persisted|publication scope does not match/);
    assert.deepEqual(await counts(),before);
    const after=(await readCatalog({database:db})).festivals.find(f=>f.slug==="idays")!;
    assert.equal(after.ticketsUrl,oldUrl);assert.equal(after.ticketStatus,"available");

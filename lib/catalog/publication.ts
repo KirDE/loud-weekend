@@ -249,9 +249,17 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
       `;
       if (held.length !== 1) throw new Error("Ingestion source lease is no longer active");
     }
-    const candidate = await db.ingestionCandidate.findUnique({ where: { attemptId: input.attemptId }, include: { diffs: true, evidence: true, attempt: { select: { requestedUrl: true } } } });
+    const candidate = await db.ingestionCandidate.findUnique({ where: { attemptId: input.attemptId }, include: { diffs: true, evidence: true, attempt: { select: { requestedUrl: true, festivalSlug: true } } } });
     if (!candidate || !candidate.publishable) throw new Error("Publishable ingestion candidate was not persisted");
-    if (input.sourceLease && (candidate.festivalSlug !== input.result.festivalSlug || candidate.attempt.requestedUrl !== input.result.sourceUrl)) throw new Error("Leased candidate source does not match persisted attempt");
+    const observed = input.result.candidate;
+    const stored = candidate.normalized as unknown as FestivalCandidate;
+    if (!stored || [candidate.festivalSlug, candidate.attempt.festivalSlug, observed.festivalSlug, stored.festivalSlug]
+      .some(slug => slug !== input.result.festivalSlug) ||
+      [candidate.attempt.requestedUrl, observed.sourceUrl, stored.sourceUrl].some(url => url !== input.result.sourceUrl) ||
+      !Array.isArray(stored.observedEditionYears) || !same(stored.observedEditionYears, observed.observedEditionYears) ||
+      stored.observedEditionYears.length > 1) {
+      throw new Error("Ingestion publication scope does not match the persisted festival, source and edition");
+    }
     const sourceId = `ingestion:${candidate.id}`;
     const existing = await db.catalogPublication.findUnique({ where: { sourceId }, include: { playlistRefresh: { select: { id: true } } } });
     // Replay reports the persisted queue relation, never creating a new job.
@@ -262,13 +270,11 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     const expected = normalizedDiffs(input.result.changes.map(({ field, before, after }) => ({ field, before: before ?? null, after: after ?? null })));
     const persisted = normalizedDiffs(candidate.diffs.map(({ field, beforeValue, afterValue }) => ({ field, before: beforeValue, after: afterValue })));
     if (!same(expected, persisted)) throw new Error("Persisted ingestion diff does not match publication request");
-    const expectedYear = input.result.candidate.observedEditionYears.length === 1 ? input.result.candidate.observedEditionYears[0] : candidate.sourceYear ?? undefined;
+    const expectedYear = stored.observedEditionYears[0] ?? candidate.sourceYear ?? undefined;
     if (!expectedYear && input.result.changes.some(({ field }) => field === "lineup" || field === "headliners")) throw new Error("Cannot publish a lineup without one verified edition year");
     // Secondary ticket observations are publishable only with the same exact
     // source, edition, value and durable evidence that passed the producer.
     // Do not extend the separate Impericon/I-Days publication paths here (#497).
-    const observed = input.result.candidate;
-    const stored = candidate.normalized as unknown as FestivalCandidate;
     if (observed.ticketSupplement || stored.ticketSupplement) {
       const registeredSource = { festivalSlug: input.result.festivalSlug,
         url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
