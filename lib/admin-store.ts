@@ -194,22 +194,20 @@ async function refreshSource(refreshId: string, sourceId: string, editionId: str
     if (!candidate.evidence.length) throw new Error("Official source provided no supported evidence");
     if (candidate.observedEditionYears.some((year) => year !== active.editionYear))
       throw new Error("Official source returned another edition");
-    const editionObserved = candidate.observedEditionYears.includes(active.editionYear);
     const reviewReasons = [...result.reviewReasons];
     const fields = ["startDate", "endDate", "city", "headliners", "lineup", "ticketsUrl", "ticketStatus", "status"] as const;
     const proposals = fields.flatMap((field) => {
       const differences = result.changes.filter((item) => item.field === field);
       const evidence = candidate.evidence.filter((item) => item.field === field);
       if (!differences.length || !evidence.length) return [];
-      if (field === "ticketsUrl" || field === "ticketStatus") {
-        const ticketYears = candidate.ticketEditionYears?.[field] ?? candidate.observedEditionYears;
-        if (!ticketYears.includes(active.editionYear)) {
-          const detail = field === "ticketsUrl" ? "Ticket URL" : "Ticket availability";
-          reviewReasons.push(`${detail} could not be verified for the selected edition.`);
+      if (field === "ticketsUrl" || field === "ticketStatus" || field === "lineup" || field === "headliners") {
+        const observedYears = candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
+        if (!observedYears.includes(active.editionYear)) {
+          const label = { ticketsUrl: "Ticket URL", ticketStatus: "Ticket availability", lineup: "Lineup", headliners: "Headliners" }[field];
+          reviewReasons.push(`${label} could not be verified for the selected edition.`);
           return [];
         }
       }
-      if ((field === "lineup" || field === "headliners") && !editionObserved) return [];
       const afterValue = field === "lineup" || field === "headliners"
         ? [...festival[field].filter((name) => !differences.some((diff) => diff.before === name)),
             ...differences.flatMap((diff) => diff.after === undefined ? [] : [diff.after])]
