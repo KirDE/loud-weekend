@@ -14,15 +14,35 @@ export async function importTimetable(db: PrismaClient, input: { festivalSlug: s
     const entries = validateFestivalTimetable(festival, input.entries);
     if (!entries.length) throw new Error('Empty timetable requires separate removal review');
     if (new Set(entries.map(entry => entry.timeZone)).size !== 1) throw new Error('A timetable must use one IANA timezone');
+    // Stable organizer IDs are edition-scoped and only accepted from reviewed
+    // source rows. Do not silently drop or reassign a previously published ID.
+    const identifiedEntries = new Map(entries.filter(entry => entry.sourcePerformanceId)
+      .map(entry => [entry.sourcePerformanceId, entry]));
+    const sourceHost = (value: string) => URL.parse(value)?.hostname.replace(/^www\./, "");
+    for (const previous of current.timetable) {
+      if (!previous.sourcePerformanceId) continue;
+      const next = identifiedEntries.get(previous.sourcePerformanceId);
+      if (!next) throw new Error("An identified performance requires an explicit retained or cancelled row");
+      if (!previous.sourceUrl || sourceHost(next.sourceUrl) !== sourceHost(previous.sourceUrl)) {
+        throw new Error("An identified performance cannot change organizer source hosts without review");
+      }
+      if (next.artist.normalize("NFC") !== previous.artistName.normalize("NFC")) {
+        throw new Error("Changing an identified performance's artist requires separate identity review");
+      }
+      if (previous.observedAt && Date.parse(next.observedAt) < previous.observedAt.valueOf()) {
+        throw new Error("An identified performance cannot be overwritten by older evidence");
+      }
+    }
     const normalize = (items: TimetableEntry[]) => items.map(item => [
       item.date, item.stage, item.start, item.artist, item.timeZone, item.status, item.sourceUrl,
-      new Date(item.observedAt).toISOString(),
+      new Date(item.observedAt).toISOString(), item.sourcePerformanceId ?? null,
       item.window ? new Date(item.window.startsAt).toISOString() : null,
       item.window ? new Date(item.window.endsAt).toISOString() : null,
     ]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
     const before = normalize(current.timetable.map(row => ({
       date: row.date.toISOString().slice(0, 10), stage: row.stage, start: row.start,
       artist: row.artistName, timeZone: row.timeZone ?? 'UTC',
+      sourcePerformanceId: row.sourcePerformanceId ?? undefined,
       status: row.status === 'CANCELLED' ? 'cancelled' : 'scheduled',
       sourceUrl: row.sourceUrl ?? current.festival.officialUrl,
       observedAt: (row.observedAt ?? current.sourceUpdatedAt).toISOString(),
@@ -37,6 +57,7 @@ export async function importTimetable(db: PrismaClient, input: { festivalSlug: s
       await tx.timetablePerformance.createMany({ data: entries.map(entry => ({
         editionId: current.id, artistName: entry.artist, date: new Date(entry.date + 'T00:00:00Z'),
         stage: entry.stage, start: entry.start, timeZone: entry.timeZone,
+        sourcePerformanceId: entry.sourcePerformanceId ?? null,
         status: entry.status === 'cancelled' ? 'CANCELLED' : 'ANNOUNCED',
         sourceUrl: entry.sourceUrl, observedAt: new Date(entry.observedAt),
         startsAt: entry.window ? new Date(entry.window.startsAt) : null,

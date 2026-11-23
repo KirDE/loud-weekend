@@ -62,7 +62,7 @@ export function StageTimetable({ entries }: { entries?: TimetableEntry[] }) {
           const start = entry.window ? timetableLocalDateTime(entry.window.startsAt, entry.timeZone) : null;
           const end = entry.window ? timetableLocalDateTime(entry.window.endsAt, entry.timeZone) : null;
           const showOffsets = start?.offset !== end?.offset;
-          return <li className={entry.status === "cancelled" ? "cancelled" : undefined} key={`${entry.start}-${entry.artist}`}>
+          return <li className={entry.status === "cancelled" ? "cancelled" : undefined} key={entry.sourcePerformanceId ? `official:${entry.sourcePerformanceId}` : `local:${entry.start}-${entry.artist}`}>
             <span className="timetableSlotTime">
               <time dateTime={entry.window?.startsAt ?? `${entry.date}T${entry.start}`}>{entry.start}{showOffsets && ` ${start?.offset}`}</time>
               {end && entry.window && <>–<time dateTime={entry.window.endsAt}>{end.time}{showOffsets && ` ${end.offset}`}{end.date !== entry.date && ` (${dayLabel(end.date)})`}</time></>}

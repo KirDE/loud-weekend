@@ -64,6 +64,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         timetable: row.timetable.length ? row.timetable.map((performance) => ({
           date: dateOnly(performance.date)!, stage: performance.stage, start: performance.start,
           artist: performance.artistName, timeZone: performance.timeZone ?? "UTC",
+          sourcePerformanceId: performance.sourcePerformanceId ?? undefined,
           window: performance.startsAt && performance.endsAt
             ? { startsAt: performance.startsAt.toISOString(), endsAt: performance.endsAt.toISOString() }
             : undefined,
@@ -91,6 +92,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         timetable: row.timetable.length ? row.timetable.map((performance) => ({
           date: dateOnly(performance.date)!, stage: performance.stage, start: performance.start,
           artist: performance.artistName, timeZone: performance.timeZone ?? "UTC",
+          sourcePerformanceId: performance.sourcePerformanceId ?? undefined,
           window: performance.startsAt && performance.endsAt
             ? { startsAt: performance.startsAt.toISOString(), endsAt: performance.endsAt.toISOString() }
             : undefined,
