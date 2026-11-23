@@ -84,3 +84,14 @@ test('nested subsequent product headings end ordinary admission scope in documen
  const disabled=copy();disabled.tickets='<section aria-disabled="true">'+disabled.tickets+'</section>';
  assert.equal(parse(disabled).ticketStatus,undefined);
 });
+
+test('a visible disabled sold-out notice still contradicts an ordinary purchase link', () => {
+ const sourceWithNotice = copy();
+ sourceWithNotice.tickets = sourceWithNotice.tickets.replace(
+  'Ya se pueden adquirir',
+  '<span aria-disabled="true">Abonos agotados.</span> Ya se pueden adquirir',
+ );
+ const candidate = parse(sourceWithNotice);
+ assert.equal(candidate.ticketStatus, undefined);
+ assert.equal(evaluateCandidate(current, candidate).publishable, false);
+});

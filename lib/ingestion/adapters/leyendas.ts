@@ -72,9 +72,16 @@ export function leyendas(html: string, source: FestivalSource) {
   }
   if (links.slice(0, 8).some(url => !data.posts.some(p => p.url === url))) warnings.push('Leyendas current-edition article was not fetched');
   const $tickets = load(data.tickets);
-  $tickets("script, style, template, noscript, nav, header, footer, [hidden], [inert], [aria-hidden='true'], [disabled], [aria-disabled='true']").remove();
+  $tickets("script, style, template, noscript, nav, header, footer, [hidden], [inert], [aria-hidden='true']").remove();
   $tickets("[style]").each((_, element) => {
     if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($tickets(element).attr("style") ?? "")) $tickets(element).remove();
+  });
+  // Disabled controls cannot authorize a sale, but visible disabled notices
+  // can still contradict it. Mark links before slicing away ancestor markup.
+  const disabled = "[disabled], [aria-disabled='true']";
+  $tickets("a").each((_, element) => {
+    const link = $tickets(element);
+    if (link.is(disabled) || link.parents(disabled).length) link.attr("aria-disabled", "true");
   });
   $tickets("br").replaceWith(" ");
   const ticketTitle = text($tickets("title").text());
