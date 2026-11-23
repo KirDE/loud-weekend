@@ -3,6 +3,7 @@
 POST create/insert is never automatically retried. An outstanding durable intent
 must be confirmed by exact read-back before another mutation is permitted.
 """
+
 import json
 import os
 import re
@@ -14,10 +15,10 @@ from pathlib import Path
 
 import requests
 
-API = 'https://www.googleapis.com/youtube/v3/'
-PLAYLIST_ID = re.compile(r'[A-Za-z0-9_-]{10,100}')
-VIDEO_ID = re.compile(r'[A-Za-z0-9_-]{11}')
-URL = re.compile(r'https://(?:music|www)\.youtube\.com/playlist\?list=([A-Za-z0-9_-]{10,100})')
+API = "https://www.googleapis.com/youtube/v3/"
+PLAYLIST_ID = re.compile(r"[A-Za-z0-9_-]{10,100}")
+VIDEO_ID = re.compile(r"[A-Za-z0-9_-]{11}")
+URL = re.compile(r"https://(?:music|www)\.youtube\.com/playlist\?list=([A-Za-z0-9_-]{10,100})")
 
 
 class ReconciliationRequired(RuntimeError):
@@ -34,81 +35,115 @@ class ProviderQuotaExceeded(RuntimeError):
 
 class ProviderWriteRejected(RuntimeError):
     """An explicit structured 4xx response, not a timeout or unknown outcome."""
+
     def __init__(self, status, reason):
-        super().__init__('youtube_provider_write_rejected')
-        self.evidence = {'status': status, 'reason': reason}
+        super().__init__("youtube_provider_write_rejected")
+        self.evidence = {"status": status, "reason": reason}
 
 
 def failure_diagnostic(error):
     if isinstance(error, ProviderQuotaExceeded):
-        return 'youtube_provider_quota_exceeded'
+        return "youtube_provider_quota_exceeded"
     if isinstance(error, ProviderWriteRejected):
-        status, reason = error.evidence['status'], error.evidence['reason']
-        if status in (400, 401, 403, 404, 409, 429) and isinstance(reason, str) and re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{0,79}', reason):
-            return f'youtube_provider_rejected_{status}_{reason}'
-    if isinstance(error, (ReconciliationRequired, QuotaBoundReached)) and re.fullmatch(r'youtube_[a-z_]{1,90}', str(error)):
+        status, reason = error.evidence["status"], error.evidence["reason"]
+        if (
+            status in (400, 401, 403, 404, 409, 429)
+            and isinstance(reason, str)
+            and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,79}", reason)
+        ):
+            return f"youtube_provider_rejected_{status}_{reason}"
+    if isinstance(error, (ReconciliationRequired, QuotaBoundReached)) and re.fullmatch(
+        r"youtube_[a-z_]{1,90}", str(error)
+    ):
         return str(error)
-    return 'youtube_plan_failed'
+    return "youtube_plan_failed"
 
 
 class Budget:
     def __init__(self, limit=5000):
         if not isinstance(limit, int) or not 1 <= limit <= 5000:
-            raise ValueError('Invalid YouTube quota bound')
+            raise ValueError("Invalid YouTube quota bound")
         self.limit = limit
         self.used = 0
 
     def charge(self, method):
-        cost = 1 if method == 'GET' else 50
+        cost = 1 if method == "GET" else 50
         if self.used + cost > self.limit:
-            raise QuotaBoundReached('youtube_quota_bound_reached')
+            raise QuotaBoundReached("youtube_quota_bound_reached")
         self.used += cost  # Count attempted calls, including unknown outcomes.
 
 
 def validate_plan(plan):
-    ids = plan.get('videoIds')
-    expected = plan.get('expectedUrl')
-    if not isinstance(ids, list) or not ids or len(ids) > 1000 or any(not isinstance(v, str) or not VIDEO_ID.fullmatch(v) for v in ids) or len(ids) != len(set(ids)):
-        raise ValueError('Invalid YouTube video plan')
-    if expected not in ('', 'NEW') and (not isinstance(expected, str) or not URL.fullmatch(expected)):
-        raise ValueError('Invalid YouTube binding')
-    if not isinstance(plan.get('title'), str) or not plan['title'].strip() or len(plan['title']) > 150 or not isinstance(plan.get('description'), str) or len(plan['description']) > 4000:
-        raise ValueError('Invalid YouTube metadata')
-    if not isinstance(plan.get('artists'), int) or plan['artists'] < 1:
-        raise ValueError('Invalid YouTube artist count')
+    ids = plan.get("videoIds")
+    expected = plan.get("expectedUrl")
+    if (
+        not isinstance(ids, list)
+        or not ids
+        or len(ids) > 1000
+        or any(not isinstance(v, str) or not VIDEO_ID.fullmatch(v) for v in ids)
+        or len(ids) != len(set(ids))
+    ):
+        raise ValueError("Invalid YouTube video plan")
+    if expected not in ("", "NEW") and (
+        not isinstance(expected, str) or not URL.fullmatch(expected)
+    ):
+        raise ValueError("Invalid YouTube binding")
+    if (
+        not isinstance(plan.get("title"), str)
+        or not plan["title"].strip()
+        or len(plan["title"]) > 150
+        or not isinstance(plan.get("description"), str)
+        or len(plan["description"]) > 4000
+    ):
+        raise ValueError("Invalid YouTube metadata")
+    if not isinstance(plan.get("artists"), int) or plan["artists"] < 1:
+        raise ValueError("Invalid YouTube artist count")
 
 
 def discover_plan(source, search=None):
     from youtube_music_transfer import load_ytmusic, parse_report_tracks, search_youtube_track
-    report = source['sourceReport']
+
+    report = source["sourceReport"]
     queries = parse_report_tracks(report)
     if not queries or len(queries) > 1000:
-        raise ValueError('Invalid YouTube source report')
+        raise ValueError("Invalid YouTube source report")
     if search is None:
         ytmusic = load_ytmusic()  # Unauthenticated discovery; no OAuth files.
         cache, stats = {}, {}
+
         def search(query):
             candidate = search_youtube_track(ytmusic, query, cache, stats=stats)
-            if any(stats.get(key) for key in ('quota_errors', 'authentication_errors', 'provider_errors')):
-                raise RuntimeError('youtube_discovery_failed')
+            if any(
+                stats.get(key)
+                for key in ("quota_errors", "authentication_errors", "provider_errors")
+            ):
+                raise RuntimeError("youtube_discovery_failed")
             return candidate
+
     ids, artists = [], set()
     for query in queries:
         candidate = search(query)
         if not candidate:
             continue
-        video = candidate.get('videoId')
+        video = candidate.get("videoId")
         if not isinstance(video, str) or not VIDEO_ID.fullmatch(video):
-            raise ValueError('Invalid discovered video')
+            raise ValueError("Invalid discovered video")
         if video in ids:
             continue
         ids.append(video)
-        artists.add(query.get('lineup_artist') or query['artist'])
+        artists.add(query.get("lineup_artist") or query["artist"])
     plan = {
-        'slug': source['slug'], 'editionYear': source['editionYear'], 'expectedUrl': source['expectedUrl'],
-        'title': report['playlist_name'],
-        'description': f"Listen to the announced artists for {report.get('festival') or report['playlist_name']}. Generated by Loud Weekend.",
-        'videoIds': ids, 'artists': len(artists), 'sourceTracks': len(queries),
+        "slug": source["slug"],
+        "editionYear": source["editionYear"],
+        "expectedUrl": source["expectedUrl"],
+        "title": report["playlist_name"],
+        "description": (
+            f"Listen to the announced artists for {report.get('festival') or report['playlist_name']}"
+            ". Generated by Loud Weekend."
+        ),
+        "videoIds": ids,
+        "artists": len(artists),
+        "sourceTracks": len(queries),
     }
     validate_plan(plan)
     return plan
@@ -116,23 +151,34 @@ def discover_plan(source, search=None):
 
 def publish_plan(plan, request, guard, state, progress, *, quota_limit=5000, wait=time.sleep):
     validate_plan(plan)
-    year = plan.get('editionYear')
+    year = plan.get("editionYear")
     if type(year) is not int or year < datetime.now(timezone.utc).year:
-        raise ReconciliationRequired('youtube_historical_edition_protected')
+        raise ReconciliationRequired("youtube_historical_edition_protected")
+
     def edition_metadata(snippet):
         # Require affirmative edition identity BEFORE metadata PUT or content
         # reconciliation; never relabel a previous year's playlist into scope.
-        title_years = set(re.findall(r'(?<!\d)(?:19|20)\d{2}(?!\d)', snippet.get('title', '')))
-        years = title_years | set(re.findall(r'(?<!\d)(?:19|20)\d{2}(?!\d)', snippet.get('description', '')))
+        title_years = set(re.findall(r"(?<!\d)(?:19|20)\d{2}(?!\d)", snippet.get("title", "")))
+        years = title_years | set(
+            re.findall(r"(?<!\d)(?:19|20)\d{2}(?!\d)", snippet.get("description", ""))
+        )
         if title_years != {str(year)} or years != {str(year)}:
-            raise ReconciliationRequired('youtube_playlist_edition_mismatch')
+            raise ReconciliationRequired("youtube_playlist_edition_mismatch")
+
     edition_metadata(plan)
     budget = Budget(quota_limit)
-    desired = plan['videoIds']
+    desired = plan["videoIds"]
     verified = 0
 
     def checkpoint(complete=False):
-        progress({'verifiedTracks': verified, 'totalTracks': len(desired), 'quotaUsed': budget.used, 'complete': complete})
+        progress(
+            {
+                "verifiedTracks": verified,
+                "totalTracks": len(desired),
+                "quotaUsed": budget.used,
+                "complete": complete,
+            }
+        )
 
     def call(method, resource, **kwargs):
         budget.charge(method)
@@ -146,31 +192,35 @@ def publish_plan(plan, request, guard, state, progress, *, quota_limit=5000, wai
         except ProviderWriteRejected as error:
             # Only exact provider rejection can release its durable intent.
             # Network errors, 5xx and uncertain/malformed responses keep it.
-            state(action + '-rejected', {'intent': intent, 'rejection': error.evidence})
+            state(action + "-rejected", {"intent": intent, "rejection": error.evidence})
             raise
 
     def pages(resource, params, *, exact_total=True):
         result, seen, total = [], set(), None
         for _ in range(200):
-            page = call('GET', resource, params=params)
-            items = page.get('items')
+            page = call("GET", resource, params=params)
+            items = page.get("items")
             if not isinstance(items, list):
-                raise ReconciliationRequired('youtube_invalid_readback')
-            reported_total = page.get('pageInfo', {}).get('totalResults')
-            if not isinstance(reported_total, int) or reported_total < 0 or (total is not None and total != reported_total):
-                raise ReconciliationRequired('youtube_incomplete_readback')
+                raise ReconciliationRequired("youtube_invalid_readback")
+            reported_total = page.get("pageInfo", {}).get("totalResults")
+            if (
+                not isinstance(reported_total, int)
+                or reported_total < 0
+                or (total is not None and total != reported_total)
+            ):
+                raise ReconciliationRequired("youtube_incomplete_readback")
             total = reported_total
             result.extend(items)
-            token = page.get('nextPageToken')
+            token = page.get("nextPageToken")
             if not token:
                 if exact_total and len(result) != total:
-                    raise ReconciliationRequired('youtube_incomplete_readback')
+                    raise ReconciliationRequired("youtube_incomplete_readback")
                 return result
             if token in seen or not items:
-                raise ReconciliationRequired('youtube_unbounded_readback')
+                raise ReconciliationRequired("youtube_unbounded_readback")
             seen.add(token)
-            params = {**params, 'pageToken': token}
-        raise ReconciliationRequired('youtube_unbounded_readback')
+            params = {**params, "pageToken": token}
+        raise ReconciliationRequired("youtube_unbounded_readback")
 
     def read_until(read, matches, failure):
         # YouTube may acknowledge a write before its list endpoint reflects it.
@@ -184,123 +234,233 @@ def publish_plan(plan, request, guard, state, progress, *, quota_limit=5000, wai
                 if matches(value):
                     return value
             except ReconciliationRequired as error:
-                if str(error) != 'youtube_incomplete_readback':
+                if str(error) != "youtube_incomplete_readback":
                     raise
         raise ReconciliationRequired(failure)
 
     def metadata(playlist_id, owner):
-        items = pages('playlists', {'part': 'snippet,status', 'id': playlist_id, 'maxResults': 50})
-        if len(items) != 1 or items[0].get('id') != playlist_id or items[0].get('snippet', {}).get('channelId') != owner:
-            raise ReconciliationRequired('youtube_ownership_readback_failed')
-        edition_metadata(items[0].get('snippet', {}))
+        items = pages("playlists", {"part": "snippet,status", "id": playlist_id, "maxResults": 50})
+        if (
+            len(items) != 1
+            or items[0].get("id") != playlist_id
+            or items[0].get("snippet", {}).get("channelId") != owner
+        ):
+            raise ReconciliationRequired("youtube_ownership_readback_failed")
+        edition_metadata(items[0].get("snippet", {}))
         return items[0]
 
     def content(playlist_id):
-        items = pages('playlistItems', {'part': 'id,snippet', 'playlistId': playlist_id, 'maxResults': 50})
+        items = pages(
+            "playlistItems", {"part": "id,snippet", "playlistId": playlist_id, "maxResults": 50}
+        )
         item_ids, video_ids = [], []
         for position, item in enumerate(items):
-            snippet = item.get('snippet', {})
-            resource = snippet.get('resourceId', {})
-            item_id, video = item.get('id'), resource.get('videoId')
-            if not isinstance(item_id, str) or not item_id or item_id in item_ids or snippet.get('position') != position or snippet.get('playlistId') != playlist_id or resource.get('kind') != 'youtube#video' or not isinstance(video, str) or not VIDEO_ID.fullmatch(video):
-                raise ReconciliationRequired('youtube_invalid_ordered_readback')
+            snippet = item.get("snippet", {})
+            resource = snippet.get("resourceId", {})
+            item_id, video = item.get("id"), resource.get("videoId")
+            if (
+                not isinstance(item_id, str)
+                or not item_id
+                or item_id in item_ids
+                or snippet.get("position") != position
+                or snippet.get("playlistId") != playlist_id
+                or resource.get("kind") != "youtube#video"
+                or not isinstance(video, str)
+                or not VIDEO_ID.fullmatch(video)
+            ):
+                raise ReconciliationRequired("youtube_invalid_ordered_readback")
             item_ids.append(item_id)
             video_ids.append(video)
         return items, video_ids
 
     try:
-        channels = pages('channels', {'part': 'id', 'mine': 'true', 'maxResults': 50})
-        if len(channels) != 1 or not channels[0].get('id'):
-            raise ReconciliationRequired('youtube_owner_ambiguous')
-        owner = channels[0]['id']
-        current_state = state('read')
-        archived_ids = current_state.get('archivedPlaylistIds', [])
-        if not isinstance(archived_ids, list) or any(not isinstance(value, str) or not PLAYLIST_ID.fullmatch(value) for value in archived_ids):
-            raise ReconciliationRequired('youtube_invalid_archive_policy')
+        channels = pages("channels", {"part": "id", "mine": "true", "maxResults": 50})
+        if len(channels) != 1 or not channels[0].get("id"):
+            raise ReconciliationRequired("youtube_owner_ambiguous")
+        owner = channels[0]["id"]
+        current_state = state("read")
+        archived_ids = current_state.get("archivedPlaylistIds", [])
+        if not isinstance(archived_ids, list) or any(
+            not isinstance(value, str) or not PLAYLIST_ID.fullmatch(value) for value in archived_ids
+        ):
+            raise ReconciliationRequired("youtube_invalid_archive_policy")
         archived_ids = set(archived_ids)
-        creating = plan['expectedUrl'] in ('', 'NEW')
-        playlist_id = current_state['playlistId'] if creating else URL.fullmatch(plan['expectedUrl']).group(1)
-        description = plan['description']
+        creating = plan["expectedUrl"] in ("", "NEW")
+        playlist_id = (
+            current_state["playlistId"] if creating else URL.fullmatch(plan["expectedUrl"]).group(1)
+        )
+        description = plan["description"]
         if creating:
             description += f"\n[{current_state['marker']}]"
-            creation_metadata = current_state.get('creationMetadata') or {'title': plan['title'], 'description': description}
-            if not playlist_id and not current_state['sent']:
+            creation_metadata = current_state.get("creationMetadata") or {
+                "title": plan["title"],
+                "description": description,
+            }
+            if not playlist_id and not current_state["sent"]:
                 # A missing DB binding does not mean the provider playlist is
                 # missing. Recover an exact owned existing identity before create.
-                owned = pages('playlists', {'part': 'snippet,status', 'mine': 'true', 'maxResults': 50}, exact_total=False)
-                owned = [item for item in owned if item.get('id') not in archived_ids]
-                matches = [item for item in owned if item.get('snippet', {}).get('channelId') == owner
-                           and item.get('snippet', {}).get('title') == plan['title']
-                           and item.get('snippet', {}).get('description') == plan['description']]
+                owned = pages(
+                    "playlists",
+                    {"part": "snippet,status", "mine": "true", "maxResults": 50},
+                    exact_total=False,
+                )
+                owned = [item for item in owned if item.get("id") not in archived_ids]
+                matches = [
+                    item
+                    for item in owned
+                    if item.get("snippet", {}).get("channelId") == owner
+                    and item.get("snippet", {}).get("title") == plan["title"]
+                    and item.get("snippet", {}).get("description") == plan["description"]
+                ]
                 if len(matches) > 1:
-                    raise ReconciliationRequired('youtube_existing_identity_ambiguous')
-                if not matches and any(item.get('snippet', {}).get('channelId') == owner and item.get('snippet', {}).get('title') == plan['title'] for item in owned):
-                    raise ReconciliationRequired('youtube_existing_identity_ambiguous')
+                    raise ReconciliationRequired("youtube_existing_identity_ambiguous")
+                if not matches and any(
+                    item.get("snippet", {}).get("channelId") == owner
+                    and item.get("snippet", {}).get("title") == plan["title"]
+                    for item in owned
+                ):
+                    raise ReconciliationRequired("youtube_existing_identity_ambiguous")
                 if matches:
-                    playlist_id = matches[0].get('id')
+                    playlist_id = matches[0].get("id")
                     if not isinstance(playlist_id, str) or not PLAYLIST_ID.fullmatch(playlist_id):
                         # No adoption or create intent exists yet; retry a
                         # corrected discovery response without a permanent hold.
-                        raise ReconciliationRequired('youtube_invalid_owned_discovery_id')
-                    current_state = state('adopt', {'playlistId': playlist_id, 'title': plan['title'], 'description': plan['description']})
-            if not playlist_id and current_state['sent']:
-                matches = [item['id'] for item in pages('playlists', {'part': 'snippet,status', 'mine': 'true', 'maxResults': 50}, exact_total=False)
-                           if item.get('id') not in archived_ids and item.get('snippet', {}).get('channelId') == owner and item.get('snippet', {}).get('description') == creation_metadata['description'] and item.get('snippet', {}).get('title') == creation_metadata['title']]
+                        raise ReconciliationRequired("youtube_invalid_owned_discovery_id")
+                    current_state = state(
+                        "adopt",
+                        {
+                            "playlistId": playlist_id,
+                            "title": plan["title"],
+                            "description": plan["description"],
+                        },
+                    )
+            if not playlist_id and current_state["sent"]:
+                matches = [
+                    item["id"]
+                    for item in pages(
+                        "playlists",
+                        {"part": "snippet,status", "mine": "true", "maxResults": 50},
+                        exact_total=False,
+                    )
+                    if item.get("id") not in archived_ids
+                    and item.get("snippet", {}).get("channelId") == owner
+                    and item.get("snippet", {}).get("description")
+                    == creation_metadata["description"]
+                    and item.get("snippet", {}).get("title") == creation_metadata["title"]
+                ]
                 if len(matches) != 1:
-                    raise ReconciliationRequired('youtube_create_unknown_no_resend')
+                    raise ReconciliationRequired("youtube_create_unknown_no_resend")
                 playlist_id = matches[0]
             if not playlist_id:
                 # Charge before reserving so quota exhaustion alone leaves no
                 # false unknown intent. No provider call occurs until committed.
-                budget.charge('POST')
-                state('reserve', creation_metadata)
-                created = mutate('POST', 'playlists', 'create', creation_metadata, params={'part': 'snippet,status'}, json={'snippet': creation_metadata, 'status': {'privacyStatus': 'public'}})
-                playlist_id = created.get('id')
+                budget.charge("POST")
+                state("reserve", creation_metadata)
+                created = mutate(
+                    "POST",
+                    "playlists",
+                    "create",
+                    creation_metadata,
+                    params={"part": "snippet,status"},
+                    json={"snippet": creation_metadata, "status": {"privacyStatus": "public"}},
+                )
+                playlist_id = created.get("id")
             if not isinstance(playlist_id, str) or not PLAYLIST_ID.fullmatch(playlist_id):
-                raise ReconciliationRequired('youtube_invalid_created_id')
+                raise ReconciliationRequired("youtube_invalid_created_id")
             created_metadata = metadata(playlist_id, owner)
-            actual = created_metadata.get('snippet', {})
-            if current_state['playlistId']:
-                valid_creation = actual.get('description', '').endswith(f"\n[{current_state['marker']}]")
-                if current_state.get('adopted'):
-                    valid_creation = valid_creation or (actual.get('title') == plan['title'] and actual.get('description') == plan['description'])
+            actual = created_metadata.get("snippet", {})
+            if current_state["playlistId"]:
+                valid_creation = actual.get("description", "").endswith(
+                    f"\n[{current_state['marker']}]"
+                )
+                if current_state.get("adopted"):
+                    valid_creation = valid_creation or (
+                        actual.get("title") == plan["title"]
+                        and actual.get("description") == plan["description"]
+                    )
             else:
-                valid_creation = actual.get('description') == creation_metadata['description'] and actual.get('title') == creation_metadata['title']
+                valid_creation = (
+                    actual.get("description") == creation_metadata["description"]
+                    and actual.get("title") == creation_metadata["title"]
+                )
             if not valid_creation:
-                raise ReconciliationRequired('youtube_creation_metadata_failed')
-            state('bind', playlist_id)
+                raise ReconciliationRequired("youtube_creation_metadata_failed")
+            state("bind", playlist_id)
 
         current_metadata = metadata(playlist_id, owner)
-        pending = current_state.get('pendingInsert')
-        if pending and pending['playlistId'] != playlist_id:
-            raise ReconciliationRequired('youtube_insert_unknown_no_resend')
-        items, current = (read_until(lambda: content(playlist_id), lambda value: value[1] == pending['expectedIds'] and len(value[1]) == len(set(value[1])), 'youtube_insert_unknown_no_resend')
-                          if pending else content(playlist_id))
+        pending = current_state.get("pendingInsert")
+        if pending and pending["playlistId"] != playlist_id:
+            raise ReconciliationRequired("youtube_insert_unknown_no_resend")
+        items, current = (
+            read_until(
+                lambda: content(playlist_id),
+                lambda value: (
+                    value[1] == pending["expectedIds"] and len(value[1]) == len(set(value[1]))
+                ),
+                "youtube_insert_unknown_no_resend",
+            )
+            if pending
+            else content(playlist_id)
+        )
         if pending:
-            if pending['playlistId'] != playlist_id or current != pending['expectedIds'] or len(current) != len(set(current)):
-                raise ReconciliationRequired('youtube_insert_unknown_no_resend')
-            state('confirm', pending)
-        pending_metadata = current_state.get('pendingMetadata')
+            if (
+                pending["playlistId"] != playlist_id
+                or current != pending["expectedIds"]
+                or len(current) != len(set(current))
+            ):
+                raise ReconciliationRequired("youtube_insert_unknown_no_resend")
+            state("confirm", pending)
+        pending_metadata = current_state.get("pendingMetadata")
         if pending_metadata:
-            snippet = current_metadata.get('snippet', {})
-            if pending_metadata['playlistId'] != playlist_id or snippet.get('title') != pending_metadata['title'] or snippet.get('description') != pending_metadata['description'] or current_metadata.get('status', {}).get('privacyStatus') != 'public':
-                raise ReconciliationRequired('youtube_metadata_unknown_no_resend')
-            state('metadata-confirm', pending_metadata)
+            snippet = current_metadata.get("snippet", {})
+            if (
+                pending_metadata["playlistId"] != playlist_id
+                or snippet.get("title") != pending_metadata["title"]
+                or snippet.get("description") != pending_metadata["description"]
+                or current_metadata.get("status", {}).get("privacyStatus") != "public"
+            ):
+                raise ReconciliationRequired("youtube_metadata_unknown_no_resend")
+            state("metadata-confirm", pending_metadata)
 
         # Metadata PUT and deletion by immutable item ID are convergent. Never
         # perform these while an ambiguous insertion could still be in flight.
-        snippet = current_metadata.get('snippet', {})
-        if snippet.get('title') != plan['title'] or snippet.get('description') != description or current_metadata.get('status', {}).get('privacyStatus') != 'public':
-            budget.charge('PUT')
-            intent = {'playlistId': playlist_id, 'title': plan['title'], 'description': description}
-            state('metadata', intent)
-            mutate('PUT', 'playlists', 'metadata', intent, params={'part': 'snippet,status'}, json={'id': playlist_id, 'snippet': {'title': plan['title'], 'description': description}, 'status': {'privacyStatus': 'public'}})
-            current_metadata = read_until(lambda: metadata(playlist_id, owner),
-                lambda value: value.get('snippet', {}).get('title') == plan['title'] and value.get('snippet', {}).get('description') == description and value.get('status', {}).get('privacyStatus') == 'public',
-                'youtube_metadata_readback_failed')
-            if current_metadata.get('snippet', {}).get('title') != plan['title'] or current_metadata.get('snippet', {}).get('description') != description or current_metadata.get('status', {}).get('privacyStatus') != 'public':
-                raise ReconciliationRequired('youtube_metadata_readback_failed')
-            state('metadata-confirm', intent)
+        snippet = current_metadata.get("snippet", {})
+        if (
+            snippet.get("title") != plan["title"]
+            or snippet.get("description") != description
+            or current_metadata.get("status", {}).get("privacyStatus") != "public"
+        ):
+            budget.charge("PUT")
+            intent = {"playlistId": playlist_id, "title": plan["title"], "description": description}
+            state("metadata", intent)
+            mutate(
+                "PUT",
+                "playlists",
+                "metadata",
+                intent,
+                params={"part": "snippet,status"},
+                json={
+                    "id": playlist_id,
+                    "snippet": {"title": plan["title"], "description": description},
+                    "status": {"privacyStatus": "public"},
+                },
+            )
+            current_metadata = read_until(
+                lambda: metadata(playlist_id, owner),
+                lambda value: (
+                    value.get("snippet", {}).get("title") == plan["title"]
+                    and value.get("snippet", {}).get("description") == description
+                    and value.get("status", {}).get("privacyStatus") == "public"
+                ),
+                "youtube_metadata_readback_failed",
+            )
+            if (
+                current_metadata.get("snippet", {}).get("title") != plan["title"]
+                or current_metadata.get("snippet", {}).get("description") != description
+                or current_metadata.get("status", {}).get("privacyStatus") != "public"
+            ):
+                raise ReconciliationRequired("youtube_metadata_readback_failed")
+            state("metadata-confirm", intent)
         while verified < min(len(current), len(desired)) and current[verified] == desired[verified]:
             verified += 1
         checkpoint()
@@ -309,6 +469,7 @@ def publish_plan(plan, request, guard, state, progress, *, quota_limit=5000, wai
         # reinserted (50 quota units for EACH delete and EACH insert).
         # Unique desired IDs turn LCS into LIS over desired positions.
         from bisect import bisect_left
+
         ranks = {video: index for index, video in enumerate(desired)}
         tails, tail_indices, previous = [], [], {}
         for index, video in enumerate(current):
@@ -329,31 +490,72 @@ def publish_plan(plan, request, guard, state, progress, *, quota_limit=5000, wai
         kept = [video for index, video in enumerate(current) if index in retained]
         for index in reversed(range(len(items))):
             if index not in retained:
-                call('DELETE', 'playlistItems', params={'id': items[index]['id']})
+                call("DELETE", "playlistItems", params={"id": items[index]["id"]})
         if len(retained) != len(items):
-            _, current = read_until(lambda: content(playlist_id), lambda value: value[1] == kept and len(value[1]) == len(set(value[1])), 'youtube_delete_readback_failed')
+            _, current = read_until(
+                lambda: content(playlist_id),
+                lambda value: value[1] == kept and len(value[1]) == len(set(value[1])),
+                "youtube_delete_readback_failed",
+            )
         else:
             current = kept
         for position, video in enumerate(desired):
             if position < len(current) and current[position] == video:
                 verified = position + 1
                 continue
-            budget.charge('POST')
+            budget.charge("POST")
             expected = current[:position] + [video] + current[position:]
-            intent = {'playlistId': playlist_id, 'expectedIds': expected, 'beforeIds': current[:], 'position': position}
-            state('insert', intent)
-            mutate('POST', 'playlistItems', 'insert', intent, params={'part': 'snippet'}, json={'snippet': {'playlistId': playlist_id, 'position': position, 'resourceId': {'kind': 'youtube#video', 'videoId': video}}})
-            _, current = read_until(lambda: content(playlist_id), lambda value: value[1] == intent['expectedIds'] and len(value[1]) == len(set(value[1])), 'youtube_insert_readback_failed')
-            state('confirm', intent)
+            intent = {
+                "playlistId": playlist_id,
+                "expectedIds": expected,
+                "beforeIds": current[:],
+                "position": position,
+            }
+            state("insert", intent)
+            mutate(
+                "POST",
+                "playlistItems",
+                "insert",
+                intent,
+                params={"part": "snippet"},
+                json={
+                    "snippet": {
+                        "playlistId": playlist_id,
+                        "position": position,
+                        "resourceId": {"kind": "youtube#video", "videoId": video},
+                    }
+                },
+            )
+            _, current = read_until(
+                lambda: content(playlist_id),
+                lambda value: (
+                    value[1] == intent["expectedIds"] and len(value[1]) == len(set(value[1]))
+                ),
+                "youtube_insert_readback_failed",
+            )
+            state("confirm", intent)
             verified = position + 1
             checkpoint()
         final = metadata(playlist_id, owner)
         _, current = content(playlist_id)
-        if current != desired or len(current) != len(set(current)) or final.get('snippet', {}).get('title') != plan['title'] or final.get('snippet', {}).get('description') != description or final.get('status', {}).get('privacyStatus') != 'public':
-            raise ReconciliationRequired('youtube_final_readback_failed')
+        if (
+            current != desired
+            or len(current) != len(set(current))
+            or final.get("snippet", {}).get("title") != plan["title"]
+            or final.get("snippet", {}).get("description") != description
+            or final.get("status", {}).get("privacyStatus") != "public"
+        ):
+            raise ReconciliationRequired("youtube_final_readback_failed")
         checkpoint(True)
         guard()
-        return {'url': f'https://music.youtube.com/playlist?list={playlist_id}' if creating else plan['expectedUrl'], 'expectedUrl': plan['expectedUrl'], 'artists': plan['artists'], 'tracks': len(desired)}
+        return {
+            "url": f"https://music.youtube.com/playlist?list={playlist_id}"
+            if creating
+            else plan["expectedUrl"],
+            "expectedUrl": plan["expectedUrl"],
+            "artists": plan["artists"],
+            "tracks": len(desired),
+        }
     except Exception:
         # Count-only progress is durable. Never report partial content as success.
         checkpoint()
@@ -361,63 +563,101 @@ def publish_plan(plan, request, guard, state, progress, *, quota_limit=5000, wai
 
 
 def run_plan(mode, value):
-    if mode == 'discover':
+    if mode == "discover":
         result = discover_plan(value)
-    elif mode == 'apply':
+    elif mode == "apply":
         from youtube_music_transfer import youtube_data_api_headers
+
         # Explicit worker environment only; no existing default credential paths.
-        credentials = Path(os.environ['YOUTUBE_MUSIC_CREDENTIALS_FILE'])
-        oauth = Path(os.environ['YOUTUBE_MUSIC_OAUTH_FILE'])
+        credentials = Path(os.environ["YOUTUBE_MUSIC_CREDENTIALS_FILE"])
+        oauth = Path(os.environ["YOUTUBE_MUSIC_OAUTH_FILE"])
+
         def state(action, payload=None):
-            args = [os.environ['PLAYLIST_GUARD_NODE'], '--experimental-strip-types', os.environ['YOUTUBE_GUARD_SCRIPT'], action]
-            reply = subprocess.run(args, input=json.dumps(payload) if payload is not None else None, capture_output=True, text=True, check=True, timeout=20)
+            args = [
+                os.environ["PLAYLIST_GUARD_NODE"],
+                "--experimental-strip-types",
+                os.environ["YOUTUBE_GUARD_SCRIPT"],
+                action,
+            ]
+            reply = subprocess.run(
+                args,
+                input=json.dumps(payload) if payload is not None else None,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=20,
+            )
             return json.loads(reply.stdout)
+
         def guard():
-            state('read')
+            state("read")
+
         def request(method, url, **kwargs):
             headers = youtube_data_api_headers(credentials, oauth)
             guard()  # Refresh may have waited; fence again immediately pre-call.
             response = requests.request(method, url, headers=headers, timeout=30, **kwargs)
             if response.status_code >= 400:
-                if response.status_code == 403 and method not in ('POST', 'PUT'):
+                if response.status_code == 403 and method not in ("POST", "PUT"):
                     try:
-                        if response.json()['error']['errors'][0]['reason'] == 'quotaExceeded':
-                            raise ProviderQuotaExceeded('youtube_provider_quota_exceeded')
+                        if response.json()["error"]["errors"][0]["reason"] == "quotaExceeded":
+                            raise ProviderQuotaExceeded("youtube_provider_quota_exceeded")
                     except (KeyError, IndexError, TypeError, ValueError):
                         pass
-                if method in ('POST', 'PUT') and response.status_code in (400, 401, 403, 404, 409, 429):
+                if method in ("POST", "PUT") and response.status_code in (
+                    400,
+                    401,
+                    403,
+                    404,
+                    409,
+                    429,
+                ):
                     try:
-                        error = response.json()['error']
-                        reasons = error['errors']
-                        reason = reasons[0]['reason']
-                        if error.get('code') == response.status_code and isinstance(reason, str) and re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{0,79}', reason):
+                        error = response.json()["error"]
+                        reasons = error["errors"]
+                        reason = reasons[0]["reason"]
+                        if (
+                            error.get("code") == response.status_code
+                            and isinstance(reason, str)
+                            and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,79}", reason)
+                        ):
                             raise ProviderWriteRejected(response.status_code, reason)
                     except (KeyError, IndexError, TypeError, ValueError):
                         pass
-                raise RuntimeError('youtube_provider_request_failed')
+                raise RuntimeError("youtube_provider_request_failed")
             return response.json() if response.content else {}
-        result = publish_plan(value, request, guard, state, lambda data: state('progress', data), quota_limit=int(os.environ.get('YOUTUBE_WORKER_QUOTA_UNITS', '5000')))
+
+        result = publish_plan(
+            value,
+            request,
+            guard,
+            state,
+            lambda data: state("progress", data),
+            quota_limit=int(os.environ.get("YOUTUBE_WORKER_QUOTA_UNITS", "5000")),
+        )
     else:
-        raise ValueError('Invalid YouTube plan operation')
+        raise ValueError("Invalid YouTube plan operation")
     return result
 
 
 def main():
     mode, input_path, output_path = sys.argv[1:4]
-    value = json.loads(Path(input_path).read_text(encoding='utf-8'))
-    Path(output_path).write_text(json.dumps(run_plan(mode, value)), encoding='utf-8')
+    value = json.loads(Path(input_path).read_text(encoding="utf-8"))
+    Path(output_path).write_text(json.dumps(run_plan(mode, value)), encoding="utf-8")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         main()
     except QuotaBoundReached:
-        sys.stderr.write('youtube_quota_bound_reached\n')
+        sys.stderr.write("youtube_quota_bound_reached\n")
         sys.exit(2)
     except ReconciliationRequired as error:
         detail = failure_diagnostic(error)
-        sys.stderr.write('youtube_reconciliation_required\n' + (detail + '\n' if detail != 'youtube_plan_failed' else ''))
+        sys.stderr.write(
+            "youtube_reconciliation_required\n"
+            + (detail + "\n" if detail != "youtube_plan_failed" else "")
+        )
         sys.exit(3)
     except Exception as error:
-        sys.stderr.write(failure_diagnostic(error) + '\n')
+        sys.stderr.write(failure_diagnostic(error) + "\n")
         sys.exit(1)

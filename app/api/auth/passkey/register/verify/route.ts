@@ -32,7 +32,9 @@ export async function POST(request: Request) {
 
     const { credential, credentialBackedUp, credentialDeviceType } = verification.registrationInfo;
     const user = await db.$transaction(async (transaction) => {
-      const created = await transaction.user.create({ data: { email: ceremony.email, passwordHash: null } });
+      const created = await transaction.user.create({
+        data: { email: ceremony.email, passwordHash: null },
+      });
       await transaction.passkey.create({
         data: {
           id: credential.id,
@@ -48,7 +50,10 @@ export async function POST(request: Request) {
       return created;
     });
     await createSession(user.id);
-    return Response.json({ user: { id: user.id, email: user.email, emailVerified: false } }, { status: 201 });
+    return Response.json(
+      { user: { id: user.id, email: user.email, emailVerified: false } },
+      { status: 201 },
+    );
   } catch (reason) {
     if (reason instanceof Prisma.PrismaClientKnownRequestError && reason.code === "P2002") {
       return error("This email or passkey is already registered.", 409);

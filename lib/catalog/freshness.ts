@@ -37,7 +37,8 @@ export async function readFreshnessEvidence(db: PrismaClient, now: Date) {
         FROM "IngestionAttempt" a
         JOIN "IngestionCandidate" c ON c."attemptId" = a.id AND c."festivalSlug" = f.slug
         WHERE a."festivalSlug" = f.slug AND a."requestedUrl" = s.url
-          AND a."endedAt" <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') AND a."httpStatus" BETWEEN 200 AND 299
+          AND a."endedAt" <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC')
+          AND a."httpStatus" BETWEEN 200 AND 299
           AND a.status IN ('UNCHANGED', 'PUBLISHABLE') AND c."reviewState" <> 'REJECTED'
           AND c.normalized->'observedEditionYears' = jsonb_build_array(e.year)
           AND EXISTS (
@@ -50,9 +51,12 @@ export async function readFreshnessEvidence(db: PrismaClient, now: Date) {
       WHERE s.enabled AND s."refreshPolicy" <> 'archived' AND e."recordState" = 'CURRENT'
     `,
   ]);
-  const publishedByEdition = new Map(publications.map((row) => [
-    editionKey(row.festivalSlug, row.editionYear), row._max.createdAt?.toISOString(),
-  ]));
+  const publishedByEdition = new Map(
+    publications.map((row) => [
+      editionKey(row.festivalSlug, row.editionYear),
+      row._max.createdAt?.toISOString(),
+    ]),
+  );
   const checksByEdition = new Map<string, SourceCheck[]>();
   for (const check of checks) {
     const existing = checksByEdition.get(check.editionId) ?? [];

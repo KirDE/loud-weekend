@@ -1,4 +1,7 @@
-import { verifyAuthenticationResponse, type AuthenticationResponseJSON } from "@simplewebauthn/server";
+import {
+  verifyAuthenticationResponse,
+  type AuthenticationResponseJSON,
+} from "@simplewebauthn/server";
 import { z } from "zod";
 import { createSession } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -18,7 +21,10 @@ export async function POST(request: Request) {
 
   try {
     const response = parsed.data as unknown as AuthenticationResponseJSON;
-    const passkey = await db.passkey.findUnique({ where: { id: response.id }, include: { user: true } });
+    const passkey = await db.passkey.findUnique({
+      where: { id: response.id },
+      include: { user: true },
+    });
     if (!passkey) return error("Passkey sign-in failed.", 401);
     if (response.response.userHandle && response.response.userHandle !== passkey.userHandle) {
       return error("Passkey sign-in failed.", 401);

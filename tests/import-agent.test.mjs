@@ -1,15 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  agentAuthorized,
-  decisionSchema,
-  fingerprint,
-} from "../lib/ingestion/agent-contract.ts";
-import {
-  watcherDecision,
-  privateJson,
-  callAgent,
-} from "../scripts/import-agent-client.mjs";
+import { agentAuthorized, decisionSchema, fingerprint } from "../lib/ingestion/agent-contract.ts";
+import { watcherDecision, privateJson, callAgent } from "../scripts/import-agent-client.mjs";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,10 +35,7 @@ test("strict decisions reject partial billing, impossible dates and unaudited wr
       },
     ],
   };
-  assert.equal(
-    decisionSchema.safeParse({ ...base, facts: { city: "City" } }).success,
-    true,
-  );
+  assert.equal(decisionSchema.safeParse({ ...base, facts: { city: "City" } }).success, true);
   for (const facts of [
     { headliners: ["X"] },
     { startDate: "2027-02-29" },
@@ -54,10 +43,7 @@ test("strict decisions reject partial billing, impossible dates and unaudited wr
     { city: "City", editionYear: 2028 },
   ])
     assert.equal(decisionSchema.safeParse({ ...base, facts }).success, false);
-  assert.equal(
-    decisionSchema.safeParse({ ...base, evidence: [] }).success,
-    false,
-  );
+  assert.equal(decisionSchema.safeParse({ ...base, evidence: [] }).success, false);
   assert.equal(
     decisionSchema.safeParse({
       action: "retry",
@@ -67,8 +53,7 @@ test("strict decisions reject partial billing, impossible dates and unaudited wr
     false,
   );
   assert.equal(
-    decisionSchema.safeParse({ action: "needs_user", reason: base.reason })
-      .success,
+    decisionSchema.safeParse({ action: "needs_user", reason: base.reason }).success,
     false,
   );
 });
@@ -89,20 +74,11 @@ test("watcher is quiet while healthy; new work, stranded work and failures wake 
   assert.equal(watcherDecision(work, active.state, now + 900001).fire, true);
   const failure = watcherDecision({ error: true }, active.state, now);
   assert.equal(failure.fire, true);
-  assert.equal(
-    watcherDecision({ error: true }, failure.state, now + 60000).fire,
-    false,
-  );
-  assert.equal(
-    watcherDecision({ error: true }, failure.state, now + 3600001).fire,
-    true,
-  );
+  assert.equal(watcherDecision({ error: true }, failure.state, now + 60000).fire, false);
+  assert.equal(watcherDecision({ error: true }, failure.state, now + 3600001).fire, true);
   assert.throws(() => watcherDecision({ ready: 0 }, {}), /Incomplete/);
   assert.equal(watcherDecision({ missing: true }, {}, now).fire, false);
-  assert.equal(
-    watcherDecision({ missing: true }, active.state, now).fire,
-    true,
-  );
+  assert.equal(watcherDecision({ missing: true }, active.state, now).fire, true);
 });
 test("client refuses plaintext endpoints and world-readable credentials", async () => {
   await assert.rejects(

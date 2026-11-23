@@ -9,13 +9,14 @@ export function canonicalPath(path: string) {
 
 export function festivalMusicEvent(item: Festival) {
   const hasVerifiedDates = Boolean(item.startDate);
-  const availability = item.ticketStatus === "available"
-    ? "https://schema.org/InStock"
-    : item.ticketStatus === "low"
-      ? "https://schema.org/LimitedAvailability"
-      : item.ticketStatus === "sold_out"
-      ? "https://schema.org/SoldOut"
-      : undefined;
+  const availability =
+    item.ticketStatus === "available"
+      ? "https://schema.org/InStock"
+      : item.ticketStatus === "low"
+        ? "https://schema.org/LimitedAvailability"
+        : item.ticketStatus === "sold_out"
+          ? "https://schema.org/SoldOut"
+          : undefined;
 
   return {
     "@context": "https://schema.org",
