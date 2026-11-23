@@ -39,14 +39,26 @@ const copy = {
     ru: "Душевые и туалеты с проточной водой доступны гостям кемпинга круглосуточно.",
   },
   motorhome: {
-    en: "Motorhome pitches include one electrical hookup. A motorhome pitch ticket does not replace the campsite ticket required for each camper.",
-    de: "Wohnmobilstellplätze haben je einen Stromanschluss. Das Stellplatzticket ersetzt nicht das Campingticket pro Person.",
-    ru: "На каждом месте для автодома есть одно подключение к электросети. Билет на место не заменяет кемпинговый билет для каждого гостя.",
+    en:
+      "Motorhome pitches include one electrical hookup. A motorhome pitch " +
+      "ticket does not replace the campsite ticket required for each camper.",
+    de:
+      "Wohnmobilstellplätze haben je einen Stromanschluss. " +
+      "Das Stellplatzticket ersetzt nicht das Campingticket pro Person.",
+    ru:
+      "На каждом месте для автодома есть одно подключение к электросети. " +
+      "Билет на место не заменяет кемпинговый билет для каждого гостя.",
   },
   accessibility: {
-    en: "The organizer lists Wheels of Steel as a designated camping area for people with disabilities. Check the organizer’s information for the specific facilities and booking conditions.",
-    de: "Der Veranstalter nennt Wheels of Steel als ausgewiesenen Campingbereich für Menschen mit Behinderung. Ausstattung und Buchungsbedingungen stehen beim Veranstalter.",
-    ru: "Организатор указывает Wheels of Steel как отдельную зону кемпинга для людей с инвалидностью. Уточняйте оснащение и условия бронирования у организатора.",
+    en:
+      "The organizer lists Wheels of Steel as a designated camping area for people with disabilities. " +
+      "Check the organizer’s information for the specific facilities and booking conditions.",
+    de:
+      "Der Veranstalter nennt Wheels of Steel als ausgewiesenen Campingbereich für Menschen mit Behinderung. " +
+      "Ausstattung und Buchungsbedingungen stehen beim Veranstalter.",
+    ru:
+      "Организатор указывает Wheels of Steel как отдельную зону кемпинга для людей с инвалидностью. " +
+      "Уточняйте оснащение и условия бронирования у организатора.",
   },
 };
 
@@ -65,22 +77,9 @@ const months = [
   "November",
   "December",
 ];
-const weekdays = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
+const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-function observedDate(
-  year: number,
-  month: number,
-  day: number,
-  weekday: string,
-) {
+function observedDate(year: number, month: number, day: number, weekday: string) {
   const date = new Date(Date.UTC(year, month - 1, day));
   if (
     date.getUTCFullYear() === year &&
@@ -100,21 +99,13 @@ function singleMatch(paragraphs: string[], pattern: RegExp) {
 
 /** Recognize only explicit, positive organizer statements. An incomplete or
  * changed policy never falls back to the previous bundle's assertions. */
-export function parseCampingGuidance(
-  html: string,
-  slug: CampingSlug,
-  year: number,
-) {
+export function parseCampingGuidance(html: string, slug: CampingSlug, year: number) {
   const $ = load(html);
   $(
     "script,style,noscript,template,header,footer,nav,[hidden],[inert],[aria-hidden='true']",
   ).remove();
   $("[style]").each((_, element) => {
-    if (
-      /display\s*:\s*none|visibility\s*:\s*hidden/i.test(
-        $(element).attr("style") ?? "",
-      )
-    )
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? ""))
       $(element).remove();
   });
   if (slug === "graspop") return parseGraspopAccessibility($, year);
@@ -133,12 +124,8 @@ export function parseCampingGuidance(
     );
     if (!dates) return;
     const earliestDate = observedDate(year, +dates[3], +dates[2], dates[1]);
-    const graveyard = $("h5").filter(
-      (_, el) => plain($(el).text()) === "Alcatraz Graveyard",
-    );
-    const motorhomes = $("h5").filter(
-      (_, el) => plain($(el).text()) === "Motorhomes",
-    );
+    const graveyard = $("h5").filter((_, el) => plain($(el).text()) === "Alcatraz Graveyard");
+    const motorhomes = $("h5").filter((_, el) => plain($(el).text()) === "Motorhomes");
     if (graveyard.length !== 1 || motorhomes.length !== 1) return;
     const pass = graveyard
       .siblings("p")
@@ -168,7 +155,10 @@ export function parseCampingGuidance(
       ) ||
       !singleMatch(
         motor,
-        /^At the Motorhome Campsite[^]*?\. 1 electric hook-up \([^)]*\) is provided per motorhome\/caravan\.[^]*?\(camping ticket compulsory for every camper\)$/,
+        new RegExp(
+          String.raw`^At the Motorhome Campsite[^]*?\. 1 electric hook-up \([^)]*\) is provided per ` +
+            String.raw`motorhome\/caravan\.[^]*?\(camping ticket compulsory for every camper\)$`,
+        ),
       )
     )
       return;
@@ -181,9 +171,7 @@ export function parseCampingGuidance(
   }
 
   if (
-    !plain($("h1[itemprop=headline]").text()).startsWith(
-      `W:O:A Camping ${year} - `,
-    ) ||
+    !plain($("h1[itemprop=headline]").text()).startsWith(`W:O:A Camping ${year} - `) ||
     $("article").length !== 1
   )
     return;
@@ -219,16 +207,10 @@ export function parseCampingGuidance(
 
 function parseGraspopAccessibility($: ReturnType<typeof load>, year: number) {
   const section = (title: string) =>
-    $("details.faq-item").filter(
-      (_, el) => plain($(el).children("summary").text()) === title,
-    );
+    $("details.faq-item").filter((_, el) => plain($(el).children("summary").text()) === title);
   const campsite = section("THE INTER CAMPSITE");
   const arena = section("IN THE FESTIVAL ARENA");
-  if (
-    plain($("h1").text()) !== "Accessibility" ||
-    campsite.length !== 1 ||
-    arena.length !== 1
-  )
+  if (plain($("h1").text()) !== "Accessibility" || campsite.length !== 1 || arena.length !== 1)
     return;
   const text = plain(campsite.text());
   const opening =
@@ -236,8 +218,7 @@ function parseGraspopAccessibility($: ReturnType<typeof load>, year: number) {
   const dates = [...text.matchAll(opening)];
   if (dates.length !== 1 || Number(dates[0][4]) !== year) return;
   const [, weekday, day, month] = dates[0];
-  if (!observedDate(year, months.indexOf(month) + 1, Number(day), weekday))
-    return;
+  if (!observedDate(year, months.indexOf(month) + 1, Number(day), weekday)) return;
   const application = singleMatch(
     $("p")
       .map((_, el) => plain($(el).text()))
@@ -245,9 +226,7 @@ function parseGraspopAccessibility($: ReturnType<typeof load>, year: number) {
     /contact Inter as soon as possible \(and by (\d{1,2}) (\w+) (20\d{2}) at the latest\)\./,
   );
   if (!application || Number(application[3]) !== year) return;
-  const deadline = new Date(
-    Date.UTC(year, months.indexOf(application[2]), Number(application[1])),
-  );
+  const deadline = new Date(Date.UTC(year, months.indexOf(application[2]), Number(application[1])));
   if (
     deadline.getUTCFullYear() !== year ||
     months[deadline.getUTCMonth()] !== application[2] ||
@@ -259,9 +238,7 @@ function parseGraspopAccessibility($: ReturnType<typeof load>, year: number) {
     !text.includes(
       "Access to the Inter campsite requires a valid festival wristband and camping wristband.",
     ) ||
-    !text.includes(
-      "This dedicated zone includes accessible showers, washbasins and toilets.",
-    )
+    !text.includes("This dedicated zone includes accessible showers, washbasins and toilets.")
   )
     return;
   const viewing = singleMatch(
@@ -269,7 +246,12 @@ function parseGraspopAccessibility($: ReturnType<typeof load>, year: number) {
       .find("p")
       .map((_, el) => plain($(el).text()))
       .get(),
-    /(?:^|[.!?]\s*)The main stages, the ([\p{L} .'-]{1,50}) and the ([\p{L} .'-]{1,50}) have raised platforms for wheelchair users and persons with a disability\. One carer can join them on the platform\./u,
+    new RegExp(
+      String.raw`(?:^|[.!?]\s*)The main stages, the ([\p{L} .'-]{1,50}) and the ([\p{L} .'-]{1,50}) ` +
+        String.raw`have raised platforms for wheelchair users and persons with a disability\. One carer ` +
+        String.raw`can join them on the platform\.`,
+      "u",
+    ),
   );
   if (!viewing) return;
   const shown = (locale: string) =>
@@ -281,9 +263,15 @@ function parseGraspopAccessibility($: ReturnType<typeof load>, year: number) {
     {
       field: "accessibility",
       description: {
-        en: `Apply to Inter by ${shown("en-GB")}. The Inferno accessibility campsite requires festival and camping wristbands.`,
-        de: `Antrag bei Inter bis ${shown("de-DE")}. Für den barrierefreien Inferno-Bereich sind Festival- und Campingarmbänder nötig.`,
-        ru: `Подайте заявку в Inter до ${shown("ru-RU")}. Для доступной зоны Inferno нужны фестивальный и кемпинговый браслеты.`,
+        en:
+          `Apply to Inter by ${shown("en-GB")}. ` +
+          "The Inferno accessibility campsite requires festival and camping wristbands.",
+        de:
+          `Antrag bei Inter bis ${shown("de-DE")}. ` +
+          "Für den barrierefreien Inferno-Bereich sind Festival- und Campingarmbänder nötig.",
+        ru:
+          `Подайте заявку в Inter до ${shown("ru-RU")}. ` +
+          "Для доступной зоны Inferno нужны фестивальный и кемпинговый браслеты.",
       },
     },
     {
@@ -298,8 +286,12 @@ function parseGraspopAccessibility($: ReturnType<typeof load>, year: number) {
       field: "viewing",
       description: {
         en: `The main stages, ${viewing[1]} and ${viewing[2]} have raised platforms. One carer may join.`,
-        de: `An den Hauptbühnen, ${viewing[1]} und ${viewing[2]} gibt es erhöhte Plattformen. Eine Begleitperson darf mit.`,
-        ru: `У главных сцен, ${viewing[1]} и ${viewing[2]} есть приподнятые площадки. Разрешён один сопровождающий.`,
+        de:
+          `An den Hauptbühnen, ${viewing[1]} und ${viewing[2]} gibt es erhöhte Plattformen. ` +
+          "Eine Begleitperson darf mit.",
+        ru:
+          `У главных сцен, ${viewing[1]} и ${viewing[2]} есть приподнятые площадки. ` +
+          "Разрешён один сопровождающий.",
       },
     },
   ] as const;

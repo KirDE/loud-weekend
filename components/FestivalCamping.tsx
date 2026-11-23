@@ -4,9 +4,39 @@ import type { PublicCampingFact } from "@/lib/catalog/camping-facts";
 import { useLanguage } from "./LanguageProvider";
 
 const copy = {
-  en: { title: "Camping and on-site facilities", camping: "Camping ticket", arrival: "Earliest campsite arrival date", accessibility: "Designated camping area", facilities: "Showers and toilets", motorhomes: "Motorhome pitches", viewing: "Accessible viewing platforms", source: "Organizer’s camping information", reviewed: "Source checked" },
-  de: { title: "Camping und Ausstattung", camping: "Campingticket", arrival: "Frühester Anreisetag zum Campingplatz", accessibility: "Ausgewiesener Campingbereich", facilities: "Duschen und Toiletten", motorhomes: "Wohnmobilstellplätze", viewing: "Barrierefreie Zuschauerplattformen", source: "Campinginformationen des Veranstalters", reviewed: "Quelle geprüft" },
-  ru: { title: "Кемпинг и удобства", camping: "Билет в кемпинг", arrival: "Первый день заезда в кемпинг", accessibility: "Выделенная зона кемпинга", facilities: "Душевые и туалеты", motorhomes: "Места для автодомов", viewing: "Доступные зрительские площадки", source: "Информация о кемпинге от организатора", reviewed: "Источник проверен" },
+  en: {
+    title: "Camping and on-site facilities",
+    camping: "Camping ticket",
+    arrival: "Earliest campsite arrival date",
+    accessibility: "Designated camping area",
+    facilities: "Showers and toilets",
+    motorhomes: "Motorhome pitches",
+    viewing: "Accessible viewing platforms",
+    source: "Organizer’s camping information",
+    reviewed: "Source checked",
+  },
+  de: {
+    title: "Camping und Ausstattung",
+    camping: "Campingticket",
+    arrival: "Frühester Anreisetag zum Campingplatz",
+    accessibility: "Ausgewiesener Campingbereich",
+    facilities: "Duschen und Toiletten",
+    motorhomes: "Wohnmobilstellplätze",
+    viewing: "Barrierefreie Zuschauerplattformen",
+    source: "Campinginformationen des Veranstalters",
+    reviewed: "Quelle geprüft",
+  },
+  ru: {
+    title: "Кемпинг и удобства",
+    camping: "Билет в кемпинг",
+    arrival: "Первый день заезда в кемпинг",
+    accessibility: "Выделенная зона кемпинга",
+    facilities: "Душевые и туалеты",
+    motorhomes: "Места для автодомов",
+    viewing: "Доступные зрительские площадки",
+    source: "Информация о кемпинге от организатора",
+    reviewed: "Источник проверен",
+  },
 };
 
 export function FestivalCamping({ facts }: { facts: readonly PublicCampingFact[] }) {
@@ -28,18 +58,28 @@ export function FestivalCamping({ facts }: { facts: readonly PublicCampingFact[]
       {Array.from(groups, ([key, group]) => (
         <div key={key}>
           <dl>
-            {group.map(fact => (
+            {group.map((fact) => (
               <div key={fact.field}>
-                <dt><strong>{t[fact.field]}</strong></dt>
-                <dd>{fact.field === "arrival"
-                  ? <time dateTime={fact.earliestDate}>{displayDate(fact.earliestDate)}</time>
-                  : fact.description[language]}</dd>
+                <dt>
+                  <strong>{t[fact.field]}</strong>
+                </dt>
+                <dd>
+                  {fact.field === "arrival" ? (
+                    <time dateTime={fact.earliestDate}>{displayDate(fact.earliestDate)}</time>
+                  ) : (
+                    fact.description[language]
+                  )}
+                </dd>
               </div>
             ))}
           </dl>
           <p>
-            <a href={group[0].sourceUrl} rel="noreferrer">{t.source}</a>
-            {" · "}{t.reviewed}: <time dateTime={group[0].checkedOn}>{displayDate(group[0].checkedOn)}</time>
+            <a href={group[0].sourceUrl} rel="noreferrer">
+              {t.source}
+            </a>
+            {" · "}
+            {t.reviewed}:{" "}
+            <time dateTime={group[0].checkedOn}>{displayDate(group[0].checkedOn)}</time>
           </p>
         </div>
       ))}
