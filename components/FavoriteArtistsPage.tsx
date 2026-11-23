@@ -76,8 +76,19 @@ export function FavoriteArtistsPage({
   }
 
   const term = query.trim().toLocaleLowerCase(locale);
+  const aliasMatches = new Set<string>();
+  if (term) {
+    for (const [name, slug] of Object.entries(lineups.legacyFavoriteSlugs)) {
+      if (name.toLocaleLowerCase(locale).includes(term)) aliasMatches.add(slug);
+    }
+  }
   const matches = term
-    ? artists.filter((artist) => artist.name.toLocaleLowerCase(locale).includes(term)).slice(0, 12)
+    ? artists
+        .filter(
+          (artist) =>
+            artist.name.toLocaleLowerCase(locale).includes(term) || aliasMatches.has(artist.slug),
+        )
+        .slice(0, 12)
     : [];
   const byDate = [...festivals].sort(
     (a, b) =>
@@ -128,7 +139,13 @@ export function FavoriteArtistsPage({
                           <ul>
                             {appearances.map((festival) => (
                               <li key={festival.slug}>
-                                <Link href={`/${language}/festivals/${festival.slug}/`}>
+                                <Link
+                                  href={
+                                    festival.editionYear
+                                      ? `/festivals/${festival.slug}/${festival.editionYear}/`
+                                      : `/${language}/festivals/${festival.slug}/`
+                                  }
+                                >
                                   {festival.name}
                                   {festival.editionYear ? ` · ${festival.editionYear}` : ""}
                                 </Link>
