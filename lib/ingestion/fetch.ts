@@ -1101,7 +1101,13 @@ export async function fetchSource(
   if (!primary.response.ok || !ticketUrl) return primary;
   let attempts = primary.attempts;
   try {
-    if (primary.response.url && primary.response.url !== source.url)
+    // The reviewed Wacken root redirects to its German homepage. Do not
+    // generalize this exception to other paths, origins or ticket documents.
+    const wackenHomepage =
+      source.festivalSlug === "wacken-open-air" &&
+      source.url === "https://www.wacken.com/" &&
+      primary.response.url === "https://www.wacken.com/de/";
+    if (primary.response.url && primary.response.url !== source.url && !wackenHomepage)
       throw new Error("Official ticket primary source changed identity");
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
