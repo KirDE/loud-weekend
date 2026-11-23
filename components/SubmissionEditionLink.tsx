@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import type { SubmissionEditionLink as LinkedEdition } from "@/lib/submission-edition-link";
 import { SubmissionFollowOnEdition, type FollowOnDraft } from "./SubmissionFollowOnEdition";
+import { SubmissionNewFestival, type NewFestivalDraft } from "./SubmissionNewFestival";
 import { useLanguage } from "./LanguageProvider";
 
 const labels = {
@@ -41,6 +42,8 @@ export function SubmissionEditionLink({
   currentEditions,
   draft,
   onDraft,
+  newFestivalDraft,
+  onNewFestivalDraft,
   link,
   onLinked,
 }: {
@@ -50,6 +53,8 @@ export function SubmissionEditionLink({
   currentEditions: { slug: string; name: string; year: number }[];
   draft?: FollowOnDraft;
   onDraft: (value: FollowOnDraft) => void;
+  newFestivalDraft?: NewFestivalDraft;
+  onNewFestivalDraft: (value: NewFestivalDraft) => void;
   link?: LinkedEdition | null;
   onLinked: (link: LinkedEdition) => void;
 }) {
@@ -119,6 +124,13 @@ export function SubmissionEditionLink({
         options={currentEditions}
         draft={draft}
         onDraft={onDraft}
+        onLink={onLinked}
+      />
+      <SubmissionNewFestival
+        reference={reference}
+        year={year}
+        draft={newFestivalDraft}
+        onDraft={onNewFestivalDraft}
         onLink={onLinked}
       />
     </>
