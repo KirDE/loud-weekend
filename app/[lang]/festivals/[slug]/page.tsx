@@ -1,3 +1,6 @@
+import { EditionHistory } from "@/components/EditionHistory";
+import { db } from "@/lib/db";
+import { readEditionHistory } from "@/lib/catalog/public-history";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { Language } from "@/components/LanguageProvider";
@@ -42,6 +45,8 @@ export default async function LocalizedFestivalPage({
   const { festivals, artists, playlists } = await getCatalog();
   const item = festivals.find((festival) => festival.slug === slug);
   if (!item) notFound();
+  const history =
+    item.editionYear === undefined ? [] : await readEditionHistory(db, item.slug, item.editionYear);
   const event = festivalMusicEvent(item);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
@@ -59,6 +64,7 @@ export default async function LocalizedFestivalPage({
         )}
         playlist={playlists[item.slug]}
       />
+      <EditionHistory entries={history} officialUrl={item.officialUrl} />
     </>
   );
 }

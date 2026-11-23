@@ -621,6 +621,10 @@
   box-shadow: 7px 7px 0 #17171244;
 }
 
+.editionHistory a {
+  text-decoration: underline;
+}
+
 .mapMarker > div a {
   display: flex;
   flex-direction: column;
@@ -3409,4 +3413,21 @@ summary:focus-visible {
 
 .plannerReset [role="status"] {
   max-width: 28rem;
+}
+
+.editionHistory {
+  border-top: 1px solid var(--line);
+  padding-block: 2rem;
+}
+
+.editionHistory ol {
+  padding-inline-start: 1.25rem;
+}
+
+.editionHistory li + li {
+  margin-top: 1rem;
+}
+
+.editionHistory time {
+  color: var(--muted);
 }

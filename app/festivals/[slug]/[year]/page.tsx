@@ -1,3 +1,6 @@
+import { EditionHistory } from "@/components/EditionHistory";
+import { db } from "@/lib/db";
+import { readEditionHistory } from "@/lib/catalog/public-history";
 import { notFound } from "next/navigation";
 import { FestivalEditionContent } from "@/components/PublicCatalogPages";
 import { getCatalog } from "@/lib/catalog/repository";
@@ -14,6 +17,13 @@ export default async function FestivalEditionPage({
     (edition) => edition.slug === slug && edition.editionYear === Number(rawYear),
   );
   if (!item) notFound();
+  const history =
+    item.editionYear === undefined ? [] : await readEditionHistory(db, item.slug, item.editionYear);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
-  return <FestivalEditionContent item={item} artistSlugs={artistSlugs} />;
+  return (
+    <>
+      <FestivalEditionContent item={item} artistSlugs={artistSlugs} />
+      <EditionHistory entries={history} officialUrl={item.officialUrl} />
+    </>
+  );
 }
