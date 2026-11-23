@@ -10,6 +10,11 @@ export function verifiedSpotifyArtistId(artist: {
   if (identities.length !== 1 || !/^[A-Za-z0-9]{22}$/.test(identities[0].externalId)) return null;
   const links = artist.links.filter((link) => link.verified && link.source === "spotify");
   if (links.length === 0) return null;
-  return links.every((link) => /^https:\/\/open\.spotify\.com\/artist\/([A-Za-z0-9]{22})\/?$/.exec(link.url)?.[1] === identities[0].externalId)
-    ? identities[0].externalId : null;
+  return links.every(
+    (link) =>
+      /^https:\/\/open\.spotify\.com\/artist\/([A-Za-z0-9]{22})\/?$/.exec(link.url)?.[1] ===
+      identities[0].externalId,
+  )
+    ? identities[0].externalId
+    : null;
 }
