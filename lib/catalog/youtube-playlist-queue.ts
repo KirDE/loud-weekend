@@ -1,30 +1,79 @@
-import {requestedProviders} from './playlist-provider-scope.ts';
-import { Prisma, type PrismaClient } from '@prisma/client';
-import { withPlaylistRefreshLease, type PlaylistLease } from './playlist-queue.ts';
+import { requestedProviders } from "./playlist-provider-scope.ts";
+import { Prisma, type PrismaClient } from "@prisma/client";
+import { withPlaylistRefreshLease, type PlaylistLease } from "./playlist-queue.ts";
 
-export const YOUTUBE_URL = /^https:\/\/(?:music|www)\.youtube\.com\/playlist\?list=([A-Za-z0-9_-]{10,100})$/;
+export const YOUTUBE_URL =
+  /^https:\/\/(?:music|www)\.youtube\.com\/playlist\?list=([A-Za-z0-9_-]{10,100})$/;
 const playlistIdPattern = /^[A-Za-z0-9_-]{10,100}$/;
 const videoIdPattern = /^[A-Za-z0-9_-]{11}$/;
-export type YoutubePlan = { slug: string; editionYear: number; expectedUrl: string; title: string; description: string; videoIds: string[]; artists: number; sourceTracks: number };
-export type YoutubeInsert = { playlistId: string; expectedIds: string[]; beforeIds: string[]; position: number };
+export type YoutubePlan = {
+  slug: string;
+  editionYear: number;
+  expectedUrl: string;
+  title: string;
+  description: string;
+  videoIds: string[];
+  artists: number;
+  sourceTracks: number;
+};
+export type YoutubeInsert = {
+  playlistId: string;
+  expectedIds: string[];
+  beforeIds: string[];
+  position: number;
+};
 export type YoutubeMetadata = { playlistId: string; title: string; description: string };
-export type YoutubeState = { marker: string; sent: boolean; playlistId: string | null; creationMetadata: { title: string; description: string } | null; pendingInsert: YoutubeInsert | null; pendingMetadata: YoutubeMetadata | null; adopted?: boolean; lastRejectedWrite?: { operation: string; status: number; reason: string }; archivedPlaylistIds?: string[] };
-export type YoutubeProgress = { verifiedTracks: number; totalTracks: number; quotaUsed: number; complete: boolean };
+export type YoutubeState = {
+  marker: string;
+  sent: boolean;
+  playlistId: string | null;
+  creationMetadata: { title: string; description: string } | null;
+  pendingInsert: YoutubeInsert | null;
+  pendingMetadata: YoutubeMetadata | null;
+  adopted?: boolean;
+  lastRejectedWrite?: { operation: string; status: number; reason: string };
+  archivedPlaylistIds?: string[];
+};
+export type YoutubeProgress = {
+  verifiedTracks: number;
+  totalTracks: number;
+  quotaUsed: number;
+  complete: boolean;
+};
 
 export function validateYoutubePlan(value: unknown): asserts value is YoutubePlan {
   const plan = value as YoutubePlan | null;
-  if (!plan || typeof plan.slug !== 'string' || !plan.slug || !Number.isSafeInteger(plan.editionYear)
-    || typeof plan.expectedUrl !== 'string' || (!['', 'NEW'].includes(plan.expectedUrl) && !YOUTUBE_URL.test(plan.expectedUrl))
-    || typeof plan.title !== 'string' || !plan.title.trim() || plan.title.length > 150
-    || typeof plan.description !== 'string' || plan.description.length > 4000
-    || !Array.isArray(plan.videoIds) || !plan.videoIds.length || plan.videoIds.length > 1000
-    || plan.videoIds.some(id => typeof id !== 'string' || !videoIdPattern.test(id)) || new Set(plan.videoIds).size !== plan.videoIds.length
-    || !Number.isSafeInteger(plan.artists) || plan.artists < 1
-    || !Number.isSafeInteger(plan.sourceTracks) || plan.sourceTracks < plan.videoIds.length) throw new Error('Invalid YouTube plan');
+  if (
+    !plan ||
+    typeof plan.slug !== "string" ||
+    !plan.slug ||
+    !Number.isSafeInteger(plan.editionYear) ||
+    typeof plan.expectedUrl !== "string" ||
+    (!["", "NEW"].includes(plan.expectedUrl) && !YOUTUBE_URL.test(plan.expectedUrl)) ||
+    typeof plan.title !== "string" ||
+    !plan.title.trim() ||
+    plan.title.length > 150 ||
+    typeof plan.description !== "string" ||
+    plan.description.length > 4000 ||
+    !Array.isArray(plan.videoIds) ||
+    !plan.videoIds.length ||
+    plan.videoIds.length > 1000 ||
+    plan.videoIds.some((id) => typeof id !== "string" || !videoIdPattern.test(id)) ||
+    new Set(plan.videoIds).size !== plan.videoIds.length ||
+    !Number.isSafeInteger(plan.artists) ||
+    plan.artists < 1 ||
+    !Number.isSafeInteger(plan.sourceTracks) ||
+    plan.sourceTracks < plan.videoIds.length
+  )
+    throw new Error("Invalid YouTube plan");
 }
 
 // The earliest same-edition record owns creation identity and outstanding intents.
-async function editionYoutubeState(tx: Prisma.TransactionClient, claim: PlaylistLease, editionYear: number) {
+async function editionYoutubeState(
+  tx: Prisma.TransactionClient,
+  claim: PlaylistLease,
+  editionYear: number,
+) {
   const [row] = await tx.$queryRaw<{ id: string; youtubeState: YoutubeState }[]>`
       SELECT job.id, job."youtubeState" FROM "CatalogPlaylistRefresh" AS job
       JOIN "CatalogPublication" AS publication ON publication.id = job."publicationId"
@@ -36,39 +85,94 @@ async function editionYoutubeState(tx: Prisma.TransactionClient, claim: Playlist
   return row;
 }
 
-export async function assertYoutubeScope(tx: Prisma.TransactionClient, claim: PlaylistLease, expectedUrl: string) {
-  if (!['', 'NEW'].includes(expectedUrl) && !YOUTUBE_URL.test(expectedUrl)) throw new Error('Invalid YouTube binding');
-  const publication = await tx.catalogPublication.findUniqueOrThrow({ where: { id: claim.publicationId } });
-  const edition = await tx.festivalEdition.findFirstOrThrow({ where: { year: publication.editionYear, recordState: 'CURRENT', festival: { slug: claim.festivalSlug } }, select: { id: true } });
-  const binding = await tx.festivalPlaylist.findUnique({ where: { editionId_provider: { editionId: edition.id, provider: 'youtube_music' } } });
-  if ((binding?.url ?? '') !== expectedUrl) {
+export async function assertYoutubeScope(
+  tx: Prisma.TransactionClient,
+  claim: PlaylistLease,
+  expectedUrl: string,
+) {
+  if (!["", "NEW"].includes(expectedUrl) && !YOUTUBE_URL.test(expectedUrl))
+    throw new Error("Invalid YouTube binding");
+  const publication = await tx.catalogPublication.findUniqueOrThrow({
+    where: { id: claim.publicationId },
+  });
+  const edition = await tx.festivalEdition.findFirstOrThrow({
+    where: {
+      year: publication.editionYear,
+      recordState: "CURRENT",
+      festival: { slug: claim.festivalSlug },
+    },
+    select: { id: true },
+  });
+  const binding = await tx.festivalPlaylist.findUnique({
+    where: { editionId_provider: { editionId: edition.id, provider: "youtube_music" } },
+  });
+  if ((binding?.url ?? "") !== expectedUrl) {
     // An immutable create plan can outlive publication of its own identity.
     // A public binding alone must never authorize adoption or another create.
     const state = (await editionYoutubeState(tx, claim, publication.editionYear))?.youtubeState;
-    const boundId = YOUTUBE_URL.exec(binding?.url ?? '')?.[1];
-    if (!['', 'NEW'].includes(expectedUrl) || !boundId || !state?.sent || state.playlistId !== boundId
-      || (state.pendingInsert && state.pendingInsert.playlistId !== boundId)
-      || (state.pendingMetadata && state.pendingMetadata.playlistId !== boundId)) throw new Error('YouTube binding changed');
-    const registry = await tx.operationalState.findUnique({ where: { key: 'playlist-provider-archives-v1' } });
+    const boundId = YOUTUBE_URL.exec(binding?.url ?? "")?.[1];
+    if (
+      !["", "NEW"].includes(expectedUrl) ||
+      !boundId ||
+      !state?.sent ||
+      state.playlistId !== boundId ||
+      (state.pendingInsert && state.pendingInsert.playlistId !== boundId) ||
+      (state.pendingMetadata && state.pendingMetadata.playlistId !== boundId)
+    )
+      throw new Error("YouTube binding changed");
+    const registry = await tx.operationalState.findUnique({
+      where: { key: "playlist-provider-archives-v1" },
+    });
     if (registry) {
       const archives = (registry.payload as { youtube_music?: unknown } | null)?.youtube_music;
-      if (!Array.isArray(archives) || archives.some(id => typeof id !== 'string' || !playlistIdPattern.test(id))) throw new Error('Invalid playlist archive registry');
-      if (archives.includes(boundId)) throw new Error('Archived YouTube playlist is immutable');
+      if (
+        !Array.isArray(archives) ||
+        archives.some((id) => typeof id !== "string" || !playlistIdPattern.test(id))
+      )
+        throw new Error("Invalid playlist archive registry");
+      if (archives.includes(boundId)) throw new Error("Archived YouTube playlist is immutable");
     }
   }
-  const newer=await tx.catalogPlaylistRefresh.findMany({where:{festivalSlug:claim.festivalSlug,youtubePlan:{not:Prisma.DbNull},publication:{editionYear:publication.editionYear,createdAt:{gt:publication.createdAt}}},select:{publication:{select:{evidence:true}}}});
-  if(newer.some(job=>requestedProviders(job.publication.evidence).includes('youtube_music')))throw new Error('YouTube plan superseded');
+  const newer = await tx.catalogPlaylistRefresh.findMany({
+    where: {
+      festivalSlug: claim.festivalSlug,
+      youtubePlan: { not: Prisma.DbNull },
+      publication: {
+        editionYear: publication.editionYear,
+        createdAt: { gt: publication.createdAt },
+      },
+    },
+    select: { publication: { select: { evidence: true } } },
+  });
+  if (newer.some((job) => requestedProviders(job.publication.evidence).includes("youtube_music")))
+    throw new Error("YouTube plan superseded");
   return publication;
 }
 
-export async function stageYoutubePlan(db: PrismaClient, claim: PlaylistLease, plan: unknown): Promise<YoutubePlan> {
+export async function stageYoutubePlan(
+  db: PrismaClient,
+  claim: PlaylistLease,
+  plan: unknown,
+): Promise<YoutubePlan> {
   validateYoutubePlan(plan);
-  return withPlaylistRefreshLease(db, claim, async tx => {
+  return withPlaylistRefreshLease(db, claim, async (tx) => {
     const publication = await assertYoutubeScope(tx, claim, plan.expectedUrl);
-    if (plan.slug !== claim.festivalSlug || plan.editionYear !== publication.editionYear) throw new Error('YouTube plan scope mismatch');
-    const [row] = await tx.$queryRaw<{ youtubePlan: unknown }[]>`SELECT "youtubePlan" FROM "CatalogPlaylistRefresh" WHERE id = ${claim.id}`;
-    if (row.youtubePlan !== null) { validateYoutubePlan(row.youtubePlan); return row.youtubePlan; }
-    await tx.$executeRaw`UPDATE "CatalogPlaylistRefresh" SET "youtubePlan" = ${JSON.stringify(plan)}::jsonb WHERE id = ${claim.id}`;
+    if (plan.slug !== claim.festivalSlug || plan.editionYear !== publication.editionYear)
+      throw new Error("YouTube plan scope mismatch");
+    const [row] = await tx.$queryRaw<
+      { youtubePlan: unknown }[]
+    >`SELECT "youtubePlan" FROM "CatalogPlaylistRefresh" WHERE id = ${claim.id}`;
+    if (row.youtubePlan !== null) {
+      validateYoutubePlan(row.youtubePlan);
+      return row.youtubePlan;
+    }
+    await tx.$executeRaw`
+UPDATE "CatalogPlaylistRefresh" SET "youtubePlan" =
+${JSON.stringify(plan)}
+::jsonb WHERE id =
+${claim.id}
+
+`;
     return plan;
   });
 }
@@ -76,111 +180,291 @@ export async function stageYoutubePlan(db: PrismaClient, claim: PlaylistLease, p
 // One edition owns the creation and outstanding insert intents, even when the
 // next attempt belongs to a different publication. Never overwrite an ambiguity.
 export async function youtubeProviderState(
-  db: PrismaClient, claim: PlaylistLease, expectedUrl: string,
-  action: 'read' | 'reserve' | 'adopt' | 'bind' | 'insert' | 'confirm' | 'metadata' | 'metadata-confirm' | 'create-rejected' | 'insert-rejected' | 'metadata-rejected', payload?: unknown,
+  db: PrismaClient,
+  claim: PlaylistLease,
+  expectedUrl: string,
+  action:
+    | "read"
+    | "reserve"
+    | "adopt"
+    | "bind"
+    | "insert"
+    | "confirm"
+    | "metadata"
+    | "metadata-confirm"
+    | "create-rejected"
+    | "insert-rejected"
+    | "metadata-rejected",
+  payload?: unknown,
 ): Promise<YoutubeState> {
-  if (!['read', 'reserve', 'adopt', 'bind', 'insert', 'confirm', 'metadata', 'metadata-confirm', 'create-rejected', 'insert-rejected', 'metadata-rejected'].includes(action)) throw new Error('Invalid YouTube state action');
-  return withPlaylistRefreshLease(db, claim, async tx => {
+  if (
+    ![
+      "read",
+      "reserve",
+      "adopt",
+      "bind",
+      "insert",
+      "confirm",
+      "metadata",
+      "metadata-confirm",
+      "create-rejected",
+      "insert-rejected",
+      "metadata-rejected",
+    ].includes(action)
+  )
+    throw new Error("Invalid YouTube state action");
+  return withPlaylistRefreshLease(db, claim, async (tx) => {
     const publication = await assertYoutubeScope(tx, claim, expectedUrl);
-    const [job] = await tx.$queryRaw<{ youtubePlan: unknown }[]>`SELECT "youtubePlan" FROM "CatalogPlaylistRefresh" WHERE id = ${claim.id}`;
+    const [job] = await tx.$queryRaw<
+      { youtubePlan: unknown }[]
+    >`SELECT "youtubePlan" FROM "CatalogPlaylistRefresh" WHERE id = ${claim.id}`;
     validateYoutubePlan(job.youtubePlan);
     const plan = job.youtubePlan;
-    if (plan.slug !== claim.festivalSlug || plan.editionYear !== publication.editionYear || plan.expectedUrl !== expectedUrl) throw new Error('YouTube plan binding mismatch');
+    if (
+      plan.slug !== claim.festivalSlug ||
+      plan.editionYear !== publication.editionYear ||
+      plan.expectedUrl !== expectedUrl
+    )
+      throw new Error("YouTube plan binding mismatch");
     const row = await editionYoutubeState(tx, claim, publication.editionYear);
-    const state = row?.youtubeState ?? { marker: `festival-radar:youtube:${claim.id}`, sent: false, playlistId: null, creationMetadata: null, pendingInsert: null, pendingMetadata: null };
+    const state = row?.youtubeState ?? {
+      marker: `festival-radar:youtube:${claim.id}`,
+      sent: false,
+      playlistId: null,
+      creationMetadata: null,
+      pendingInsert: null,
+      pendingMetadata: null,
+    };
     const boundId = YOUTUBE_URL.exec(expectedUrl)?.[1] ?? state.playlistId;
     // Provider titles may already have been renamed. An explicit archive by
     // immutable ID must win over both a DB binding and existing adoption.
-    const registry = await tx.operationalState.findUnique({ where: { key: 'playlist-provider-archives-v1' } });
+    const registry = await tx.operationalState.findUnique({
+      where: { key: "playlist-provider-archives-v1" },
+    });
     let archivedPlaylistIds: string[] | undefined;
     if (registry) {
       const archived = (registry.payload as { youtube_music?: unknown } | null)?.youtube_music;
-      if (!Array.isArray(archived) || archived.some(id => typeof id !== 'string' || !playlistIdPattern.test(id))) throw new Error('Invalid playlist archive registry');
+      if (
+        !Array.isArray(archived) ||
+        archived.some((id) => typeof id !== "string" || !playlistIdPattern.test(id))
+      )
+        throw new Error("Invalid playlist archive registry");
       archivedPlaylistIds = archived as string[];
-      const candidate = action === 'bind' ? payload : action === 'adopt' ? (payload as { playlistId?: unknown } | null)?.playlistId : null;
-      if ([boundId, state.playlistId, state.pendingInsert?.playlistId, state.pendingMetadata?.playlistId, candidate].some(id => archived.includes(id))) throw new Error('Archived YouTube playlist is immutable');
+      const candidate =
+        action === "bind"
+          ? payload
+          : action === "adopt"
+            ? (payload as { playlistId?: unknown } | null)?.playlistId
+            : null;
+      if (
+        [
+          boundId,
+          state.playlistId,
+          state.pendingInsert?.playlistId,
+          state.pendingMetadata?.playlistId,
+          candidate,
+        ].some((id) => archived.includes(id))
+      )
+        throw new Error("Archived YouTube playlist is immutable");
     }
-    if (state.pendingInsert && boundId !== state.pendingInsert.playlistId) throw new Error('Unresolved YouTube insert belongs to another binding');
-    if (state.pendingMetadata && boundId !== state.pendingMetadata.playlistId) throw new Error('Unresolved YouTube metadata belongs to another binding');
-    if (action.endsWith('-rejected')) {
-      const evidence = payload as { intent?: unknown; rejection?: { status?: number; reason?: string } } | null;
+    if (state.pendingInsert && boundId !== state.pendingInsert.playlistId)
+      throw new Error("Unresolved YouTube insert belongs to another binding");
+    if (state.pendingMetadata && boundId !== state.pendingMetadata.playlistId)
+      throw new Error("Unresolved YouTube metadata belongs to another binding");
+    if (action.endsWith("-rejected")) {
+      const evidence = payload as {
+        intent?: unknown;
+        rejection?: { status?: number; reason?: string };
+      } | null;
       const rejection = evidence?.rejection;
-      if (!rejection || ![400, 401, 403, 404, 409, 429].includes(rejection.status ?? 0)
-        || typeof rejection.reason !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,79}$/.test(rejection.reason)) throw new Error('Invalid YouTube rejection evidence');
+      if (
+        !rejection ||
+        ![400, 401, 403, 404, 409, 429].includes(rejection.status ?? 0) ||
+        typeof rejection.reason !== "string" ||
+        !/^[A-Za-z][A-Za-z0-9_]{0,79}$/.test(rejection.reason)
+      )
+        throw new Error("Invalid YouTube rejection evidence");
       const operation = action.slice(0, -9);
-      const expected = operation === 'create' ? state.creationMetadata : operation === 'insert' ? state.pendingInsert : state.pendingMetadata;
+      const expected =
+        operation === "create"
+          ? state.creationMetadata
+          : operation === "insert"
+            ? state.pendingInsert
+            : state.pendingMetadata;
       // Compare structure, independent of JSON key insertion order.
       const equal = (a: unknown, b: unknown): boolean => {
         if (a === b) return true;
-        if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
-        const left = Object.entries(a), right = Object.entries(b);
-        return left.length === right.length && left.every(([key, value]) => Object.hasOwn(b, key) && equal(value, (b as Record<string, unknown>)[key]));
+        if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+        const left = Object.entries(a),
+          right = Object.entries(b);
+        return (
+          left.length === right.length &&
+          left.every(
+            ([key, value]) =>
+              Object.hasOwn(b, key) && equal(value, (b as Record<string, unknown>)[key]),
+          )
+        );
       };
-      if (!expected || !equal(expected, evidence?.intent)) throw new Error('YouTube rejected intent mismatch');
-      if (operation === 'create') {
-        if (!['', 'NEW'].includes(expectedUrl) || !state.sent || state.playlistId || state.pendingInsert || state.pendingMetadata) throw new Error('YouTube creation cannot be reopened');
+      if (!expected || !equal(expected, evidence?.intent))
+        throw new Error("YouTube rejected intent mismatch");
+      if (operation === "create") {
+        if (
+          !["", "NEW"].includes(expectedUrl) ||
+          !state.sent ||
+          state.playlistId ||
+          state.pendingInsert ||
+          state.pendingMetadata
+        )
+          throw new Error("YouTube creation cannot be reopened");
         state.sent = false;
         state.creationMetadata = null;
-      } else if (operation === 'insert') state.pendingInsert = null;
+      } else if (operation === "insert") state.pendingInsert = null;
       else state.pendingMetadata = null;
       state.lastRejectedWrite = { operation, status: rejection.status!, reason: rejection.reason };
-    } else if (action === 'adopt') {
-      const existing = payload as { playlistId?: string; title?: string; description?: string } | null;
-      if (!['', 'NEW'].includes(expectedUrl) || state.sent || state.playlistId || state.pendingInsert || state.pendingMetadata
-        || !existing || typeof existing.playlistId !== 'string' || !playlistIdPattern.test(existing.playlistId)
-        || existing.title !== plan.title || existing.description !== plan.description) throw new Error('Invalid existing YouTube adoption');
+    } else if (action === "adopt") {
+      const existing = payload as {
+        playlistId?: string;
+        title?: string;
+        description?: string;
+      } | null;
+      if (
+        !["", "NEW"].includes(expectedUrl) ||
+        state.sent ||
+        state.playlistId ||
+        state.pendingInsert ||
+        state.pendingMetadata ||
+        !existing ||
+        typeof existing.playlistId !== "string" ||
+        !playlistIdPattern.test(existing.playlistId) ||
+        existing.title !== plan.title ||
+        existing.description !== plan.description
+      )
+        throw new Error("Invalid existing YouTube adoption");
       state.sent = true;
       state.playlistId = existing.playlistId;
       state.adopted = true;
-      state.creationMetadata = { title: plan.title, description: `${plan.description}\n[${state.marker}]` };
-    } else if (action === 'reserve') {
-      if (!['', 'NEW'].includes(expectedUrl) || state.sent || state.pendingInsert || state.pendingMetadata) throw new Error('YouTube creation already sent or bound; reconcile');
+      state.creationMetadata = {
+        title: plan.title,
+        description: `${plan.description}\n[${state.marker}]`,
+      };
+    } else if (action === "reserve") {
+      if (
+        !["", "NEW"].includes(expectedUrl) ||
+        state.sent ||
+        state.pendingInsert ||
+        state.pendingMetadata
+      )
+        throw new Error("YouTube creation already sent or bound; reconcile");
       const metadata = payload as { title?: string; description?: string } | null;
-      if (!metadata || metadata.title !== plan.title || metadata.description !== `${plan.description}\n[${state.marker}]`) throw new Error('YouTube creation metadata mismatch');
+      if (
+        !metadata ||
+        metadata.title !== plan.title ||
+        metadata.description !== `${plan.description}\n[${state.marker}]`
+      )
+        throw new Error("YouTube creation metadata mismatch");
       state.creationMetadata = { title: metadata.title, description: metadata.description };
       state.sent = true;
-    } else if (action === 'bind') {
-      if (!['', 'NEW'].includes(expectedUrl) || !state.sent || typeof payload !== 'string' || !playlistIdPattern.test(payload)
-        || (state.playlistId && state.playlistId !== payload)) throw new Error('YouTube creation identity mismatch');
+    } else if (action === "bind") {
+      if (
+        !["", "NEW"].includes(expectedUrl) ||
+        !state.sent ||
+        typeof payload !== "string" ||
+        !playlistIdPattern.test(payload) ||
+        (state.playlistId && state.playlistId !== payload)
+      )
+        throw new Error("YouTube creation identity mismatch");
       state.playlistId = payload;
-    } else if (action === 'metadata' || action === 'metadata-confirm') {
+    } else if (action === "metadata" || action === "metadata-confirm") {
       const metadata = payload as YoutubeMetadata;
-      if (!metadata || metadata.playlistId !== boundId || typeof metadata.title !== 'string' || typeof metadata.description !== 'string') throw new Error('Invalid YouTube metadata intent');
-      if (action === 'metadata') {
-        const description = ['', 'NEW'].includes(expectedUrl) ? `${plan.description}\n[${state.marker}]` : plan.description;
-        if (state.pendingMetadata || state.pendingInsert || metadata.title !== plan.title || metadata.description !== description) throw new Error('YouTube metadata unresolved or mismatched');
+      if (
+        !metadata ||
+        metadata.playlistId !== boundId ||
+        typeof metadata.title !== "string" ||
+        typeof metadata.description !== "string"
+      )
+        throw new Error("Invalid YouTube metadata intent");
+      if (action === "metadata") {
+        const description = ["", "NEW"].includes(expectedUrl)
+          ? `${plan.description}\n[${state.marker}]`
+          : plan.description;
+        if (
+          state.pendingMetadata ||
+          state.pendingInsert ||
+          metadata.title !== plan.title ||
+          metadata.description !== description
+        )
+          throw new Error("YouTube metadata unresolved or mismatched");
         state.pendingMetadata = metadata;
       } else {
-        if (!state.pendingMetadata || state.pendingMetadata.playlistId !== metadata.playlistId || state.pendingMetadata.title !== metadata.title || state.pendingMetadata.description !== metadata.description) throw new Error('YouTube metadata confirmation mismatch');
+        if (
+          !state.pendingMetadata ||
+          state.pendingMetadata.playlistId !== metadata.playlistId ||
+          state.pendingMetadata.title !== metadata.title ||
+          state.pendingMetadata.description !== metadata.description
+        )
+          throw new Error("YouTube metadata confirmation mismatch");
         state.pendingMetadata = null;
       }
-    } else if (action === 'insert' || action === 'confirm') {
+    } else if (action === "insert" || action === "confirm") {
       const insert = payload as YoutubeInsert;
-      if (!insert || insert.playlistId !== boundId || !playlistIdPattern.test(insert.playlistId)
-        || !Array.isArray(insert.expectedIds) || !insert.expectedIds.length || insert.expectedIds.length > 1000
-        || insert.expectedIds.some(id => typeof id !== 'string' || !videoIdPattern.test(id))
-        || new Set(insert.expectedIds).size !== insert.expectedIds.length) throw new Error('Invalid YouTube insert intent');
-      if (action === 'insert') {
-        if (state.pendingInsert || state.pendingMetadata) throw new Error('YouTube insert unresolved; reconcile');
+      if (
+        !insert ||
+        insert.playlistId !== boundId ||
+        !playlistIdPattern.test(insert.playlistId) ||
+        !Array.isArray(insert.expectedIds) ||
+        !insert.expectedIds.length ||
+        insert.expectedIds.length > 1000 ||
+        insert.expectedIds.some((id) => typeof id !== "string" || !videoIdPattern.test(id)) ||
+        new Set(insert.expectedIds).size !== insert.expectedIds.length
+      )
+        throw new Error("Invalid YouTube insert intent");
+      if (action === "insert") {
+        if (state.pendingInsert || state.pendingMetadata)
+          throw new Error("YouTube insert unresolved; reconcile");
         {
-          const position=insert.position, before=insert.beforeIds;
-          if (!Array.isArray(before)||!Number.isSafeInteger(position)||position < 0||position > before.length
-            ||insert.expectedIds.length!==before.length+1
-            ||JSON.stringify(before)!==JSON.stringify(insert.expectedIds.filter((_,i)=>i!==position))
-            ||JSON.stringify(insert.expectedIds.slice(0,position+1))!==JSON.stringify(plan.videoIds.slice(0,position+1))) throw new Error('Invalid retained YouTube insertion');
-          let cursor=0;
-          for(const id of plan.videoIds)if(id===insert.expectedIds[cursor])cursor++;
-          if(cursor!==insert.expectedIds.length)throw new Error('YouTube retained order does not match durable plan');
+          const position = insert.position,
+            before = insert.beforeIds;
+          if (
+            !Array.isArray(before) ||
+            !Number.isSafeInteger(position) ||
+            position < 0 ||
+            position > before.length ||
+            insert.expectedIds.length !== before.length + 1 ||
+            JSON.stringify(before) !==
+              JSON.stringify(insert.expectedIds.filter((_, i) => i !== position)) ||
+            JSON.stringify(insert.expectedIds.slice(0, position + 1)) !==
+              JSON.stringify(plan.videoIds.slice(0, position + 1))
+          )
+            throw new Error("Invalid retained YouTube insertion");
+          let cursor = 0;
+          for (const id of plan.videoIds) if (id === insert.expectedIds[cursor]) cursor++;
+          if (cursor !== insert.expectedIds.length)
+            throw new Error("YouTube retained order does not match durable plan");
         }
         state.pendingInsert = insert;
       } else {
-        if (!state.pendingInsert || state.pendingInsert.playlistId !== insert.playlistId || (JSON.stringify(state.pendingInsert.expectedIds) !== JSON.stringify(insert.expectedIds)
-          || JSON.stringify(state.pendingInsert.beforeIds ?? null) !== JSON.stringify(insert.beforeIds ?? null)
-          || state.pendingInsert.position !== insert.position)) throw new Error('YouTube insert confirmation mismatch');
+        if (
+          !state.pendingInsert ||
+          state.pendingInsert.playlistId !== insert.playlistId ||
+          JSON.stringify(state.pendingInsert.expectedIds) !== JSON.stringify(insert.expectedIds) ||
+          JSON.stringify(state.pendingInsert.beforeIds ?? null) !==
+            JSON.stringify(insert.beforeIds ?? null) ||
+          state.pendingInsert.position !== insert.position
+        )
+          throw new Error("YouTube insert confirmation mismatch");
         state.pendingInsert = null;
       }
     }
-    if (action !== 'read') await tx.$executeRaw`UPDATE "CatalogPlaylistRefresh" SET "youtubeState" = ${JSON.stringify(state)}::jsonb WHERE id = ${row?.id ?? claim.id} OR id = ${claim.id}`;
+    if (action !== "read")
+      await tx.$executeRaw`
+UPDATE "CatalogPlaylistRefresh" SET "youtubeState" =
+${JSON.stringify(state)}
+::jsonb WHERE id =
+${row?.id ?? claim.id}
+ OR id =
+${claim.id}
+
+`;
     // Discovery must not mistake a protected archive (even one renamed into
     // the current year) for a writable existing identity or an unresolved create.
     // Return live policy, never persist it in the edition's creation history.
@@ -188,16 +472,40 @@ export async function youtubeProviderState(
   });
 }
 
-export async function saveYoutubeProgress(db: PrismaClient, claim: PlaylistLease, expectedUrl: string, progress: YoutubeProgress) {
-  if (!progress || !Number.isSafeInteger(progress.verifiedTracks) || progress.verifiedTracks < 0
-    || !Number.isSafeInteger(progress.totalTracks) || progress.totalTracks < 1 || progress.verifiedTracks > progress.totalTracks
-    || !Number.isSafeInteger(progress.quotaUsed) || progress.quotaUsed < 0 || progress.quotaUsed > 5000
-    || typeof progress.complete !== 'boolean' || (progress.complete && progress.verifiedTracks !== progress.totalTracks)) throw new Error('Invalid YouTube progress');
-  return withPlaylistRefreshLease(db, claim, async tx => {
+export async function saveYoutubeProgress(
+  db: PrismaClient,
+  claim: PlaylistLease,
+  expectedUrl: string,
+  progress: YoutubeProgress,
+) {
+  if (
+    !progress ||
+    !Number.isSafeInteger(progress.verifiedTracks) ||
+    progress.verifiedTracks < 0 ||
+    !Number.isSafeInteger(progress.totalTracks) ||
+    progress.totalTracks < 1 ||
+    progress.verifiedTracks > progress.totalTracks ||
+    !Number.isSafeInteger(progress.quotaUsed) ||
+    progress.quotaUsed < 0 ||
+    progress.quotaUsed > 5000 ||
+    typeof progress.complete !== "boolean" ||
+    (progress.complete && progress.verifiedTracks !== progress.totalTracks)
+  )
+    throw new Error("Invalid YouTube progress");
+  return withPlaylistRefreshLease(db, claim, async (tx) => {
     await assertYoutubeScope(tx, claim, expectedUrl);
-    const [row] = await tx.$queryRaw<{ youtubePlan: unknown }[]>`SELECT "youtubePlan" FROM "CatalogPlaylistRefresh" WHERE id = ${claim.id}`;
+    const [row] = await tx.$queryRaw<
+      { youtubePlan: unknown }[]
+    >`SELECT "youtubePlan" FROM "CatalogPlaylistRefresh" WHERE id = ${claim.id}`;
     validateYoutubePlan(row.youtubePlan);
-    if (row.youtubePlan.videoIds.length !== progress.totalTracks) throw new Error('YouTube progress plan mismatch');
-    await tx.$executeRaw`UPDATE "CatalogPlaylistRefresh" SET "youtubeProgress" = ${JSON.stringify(progress)}::jsonb WHERE id = ${claim.id}`;
+    if (row.youtubePlan.videoIds.length !== progress.totalTracks)
+      throw new Error("YouTube progress plan mismatch");
+    await tx.$executeRaw`
+UPDATE "CatalogPlaylistRefresh" SET "youtubeProgress" =
+${JSON.stringify(progress)}
+::jsonb WHERE id =
+${claim.id}
+
+`;
   });
 }
