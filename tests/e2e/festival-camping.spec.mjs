@@ -1,27 +1,41 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
+import { collectReviewedCamping } from "../../lib/ingestion/camping-collector.ts";
+import { campingSources, campingSourceUrl } from "../../lib/ingestion/adapters/camping-guidance.ts";
 import { importReviewedCamping } from "../../lib/catalog/camping-import.ts";
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 
-const recordsDirectory = new URL("../../catalog-data/camping/", import.meta.url);
-const inputFiles = (await readdir(recordsDirectory)).filter(name => name.endsWith(".json")).sort();
-const campingRecords = await Promise.all(inputFiles.map(async name =>
-  JSON.parse(await readFile(new URL(name, recordsDirectory), "utf8"))));
+const year = 2027;
+const inputs = await Promise.all(Object.keys(campingSources).map(async slug => ({
+  slug, ...campingSources[slug],
+  html: await readFile(new URL(`../fixtures/camping/${slug}.html`, import.meta.url), "utf8"),
+})));
+
+const collect = (db, input, body = input.html, approval) => {
+  const source = campingSourceUrl(input.slug, year);
+  return collectReviewedCamping(db, input.slug, year, { approval, fetchImpl: async (url, init) => {
+    expect(url).toBe(source);
+    expect(init.redirect).toBe("error");
+    const response = new Response(body, { headers: { "content-type": "text/html" } });
+    Object.defineProperty(response, "url", { value: source });
+    return response;
+  } });
+};
 
 test("validated edition camping facts are accessible in every locale", async ({ browser }) => {
   requireLocalDisposableDatabase(process.env.DATABASE_URL);
   const db = createPrismaClient();
   const inserted = [];
   try {
-    for (const record of campingRecords) {
+    for (const record of inputs) {
       const festival = await db.festival.create({
         data: {
-          slug: record.festivalSlug, name: `Edition fixture ${record.city}`,
+          slug: record.slug, name: `Edition fixture ${record.city}`,
           city: record.city, country: "Fixture country", countryCode: record.countryCode,
           officialUrl: `https://www.${record.organizerHost}/`, genres: [], catalogOrder: 9000,
           editions: { create: {
-            year: record.editionYear, status: "TBA", ticketStatus: "UNKNOWN", recordState: "CURRENT",
+            year, status: "TBA", ticketStatus: "UNKNOWN", recordState: "CURRENT",
             completeness: "TBA", sourceUpdatedAt: new Date(),
           } },
         },
@@ -30,11 +44,13 @@ test("validated edition camping facts are accessible in every locale", async ({ 
       inserted.push(festival.id);
     }
 
+    const previews = await Promise.all(inputs.map(input => collect(db, input)));
+    const campingRecords = previews.map(item => item.record);
     const first = campingRecords[0];
     const route = `/en/festivals/${first.festivalSlug}/`;
     const before = await browser.newPage();
     try {
-      await importReviewedCamping(db, first);
+      expect(await db.editionCampingFact.count()).toBe(0);
       await before.goto(route);
       await expect(before.getByRole("heading", { name: "Camping and on-site facilities" })).toHaveCount(0);
     } finally {
@@ -42,7 +58,13 @@ test("validated edition camping facts are accessible in every locale", async ({ 
     }
     await expect(importReviewedCamping(db, { ...first, city: "Wrong city" }, false)).rejects.toThrow(/exact catalogue edition/);
     await expect(importReviewedCamping(db, { ...first, editionYear: first.editionYear + 1 }, false)).rejects.toThrow();
-    for (const record of campingRecords) await importReviewedCamping(db, record, false);
+    const dateChange = inputs[0].html.replaceAll("Thursday 5", "Friday 6");
+    await expect(collect(db, inputs[0], dateChange, previews[0].fingerprint)).rejects.toThrow(/changed since preview/);
+    await expect(collect(db, inputs[0], "<html></html>", previews[0].fingerprint)).rejects.toThrow(/No complete/);
+    expect(await db.editionCampingFact.count()).toBe(0);
+    for (const [index, input] of inputs.entries()) {
+      await collect(db, input, input.html, previews[index].fingerprint);
+    }
     await importReviewedCamping(db, { ...first, facts: first.facts.slice(0, 1) }, false);
     await expect(importReviewedCamping(db, { ...first, checkedOn: "2026-01-01" }, false)).rejects.toThrow(/more recently reviewed/);
 
