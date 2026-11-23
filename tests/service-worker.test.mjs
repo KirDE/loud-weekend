@@ -111,14 +111,17 @@ test("asset eviction keeps the installed trip shell, module and public catalogue
     mode: "navigate",
   });
   assert.equal(await navigation.text(), "/offline.html");
-  const module = await dispatch(listeners, new Request("https://festivals.test/offline-trips.mjs"));
+  const shell = await readFile(new URL("../public/offline.html", import.meta.url), "utf8");
+  const moduleUrl = shell.match(/offline-trips\.mjs\?shell=\d+/)?.[0];
+  assert.ok(moduleUrl, "New HTML must bypass the previous worker's unversioned module cache");
+  const module = await dispatch(listeners, new Request(`https://festivals.test/${moduleUrl}`));
   assert.equal(await module.text(), "/offline-trips.mjs");
   assert.deepEqual(await (await dispatch(listeners)).json(), payload());
 });
 
 test("worker activation removes only obsolete caches for its scope", async () => {
   const obsolete = "festival-radar-public-v6";
-  const current = "festival-radar-public-v7";
+  const current = "festival-radar-public-v8";
   const keys = new Set([obsolete, current, obsolete + ":%2Fradar", "unrelated-app-cache"]);
   const { listeners } = await loadWorker({
     cachesImpl: {
