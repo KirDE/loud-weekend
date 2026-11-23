@@ -902,3 +902,11 @@ model OperationalState {
   leaseExpiresAt DateTime?
   updatedAt      DateTime @updatedAt
 }
+
+model ReviewedStockProduct {
+  sourceUrl   String
+  editionYear Int
+  assertions  Json
+
+  @@id([sourceUrl, editionYear])
+}

@@ -2,7 +2,7 @@
 
 `observeTolminatorStock` is a pure, **unregistered** stock observer. It is not a
 production source, scheduled collector or automatic publication path. An explicit manual audit command is available below. Existing source
-configuration is unchanged. No migration or production writes are involved.
+configuration is unchanged. The migration stores the reviewed product assertions in PostgreSQL; no production writes are performed by preview.
 
 ## Reviewed evidence
 
@@ -88,7 +88,7 @@ stock-only festival without primary health. This does not register a live produc
 
 ## Explicit operator invocation (no automatic publication)
 
-`node --import tsx scripts/collect-tolminator-stock.ts` is a DB-free preview.
+`node --import tsx scripts/collect-tolminator-stock.ts` is a read-only preview.
 It performs exactly one reviewed GET and prints only the minimized candidate.
 `--record-attempt EXACT_COMMIT` explicitly requires DATABASE_URL and the matching
 current Tolminator 2027 canonical target. It writes only the existing run,
@@ -104,7 +104,7 @@ or printed. DB errors propagate, never trigger a fabricated second attempt.
 The summary queries extraction time/failure streak using the exact product URL.
 Invalid arguments or an absent/mismatched target fail before any public request.
 
-On 2026-11-22 at 17:44:29.916 UTC the DB-free command made a new ordinary public
+On 2026-11-22 at 17:44:29.916 UTC the read-only command made a new ordinary public
 GET which passed the exact status/URL/MIME/schema guards: ordinary 2027 admission
 explicitly In stock, two field proofs, zero warnings. No DB, basket, account,
 reservation, source configuration or production write occurred. Availability

@@ -1,3 +1,5 @@
+import { readReviewedStockProduct } from "../lib/ingestion/reviewed-stock-products.ts";
+import { TOLMINATOR_PRODUCT as reviewedProductUrl } from "../lib/ingestion/adapters/tolminator-stock.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -44,7 +46,7 @@ test("Tolminator real producer → durable proof → canonical read, replay, tam
     festivalId = edition.festivalId;
     const before = await read();
     const jobs = await db.catalogPlaylistRefresh.count();
-    const candidate = await collectTolminatorCandidate({ fetchImpl });
+    const candidate = await collectTolminatorCandidate({ fetchImpl, product: await readReviewedStockProduct(db, reviewedProductUrl, 2027) });
     assert.deepEqual(Object.keys(candidate).sort(), ["schemaVersion","festivalSlug","sourceUrl","fetchedAt","observedEditionYears","warnings","ticketStatus","ticketsUrl","evidence"].sort());
     const value = evaluateCandidate(before, candidate);
     assert.equal(value.publishable, true, JSON.stringify(value.reviewReasons));

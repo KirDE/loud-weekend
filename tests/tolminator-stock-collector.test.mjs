@@ -1,3 +1,4 @@
+import { reviewedStockProduct } from "./fixtures/ticket-status/tolminator-product.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -11,10 +12,10 @@ function response(body = html, init = {}, url = TOLMINATOR_PRODUCT, redirected =
   Object.defineProperties(result, { url: { value: url }, redirected: { value: redirected } });
   return result;
 }
-const run = (res, options = {}) => collectTolminatorStock({ fetchImpl: async () => res, ...options });
+const run = (res, options = {}) => collectTolminatorStock({ product: reviewedStockProduct, fetchImpl: async () => res, ...options });
 test('Tolminator one exact credential-free GET returns only minimized current evidence', async () => {
   const start = Date.now(); let calls = 0; let signal;
-  const result = await collectTolminatorStock({ fetchImpl: async (url, options) => {
+  const result = await collectTolminatorStock({ product: reviewedStockProduct, fetchImpl: async (url, options) => {
     calls++; assert.equal(url, TOLMINATOR_PRODUCT);
     assert.equal(options.method, 'GET'); assert.equal(options.redirect, 'error'); assert.equal(options.credentials, 'omit');
     assert.deepEqual(options.headers, { accept: 'text/html, application/xhtml+xml' });
@@ -28,7 +29,7 @@ test('Tolminator one exact credential-free GET returns only minimized current ev
 });
 for (const status of [201, 204, 206, 301, 302, 403, 429, 500]) test(`Tolminator preserves HTTP ${status} as failure without retries or parsing body`, async () => {
   let calls = 0;
-  await assert.rejects(collectTolminatorStock({ fetchImpl: async () => {
+  await assert.rejects(collectTolminatorStock({ product: reviewedStockProduct, fetchImpl: async () => {
     calls++; return response([204, 304].includes(status) ? null : html, { status });
   } }), new RegExp(`HTTP ${status}`));
   assert.equal(calls, 1);
@@ -52,18 +53,18 @@ for (const [name, res] of [
   ['metadata/body conflict', () => response(html.replace('</body>', '<p>Razprodano</p></body>'))],
 ]) test(`Tolminator rejects ${name}`, async () => { await assert.rejects(run(res())); });
 test('Tolminator rejects header and body stalls even when transport ignores abort', async () => {
-  await assert.rejects(collectTolminatorStock({ timeoutMs: 10, fetchImpl: () => new Promise(() => {}) }), /deadline/);
+  await assert.rejects(collectTolminatorStock({ product: reviewedStockProduct, timeoutMs: 10, fetchImpl: () => new Promise(() => {}) }), /deadline/);
   let canceled = false;
   const body = new ReadableStream({ pull() { return new Promise(() => {}); }, cancel() { canceled = true; return new Promise(() => {}); } });
   await assert.rejects(run(response(body), { timeoutMs: 10 }), /deadline/);
   assert.equal(canceled, true);
 });
 test('Tolminator propagates network and body read failures without a healthy result', async () => {
-  await assert.rejects(collectTolminatorStock({ fetchImpl: async () => { throw new Error('network refused'); } }), /network refused/);
+  await assert.rejects(collectTolminatorStock({ product: reviewedStockProduct, fetchImpl: async () => { throw new Error('network refused'); } }), /network refused/);
   await assert.rejects(run(response(new ReadableStream({ start(controller) { controller.error(new Error('broken body')); } }))), /broken body/);
 });
 test('Tolminator rejects invalid deadline before making any request', async () => {
   for (const timeoutMs of [0, -1, 20_001, Infinity, NaN, 1.5]) {
-    await assert.rejects(collectTolminatorStock({ timeoutMs, fetchImpl: () => { assert.fail('must not request'); } }), /deadline/);
+    await assert.rejects(collectTolminatorStock({ product: reviewedStockProduct, timeoutMs, fetchImpl: () => { assert.fail('must not request'); } }), /deadline/);
   }
 });

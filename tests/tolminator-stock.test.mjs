@@ -1,10 +1,11 @@
+import { reviewedStockProduct } from "./fixtures/ticket-status/tolminator-product.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { observeTolminatorStock, TOLMINATOR_PRODUCT } from "../lib/ingestion/adapters/tolminator-stock.ts";
 const fixture = readFileSync(new URL("./fixtures/ticket-status/tolminator-ordinary.html", import.meta.url), "utf8");
 const at = "2026-11-22T17:01:23Z";
-const observe = (html = fixture, url = TOLMINATOR_PRODUCT, year = 2027, time = at) => observeTolminatorStock(html, url, year, time);
+const observe = (html = fixture, url = TOLMINATOR_PRODUCT, year = 2027, time = at) => observeTolminatorStock(html, url, year, time, reviewedStockProduct);
 const metadata = (change) => fixture.replace(/(<script[^>]*>)([^]*?)(<\/script>)/, (_, a, json, c) => {
   const document = JSON.parse(json); change(document['@graph'][0], document); return a + JSON.stringify(document) + c;
 });
