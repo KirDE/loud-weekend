@@ -21,3 +21,8 @@ dedicated overview row, not catalogue freshness, dates, tickets or lineups.
 The public panel reads only the matching PostgreSQL overview. If an already
 reviewed overview is no longer valid, withdraw its exact edition row through
 the approved maintenance path; a failed fetch does not delete reviewed data.
+
+Each applied change stores the approved observation, source URLs, document digest,
+observation time, fingerprint and applying OS account in the append-only admin
+audit. The audit and overview update share a transaction. Preview and same-day
+no-op replay write neither row.

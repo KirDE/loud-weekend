@@ -1,3 +1,4 @@
+import { userInfo } from "node:os";
 import { parseArgs } from "node:util";
 import { db } from "../lib/db.ts";
 import { collectReviewedOverview } from "../lib/ingestion/overview-collector.ts";
@@ -17,6 +18,7 @@ try {
   }
   const result = await collectReviewedOverview(db, values.festival, Number(values.edition), {
     approval: values.apply,
+    actorLabel: values.apply === undefined ? undefined : `overview-import:${userInfo().username}`,
   });
   console.log(JSON.stringify(result));
 } finally {

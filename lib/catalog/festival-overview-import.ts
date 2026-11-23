@@ -14,7 +14,18 @@ const reviewedOverview = z.strictObject({
   summary: z.strictObject({ en: summary, de: summary, ru: summary }),
 });
 
-export async function importReviewedOverview(db: PrismaClient, input: unknown, checkOnly = true) {
+const approvalReceipt = z.strictObject({
+  actorLabel: z.string().trim().min(1).max(160),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  observedAt: z.iso.datetime(),
+});
+
+export async function importReviewedOverview(
+  db: PrismaClient,
+  input: unknown,
+  approvalInput?: unknown,
+) {
   const record = reviewedOverview.parse(input);
   if (
     record.sources.some((url) => overviewSourceHost(url) !== record.organizerHost) ||
@@ -22,6 +33,8 @@ export async function importReviewedOverview(db: PrismaClient, input: unknown, c
   ) {
     throw new Error("Sources must be distinct public HTTPS URLs on the organizer host");
   }
+  const approval = approvalInput === undefined ? undefined : approvalReceipt.parse(approvalInput);
+  const checkOnly = approval === undefined;
   const checkedOn = new Date(record.checkedOn + "T00:00:00Z");
 
   return db.$transaction(
@@ -31,7 +44,18 @@ export async function importReviewedOverview(db: PrismaClient, input: unknown, c
         select: {
           id: true,
           recordState: true,
-          overview: { select: { checkedOn: true } },
+          overview: {
+            select: {
+              checkedOn: true,
+              city: true,
+              countryCode: true,
+              organizerHost: true,
+              sourceUrls: true,
+              summaryEn: true,
+              summaryDe: true,
+              summaryRu: true,
+            },
+          },
           festival: { select: { city: true, countryCode: true, officialUrl: true } },
         },
       });
@@ -48,7 +72,7 @@ export async function importReviewedOverview(db: PrismaClient, input: unknown, c
         throw new Error("The import cannot overwrite a more recently reviewed overview");
       }
 
-      if (!checkOnly) {
+      if (approval) {
         const data = {
           city,
           countryCode,
@@ -59,10 +83,44 @@ export async function importReviewedOverview(db: PrismaClient, input: unknown, c
           summaryDe: record.summary.de,
           summaryRu: record.summary.ru,
         };
+        const previous = edition.overview;
+        if (
+          previous &&
+          previous.checkedOn.getTime() === checkedOn.getTime() &&
+          previous.city === data.city &&
+          previous.countryCode === data.countryCode &&
+          previous.organizerHost === data.organizerHost &&
+          previous.summaryEn === data.summaryEn &&
+          previous.summaryDe === data.summaryDe &&
+          previous.summaryRu === data.summaryRu &&
+          previous.sourceUrls.length === data.sourceUrls.length &&
+          previous.sourceUrls.every((url, index) => url === data.sourceUrls[index])
+        ) {
+          return { checkOnly, festivalSlug: record.festivalSlug, editionYear: record.editionYear };
+        }
         await tx.editionOverview.upsert({
           where: { editionId: edition.id },
           create: { editionId: edition.id, ...data },
           update: data,
+        });
+        await tx.adminAuditEntry.create({
+          data: {
+            actorLabel: approval.actorLabel,
+            action: "FESTIVAL_OVERVIEW_PUBLICATION",
+            resourceKind: "FESTIVAL",
+            resourceKey: record.festivalSlug,
+            target: edition.id,
+            beforeValue: previous
+              ? { ...previous, checkedOn: previous.checkedOn.toISOString().slice(0, 10) }
+              : undefined,
+            afterValue: record,
+            evidence: {
+              ...approval,
+              sources: record.sources,
+              editionYear: record.editionYear,
+              adapter: "festival-overview",
+            },
+          },
         });
       }
       return { checkOnly, festivalSlug: record.festivalSlug, editionYear: record.editionYear };

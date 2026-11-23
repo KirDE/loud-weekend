@@ -9,6 +9,8 @@ const db = createPrismaClient();
 const slug = "hellfest";
 const year = 2027;
 const source = overviewOrganizer(slug, year);
+const actorLabel = "overview-import:e2e-fixture";
+const auditWhere = { action: "FESTIVAL_OVERVIEW_PUBLICATION", resourceKey: slug, actorLabel };
 const detailPath = (language) => `/${language}/festivals/${slug}/`;
 
 function fixture(stageCount, edition = year) {
@@ -53,6 +55,7 @@ test.beforeAll(async () => {
   festivalId = festival.id;
 });
 test.afterAll(async () => {
+  await db.adminAuditEntry.deleteMany({ where: auditWhere });
   if (festivalId) await db.festival.delete({ where: { id: festivalId } });
   await db.$disconnect();
 });
@@ -68,13 +71,18 @@ test("preview, evidence changes, absence and edition mismatches do not publish",
 
   for (const fetchImpl of [fixture(), fixture(7, year - 1)]) {
     await expect(
-      collectReviewedOverview(db, slug, year, { fetchImpl, approval: preview.fingerprint }),
+      collectReviewedOverview(db, slug, year, {
+        fetchImpl,
+        approval: preview.fingerprint,
+        actorLabel,
+      }),
     ).rejects.toThrow(/No complete organizer overview evidence/);
   }
   await expect(
     collectReviewedOverview(db, slug, year, {
       fetchImpl: fixture(8),
       approval: preview.fingerprint,
+      actorLabel,
     }),
   ).rejects.toThrow(/changed since preview/);
   await page.reload();
@@ -82,11 +90,44 @@ test("preview, evidence changes, absence and edition mismatches do not publish",
 
   const next = await collectReviewedOverview(db, slug, year, { fetchImpl: fixture(8) });
   const apply = () =>
-    collectReviewedOverview(db, slug, year, { fetchImpl: fixture(8), approval: next.fingerprint });
+    collectReviewedOverview(db, slug, year, {
+      fetchImpl: fixture(8),
+      approval: next.fingerprint,
+      actorLabel,
+    });
+  expect(await db.adminAuditEntry.count({ where: auditWhere })).toBe(0);
+  await expect(
+    collectReviewedOverview(db, slug, year, {
+      fetchImpl: fixture(8),
+      approval: next.fingerprint,
+    }),
+  ).rejects.toThrow(/actorLabel/);
   await apply();
   await apply();
+  const rows = await db.adminAuditEntry.findMany({ where: auditWhere });
+  expect(rows).toHaveLength(1);
+  expect(rows[0].afterValue).toEqual(next.record);
+  expect(rows[0].evidence).toMatchObject({
+    fingerprint: next.fingerprint,
+    contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    sources: [source.url],
+  });
+  const revised = await collectReviewedOverview(db, slug, year, { fetchImpl: fixture(9) });
+  await collectReviewedOverview(db, slug, year, {
+    fetchImpl: fixture(9),
+    approval: revised.fingerprint,
+    actorLabel,
+  });
+  const history = await db.adminAuditEntry.findMany({
+    where: auditWhere,
+    orderBy: { createdAt: "asc" },
+  });
+  expect(history).toHaveLength(2);
+  expect(history[0].id).toBe(rows[0].id);
+  expect(history[1].beforeValue.summaryEn).toBe(next.record.summary.en);
+  expect(history[1].afterValue).toEqual(revised.record);
   await page.reload();
-  await expect(region.getByText(next.record.summary.en)).toBeVisible();
+  await expect(region.getByText(revised.record.summary.en)).toBeVisible();
 
   await db.festival.update({ where: { id: festivalId }, data: { city: null } });
   try {
@@ -106,7 +147,7 @@ for (const [lang, heading] of Object.entries({
   test(`${lang} shows the localized reviewed observation and provenance`, async ({ page }) => {
     const fetchImpl = fixture(8);
     const { record, fingerprint } = await collectReviewedOverview(db, slug, year, { fetchImpl });
-    await collectReviewedOverview(db, slug, year, { fetchImpl, approval: fingerprint });
+    await collectReviewedOverview(db, slug, year, { fetchImpl, approval: fingerprint, actorLabel });
     await page.setViewportSize({ width: 320, height: 760 });
     await page.goto(detailPath(lang));
     const region = page.getByRole("region", { name: heading });

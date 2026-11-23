@@ -40,12 +40,13 @@ export async function collectReviewedOverview(
   db: PrismaClient,
   festivalSlug: string,
   editionYear: number,
-  options: { approval?: string; fetchImpl?: typeof fetch } = {},
+  options: { approval?: string; actorLabel?: string; fetchImpl?: typeof fetch } = {},
 ) {
   const source = overviewOrganizer(festivalSlug, editionYear);
   if (!source) throw new Error("A supported festival and edition year are required");
   const { url, ...identity } = source;
   const html = await readPage(url, options.fetchImpl ?? fetch);
+  const observedAt = new Date().toISOString();
   const summary = parseFestivalOverview(html, festivalSlug, editionYear);
   if (!summary) throw new Error("No complete organizer overview evidence for this edition");
   const observation = { festivalSlug, editionYear, ...identity, sources: [url], summary };
@@ -54,7 +55,18 @@ export async function collectReviewedOverview(
     throw new Error("Organizer overview evidence changed since preview");
   }
   const checkOnly = options.approval === undefined;
-  const record = { ...observation, checkedOn: new Date().toISOString().slice(0, 10) };
-  await importReviewedOverview(db, record, checkOnly);
+  const record = { ...observation, checkedOn: observedAt.slice(0, 10) };
+  await importReviewedOverview(
+    db,
+    record,
+    checkOnly
+      ? undefined
+      : {
+          actorLabel: options.actorLabel,
+          fingerprint,
+          contentHash: createHash("sha256").update(html).digest("hex"),
+          observedAt,
+        },
+  );
   return { record, fingerprint, checkOnly };
 }
