@@ -1,8 +1,12 @@
+import { before, after, mock } from "node:test";
 import assert from 'node:assert/strict';import test from 'node:test';import{readFileSync}from'node:fs';
 import{fetchSource}from'../lib/ingestion/fetch.ts';import{extractFestivalCandidate}from'../lib/ingestion/extract.ts';
 import{SUMMER_EVENT,SUMMER_EVENT_API,SUMMER_TOKEN,SUMMER_STOCK,SUMMER_COUNTS,SUMMER_PURCHASE,SUMMER_SCOPE,SUMMER_LIMIT_REQUEST,fetchSummerStock,observeSummerStock}from'../lib/ingestion/summer-ticket-stock.ts';
 import{ticketSupplementScope}from'../lib/ingestion/ticket-supplements.ts';
 import{summerStockResponse,summerEvent,summerLimits}from'./support/summer-stock-fixture.ts';
+before(() => mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-22T14:08:00Z") }));
+after(() => mock.timers.reset());
+
 const dates={startDate:'2027-06-17',endDate:'2027-06-19'},source={festivalSlug:'summer-punch',url:'https://summerpunchfestival.pl/',editionYear:2027,strategies:['official_markup'],enabled:true,refreshPolicy:'daily'};
 const home=readFileSync(new URL('./fixtures/official-markup/summer-punch-full.html',import.meta.url),'utf8');
 const produce=()=>fetchSummerStock( async url=>summerStockResponse(url));

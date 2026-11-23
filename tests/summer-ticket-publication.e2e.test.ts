@@ -1,3 +1,4 @@
+import { before, after, mock } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ticketProducerPublication } from "./support/ticket-producer-publication.ts";
@@ -5,6 +6,9 @@ import { summerStockResponse } from "./support/summer-stock-fixture.ts";
 import { fetchSource } from "../lib/ingestion/fetch.ts";
 import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
 import { parserSource } from "./support/parser-source.ts";
+before(() => mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-22T14:18:00Z") }));
+after(() => mock.timers.reset());
+
 const baseSource = parserSource("summer-punch", { url:"https://summerpunchfestival.pl/" });
 const home = readFileSync(new URL("./fixtures/official-markup/summer-punch-full.html",import.meta.url),"utf8");
 ticketProducerPublication({slug:baseSource.festivalSlug, produce:async (archived)=>{
