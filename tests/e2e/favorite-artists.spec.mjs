@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { createPrismaClient } from "../../lib/prisma-client.mjs";
+import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 
 const localized = {
   en: ["My artists", "Find an artist to save", "No favorite artists yet."],
@@ -80,4 +82,54 @@ test("legacy names and canonical favorites read back once from explicit account 
   await page.locator(".artistToolbar button").click();
   await page.goBack();
   await expect(page.getByText("No favorite artists yet.")).toBeVisible();
+});
+
+test("cancelled entries are not current favorite appearances", async ({ page }) => {
+  requireLocalDisposableDatabase(process.env.DATABASE_URL);
+  const db = createPrismaClient();
+  try {
+    const [edition, artist] = await Promise.all([
+      db.festivalEdition.findFirstOrThrow({
+        where: {
+          recordState: "CURRENT",
+          festival: { slug: "synthetic-west" },
+        },
+      }),
+      db.artist.findUniqueOrThrow({ where: { slug: "second-artist" } }),
+    ]);
+    const cancelled = await db.lineupEntry.create({
+      data: {
+        editionId: edition.id,
+        artistId: artist.id,
+        billing: "LINEUP",
+        position: 99,
+        status: "CANCELLED",
+      },
+    });
+    try {
+      await page.addInitScript(() => {
+        const key = "festival-radar-planner-v1";
+        if (!localStorage.getItem(key))
+          localStorage.setItem(
+            key,
+            JSON.stringify({
+              favoriteArtists: ["artist:second-artist"],
+            }),
+          );
+      });
+      await page.goto("/en/planner/artists/");
+      const saved = page
+        .locator("article")
+        .filter({ has: page.getByRole("heading", { name: "Second Artist" }) });
+      await expect(saved.getByRole("link", { name: "Synthetic Fest · 2027" })).toBeVisible();
+      await expect(saved.getByRole("link", { name: /Synthetic West/ })).toHaveCount(0);
+      await saved.getByRole("link", { name: "Second Artist", exact: true }).click();
+      await expect(page.getByRole("link", { name: "Synthetic Fest" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Synthetic West" })).toHaveCount(0);
+    } finally {
+      await db.lineupEntry.delete({ where: { id: cancelled.id } });
+    }
+  } finally {
+    await db.$disconnect();
+  }
 });

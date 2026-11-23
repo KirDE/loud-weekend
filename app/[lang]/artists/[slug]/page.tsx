@@ -42,7 +42,7 @@ export default async function LocalizedArtistPage({
   const artist = artists.find((item) => item.slug === slug);
   if (!artist) notFound();
   const appearances = festivals.filter((festival) =>
-    [...festival.headliners, ...festival.lineup].includes(artist.name),
+    discoveryLineups.artistSlugsByFestival[festival.slug]?.includes(artist.slug),
   );
   return (
     <ArtistDetail
