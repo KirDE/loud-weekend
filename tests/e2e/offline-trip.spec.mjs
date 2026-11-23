@@ -109,3 +109,36 @@ test("explicit mobile trip download keeps only public proof and works offline", 
     await db.$disconnect();
   }
 });
+
+test("refreshing an offline trip does not restore a copy removed in another tab", async ({ page, context }) => {
+  const festivalPath = "/en/festivals/synthetic-fest/";
+  const key = "festival-radar-offline-trip:v1:synthetic-fest:2027";
+  await page.goto(festivalPath);
+  const save = page.getByRole("button", { name: "Save trip offline", exact: true });
+  await save.click();
+  const refresh = page.getByRole("button", { name: "Update offline copy", exact: true });
+  await expect(refresh).toBeVisible();
+
+  const otherTab = await context.newPage();
+  const responseReady = Promise.withResolvers();
+  const releaseResponse = Promise.withResolvers();
+  await page.route("**/api/offline/trips/synthetic-fest/2027/", async route => {
+    const response = await route.fetch();
+    responseReady.resolve(response.status());
+    await releaseResponse.promise;
+    await route.fulfill({ response });
+  });
+  try {
+    await refresh.click();
+    expect(await responseReady.promise).toBe(200);
+    await otherTab.goto("/offline.html#trips");
+    await otherTab.getByRole("button", { name: "Remove offline copy: Synthetic Fest" }).click();
+    releaseResponse.resolve();
+
+    await expect(save).toBeEnabled();
+    expect(await page.evaluate(key => localStorage.getItem(key), key)).toBeNull();
+  } finally {
+    releaseResponse.resolve();
+    await otherTab.close();
+  }
+});

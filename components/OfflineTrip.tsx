@@ -31,18 +31,23 @@ export function OfflineTripDownload({ slug, year }: { slug: string; year: number
     setBusy(true);
     setNotice(null);
     try {
+      const previous = localStorage.getItem(key);
       let trip: OfflineTrip;
       try {
         trip = await fetchOfflineTrip(basePath, slug, year);
       } catch {
         return setNotice("unavailable");
       }
-      try {
-        setRecord(saveOfflineTrip(localStorage, trip));
-        setNotice("saved");
-      } catch {
-        setNotice("storage");
+      // Match the offline shell: another tab's edit or removal wins over
+      // a response to an earlier request.
+      if (localStorage.getItem(key) !== previous) {
+        setRecord(readOfflineTrip(localStorage, slug, year));
+        return;
       }
+      setRecord(saveOfflineTrip(localStorage, trip));
+      setNotice("saved");
+    } catch {
+      setNotice("storage");
     } finally {
       setBusy(false);
     }
