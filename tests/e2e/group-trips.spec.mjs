@@ -148,6 +148,8 @@ test("mobile owner shares a private edition vote with an invited account and can
             })
           ).status(),
         ).toBe(404);
+        await ballot(owner.page).focus();
+        await ballot(voter.page).focus();
         await Promise.all([
           ballot(owner.page).selectOption("MAYBE"),
           ballot(voter.page).selectOption("GOING"),
@@ -162,6 +164,8 @@ test("mobile owner shares a private edition vote with an invited account and can
             return visible.options[0].tally;
           })
           .toEqual({ GOING: 1, MAYBE: 1 });
+        await expect(ballot(owner.page)).toBeFocused();
+        await expect(ballot(voter.page)).toBeFocused();
         for (const page of [owner.page, voter.page, viewer.page]) {
           expect(
             await page.evaluate(() => document.documentElement.scrollWidth),

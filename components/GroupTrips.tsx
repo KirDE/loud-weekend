@@ -170,6 +170,18 @@ export function GroupTrips() {
   const [secret, setSecret] = useState("");
   const [status, setStatus] = useState<"busy" | "auth" | "error" | "ready">("busy");
   const authRevision = useRef(0);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const controls = useRef<HTMLFieldSetElement>(null);
+  const pendingFocus = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (status === "busy" || !pendingFocus.current) return;
+    const previous = pendingFocus.current;
+    pendingFocus.current = null;
+    if (document.activeElement !== document.body) return;
+    const destination = previous.isConnected ? previous : heading.current;
+    destination?.focus();
+  }, [status]);
   const date = (iso: string) =>
     new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(
       new Date(iso),
@@ -177,6 +189,7 @@ export function GroupTrips() {
 
   useEffect(() => {
     async function load() {
+      pendingFocus.current = null;
       const revision = ++authRevision.current;
       setIndex(null);
       setTrip(null);
@@ -206,6 +219,9 @@ export function GroupTrips() {
     nextTripId: string | undefined,
     reloadIndex = false,
   ) {
+    const active = document.activeElement;
+    pendingFocus.current =
+      active instanceof HTMLElement && controls.current?.contains(active) ? active : null;
     const revision = ++authRevision.current;
     setStatus("busy");
     setSecret("");
@@ -253,7 +269,9 @@ export function GroupTrips() {
       <Link className="back" href={`/${language}/planner/`}>
         {t.back}
       </Link>
-      <h1>{t.title}</h1>
+      <h1 ref={heading} tabIndex={-1}>
+        {t.title}
+      </h1>
       <p>{t.intro}</p>
       <p role="status">
         {status === "auth"
@@ -265,7 +283,7 @@ export function GroupTrips() {
               : ""}
       </p>
       {index && (
-        <fieldset disabled={status === "busy"}>
+        <fieldset ref={controls} disabled={status === "busy"}>
           <label>
             {t.open}
             <select
