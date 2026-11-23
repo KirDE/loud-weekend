@@ -24,13 +24,18 @@ const ceremonySchema = z.discriminatedUnion("kind", [
 
 export type PasskeyCeremony = z.infer<typeof ceremonySchema>;
 type PendingPasskeyCeremony = PasskeyCeremony extends infer Ceremony
-  ? Ceremony extends PasskeyCeremony ? Omit<Ceremony, "expiresAt"> : never
+  ? Ceremony extends PasskeyCeremony
+    ? Omit<Ceremony, "expiresAt">
+    : never
   : never;
 
 export function passkeyConfig() {
   if (!process.env.APP_URL) throw new Error("APP_URL is required for passkey authentication");
   const appUrl = new URL(process.env.APP_URL);
-  const local = appUrl.hostname === "localhost" || appUrl.hostname === "127.0.0.1" || appUrl.hostname === "[::1]";
+  const local =
+    appUrl.hostname === "localhost" ||
+    appUrl.hostname === "127.0.0.1" ||
+    appUrl.hostname === "[::1]";
   if (appUrl.protocol !== "https:" && !(local && appUrl.protocol === "http:")) {
     throw new Error("Passkey authentication requires HTTPS");
   }
@@ -56,7 +61,8 @@ export async function consumePasskeyCeremony<T extends PasskeyCeremony["kind"]>(
   if (!value) return null;
   try {
     const parsed = ceremonySchema.safeParse(JSON.parse(decrypt(value)));
-    if (!parsed.success || parsed.data.kind !== kind || parsed.data.expiresAt <= Date.now()) return null;
+    if (!parsed.success || parsed.data.kind !== kind || parsed.data.expiresAt <= Date.now())
+      return null;
     return parsed.data as Extract<PasskeyCeremony, { kind: T }>;
   } catch {
     return null;
