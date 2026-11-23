@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { StageTimetable } from "./StageTimetable";
 import type { Festival } from "@/lib/domain/festival";
 import type { FestivalEdition } from "@/lib/domain/edition";
 import { FestivalExplorer } from "./FestivalExplorer";
@@ -309,6 +310,9 @@ export function FestivalEditionContent({
           </div>
         )}
       </section>
+      {item.timetable?.length ? (
+        <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
+      ) : null}
       <section className="sourceNote">
         <strong>{t.provenance}</strong>
         {item.snapshotAt && (

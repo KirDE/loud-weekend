@@ -1,4 +1,4 @@
-import type { Festival } from "./festival.ts";
+import type { Festival, TimetableEntry } from "./festival.ts";
 
 export type EditionProvenance = Readonly<{
   field: "edition" | "dates" | "lineup";
@@ -11,7 +11,7 @@ export type FestivalEdition = Readonly<
   Omit<Festival, "editionYear" | "headliners" | "lineup" | "timetable"> & {
     headliners: readonly string[];
     lineup: readonly string[];
-    timetable?: readonly Readonly<{ date: string; stage: string; start: string; artist: string }>[];
+    timetable?: readonly TimetableEntry[];
     editionYear: number;
     recordState: "archived" | "current" | "tracking";
     completeness: "complete" | "partial" | "tba";

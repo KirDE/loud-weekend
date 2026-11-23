@@ -87,7 +87,7 @@ export function PlanningTools({ item, festivals }: { item: Festival; festivals: 
           {t.map}
         </a>
       </div>
-      <StageTimetable entries={item.timetable} />
+      <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
       {similar.length > 0 && (
         <div className="recommendations">
           <h3>{t.similar}</h3>

@@ -9,6 +9,7 @@ test("published days and stages can be filtered without hiding cancellations or 
   requireLocalDisposableDatabase(process.env.DATABASE_URL);
   const db = createPrismaClient();
   let importedEditionId;
+  let savedContext;
   try {
     const edition = await db.festivalEdition.findFirstOrThrow({
       where: { festival: { slug: "synthetic-west" }, year: 2027 },
@@ -44,6 +45,16 @@ test("published days and stages can be filtered without hiding cancellations or 
           start: "18:30",
           artist: "Second Fixture",
           status: "scheduled",
+          sourcePerformanceId: "fixture:set-2",
+        },
+        {
+          ...shared,
+          stage: "Third stage",
+          start: "19:00",
+          artist: "Overlap Fixture",
+          status: "scheduled",
+          sourcePerformanceId: "fixture:set-3",
+          window: { startsAt: "2027-06-10T19:00:00+02:00", endsAt: "2027-06-10T19:30:00+02:00" },
         },
         {
           ...shared,
@@ -118,6 +129,32 @@ test("published days and stages can be filtered without hiding cancellations or 
         await context.close();
       }
     }
+    savedContext = await browser.newContext({ viewport: { width: 320, height: 720 } });
+    const planPage = await savedContext.newPage();
+    const timetable = planPage.getByRole("region", { name: "Stage timetable", exact: true });
+    const runningOrder = planPage.getByRole("region", { name: "My running order", exact: true });
+    const editionUrl = "/festivals/synthetic-west/2027/";
+    await planPage.goto(editionUrl);
+    for (const artist of ["First Fixture", "Second Fixture", "Overlap Fixture"]) {
+      const toggle = timetable.getByRole("button", { name: `Save to running order: ${artist}` });
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    }
+    await expect(
+      runningOrder.getByText("Verified overlap: First Fixture / Overlap Fixture"),
+    ).toBeVisible();
+    await expect(runningOrder.getByText(/no verified end time/)).toBeVisible();
+    expect(await planPage.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
+    await planPage.goto("/en/festivals/synthetic-west/");
+    await expect(
+      runningOrder.getByText("Verified overlap: First Fixture / Overlap Fixture"),
+    ).toBeVisible();
+    await planPage.goto(editionUrl);
+    await expect(
+      runningOrder.getByText("Verified overlap: First Fixture / Overlap Fixture"),
+    ).toBeVisible();
     const [identified, ...others] = input.entries;
     const replace = (entry) =>
       importTimetable(db, { ...input, entries: [entry, ...others] }, false);
@@ -171,7 +208,15 @@ test("published days and stages can be filtered without hiding cancellations or 
       endsAt: null,
     });
     await expect(replace(moved)).rejects.toThrow("older evidence");
+    await planPage.reload();
+    await expect(runningOrder.getByText(/First Fixture · Fourth stage.*Cancelled/)).toBeVisible();
+    await expect(runningOrder.getByText("Verified overlap:", { exact: false })).toHaveCount(0);
+    await runningOrder.getByRole("button", { name: "Clear running order" }).click();
+    await expect(runningOrder).toHaveCount(0);
+    await planPage.reload();
+    await expect(runningOrder).toHaveCount(0);
   } finally {
+    await savedContext?.close();
     if (importedEditionId)
       await db.timetablePerformance.deleteMany({ where: { editionId: importedEditionId } });
     await db.$disconnect();
