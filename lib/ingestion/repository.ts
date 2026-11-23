@@ -1,3 +1,4 @@
+import { ROSKILDE_PRODUCTS_URL } from "./adapters/roskilde-stock.ts";
 import { TOLMINATOR_PRODUCT } from "./adapters/tolminator-stock.ts";
 import { queueImportEvent } from "./import-event-queue.ts";
 import { createHash } from "node:crypto";
@@ -35,7 +36,7 @@ export async function createIngestionRun(
 
 // Only reviewed independent endpoints are excluded. Do not infer scope from
 // caller-supplied candidate fields (a failed request has no candidate at all).
-const independentTicketUrls = [TOLMINATOR_PRODUCT];
+const independentTicketUrls = [TOLMINATOR_PRODUCT, ROSKILDE_PRODUCTS_URL];
 const attemptScope = (requestedUrl?: string): Prisma.IngestionAttemptWhereInput =>
   requestedUrl ? { requestedUrl } : { requestedUrl: { notIn: independentTicketUrls } };
 
