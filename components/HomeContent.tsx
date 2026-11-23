@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { CatalogFreshness } from "@/lib/domain/freshness";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalExplorer } from "./FestivalExplorer";
@@ -13,7 +14,7 @@ export function HomeContent({
   festivals: Festival[];
   freshness: CatalogFreshness;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const announced = festivals.filter(hasAnnouncedLineup).length;
   const countries = new Set(festivals.map((item) => item.countryCode)).size;
   return (
@@ -39,6 +40,11 @@ export function HomeContent({
         </div>
       </section>
       <FestivalExplorer festivals={festivals} freshness={freshness} />
+      <p className="dataQualityLink">
+        <Link className="textLink" href={`/${language}/data-quality/`}>
+          {t("dataQuality")}
+        </Link>
+      </p>
     </>
   );
 }
