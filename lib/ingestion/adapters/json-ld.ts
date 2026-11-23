@@ -1,6 +1,7 @@
 import type { FestivalCandidate, FestivalSource, FieldEvidence } from "../types.ts";
 import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 import { validateGenericLineup } from "../lineup-quality.ts";
+import { festivalDateInterval } from "../../festival-dates.ts";
 
 type JsonLd = Record<string, unknown>;
 
@@ -41,10 +42,12 @@ function text(value: unknown): string | undefined {
 function date(value: unknown): string | undefined {
   const valueText = text(value);
   if (!valueText) return undefined;
-  const plainDate = valueText.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
-  if (plainDate) return plainDate;
-  const parsed = new Date(valueText);
-  return Number.isNaN(parsed.valueOf()) ? undefined : parsed.toISOString().slice(0, 10);
+  const plainDate = valueText.match(/^(\d{4}-\d{2}-\d{2})(?:[Tt ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})?)?$/)?.[1];
+  if (!plainDate || !festivalDateInterval({ startDate: plainDate }) || !Number.isFinite(Date.parse(valueText))) {
+    return undefined;
+  }
+  // Use the local date in the official timestamp, not its UTC day.
+  return plainDate;
 }
 
 function city(location: unknown): string | undefined {
@@ -129,10 +132,14 @@ export function extractJsonLdCandidate(html: string, source: FestivalSource, fet
     ticketStatus: ticketStatus(selected.event.offers),
     timetable: timetable(selected.event.subEvent),
   };
+  if (selected.event.startDate != null && fields.startDate === undefined)
+    candidate.warnings.push("JSON-LD Event contains an invalid start date");
+  if (selected.event.endDate != null && fields.endDate === undefined)
+    candidate.warnings.push("JSON-LD Event contains an invalid end date");
   const lineupQuality = validateGenericLineup(fields.lineup ?? []);
   fields.lineup = lineupQuality.names.length ? lineupQuality.names : fields.lineup === undefined ? undefined : [];
   candidate.warnings.push(...lineupQuality.warnings);
-  const observedYear = Number(date(selected.event.startDate)?.slice(0, 4));
+  const observedYear = Number(fields.startDate?.slice(0, 4));
   if (Number.isFinite(observedYear)) candidate.observedEditionYears.push(observedYear);
   if (matches.length && matching.length === 0 && candidate.observedEditionYears.length) {
     candidate.warnings.push(`JSON-LD event edition ${candidate.observedEditionYears[0]} does not match catalogue edition ${source.editionYear}`);

@@ -21,6 +21,7 @@ let primaryHasDatedFallback = false;
 let observedTicketsUrl = ticketsUrl;
 let includePerformer = false;
 let includeAnotherEvent = false;
+let primaryStartDate;
 let observedCity = "Wacken Preview";
 const performer = "Example Metal Band";
 const replacementTicketsUrl = "https://tickets.example.test/replacement";
@@ -35,7 +36,8 @@ const sourceServer = createServer((request, response) => {
     return;
   }
   assert.ok(request.url === "/primary" || request.url === "/dates");
-  const startDate = request.url === "/dates" && datesChanged ? correctedStartDate : originalStartDate;
+  const startDate = request.url === "/primary" ? primaryStartDate ?? originalStartDate
+    : datesChanged ? correctedStartDate : originalStartDate;
   const availability = request.url === "/primary" ? ' ,"availability":"https://schema.org/SoldOut"' : "";
   const performers = includePerformer ? `,"performer":[{"@type":"MusicGroup","name":"${performer}"}]` : "";
   response.setHeader("content-type", "text/html");
@@ -364,6 +366,15 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.ok(cityLog.log.some(({ reviewReasons }) => reviewReasons?.includes("City could not be verified for the selected edition.")));
 
   primaryOffersWithoutEdition = false;
+  primaryStartDate = "2027-02-29";
+  const invalidDate = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(invalidDate.status, 201);
+  const invalidDateRun = await invalidDate.json();
+  assert.equal(invalidDateRun.queued, 0);
+  const invalidDateLog = await (await admin.json(`/api/admin/parser-runs/${invalidDateRun.id}/log`)).json();
+  assert.ok(invalidDateLog.log.some(({ reviewReasons }) => reviewReasons?.includes("JSON-LD Event contains an invalid start date")));
+  primaryStartDate = undefined;
+
   includeAnotherEvent = true;
   const ambiguousCity = await admin.json(`${refreshPath}?year=2027`, "POST");
   assert.equal(ambiguousCity.status, 201);
