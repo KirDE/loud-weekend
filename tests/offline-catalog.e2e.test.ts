@@ -64,6 +64,9 @@ test("real DB content mutations invalidate ETag; timestamps alone do not; missin
       { ...basePerformance, artistName: "No time zone", timeZone: null },
       { ...basePerformance, artistName: "No source", sourceUrl: null },
       { ...basePerformance, artistName: "No observation", observedAt: null },
+      { ...basePerformance, artistName: "Invalid zone", timeZone: "City/Unknown" },
+      { ...basePerformance, artistName: "Invalid source", sourceUrl: "unverified" },
+      { ...basePerformance, artistName: "Invalid clock", start: "25:00" },
     ] });
     const datedTag = dated.headers.get("etag");
     assert.equal((await serveOfflineCatalog(request(datedTag), read)).status, 304);
@@ -73,7 +76,7 @@ test("real DB content mutations invalidate ETag; timestamps alone do not; missin
     assert.equal(withSchedule.status, 200);
     const schedule = await withSchedule.text();
     assert.match(schedule, /"artist":"Verified offline artist","timeZone":"Europe\/Berlin"/);
-    assert.doesNotMatch(schedule, /No time zone|No source|No observation|sourceUrl|observedAt/);
+    assert.doesNotMatch(schedule, /No time zone|No source|No observation|Invalid zone|Invalid source|Invalid clock|sourceUrl|observedAt/);
     await tx.festivalEdition.updateMany({ where: { year: 2027, recordState: "CURRENT" }, data: { recordState: "TRACKING" } });
     const missing = await serveOfflineCatalog(request("*"), read);
     assert.equal(missing.status, 503);

@@ -1,4 +1,5 @@
 import { parseOfflineTrip } from "../../public/offline-trips.mjs";
+import { offlineTimetableSelect, offlineTimetableWhere, projectOfflinePerformance } from "./offline-timetable.ts";
 
 export async function readPublishedOfflineTrip(slug: string, year: number) {
   const { db } = await import("../db.ts");
@@ -9,10 +10,10 @@ export async function readPublishedOfflineTrip(slug: string, year: number) {
       startDate: true, endDate: true, sourceUpdatedAt: true,
       timetable: {
         // Older rows without explicit schedule evidence must not inherit a default time zone or checked time.
-        where: { timeZone: { not: null }, sourceUrl: { not: null }, observedAt: { not: null } },
+        where: offlineTimetableWhere,
         take: 801,
         orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }],
-        select: { date: true, start: true, stage: true, artistName: true, timeZone: true, status: true, observedAt: true },
+        select: offlineTimetableSelect,
       },
     },
   });
@@ -22,10 +23,7 @@ export async function readPublishedOfflineTrip(slug: string, year: number) {
   const trip = parseOfflineTrip({
     version: 1, slug, year, name, location: [city, country].filter(Boolean).join(", ") || null,
     startDate: date(edition.startDate), endDate: date(edition.endDate), updatedAt: edition.sourceUpdatedAt.toISOString(),
-    timetable: edition.timetable.map((entry) => ({
-      date: date(entry.date), start: entry.start, stage: entry.stage, artist: entry.artistName, timeZone: entry.timeZone,
-      status: entry.status === "CANCELLED" ? "cancelled" : "scheduled", checkedAt: entry.observedAt?.toISOString(),
-    })),
+    timetable: edition.timetable.flatMap(projectOfflinePerformance),
   });
   if (!trip) throw new Error("Invalid public trip data");
   return trip;
