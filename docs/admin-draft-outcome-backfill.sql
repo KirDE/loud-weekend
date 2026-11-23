@@ -1,3 +1,5 @@
+-- Optional, separately authorized operational backfill. Not a schema migration.
+-- Run after the PARTIALLY_APPLIED enum value is available.
 -- Derive historical mixed outcomes from the recorded field decisions.
 UPDATE "AdminDraft" AS draft
 SET "status" = 'PARTIALLY_APPLIED'
