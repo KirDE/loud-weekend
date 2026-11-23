@@ -29,16 +29,22 @@ export async function readPublishedOfflineTrip(slug: string, year: number) {
   if (!edition) return null;
   const { name, city, country } = edition.festival;
   const date = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
+  const startDate = date(edition.startDate);
+  const endDate = date(edition.endDate);
+  const timetable = edition.timetable.filter((entry) => {
+    const day = date(entry.date);
+    return day && (!startDate || day >= startDate) && (!endDate || day <= endDate);
+  });
   const trip = parseOfflineTrip({
     version: 1,
     slug,
     year,
     name,
     location: [city, country].filter(Boolean).join(", ") || null,
-    startDate: date(edition.startDate),
-    endDate: date(edition.endDate),
+    startDate,
+    endDate,
     updatedAt: edition.sourceUpdatedAt.toISOString(),
-    timetable: edition.timetable.map((entry) => ({
+    timetable: timetable.map((entry) => ({
       date: date(entry.date),
       start: entry.start,
       stage: entry.stage,

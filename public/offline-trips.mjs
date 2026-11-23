@@ -117,6 +117,11 @@ export function parseOfflineTrip(value) {
       !["scheduled", "cancelled"].includes(row.status)
     )
       return null;
+    if (
+      (value.startDate && row.date < value.startDate) ||
+      (value.endDate && row.date > value.endDate)
+    )
+      continue;
     timetable.push({
       date: row.date,
       start: row.start,

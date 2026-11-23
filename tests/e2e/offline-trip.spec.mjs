@@ -16,7 +16,10 @@ test("explicit mobile trip download keeps only public proof and works offline", 
   }
   const db = createPrismaClient();
   const where = { festival: { slug: "synthetic-fest" }, year: 2027 };
-  const target = await db.festivalEdition.findFirstOrThrow({ where, select: { id: true } });
+  const target = await db.festivalEdition.findFirstOrThrow({
+    where,
+    select: { id: true, startDate: true, endDate: true },
+  });
   const entry = {
     date: "2027-06-11",
     start: "20:30",
@@ -84,6 +87,21 @@ test("explicit mobile trip download keeps only public proof and works offline", 
     await expect
       .poll(async () => JSON.parse(await saved()).trip.timetable[0].status)
       .toBe("cancelled");
+
+    await db.festivalEdition.update({
+      where: { id: target.id },
+      data: { startDate: new Date("2027-06-18"), endDate: new Date("2027-06-20") },
+    });
+    try {
+      const moved = await request.get(api);
+      expect(moved.status()).toBe(200);
+      expect(await moved.json()).toMatchObject({ startDate: "2027-06-18", timetable: [] });
+    } finally {
+      await db.festivalEdition.update({
+        where: { id: target.id },
+        data: { startDate: target.startDate, endDate: target.endDate },
+      });
+    }
 
     const lastGood = await saved();
     await page.evaluate(() => {
