@@ -1,11 +1,12 @@
 import { verifyDispatchEvent, drainImportEvents } from "@/lib/ingestion/import-events";
-import { validDispatchEvent, sendImportEvent, transportConfigured } from "@/lib/ingestion/import-event-transport.mjs";
+import {
+  validDispatchEvent,
+  sendImportEvent,
+  transportConfigured,
+} from "@/lib/ingestion/import-event-transport.mjs";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import {
-  agentAuthorized,
-  ImportAgentError,
-} from "@/lib/ingestion/agent-contract";
+import { agentAuthorized, ImportAgentError } from "@/lib/ingestion/agent-contract";
 import {
   listAgentIssues,
   claimAgentIssue,
@@ -13,7 +14,13 @@ import {
   releaseAgentIssue,
   resumeAgentIssue,
 } from "@/lib/ingestion/agent-issues";
-import { listParserRepairs, claimParserRepair, finishParserRepair, configureParserRepair, configureParserRepairSource } from "@/lib/ingestion/parser-repairs";
+import {
+  listParserRepairs,
+  claimParserRepair,
+  finishParserRepair,
+  configureParserRepair,
+  configureParserRepairSource,
+} from "@/lib/ingestion/parser-repairs";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const headers = {
@@ -23,14 +30,46 @@ const headers = {
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,160}$/);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const requestSchema = z.discriminatedUnion("operation", [
-  z.object({ operation: z.literal("repair_retarget"), repairId: digest, leaseToken: z.string().uuid(), decision: z.unknown(), commit: z.string().regex(/^[a-f0-9]{40}$/) }).strict(),
-  z.object({ operation: z.literal("repair_configure"), repairId: digest, leaseToken: z.string().uuid(),
-    expectedParserKey: z.string().min(1).max(160), followLinkPattern: z.string().min(1).max(256).nullable() }).strict(),
+  z
+    .object({
+      operation: z.literal("repair_retarget"),
+      repairId: digest,
+      leaseToken: z.string().uuid(),
+      decision: z.unknown(),
+      commit: z.string().regex(/^[a-f0-9]{40}$/),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("repair_configure"),
+      repairId: digest,
+      leaseToken: z.string().uuid(),
+      expectedParserKey: z.string().min(1).max(160),
+      followLinkPattern: z.string().min(1).max(256).nullable(),
+    })
+    .strict(),
   z.object({ operation: z.literal("repair_claim"), repairId: digest }).strict(),
-  z.object({ operation: z.literal("repair_finish"), repairId: digest, leaseToken: z.string().uuid(),
-    result: z.object({ status: z.enum(["completed", "retry"]), reason: z.string().min(10).max(2000),
-      prUrl: z.string().regex(/^https:\/\/github\.com\/KirDE\/(?:loud-weekend|festival-radar)\/pull\/\d+$/).optional(),
-      commit: z.string().regex(/^[a-f0-9]{40}$/).optional() }).strict() }).strict(),
+  z
+    .object({
+      operation: z.literal("repair_finish"),
+      repairId: digest,
+      leaseToken: z.string().uuid(),
+      result: z
+        .object({
+          status: z.enum(["completed", "retry"]),
+          reason: z.string().min(10).max(2000),
+          prUrl: z
+            .string()
+            .regex(/^https:\/\/github\.com\/KirDE\/(?:loud-weekend|festival-radar)\/pull\/\d+$/)
+            .optional(),
+          commit: z
+            .string()
+            .regex(/^[a-f0-9]{40}$/)
+            .optional(),
+        })
+        .strict(),
+    })
+    .strict(),
   z
     .object({
       operation: z.literal("resume"),
@@ -39,9 +78,7 @@ const requestSchema = z.discriminatedUnion("operation", [
       answer: z.string().trim().min(10).max(2000),
     })
     .strict(),
-  z
-    .object({ operation: z.literal("claim"), sourceId: id, issueId: digest })
-    .strict(),
+  z.object({ operation: z.literal("claim"), sourceId: id, issueId: digest }).strict(),
   z
     .object({
       operation: z.literal("release"),
@@ -60,8 +97,7 @@ const requestSchema = z.discriminatedUnion("operation", [
     })
     .strict(),
 ]);
-const reply = (body: unknown, status = 200) =>
-  Response.json(body, { status, headers });
+const reply = (body: unknown, status = 200) => Response.json(body, { status, headers });
 const failure = (cause: unknown) =>
   cause instanceof ImportAgentError
     ? reply({ error: cause.code }, cause.code === "invalid" ? 400 : 409)
@@ -73,13 +109,16 @@ export async function GET(request: Request) {
   try {
     const mode = new URL(request.url).searchParams.get("mode");
     if (mode === "event") {
-      const raw = new URL(request.url).searchParams.get('event') ?? '';
-      if (raw.length > 2048) return reply({ error: 'Invalid event' }, 400);
+      const raw = new URL(request.url).searchParams.get("event") ?? "";
+      if (raw.length > 2048) return reply({ error: "Invalid event" }, 400);
       const event = JSON.parse(raw);
-      if (!validDispatchEvent(event) || event.kind === 'probe') return reply({ error: 'Invalid event' }, 400);
+      if (!validDispatchEvent(event) || event.kind === "probe")
+        return reply({ error: "Invalid event" }, 400);
       return reply(await verifyDispatchEvent(db, event));
     }
-    const result = mode?.startsWith("repairs") ? await listParserRepairs(db) : await listAgentIssues(db);
+    const result = mode?.startsWith("repairs")
+      ? await listParserRepairs(db)
+      : await listAgentIssues(db);
     return reply(
       ["signal", "repairs-signal"].includes(mode ?? "")
         ? {
@@ -111,38 +150,48 @@ export async function POST(request: Request) {
       }
       chunks.push(value);
     }
-    const parsed = requestSchema.safeParse(
-      JSON.parse(Buffer.concat(chunks).toString("utf8")),
-    );
+    const parsed = requestSchema.safeParse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
     if (!parsed.success) return reply({ error: "Invalid agent request" }, 400);
-    if (parsed.data.operation === "repair_retarget") return reply(await configureParserRepairSource(db, parsed.data.repairId, parsed.data.leaseToken, parsed.data.decision, parsed.data.commit));
-    if (parsed.data.operation === "repair_configure") return reply(await configureParserRepair(db, parsed.data));
-    if (parsed.data.operation === "repair_claim") return reply(await claimParserRepair(db, parsed.data.repairId));
-    if (parsed.data.operation === "repair_finish") return reply(await finishParserRepair(db, parsed.data.repairId, parsed.data.leaseToken, parsed.data.result));
-    if (parsed.data.operation === "claim")
+    if (parsed.data.operation === "repair_retarget")
       return reply(
-        await claimAgentIssue(db, parsed.data.sourceId, parsed.data.issueId),
+        await configureParserRepairSource(
+          db,
+          parsed.data.repairId,
+          parsed.data.leaseToken,
+          parsed.data.decision,
+          parsed.data.commit,
+        ),
       );
+    if (parsed.data.operation === "repair_configure")
+      return reply(await configureParserRepair(db, parsed.data));
+    if (parsed.data.operation === "repair_claim")
+      return reply(await claimParserRepair(db, parsed.data.repairId));
+    if (parsed.data.operation === "repair_finish")
+      return reply(
+        await finishParserRepair(
+          db,
+          parsed.data.repairId,
+          parsed.data.leaseToken,
+          parsed.data.result,
+        ),
+      );
+    if (parsed.data.operation === "claim")
+      return reply(await claimAgentIssue(db, parsed.data.sourceId, parsed.data.issueId));
     if (parsed.data.operation === "resume")
       return reply(
-        await resumeAgentIssue(
-          db,
-          parsed.data.sourceId,
-          parsed.data.issueId,
-          parsed.data.answer,
-        ),
+        await resumeAgentIssue(db, parsed.data.sourceId, parsed.data.issueId, parsed.data.answer),
       );
     if (parsed.data.operation === "release")
-      return reply(
-        await releaseAgentIssue(
-          db,
-          parsed.data.issueId,
-          parsed.data.leaseToken,
-        ),
-      );
+      return reply(await releaseAgentIssue(db, parsed.data.issueId, parsed.data.leaseToken));
     const result = await resolveAgentIssue(db, parsed.data);
     // Corrections enqueue parser repair atomically; deliver only after commit.
-    if (transportConfigured()) { try { await drainImportEvents(db, sendImportEvent, 1); } catch { /* durable outbox remains pending */ } }
+    if (transportConfigured()) {
+      try {
+        await drainImportEvents(db, sendImportEvent, 1);
+      } catch {
+        /* durable outbox remains pending */
+      }
+    }
     return reply(result);
   } catch (cause) {
     return failure(cause);

@@ -8,7 +8,17 @@ test("scheduler liveness is degraded until a delivery provider is configured", a
   const directory = await mkdtemp(join(tmpdir(), "festival-notification-health-"));
   const stateFile = join(directory, "state.json");
   const finishedAt = new Date().toISOString();
-  await writeFile(stateFile, JSON.stringify({ finishedAt, ok: true, processed: 0, statuses: {}, lastDeliveryAt: finishedAt, lastDeliveryStatuses: { sent: 1 } }));
+  await writeFile(
+    stateFile,
+    JSON.stringify({
+      finishedAt,
+      ok: true,
+      processed: 0,
+      statuses: {},
+      lastDeliveryAt: finishedAt,
+      lastDeliveryStatuses: { sent: 1 },
+    }),
+  );
   process.env.NOTIFICATION_SCHEDULER_STATE_FILE = stateFile;
   delete process.env.EMAIL_WEBHOOK_URL;
   delete process.env.TELEGRAM_BOT_TOKEN;

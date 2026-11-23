@@ -12,15 +12,22 @@ import { LocalPlannerProvider } from "../components/LocalPlanner.tsx";
 import { festival } from "./support/catalog.ts";
 
 const cases = [
-  ["available", "officialTickets", "InStock"], ["low", "ticketsLow", "LimitedAvailability"],
-  ["not_on_sale", "ticketsNotOnSale", undefined], ["sold_out", "ticketsSoldOut", "SoldOut"],
-  ["sales_ended", "ticketsSalesEnded", undefined], ["unavailable", "ticketsUnavailable", undefined],
+  ["available", "officialTickets", "InStock"],
+  ["low", "ticketsLow", "LimitedAvailability"],
+  ["not_on_sale", "ticketsNotOnSale", undefined],
+  ["sold_out", "ticketsSoldOut", "SoldOut"],
+  ["sales_ended", "ticketsSalesEnded", undefined],
+  ["unavailable", "ticketsUnavailable", undefined],
   ["unknown", "ticketsUnknown", undefined],
 ];
 
 for (const [status, label, availability] of cases) {
   test(`${status} keeps its meaning through ingestion, UI, filters and structured offers`, () => {
-    const item = { ...festival, ticketStatus: status, ticketsUrl: "https://festival.example.test/tickets" };
+    const item = {
+      ...festival,
+      ticketStatus: status,
+      ticketsUrl: "https://festival.example.test/tickets",
+    };
     const before = structuredClone(item);
     assert.equal(factsSchema.parse({ ticketStatus: status }).ticketStatus, status);
     assert.deepEqual(ticketPresentation(item), { status, href: item.ticketsUrl, label });
@@ -29,7 +36,17 @@ for (const [status, label, availability] of cases) {
     if (availability) assert.equal(event.offers.availability, `https://schema.org/${availability}`);
     else assert.equal(event.offers, undefined);
     for (const language of ["en", "de", "ru"]) {
-      const html = renderToStaticMarkup(h(LanguageProvider, { initialLanguage: language }, h(LocalPlannerProvider, null, h(FestivalDetail, { item, festivals: [item], artistSlugs: {} }))));
+      const html = renderToStaticMarkup(
+        h(
+          LanguageProvider,
+          { initialLanguage: language },
+          h(
+            LocalPlannerProvider,
+            null,
+            h(FestivalDetail, { item, festivals: [item], artistSlugs: {} }),
+          ),
+        ),
+      );
       assert.ok(html.includes(`data-ticket-status="${status}"`));
       assert.ok(html.includes(translate(language, label).replaceAll("&", "&amp;")));
       if (status !== "available") assert.ok(!html.includes(translate(language, "officialTickets")));
@@ -48,22 +65,42 @@ test("missing links and legacy unavailable never invent sold-out or actionable o
     assert.equal(presentation.status, status === "available" ? "unknown" : status);
   }
   for (const status of ["unknown", "unavailable"]) {
-    assert.equal(festivalMusicEvent({ ...festival, ticketStatus: status, ticketsUrl: "https://festival.example.test/tickets" }).offers, undefined);
+    assert.equal(
+      festivalMusicEvent({
+        ...festival,
+        ticketStatus: status,
+        ticketsUrl: "https://festival.example.test/tickets",
+      }).offers,
+      undefined,
+    );
   }
   assert.equal(factsSchema.safeParse({ ticketStatus: "maybe_sold_out" }).success, false);
 });
-
 
 test("unticketed admission is explicit across ingestion, EN/DE/RU, filters and SEO", () => {
   for (const ticketsUrl of [undefined, "https://festival.example.test/camping"]) {
     const item = { ...festival, ticketStatus: "free", ticketsUrl };
     assert.equal(factsSchema.parse({ ticketStatus: "free" }).ticketStatus, "free");
-    assert.deepEqual(ticketPresentation(item), { status: "free", href: item.officialUrl, label: "ticketsFree" });
+    assert.deepEqual(ticketPresentation(item), {
+      status: "free",
+      href: item.officialUrl,
+      label: "ticketsFree",
+    });
     assert.equal(hasAvailableTickets(item), false); // The filter is paid ticket inventory, not admission.
     assert.equal(festivalMusicEvent(item).isAccessibleForFree, true);
     assert.equal(festivalMusicEvent(item).offers, undefined);
     for (const language of ["en", "de", "ru"]) {
-      const html = renderToStaticMarkup(h(LanguageProvider, { initialLanguage: language }, h(LocalPlannerProvider, null, h(FestivalDetail, { item, festivals: [item], artistSlugs: {} }))));
+      const html = renderToStaticMarkup(
+        h(
+          LanguageProvider,
+          { initialLanguage: language },
+          h(
+            LocalPlannerProvider,
+            null,
+            h(FestivalDetail, { item, festivals: [item], artistSlugs: {} }),
+          ),
+        ),
+      );
       assert.ok(html.includes('data-ticket-status="free"'));
       assert.ok(html.includes(translate(language, "ticketsFree")));
       assert.ok(!html.includes(translate(language, "officialTickets")));
@@ -82,14 +119,27 @@ test("comparison ticket cells preserve free and paid semantics in EN/DE/RU", () 
       for (const ticketsUrl of [undefined, "https://festival.example.test/camping"]) {
         for (const officialUrl of [undefined, "https://festival.example.test/"]) {
           const item = { ...festival, ticketStatus: status, ticketsUrl, officialUrl };
-          const html = renderToStaticMarkup(h(LanguageProvider, { initialLanguage: language }, h(FestivalComparisonTicket, { item })));
+          const html = renderToStaticMarkup(
+            h(
+              LanguageProvider,
+              { initialLanguage: language },
+              h(FestivalComparisonTicket, { item }),
+            ),
+          );
           const expectedLabel = status === "available" && !ticketsUrl ? "ticketsUnknown" : label;
           assert.ok(html.includes(translate(language, expectedLabel).replaceAll("&", "&amp;")));
           if (status === "free") {
             assert.ok(!html.includes("https://festival.example.test/camping"));
             assert.ok(!html.includes(translate(language, "officialTickets")));
-            assert.equal(html.includes('<a href="https://festival.example.test/"'), Boolean(officialUrl));
-          } else assert.equal(html.includes('<a href="https://festival.example.test/camping"'), Boolean(ticketsUrl));
+            assert.equal(
+              html.includes('<a href="https://festival.example.test/"'),
+              Boolean(officialUrl),
+            );
+          } else
+            assert.equal(
+              html.includes('<a href="https://festival.example.test/camping"'),
+              Boolean(ticketsUrl),
+            );
         }
       }
     }
