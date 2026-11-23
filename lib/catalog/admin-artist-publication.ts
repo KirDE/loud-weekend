@@ -44,6 +44,12 @@ function readSite(artist: Artist) {
   return rows[0];
 }
 
+function hasConflictingLink(artist: Artist, url: string, officialLinkId?: string) {
+  return artist.links.some((link) => link.url === url && link.id !== officialLinkId);
+}
+
+const conflictingLinkMessage = "This URL already belongs to a different artist link";
+
 async function nameBelongsToAnotherArtist(
   tx: Prisma.TransactionClient,
   artist: Artist,
@@ -74,13 +80,13 @@ export async function prepareArtistDraft(
         changes.push({ field, beforeValue: artist.name, afterValue: name });
         break;
       }
-      case "officialUrl":
-        changes.push({
-          field,
-          beforeValue: readSite(artist)?.url ?? null,
-          afterValue: urlValue(value),
-        });
+      case "officialUrl": {
+        const existing = readSite(artist);
+        const url = urlValue(value);
+        if (hasConflictingLink(artist, url, existing?.id)) throw new Error(conflictingLinkMessage);
+        changes.push({ field, beforeValue: existing?.url ?? null, afterValue: url });
         break;
+      }
       default:
         throw new Error("Unsupported artist field");
     }
@@ -123,8 +129,8 @@ export async function publishAdminArtistChange(tx: Prisma.TransactionClient, cha
           "The official artist site changed after review was queued",
         );
       // A reviewed official site must not overwrite an independent provider link.
-      if (artist.links.some((link) => link.url === url && link.id !== existing?.id))
-        throw new Error("This URL already belongs to a different artist link");
+      if (hasConflictingLink(artist, url, existing?.id))
+        throw new CanonicalReviewConflict(conflictingLinkMessage);
       if (existing) {
         await tx.artistLink.update({ where: { id: existing.id }, data: { url, verified: true } });
       } else {
