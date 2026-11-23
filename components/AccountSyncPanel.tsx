@@ -195,7 +195,7 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
       // checks as normal sync. A conflict aborts before calling the provider.
       const selection=mergeCollections(docs.collections?.payload,payloads(planner).collections);
       const saved=await put("collections",selection,docs.collections,true);
-      planner.merge({playlistFestivals:readCollections(saved.payload).playlistFestivals});
+      planner.merge(plannerFields("collections", saved), planner);
       const response=await fetch("/api/spotify/sync",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({revision:saved.revision})});
       if(response.status===409){
         const document = await readDocument("collections");
