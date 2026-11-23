@@ -1460,3 +1460,8 @@ a:focus-visible, select:focus-visible, summary:focus-visible {
 .plannerResetDialog::backdrop { background: rgb(0 0 0 / 65%); }
 .plannerResetDialog .playlistActions { margin-top: 1rem; flex-wrap: wrap; }
 .plannerReset [role="status"] { max-width: 28rem; }
+
+.runningOrderAccount { margin-block: 0.75rem; }
+.runningOrderAccount summary { cursor: pointer; }
+.runningOrderAccountIdentity { overflow-wrap: anywhere; }
+.runningOrderAccountActions { display: flex; flex-wrap: wrap; gap: 0.5rem; }

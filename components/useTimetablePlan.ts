@@ -32,15 +32,17 @@ export function useTimetablePlan(slug?: string, year?: number) {
   const selected = parsePerformanceSelections(useSyncExternalStore(subscribe, snapshot, () => empty));
 
   function update(action: (ids: string[]) => string[]) {
-    if (!key) return;
+    if (!key) return false;
     try {
       const next = action(parsePerformanceSelections(read(key)));
       if (next.length) localStorage.setItem(key, JSON.stringify(next));
       else localStorage.removeItem(key);
       setStorageFailed(false);
       window.dispatchEvent(new Event(change));
+      return true;
     } catch {
       setStorageFailed(true);
+      return false;
     }
   }
 
@@ -48,5 +50,6 @@ export function useTimetablePlan(slug?: string, year?: number) {
     selected, storageFailed,
     toggle: (id: string) => update(ids => togglePerformanceSelection(ids, id)),
     clear: () => update(() => []),
+    replace: (ids: string[]) => update(() => ids),
   };
 }

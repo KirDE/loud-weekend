@@ -85,6 +85,7 @@ export function AccountMenu() {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error(t.failed);
       setUser(null); setMode("login"); setOpen(false);
+      window.dispatchEvent(new CustomEvent("loud-weekend-signed-out"));
     } catch { setError(t.failed); }
     finally { setBusy(false); }
   }

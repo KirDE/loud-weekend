@@ -1,15 +1,16 @@
 import { escapeIcs } from "./planning.ts";
 import type { TimetableEntry } from "./domain/festival.ts";
 
-const maxSelections = 150;
+export const maxPerformanceSelections = 150;
+export const performanceSelectionId = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 
 export function parsePerformanceSelections(raw: string) {
   try {
     const values: unknown = JSON.parse(raw);
     if (!Array.isArray(values)) return [];
     return [...new Set(values.filter((value): value is string =>
-      typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(value)
-    ))].slice(0, maxSelections);
+      typeof value === "string" && performanceSelectionId.test(value)
+    ))].slice(0, maxPerformanceSelections);
   } catch {
     return [];
   }
@@ -17,7 +18,7 @@ export function parsePerformanceSelections(raw: string) {
 
 export function togglePerformanceSelection(ids: string[], id: string) {
   if (ids.includes(id)) return ids.filter(value => value !== id);
-  return ids.length < maxSelections ? [...ids, id] : ids;
+  return ids.length < maxPerformanceSelections ? [...ids, id] : ids;
 }
 
 function verifiedPerformanceWindows(entries: TimetableEntry[]) {

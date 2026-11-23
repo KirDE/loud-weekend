@@ -181,6 +181,7 @@ model User {
   emailVerifiedAt           DateTime?
   sessions                  Session[]
   documents                 SyncDocument[]
+  runningOrders             RunningOrder[]
   shareLinks                ShareLink[]
   spotify                   SpotifyConnection?
   notificationPreferences   NotificationPreference[]
@@ -321,6 +322,7 @@ model FestivalEdition {
   lineup          LineupEntry[]
   provenance      EditionProvenance[]
   timetable       TimetablePerformance[]
+  runningOrders   RunningOrder[]
   playlists       FestivalPlaylist[]
   sources         FestivalSource[]
 
@@ -692,6 +694,18 @@ model SyncDocument {
   shareLink ShareLink?
 
   @@unique([userId, kind])
+}
+
+model RunningOrder {
+  userId         String
+  editionId      String
+  performanceIds String[]
+  revision       Int             @default(1)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  edition        FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, editionId])
+  @@index([editionId])
 }
 
 model ShareLink {
