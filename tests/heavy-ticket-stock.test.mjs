@@ -81,6 +81,14 @@ const htmlCases = [
   ["missing qty1", (s) => s.replace(/<option value="1"[^>]*>[^<]*<\/option>/, "")],
   ["disabled qty1", (s) => s.replace('value="1"', 'disabled value="1"')],
   ["aria-disabled qty1", (s) => s.replace('value="1"', 'aria-disabled="true" value="1"')],
+  [
+    "disabled option group",
+    (s) =>
+      s.replace(
+        /<option value="1">.*?<\/option>/s,
+        (one) => `<optgroup disabled>${one}</optgroup>`,
+      ),
+  ],
   ["already selected quantity", (s) => s.replace('value="1"', 'selected value="1"')],
   [
     "foreign select binding",

@@ -288,15 +288,15 @@ export function observeHeavyStock(
   const { table, row, rateId } = ordinary;
   const select = row.find(`select#quantite_${rateId}[name='quantite_${rateId}']`),
     price = row.find(".billetterie_tb_prix .globalize[data-value]");
+  const one = select.find("option[value='1']");
   const blocked =
     "[disabled],[aria-disabled='true'],[hidden],[inert],.disabled,.hidden,.is--hidden,.d-none";
   if (
     select.length !== 1 ||
     select.attr("data-ticket_id") !== String(rateId) ||
     select.val() !== "0" ||
-    select.find("option[value='1']").length !== 1 ||
-    select.find("option[value='1']").is("[disabled],[hidden],[aria-disabled='true']") ||
-    [table, row, select].some((e) => e.is(blocked) || e.parents(blocked).length) ||
+    one.length !== 1 ||
+    [table, row, select, one].some((e) => e.is(blocked) || e.parents(blocked).length) ||
     price.length !== 1 ||
     !/^\d+(?:\.\d+)?$/.test(price.attr("data-value") ?? "") ||
     !Number.isFinite(Number(price.attr("data-value"))) ||
@@ -316,4 +316,53 @@ export function observeHeavyStock(
       `EUR ${price.attr("data-value")}; public initial render has enabled unselected quantity with option1; ` +
       "no ticket selected or reserved",
   };
+}
+
+// Only the initial public document is returned. Issued tokens and hidden form
+// state are excluded from the normalized source envelope.
+export async function fetchHeavyStockDocument({
+  fetchMetadata,
+  fetchRender,
+  readText,
+}: {
+  fetchMetadata: (url: string, headers: Record<string, string>) => Promise<Response>;
+  fetchRender: (url: string, init: RequestInit) => Promise<Response>;
+  readText: (response: Response) => Promise<string>;
+}): Promise<{ response: Response } | { html: string }> {
+  const meta = await fetchMetadata(HEAVY_WIDGET_API, {
+    accept: "application/json",
+    "accept-language": "en-GB",
+  });
+  if (!meta.ok) return { response: meta };
+  if (meta.url && meta.url !== HEAVY_WIDGET_API)
+    throw new Error("Heavy public widget metadata redirected");
+  if (!/^application\/json\b/i.test(meta.headers.get("content-type") ?? ""))
+    throw new Error("Heavy public widget metadata media type changed");
+  const action = heavyRenderAction(JSON.parse(await readText(meta)));
+  // One read-only document-render POST, no blind retry. Never forward the
+  // primary's authorization/cookies or follow a token-bearing redirect.
+  const render = await fetchRender(HEAVY_STOCK, {
+    method: "POST",
+    redirect: "error",
+    signal: AbortSignal.timeout(20_000),
+    headers: {
+      accept: "text/html",
+      "content-type": "application/x-www-form-urlencoded",
+      "user-agent": "LoudWeekendBot/1.1 (+https://loudweekend.eu/; public festival-data monitor)",
+    },
+    body: new URLSearchParams({ token: action.token }).toString(),
+  });
+  if (!render.ok) return { response: render };
+  if (render.url && render.url !== HEAVY_STOCK)
+    throw new Error("Heavy public initial render redirected");
+  if (!/^text\/html\b|^application\/xhtml\+xml\b/i.test(render.headers.get("content-type") ?? ""))
+    throw new Error("Heavy public initial render media type changed");
+  const html = JSON.stringify({
+    kind: HEAVY_STOCK_DOCUMENTS,
+    apiUrl: HEAVY_WIDGET_API,
+    renderUrl: HEAVY_STOCK,
+    meta: action.meta,
+    html: reduceHeavyStockDocument(await readText(render)),
+  });
+  return { html };
 }
