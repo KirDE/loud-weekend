@@ -12,7 +12,7 @@ test("validated edition camping facts are accessible in every locale", async ({ 
       const festival = await db.festival.create({
         data: {
           slug: record.slug, name: `Edition fixture ${record.city}`,
-          city: record.city, country: "Fixture country", countryCode: "DE",
+          city: record.city, country: "Fixture country", countryCode: record.organizer === "wacken.com" ? "DE" : "BE",
           officialUrl: `https://www.${record.organizer}/`, genres: [], catalogOrder: 9000,
           editions: { create: {
             year: record.year, status: "TBA", ticketStatus: "UNKNOWN", recordState: "CURRENT",
@@ -34,8 +34,13 @@ test("validated edition camping facts are accessible in every locale", async ({ 
           await expect(panel.locator("dd")).toHaveCount(record.facts.length);
           await expect(panel.locator(`a[href="${record.source}"]`)).toBeVisible();
           await expect(panel.locator(`time[datetime="${record.checkedOn}"]`)).toBeVisible();
-          const arrival = record.facts.find(fact => fact.field === "arrival").earliestDate;
-          await expect(panel.locator(`time[datetime="${arrival}"]`)).toBeVisible();
+          for (const fact of record.facts) {
+            if (fact.field === "arrival") {
+              await expect(panel.locator(`time[datetime="${fact.earliestDate}"]`)).toBeVisible();
+            } else {
+              await expect(panel.getByText(fact.description[lang], { exact: true })).toBeVisible();
+            }
+          }
           expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
         }
         await page.goto(`/${lang}/festivals/synthetic-fest/`);

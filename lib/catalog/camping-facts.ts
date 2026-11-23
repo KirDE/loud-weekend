@@ -1,7 +1,7 @@
 import type { Festival } from "../domain/festival";
 
 type Localized = Record<"en" | "de" | "ru", string>;
-type CampingField = "camping" | "arrival" | "accessibility" | "facilities" | "motorhomes";
+type CampingField = "camping" | "arrival" | "accessibility" | "facilities" | "motorhomes" | "viewing";
 type Fact = { field: Exclude<CampingField, "arrival">; description: Localized } | {
   field: "arrival"; earliestDate: string;
 };
@@ -53,6 +53,27 @@ export const campingRecords: readonly CampingRecord[] = [
         en: "Motorhome pitches include one electrical hookup. A motorhome pitch ticket does not replace the campsite ticket required for each camper.",
         de: "Wohnmobilstellplätze haben je einen Stromanschluss. Das Stellplatzticket ersetzt nicht das Campingticket pro Person.",
         ru: "На каждом месте для автодома есть одно подключение к электросети. Билет на место не заменяет кемпинговый билет для каждого гостя.",
+      } },
+    ],
+  },
+  {
+    slug: "graspop", year: 2027, city: "Dessel", organizer: "graspop.be",
+    source: "https://www.graspop.be/en/info/accessibility", checkedOn: "2026-11-23",
+    facts: [
+      { field: "accessibility", description: {
+        en: "The Inter campsite is part of Inferno. Places are limited and require an application to Inter by 31 May 2027. Access requires both a festival wristband and a paid camping wristband.",
+        de: "Der Inter-Campingbereich gehört zu Inferno. Die Plätze sind begrenzt; der Antrag bei Inter ist bis zum 31. Mai 2027 nötig. Für den Zutritt sind ein Festivalarmband und ein kostenpflichtiges Campingarmband erforderlich.",
+        ru: "Кемпинг Inter находится на территории Inferno. Число мест ограничено; заявку в Inter нужно подать до 31 мая 2027 года. Для входа нужны фестивальный браслет и платный браслет кемпинга.",
+      } },
+      { field: "facilities", description: {
+        en: "The Inter campsite has accessible showers and toilets. Electricity in the care tent is for medical use only.",
+        de: "Im Inter-Campingbereich gibt es barrierefreie Duschen und Toiletten. Strom im Betreuungszelt ist medizinischen Zwecken vorbehalten.",
+        ru: "В кемпинге Inter есть доступные душевые и туалеты. Электричество в палатке помощи предназначено только для медицинских нужд.",
+      } },
+      { field: "viewing", description: {
+        en: "The main stages, Jupiler Stage and Marquee have raised viewing platforms for visitors with disabilities. One companion may join them on the platform.",
+        de: "An den Hauptbühnen, der Jupiler Stage und der Marquee gibt es erhöhte Plattformen für Menschen mit Behinderung. Eine Begleitperson darf mit auf die Plattform.",
+        ru: "У главных сцен, Jupiler Stage и Marquee есть приподнятые площадки для зрителей с инвалидностью. На площадку можно пройти с одним сопровождающим.",
       } },
     ],
   },

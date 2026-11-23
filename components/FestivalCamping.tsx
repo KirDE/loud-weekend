@@ -5,9 +5,9 @@ import { campingFacts } from "@/lib/catalog/camping-facts";
 import { useLanguage } from "./LanguageProvider";
 
 const copy = {
-  en: { title: "Camping and on-site facilities", camping: "Camping ticket", arrival: "Earliest campsite arrival date", accessibility: "Designated camping area", facilities: "Showers and toilets", motorhomes: "Motorhome pitches", source: "Organizer’s camping information", reviewed: "Source checked" },
-  de: { title: "Camping und Ausstattung", camping: "Campingticket", arrival: "Frühester Anreisetag zum Campingplatz", accessibility: "Ausgewiesener Campingbereich", facilities: "Duschen und Toiletten", motorhomes: "Wohnmobilstellplätze", source: "Campinginformationen des Veranstalters", reviewed: "Quelle geprüft" },
-  ru: { title: "Кемпинг и удобства", camping: "Билет в кемпинг", arrival: "Первый день заезда в кемпинг", accessibility: "Выделенная зона кемпинга", facilities: "Душевые и туалеты", motorhomes: "Места для автодомов", source: "Информация о кемпинге от организатора", reviewed: "Источник проверен" },
+  en: { title: "Camping and on-site facilities", camping: "Camping ticket", arrival: "Earliest campsite arrival date", accessibility: "Designated camping area", facilities: "Showers and toilets", motorhomes: "Motorhome pitches", viewing: "Accessible viewing platforms", source: "Organizer’s camping information", reviewed: "Source checked" },
+  de: { title: "Camping und Ausstattung", camping: "Campingticket", arrival: "Frühester Anreisetag zum Campingplatz", accessibility: "Ausgewiesener Campingbereich", facilities: "Duschen und Toiletten", motorhomes: "Wohnmobilstellplätze", viewing: "Barrierefreie Zuschauerplattformen", source: "Campinginformationen des Veranstalters", reviewed: "Quelle geprüft" },
+  ru: { title: "Кемпинг и удобства", camping: "Билет в кемпинг", arrival: "Первый день заезда в кемпинг", accessibility: "Выделенная зона кемпинга", facilities: "Душевые и туалеты", motorhomes: "Места для автодомов", viewing: "Доступные зрительские площадки", source: "Информация о кемпинге от организатора", reviewed: "Источник проверен" },
 };
 
 export function FestivalCamping({ festival }: { festival: Festival }) {
