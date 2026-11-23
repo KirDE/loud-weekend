@@ -362,7 +362,7 @@ async function applyFestivalChanges(
   return { edition, changedFields: [...new Set(changedFields)] };
 }
 
-async function createPublication(
+export async function createPublication(
   db: Database,
   input: {
     source: CatalogPublicationSource;

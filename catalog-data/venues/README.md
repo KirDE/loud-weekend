@@ -1,10 +1,13 @@
 # Reviewed festival venues
 
-The map reads the precise venue from the matching edition in PostgreSQL. Without it, the map continues
-to label city coordinates as approximate. No coordinates are shipped with the application.
+The map reads the precise venue from the matching edition in PostgreSQL. Without it, the map labels
+city coordinates as approximate. No venue coordinates are shipped with the application.
 
-For supported editions of Brutal Assault, use `npm run venues:import -- --edition=YYYY` to preview the
-organizer's published venue and coordinates. Review the resulting source URL, edition, place, and location.
-To apply the reviewed observation, repeat the command with `--apply=<fingerprint>` from that preview.
-The collector re-fetches and re-parses the organizer page, and rejects changed evidence, a different
-catalogue place or organizer, an archived edition, or an older observation.
+For supported editions of Brutal Assault, run `npm run venues:import -- --edition=YYYY` to stage
+the organizer's current observation for review. Staging records source evidence but does not change
+the catalogue. Review the resulting source URL, edition, place, and coordinates.
+
+To publish the reviewed observation, repeat the command with `--apply=<candidate token>` and
+`--actor=<non-personal operator identifier>`. The collector re-fetches the organizer page and compares
+it with the persisted evidence before publishing. Changed, superseded, archived or mismatched
+observations are rejected. Approval, publication and the public venue update commit together.

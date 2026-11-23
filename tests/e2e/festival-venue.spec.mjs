@@ -11,6 +11,7 @@ const html = await readFile(
 );
 const { festivalSlug, sourceUrl, countryCode } = brutalAssaultVenueSource;
 const edition = 2027;
+const actor = "venue-review-fixture";
 const response = (body) => async (url, init) => {
   expect(url).toBe(sourceUrl);
   expect(init.redirect).toBe("error");
@@ -76,14 +77,22 @@ test("the public map shows only persisted venue evidence for the selected editio
       checkOnly: true,
     });
     expect(await db.editionVenue.count()).toBe(0);
+    const staged = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { id: preview.candidateId },
+      include: { evidence: true },
+    });
+    expect(staged.reviewState).toBe("PENDING");
+    expect(staged.evidence).toEqual([
+      expect.objectContaining({ sourceUrl, contentHash: preview.fingerprint }),
+    ]);
     const before = await browser.newPage({ viewport: { width: 320, height: 844 } });
     try {
       await expect(await venueInMapList(before, "en")).toContainText("Approximate location");
     } finally {
       await before.close();
     }
-    const collect = (body, approval = preview.fingerprint) =>
-      collectReviewedVenue(db, edition, { fetchImpl: response(body), approval });
+    const collect = (body, approval = preview.token) =>
+      collectReviewedVenue(db, edition, { fetchImpl: response(body), approval, actor });
     await expect(collect(html.replace("25.54", "26.54"))).rejects.toThrow(/changed since preview/);
     await expect(collect(html.replace("GPS location", "Approximate map centre"))).rejects.toThrow(
       /No unambiguous/,
@@ -96,8 +105,32 @@ test("the public map shows only persisted venue evidence for the selected editio
     expect(await db.editionVenue.count()).toBe(0);
     const changedHtml = html.replace("25.54", "26.54");
     const refreshed = await collectReviewedVenue(db, edition, { fetchImpl: response(changedHtml) });
-    await collect(changedHtml, refreshed.fingerprint);
-    await collect(changedHtml, refreshed.fingerprint);
+    await collect(changedHtml, refreshed.token);
+    await collect(changedHtml, refreshed.token);
+    await expect(collect(html)).rejects.toThrow(/superseded/);
+    expect(
+      await db.catalogPublication.count({
+        where: { sourceId: `ingestion:${refreshed.candidateId}` },
+      }),
+    ).toBe(1);
+    const applied = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { id: refreshed.candidateId },
+    });
+    expect(applied).toMatchObject({ reviewState: "PUBLISHED", reviewActor: actor });
+    expect(
+      await db.catalogPublication.findUniqueOrThrow({
+        where: { id: applied.catalogueVersion },
+      }),
+    ).toMatchObject({
+      fields: ["venue"],
+      evidence: expect.objectContaining({ fingerprint: refreshed.fingerprint }),
+    });
+    expect(
+      await db.ingestionCandidate.findUniqueOrThrow({
+        where: { id: preview.candidateId },
+        include: { evidence: true },
+      }),
+    ).toEqual(staged);
     expect(await db.editionVenue.findFirst()).toMatchObject({
       latitude: refreshed.latitude,
       name: refreshed.name,
