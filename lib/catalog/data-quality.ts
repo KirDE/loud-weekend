@@ -2,6 +2,7 @@ import type { CatalogSnapshot } from "./repository";
 import { latestDate } from "./freshness";
 import { festivalDateInterval } from "../festival-dates";
 import { hasAnnouncedLineup } from "../festival-lineup";
+import { timetableEntrySchema } from "../timetables";
 
 export function summarizeDataQuality(
   catalog: Pick<CatalogSnapshot, "festivals" | "editions">,
@@ -26,7 +27,15 @@ export function summarizeDataQuality(
     if (festivalDateInterval(festival)) summary.dates += 1;
     if (hasAnnouncedLineup(festival)) summary.lineup += 1;
     if (festival.ticketStatus !== "unknown") summary.tickets += 1;
-    if (festival.timetable?.some(({ status }) => status === "scheduled")) summary.timetable += 1;
+    const hasUsableSchedule = festival.timetable?.some(
+      (entry) =>
+        entry.status === "scheduled" &&
+        verifiedTime(entry.observedAt) &&
+        (!festival.startDate || entry.date >= festival.startDate) &&
+        (!festival.endDate || entry.date <= festival.endDate) &&
+        timetableEntrySchema.safeParse(entry).success,
+    );
+    if (hasUsableSchedule) summary.timetable += 1;
     const freshness = festival.freshness;
     const checkAt = verifiedTime(freshness?.lastSuccessfulSourceCheckAt);
     if (freshness?.sourceCheckStale || festival.sourceDeprecated) {
