@@ -239,7 +239,7 @@ model FestivalSubmission {
   reviewedAt      DateTime?
   reviewedById    String?
   reviewNote      String?
-  reviewedBy      User?                     @relation("SubmissionReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+reviewedBy User? @relation("SubmissionReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
   audit           FestivalSubmissionAudit[]
 
   @@index([status, submittedAt])
@@ -546,7 +546,7 @@ model AdminChange {
   updatedAt      DateTime          @updatedAt
   draft          AdminDraft?       @relation(fields: [draftId], references: [id], onDelete: SetNull)
   parserRun      AdminParserRun?   @relation(fields: [parserRunId], references: [id], onDelete: SetNull)
-  decidedBy      User?             @relation("AdminChangeDecisionActor", fields: [decidedById], references: [id], onDelete: Restrict)
+decidedBy User? @relation("AdminChangeDecisionActor", fields: [decidedById], references: [id], onDelete: Restrict)
 
   @@index([status, createdAt])
   @@index([resourceKind, resourceKey, status])
@@ -758,7 +758,7 @@ model IngestionAttempt {
   startedAt      DateTime
   endedAt        DateTime
   priorAttemptId String?
-  priorAttempt   IngestionAttempt?      @relation("AttemptRetry", fields: [priorAttemptId], references: [id], onDelete: SetNull)
+priorAttempt IngestionAttempt? @relation("AttemptRetry", fields: [priorAttemptId], references: [id], onDelete: SetNull)
   retries        IngestionAttempt[]     @relation("AttemptRetry")
   run            IngestionRun           @relation(fields: [runId], references: [id], onDelete: Cascade)
   candidate      IngestionCandidate?
@@ -783,7 +783,7 @@ model IngestionCandidate {
   reviewedAt       DateTime?
   publishedAt      DateTime?
   supersedesId     String?
-  supersedes       IngestionCandidate?  @relation("CandidateVersion", fields: [supersedesId], references: [id], onDelete: SetNull)
+supersedes IngestionCandidate? @relation("CandidateVersion",fields: [supersedesId],references: [id],onDelete: SetNull)
   supersededBy     IngestionCandidate[] @relation("CandidateVersion")
   catalogueVersion String?
   createdAt        DateTime             @default(now())

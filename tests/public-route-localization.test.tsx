@@ -2,21 +2,64 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ArchiveContent, CountryContent, EditionYearContent, FestivalEditionContent, MonthContent, SharedPlanContent } from "../components/PublicCatalogPages";
+import {
+  ArchiveContent,
+  CountryContent,
+  EditionYearContent,
+  FestivalEditionContent,
+  MonthContent,
+  SharedPlanContent,
+} from "../components/PublicCatalogPages";
 import { LanguageProvider, type Language } from "../components/LanguageProvider";
 import { LocalPlannerProvider } from "../components/LocalPlanner";
 import { catalogSeed, festival } from "./support/catalog";
 
 const archived = catalogSeed.editions[0];
 const current = catalogSeed.editions[1];
-const tracking = { ...archived, editionYear: 2028, recordState: "tracking" as const, completeness: "tba" as const, status: "tba" as const, startDate: undefined, endDate: undefined, headliners: [], lineup: [] };
+const tracking = {
+  ...archived,
+  editionYear: 2028,
+  recordState: "tracking" as const,
+  completeness: "tba" as const,
+  status: "tba" as const,
+  startDate: undefined,
+  endDate: undefined,
+  headliners: [],
+  lineup: [],
+};
 function render(language: Language, content: ReactNode) {
-  return renderToStaticMarkup(<LanguageProvider initialLanguage={language}><LocalPlannerProvider>{content}</LocalPlannerProvider></LanguageProvider>);
+  return renderToStaticMarkup(
+    <LanguageProvider initialLanguage={language}>
+      <LocalPlannerProvider>{content}</LocalPlannerProvider>
+    </LanguageProvider>,
+  );
 }
 
 const expected = {
-  de: { archive: "Archivierte und künftige Ausgaben", future: "Künftige Ausgaben", edition: "Festivalausgaben 2027", detail: "Line-up-Status", status: "vollständiger Datensatz", empty: "Katalogeintrag noch offen", share: "Geteilter Plan", attendance: "Dabei", country: "Festivals in Deutschland", month: "Festivals im Juni" },
-  ru: { archive: "Архивные и будущие выпуски", future: "Будущие выпуски", edition: "Выпуски фестивалей 2027 года", detail: "Состояние лайнапа", status: "полная запись", empty: "Запись каталога уточняется", share: "Общий план", attendance: "Пойду", country: "Фестивали в стране: Германия", month: "Фестивали в июне" },
+  de: {
+    archive: "Archivierte und künftige Ausgaben",
+    future: "Künftige Ausgaben",
+    edition: "Festivalausgaben 2027",
+    detail: "Line-up-Status",
+    status: "vollständiger Datensatz",
+    empty: "Katalogeintrag noch offen",
+    share: "Geteilter Plan",
+    attendance: "Dabei",
+    country: "Festivals in Deutschland",
+    month: "Festivals im Juni",
+  },
+  ru: {
+    archive: "Архивные и будущие выпуски",
+    future: "Будущие выпуски",
+    edition: "Выпуски фестивалей 2027 года",
+    detail: "Состояние лайнапа",
+    status: "полная запись",
+    empty: "Запись каталога уточняется",
+    share: "Общий план",
+    attendance: "Пойду",
+    country: "Фестивали в стране: Германия",
+    month: "Фестивали в июне",
+  },
 };
 
 for (const language of ["de", "ru"] as const) {
@@ -24,8 +67,12 @@ for (const language of ["de", "ru"] as const) {
     const t = expected[language];
     const archive = render(language, <ArchiveContent archived={[archived]} future={[tracking]} />);
     assert.ok(archive.includes(t.archive) && archive.includes(t.future));
-    assert.ok(!archive.includes("Archived and future records") && !archive.includes("Open edition"));
-    assert.ok(archive.includes('href="/editions/2027"') || archive.includes('href="/editions/2027/"'));
+    assert.ok(
+      !archive.includes("Archived and future records") && !archive.includes("Open edition"),
+    );
+    assert.ok(
+      archive.includes('href="/editions/2027"') || archive.includes('href="/editions/2027/"'),
+    );
 
     const year = render(language, <EditionYearContent year={2027} items={[current]} />);
     assert.ok(year.includes(t.edition) && !year.includes("provenance-aware"));
@@ -36,10 +83,19 @@ for (const language of ["de", "ru"] as const) {
     assert.ok(unannounced.includes(t.empty));
     assert.ok(!unannounced.includes("Catalogue record pending"));
 
-    const share = render(language, <SharedPlanContent attendance={{ "Synthetic Fest": "going", "Other Fest": "unknown" }} updatedAt="2026-01-01T12:00:00Z" />);
+    const share = render(
+      language,
+      <SharedPlanContent
+        attendance={{ "Synthetic Fest": "going", "Other Fest": "unknown" }}
+        updatedAt="2026-01-01T12:00:00Z"
+      />,
+    );
     assert.ok(share.includes(t.share) && share.includes(t.attendance));
     assert.ok(!share.includes("Shared plan") && !share.includes("Last updated"));
-    const country = render(language, <CountryContent countryCode="DE" country="Germany" festivals={[festival]} />);
+    const country = render(
+      language,
+      <CountryContent countryCode="DE" country="Germany" festivals={[festival]} />,
+    );
     assert.ok(country.includes(t.country), country.slice(0, 300));
     const month = render(language, <MonthContent month="06" festivals={[festival]} />);
     assert.ok(month.includes(t.month), month.slice(0, 300));

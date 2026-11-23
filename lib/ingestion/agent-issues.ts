@@ -1,9 +1,5 @@
 import { rosterFingerprint } from "../catalog/lineup-proof.ts";
-import {
-  Prisma,
-  type PrismaClient,
-  type Prisma as PrismaTypes,
-} from "@prisma/client";
+import { Prisma, type PrismaClient, type Prisma as PrismaTypes } from "@prisma/client";
 import { failureRetryAt } from "./failure-policy.ts";
 import { enqueueParserRepair } from "./parser-repairs.ts";
 import { randomUUID } from "node:crypto";
@@ -93,16 +89,13 @@ export async function inspectSource(db: Database, sourceId: string) {
     return null;
   const failed =
     s.consecutiveFailures > 0 ||
-    (a?.status === "FAILED" &&
-      (!s.lastSuccessAt || s.lastSuccessAt < a.endedAt));
+    (a?.status === "FAILED" && (!s.lastSuccessAt || s.lastSuccessAt < a.endedAt));
   const review = a?.status === "REVIEW" && c?.reviewState === "PENDING";
   if (!manual && !failed && !review) return null;
   const kind = failed ? "failure" : manual ? "manual_source" : "review";
   const normalized = (c?.normalized ?? {}) as Record<string, unknown>;
   const facts = Object.fromEntries(
-    fields
-      .filter((k) => Object.hasOwn(normalized, k))
-      .map((k) => [k, normalized[k]]),
+    fields.filter((k) => Object.hasOwn(normalized, k)).map((k) => [k, normalized[k]]),
   );
   // The deployed archive recognizers deliberately return a successful empty
   // candidate. A manual source is not itself an error: keep its scheduled
@@ -110,12 +103,20 @@ export async function inspectSource(db: Database, sourceId: string) {
   // markup retains its warning; new facts, evidence, diffs and failures remain
   // reviewable. Never infer success from a missing/stale attempt or candidate.
   if (
-    manual && !failed && a?.status === "UNCHANGED" &&
-    a.httpStatus !== null && a.httpStatus >= 200 && a.httpStatus < 300 && c &&
-    Array.isArray(c.warnings) && c.warnings.length === 0 &&
-    c.diffs.length === 0 && c.evidence.length === 0 &&
-    Object.keys(facts).every(k => k === "observedEditionYears") &&
-    Array.isArray(facts.observedEditionYears) && facts.observedEditionYears.length === 0
+    manual &&
+    !failed &&
+    a?.status === "UNCHANGED" &&
+    a.httpStatus !== null &&
+    a.httpStatus >= 200 &&
+    a.httpStatus < 300 &&
+    c &&
+    Array.isArray(c.warnings) &&
+    c.warnings.length === 0 &&
+    c.diffs.length === 0 &&
+    c.evidence.length === 0 &&
+    Object.keys(facts).every((k) => k === "observedEditionYears") &&
+    Array.isArray(facts.observedEditionYears) &&
+    facts.observedEditionYears.length === 0
   )
     return null;
   const issueId = fingerprint({
@@ -131,8 +132,7 @@ export async function inspectSource(db: Database, sourceId: string) {
           after: d.afterValue,
           review: d.reviewRequired,
         }))
-        .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))) ??
-      [],
+        .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))) ?? [],
     failure: failed
       ? {
           httpStatus: a?.httpStatus ?? null,
@@ -160,8 +160,10 @@ export async function inspectSource(db: Database, sourceId: string) {
       .map((l) => l.artist.name),
     finalLineup: {
       year: s.editionYear,
-      complete: Boolean(s.edition.finalLineupFingerprint &&
-        s.edition.finalLineupFingerprint === rosterFingerprint(s.edition.id, s.edition.lineup)),
+      complete: Boolean(
+        s.edition.finalLineupFingerprint &&
+        s.edition.finalLineupFingerprint === rosterFingerprint(s.edition.id, s.edition.lineup),
+      ),
     },
     entries: s.edition.lineup.map((l) => ({
       artistId: l.artistId,
@@ -260,13 +262,18 @@ export async function listAgentIssues(db: Database, now = new Date()) {
   const ready = entries.filter((i) => {
     const state = states.find((s) => s.key === i.key),
       p = (state?.payload ?? {}) as Record<string, unknown>;
-    if (state?.leaseOwner && state.leaseExpiresAt && state.leaseExpiresAt > now)
-      return false;
+    if (state?.leaseOwner && state.leaseExpiresAt && state.leaseExpiresAt > now) return false;
     if (p.status === "needs_user") return false;
     // No-op manual reviews are reconsidered weekly, even without parser changes.
     if (p.status === "resolved" && i.kind !== "manual_source") return false;
     if (p.retryAt && new Date(String(p.retryAt)) > now) return false;
-    if (i.kind === "failure" && Number(p.attempts ?? 0) > 0 && i.source.nextRunAt && i.source.nextRunAt > now) return false;
+    if (
+      i.kind === "failure" &&
+      Number(p.attempts ?? 0) > 0 &&
+      i.source.nextRunAt &&
+      i.source.nextRunAt > now
+    )
+      return false;
     if (i.source.leaseExpiresAt && i.source.leaseExpiresAt > now) return false;
     return true;
   });
@@ -285,22 +292,31 @@ export async function listAgentIssues(db: Database, now = new Date()) {
   };
 }
 
-export async function claimAgentIssue(
-  db: PrismaClient,
-  sourceId: string,
-  issueId: string,
-) {
+export async function claimAgentIssue(db: PrismaClient, sourceId: string, issueId: string) {
   return db.$transaction(
     async (tx) => {
       const i = await inspectSource(tx, sourceId);
       if (!i || i.issueId !== issueId) throw new ImportAgentError("stale");
       if (i.source.leaseExpiresAt && i.source.leaseExpiresAt > new Date())
         throw new ImportAgentError("busy");
-      await tx.$executeRaw`INSERT INTO "OperationalState" (key,payload,"updatedAt") VALUES (${i.key},'{}'::jsonb,(clock_timestamp() AT TIME ZONE 'UTC')) ON CONFLICT (key) DO NOTHING`;
+      await tx.$executeRaw`
+INSERT INTO "OperationalState" (key,payload,"updatedAt") VALUES (
+${i.key}
+,'{}'::jsonb,(clock_timestamp() AT TIME ZONE 'UTC')) ON CONFLICT (key)
+DO NOTHING
+`;
       const token = randomUUID();
-      const rows = await tx.$queryRaw<
-        { payload: Record<string, unknown> }[]
-      >`UPDATE "OperationalState" SET "leaseOwner"=${token},"leaseExpiresAt"=(clock_timestamp() AT TIME ZONE 'UTC')+interval '2 hours',"updatedAt"=(clock_timestamp() AT TIME ZONE 'UTC') WHERE key=${i.key} AND ("leaseOwner" IS NULL OR "leaseExpiresAt" <= (clock_timestamp() AT TIME ZONE 'UTC')) AND COALESCE(payload->>'status','') <> 'needs_user' AND (payload->>'retryAt' IS NULL OR (payload->>'retryAt')::timestamptz <= clock_timestamp()) RETURNING payload`;
+      const rows = await tx.$queryRaw<{ payload: Record<string, unknown> }[]>`
+UPDATE "OperationalState" SET "leaseOwner"=
+${token}
+,"leaseExpiresAt"=(clock_timestamp() AT TIME ZONE 'UTC')+interval '2 hours',"updatedAt"=(clock_timestamp()
+AT TIME ZONE 'UTC') WHERE key=
+${i.key}
+ AND ("leaseOwner" IS NULL OR "leaseExpiresAt" <= (clock_timestamp() AT
+TIME ZONE 'UTC')) AND COALESCE(payload->>'status','') <> 'needs_user' AND
+(payload->>'retryAt' IS NULL OR (payload->>'retryAt')::timestamptz <= clock_timestamp())
+RETURNING payload
+`;
       if (rows.length !== 1) throw new ImportAgentError("busy");
       if (rows[0].payload.status === "resolved" && i.kind !== "manual_source")
         throw new ImportAgentError("stale");
@@ -308,9 +324,7 @@ export async function claimAgentIssue(
         ...i,
         leaseToken: token,
         ownerClarification:
-          typeof rows[0].payload.answer === "string"
-            ? rows[0].payload.answer
-            : null,
+          typeof rows[0].payload.answer === "string" ? rows[0].payload.answer : null,
       };
     },
     {
@@ -322,11 +336,7 @@ export async function claimAgentIssue(
 
 // A stale decision must not strand the case behind its two-hour crash lease.
 // Releasing requires its exact capability; it never writes catalog/source data.
-export async function releaseAgentIssue(
-  db: PrismaClient,
-  issueId: string,
-  leaseToken: string,
-) {
+export async function releaseAgentIssue(db: PrismaClient, issueId: string, leaseToken: string) {
   const result = await db.operationalState.updateMany({
     where: { key: prefix + issueId, leaseOwner: leaseToken },
     data: { leaseOwner: null, leaseExpiresAt: null },
@@ -344,11 +354,12 @@ export async function resumeAgentIssue(
   return db.$transaction(
     async (tx) => {
       const issue = await inspectSource(tx, sourceId);
-      if (!issue || issue.issueId !== issueId)
-        throw new ImportAgentError("stale");
-      const rows = await tx.$queryRaw<
-        { payload: Record<string, unknown> }[]
-      >`SELECT payload FROM "OperationalState" WHERE key=${issue.key} AND payload->>'status'='needs_user' AND "leaseOwner" IS NULL FOR UPDATE`;
+      if (!issue || issue.issueId !== issueId) throw new ImportAgentError("stale");
+      const rows = await tx.$queryRaw<{ payload: Record<string, unknown> }[]>`
+SELECT payload FROM "OperationalState" WHERE key=
+${issue.key}
+ AND payload->>'status'='needs_user' AND "leaseOwner" IS NULL FOR UPDATE
+`;
       if (rows.length !== 1) throw new ImportAgentError("busy");
       const payload = {
         status: "retry",
@@ -385,12 +396,9 @@ function allowedEvidence(
   d: AgentDecision,
   now: Date,
 ) {
-  const urls = [
-    i.source.url,
-    i.source.officialUrl,
-    i.source.fetchUrl,
-    i.current.ticketsUrl,
-  ].filter((v): v is string => !!v);
+  const urls = [i.source.url, i.source.officialUrl, i.source.fetchUrl, i.current.ticketsUrl].filter(
+    (v): v is string => !!v,
+  );
   const hosts = new Set(urls.map((u) => new URL(u).hostname));
   const valid = (u: string) => {
     const x = new URL(u);
@@ -410,8 +418,7 @@ function allowedEvidence(
     )
       throw new ImportAgentError("invalid");
   for (const field of Object.keys(d.facts ?? {}))
-    if (!d.evidence.some((e) => e.field === field))
-      throw new ImportAgentError("invalid");
+    if (!d.evidence.some((e) => e.field === field)) throw new ImportAgentError("invalid");
   if (
     d.source &&
     (!valid(d.source.url) ||
@@ -419,14 +426,20 @@ function allowedEvidence(
   )
     throw new ImportAgentError("invalid");
   if (d.facts?.finalLineup) {
-    const festivalHosts = new Set([i.source.officialUrl, i.source.url, i.source.fetchUrl]
-      .filter((url): url is string => Boolean(url)).map((url) => new URL(url).hostname));
-    if (d.facts.finalLineup.year !== i.current.year ||
-        d.evidence.some((e) => e.field === "finalLineup" && !festivalHosts.has(new URL(e.url).hostname)))
+    const festivalHosts = new Set(
+      [i.source.officialUrl, i.source.url, i.source.fetchUrl]
+        .filter((url): url is string => Boolean(url))
+        .map((url) => new URL(url).hostname),
+    );
+    if (
+      d.facts.finalLineup.year !== i.current.year ||
+      d.evidence.some(
+        (e) => e.field === "finalLineup" && !festivalHosts.has(new URL(e.url).hostname),
+      )
+    )
       throw new ImportAgentError("invalid");
   }
-  if (d.facts?.ticketsUrl && !valid(d.facts.ticketsUrl))
-    throw new ImportAgentError("invalid");
+  if (d.facts?.ticketsUrl && !valid(d.facts.ticketsUrl)) throw new ImportAgentError("invalid");
 }
 
 export async function resolveAgentIssue(
@@ -444,9 +457,14 @@ export async function resolveAgentIssue(
     now = new Date();
   return db.$transaction(
     async (tx) => {
-      const held = await tx.$queryRaw<
-        { payload: Record<string, unknown>; active: boolean }[]
-      >`SELECT payload,("leaseOwner"=${input.leaseToken} AND "leaseExpiresAt">(clock_timestamp() AT TIME ZONE 'UTC')) AS active FROM "OperationalState" WHERE key=${key} FOR UPDATE`;
+      const held = await tx.$queryRaw<{ payload: Record<string, unknown>; active: boolean }[]>`
+SELECT payload,("leaseOwner"=
+${input.leaseToken}
+ AND "leaseExpiresAt">(clock_timestamp() AT TIME ZONE 'UTC')) AS active
+FROM "OperationalState" WHERE key=
+${key}
+ FOR UPDATE
+`;
       if (held.length !== 1) throw new ImportAgentError("busy");
       const previous = held[0].payload;
       if (
@@ -454,44 +472,47 @@ export async function resolveAgentIssue(
         previous.snapshot === input.snapshot &&
         previous.decisionHash === fingerprint(d)
       ) {
-        const {
-          leaseDigest: _l,
-          snapshot: _s,
-          decisionHash: _d,
-          ...receipt
-        } = previous;
+        const { leaseDigest: _l, snapshot: _s, decisionHash: _d, ...receipt } = previous;
         return receipt;
       }
       if (!held[0].active) throw new ImportAgentError("busy");
       const i = await inspectSource(tx, input.sourceId);
       if (!i || i.issueId !== input.issueId || i.snapshot !== input.snapshot)
         throw new ImportAgentError("stale");
-      const sources = await tx.$queryRaw<
-        { id: string }[]
-      >`SELECT id FROM "FestivalSource" WHERE id=${i.sourceId} AND ("leaseOwner" IS NULL OR "leaseExpiresAt" <= (clock_timestamp() AT TIME ZONE 'UTC')) FOR UPDATE`;
+      const sources = await tx.$queryRaw<{ id: string }[]>`
+SELECT id FROM "FestivalSource" WHERE id=
+${i.sourceId}
+ AND ("leaseOwner" IS NULL OR "leaseExpiresAt" <= (clock_timestamp() AT
+TIME ZONE 'UTC')) FOR UPDATE
+`;
       if (sources.length !== 1) throw new ImportAgentError("busy");
       allowedEvidence(i, d, now);
       // A stored candidate is not proof of a parser problem. In particular,
       // manual no-op reviews (including unchanged supplied facts/source) must
       // not manufacture repair tasks. Actual corrections and rejected/review
       // proposals still enqueue atomically with their audit.
-      const changedParserFacts = d.facts && Object.entries(d.facts).some(
-        ([field, value]) => field !== "finalLineup" &&
-          fingerprint(value) !== fingerprint(i.current[field as keyof typeof i.current]),
-      );
+      const changedParserFacts =
+        d.facts &&
+        Object.entries(d.facts).some(
+          ([field, value]) =>
+            field !== "finalLineup" &&
+            fingerprint(value) !== fingerprint(i.current[field as keyof typeof i.current]),
+        );
       // An explicit review can renew or revoke stored proof even when the
       // published artist names and the current display state have not changed.
       const changedFacts = changedParserFacts || d.facts?.finalLineup !== undefined;
-      const changedSource = d.source && (
-        d.source.url !== i.source.url ||
-        fingerprint(d.source.strategies) !== fingerprint(i.source.strategies) ||
-        d.source.refreshPolicy !== i.source.refreshPolicy ||
-        (d.source.manualReviewReason ?? null) !== i.source.manualReviewReason
-      );
-      const candidateFeedback = i.candidate && (
-        i.attempt?.status === "REVIEW" || i.candidate.diffs.length > 0 ||
-        !Array.isArray(i.candidate.warnings) || i.candidate.warnings.length > 0
-      );
+      const changedSource =
+        d.source &&
+        (d.source.url !== i.source.url ||
+          fingerprint(d.source.strategies) !== fingerprint(i.source.strategies) ||
+          d.source.refreshPolicy !== i.source.refreshPolicy ||
+          (d.source.manualReviewReason ?? null) !== i.source.manualReviewReason);
+      const candidateFeedback =
+        i.candidate &&
+        (i.attempt?.status === "REVIEW" ||
+          i.candidate.diffs.length > 0 ||
+          !Array.isArray(i.candidate.warnings) ||
+          i.candidate.warnings.length > 0);
       let publication = null;
       if (d.action === "apply") {
         if (d.facts && changedFacts)
@@ -540,11 +561,7 @@ export async function resolveAgentIssue(
           where: { id: i.candidate.id },
           data: {
             reviewState:
-              d.action === "dismiss"
-                ? "REJECTED"
-                : publication
-                  ? "PUBLISHED"
-                  : "SUPERSEDED",
+              d.action === "dismiss" ? "REJECTED" : publication ? "PUBLISHED" : "SUPERSEDED",
             reviewActor: "openclaw-import-agent",
             reviewedAt: now,
             publishedAt: publication ? now : null,
@@ -553,13 +570,28 @@ export async function resolveAgentIssue(
         });
       const attempts = Number(held[0].payload.attempts ?? 0) + 1;
       const retryFailure = d.action === "apply" && i.kind === "failure" && !changedSource;
-      const retryAt = d.action === "retry" || retryFailure
-        ? failureRetryAt(Math.max(attempts, i.source.consecutiveFailures || 1), now).toISOString()
-        : i.kind === "manual_source" && !changedSource ? new Date(now.getTime() + 604800000).toISOString() : null;
-      const parserRepairId = ["apply", "dismiss"].includes(d.action) && (changedParserFacts || changedSource || candidateFeedback)
-        ? await enqueueParserRepair(tx, { sourceId: i.sourceId, festivalSlug: i.festivalSlug, issueId: i.issueId,
-            parserKey: i.source.parserKey, sourceUrl: i.source.fetchUrl ?? i.source.url, year: i.current.year,
-            reason: d.reason, decision: d, candidate: i.candidate, current: i.current }) : null;
+      const retryAt =
+        d.action === "retry" || retryFailure
+          ? failureRetryAt(Math.max(attempts, i.source.consecutiveFailures || 1), now).toISOString()
+          : i.kind === "manual_source" && !changedSource
+            ? new Date(now.getTime() + 604800000).toISOString()
+            : null;
+      const parserRepairId =
+        ["apply", "dismiss"].includes(d.action) &&
+        (changedParserFacts || changedSource || candidateFeedback)
+          ? await enqueueParserRepair(tx, {
+              sourceId: i.sourceId,
+              festivalSlug: i.festivalSlug,
+              issueId: i.issueId,
+              parserKey: i.source.parserKey,
+              sourceUrl: i.source.fetchUrl ?? i.source.url,
+              year: i.current.year,
+              reason: d.reason,
+              decision: d,
+              candidate: i.candidate,
+              current: i.current,
+            })
+          : null;
       const status =
         d.action === "needs_user"
           ? "needs_user"
@@ -617,7 +649,9 @@ export async function resolveAgentIssue(
           metadata: {
             issueId: i.issueId,
             reason: d.reason,
-            providerPolicy: publication?.playlistRefreshRequested ? "initial-lineup-generation" : "explicit-refresh-only",
+            providerPolicy: publication?.playlistRefreshRequested
+              ? "initial-lineup-generation"
+              : "explicit-refresh-only",
           },
         },
       });
