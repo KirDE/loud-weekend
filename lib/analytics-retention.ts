@@ -7,7 +7,12 @@ type AnalyticsDb = {
 export function retentionDaysFrom(value?: string) {
   const raw = value ?? "90";
   const retentionDays = Number.parseInt(raw, 10);
-  if (!/^\d+$/.test(raw) || !Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 730) {
+  if (
+    !/^\d+$/.test(raw) ||
+    !Number.isInteger(retentionDays) ||
+    retentionDays < 1 ||
+    retentionDays > 730
+  ) {
     throw new Error("ANALYTICS_RETENTION_DAYS must be an integer from 1 to 730");
   }
   return retentionDays;
