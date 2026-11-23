@@ -77,8 +77,11 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   await page.reload();
   await page.getByRole("button", { name: /Festival submissions/ }).click();
   await expect(
-    page.locator("article.reviewCard").filter({ hasText: "Browser Metal Festival" }),
-  ).toContainText("APPROVED");
+    page
+      .locator("article.reviewCard")
+      .filter({ hasText: "Browser Metal Festival" })
+      .locator(".reviewMeta .safe"),
+  ).toHaveText("approved");
   await page.getByRole("button", { name: "Festivals & artists" }).click();
   await page.getByLabel("City").fill("Sample E2E City");
   await page.getByRole("button", { name: "Save festival draft" }).click();
@@ -151,6 +154,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   await expect(page.getByText("E2E adapter failure")).toBeVisible();
   await page.getByRole("button", { name: "View parser log" }).click();
   await expect(page.getByLabel("synthetic-fest parser log")).toContainText("fixture");
+  await page.getByRole("button", { name: "View parser log" }).click();
 
   const snapshot = await (await page.request.get("/api/admin")).json();
   expect(snapshot.drafts).toHaveLength(5);
@@ -161,29 +165,151 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
     new Set(["FESTIVAL", "ARTIST", "LINK", "ASSET", "PLAYLIST"]),
   );
 
-  const sections = [
-    "Review queue",
-    "Festival submissions",
-    "Festivals & artists",
-    "Links & assets",
-    "Parser diagnostics",
-    "Audit history",
-  ];
-  for (const width of [320, 375, 390]) {
+  const editorial = {
+    en: {
+      sections: [
+        "Review queue",
+        "Festival submissions",
+        "Festivals & artists",
+        "Links & assets",
+        "Parser diagnostics",
+        "Audit history",
+      ],
+      artist: "Artist editor",
+      refresh: "Manual refresh",
+      city: "City",
+      save: "Save festival draft",
+      playlist: "Playlist editor",
+      savePlaylist: "Save playlist draft",
+      publication: "Publication status",
+      published: "Published",
+      history: "History",
+      approved: "approved",
+      failed: "Failed",
+      showLog: "View parser log",
+      log: "synthetic-fest parser log",
+      saved: /Draft revision \d+ persisted and queued/,
+      refreshFailed: /Source check failed/,
+    },
+    de: {
+      sections: [
+        "Prüfwarteschlange",
+        "Festivalvorschläge",
+        "Festivals & Künstler",
+        "Links & Medien",
+        "Parser-Diagnose",
+        "Prüfverlauf",
+      ],
+      artist: "Künstlereditor",
+      refresh: "Manuelle Aktualisierung",
+      city: "Stadt",
+      save: "Festivalentwurf speichern",
+      playlist: "Playlist-Editor",
+      savePlaylist: "Playlistentwurf speichern",
+      publication: "Veröffentlichungsstatus",
+      published: "Veröffentlicht",
+      history: "Verlauf",
+      approved: "freigegeben",
+      failed: "Fehlgeschlagen",
+      showLog: "Parser-Protokoll anzeigen",
+      log: "Parser-Protokoll für synthetic-fest",
+      saved: /Entwurfsversion \d+ gespeichert/,
+      refreshFailed: /Quellenprüfung fehlgeschlagen/,
+    },
+    ru: {
+      sections: [
+        "Очередь проверки",
+        "Предложения фестивалей",
+        "Фестивали и артисты",
+        "Ссылки и материалы",
+        "Диагностика парсера",
+        "Журнал аудита",
+      ],
+      artist: "Редактор артистов",
+      refresh: "Ручное обновление",
+      city: "Город",
+      save: "Сохранить черновик фестиваля",
+      playlist: "Редактор плейлистов",
+      savePlaylist: "Сохранить черновик плейлиста",
+      publication: "Статус публикации",
+      published: "Опубликовано",
+      history: "История",
+      approved: "подтверждено",
+      failed: "Ошибка",
+      showLog: "Открыть журнал парсера",
+      log: "Журнал парсера: synthetic-fest",
+      saved: /Версия черновика \d+ сохранена/,
+      refreshFailed: /Не удалось проверить источник/,
+    },
+  };
+  await page.route("**/api/admin/refresh/**", (route) =>
+    route.fulfill({ status: 502, json: { error: "Raw upstream error" } }),
+  );
+  const draftFestival = { en: "synthetic-fest", de: "synthetic-alpine", ru: "synthetic-west" };
+  for (const width of [1280, 320, 375, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const name of sections) {
-      await page.getByRole("button", { name: new RegExp(name) }).click();
-      const layout = await page.evaluate(() => ({
-        viewport: window.innerWidth,
-        document: document.documentElement.scrollWidth,
-        body: document.body.scrollWidth,
-        nav: document.querySelector(".adminNav")?.scrollWidth,
-        main: document.querySelector(".adminMain")?.scrollWidth,
-      }));
-      expect(
-        layout.document,
-        `${name} at ${width}px: ${JSON.stringify(layout)}`,
-      ).toBeLessThanOrEqual(layout.viewport);
+    for (const [language, copy] of Object.entries(editorial)) {
+      await page.locator(".adminLanguage select").selectOption(language);
+      const open = (section) => page.getByRole("button", { name: section }).click();
+
+      await open(copy.sections[0]);
+      await expect(page.locator(".reviewList")).toBeVisible();
+      await open(copy.sections[1]);
+      const existing = page.locator(".reviewCard").filter({ hasText: "Browser Metal Festival" });
+      await expect(existing.locator(".reviewMeta .safe")).toHaveText(copy.approved);
+      await expect(existing).toContainText(copy.history + ":");
+      await expect(existing).toContainText("Browser-created durable submission");
+      await expect(existing).toContainText("https://browser-festival.example.test/official");
+      await open(copy.sections[2]);
+      await expect(page.getByRole("heading", { name: copy.artist })).toBeVisible();
+      await expect(page.getByRole("heading", { name: copy.refresh })).toBeVisible();
+      if (width === 1280) {
+        await page
+          .locator(".editorGrid .adminPanel")
+          .first()
+          .getByRole("combobox")
+          .first()
+          .selectOption(draftFestival[language]);
+        await page
+          .getByLabel(copy.city, { exact: true })
+          .fill(`Localized synthetic city ${language}`);
+        await page.getByRole("button", { name: copy.save }).click();
+        await expect(page.getByRole("status")).toContainText(copy.saved);
+        await page
+          .locator(".adminPanel")
+          .filter({ has: page.getByRole("heading", { name: copy.refresh }) })
+          .getByRole("button")
+          .click();
+        await expect(page.getByRole("status")).toContainText(copy.refreshFailed);
+        await expect(page.getByRole("status")).not.toContainText("Raw upstream error");
+      }
+      await open(copy.sections[3]);
+      await expect(page.getByRole("heading", { name: copy.playlist })).toBeVisible();
+      await expect(page.getByRole("button", { name: copy.savePlaylist })).toBeVisible();
+      const publication = page.getByLabel(copy.publication);
+      await expect(publication.locator("option[value=published]")).toHaveText(copy.published);
+      await expect(publication).toHaveValue("published");
+      await open(copy.sections[4]);
+      await expect(page.locator(".diagnosticGrid .reviewMeta")).toContainText(copy.failed);
+      await expect(page.getByText("E2E adapter failure", { exact: false })).toBeVisible();
+      await page.getByRole("button", { name: copy.showLog }).click();
+      await expect(page.getByLabel(copy.log)).toContainText('"message": "fixture"');
+      await page.getByRole("button", { name: copy.showLog }).click();
+      await open(copy.sections[5]);
+      await expect(page.getByText("CHANGE_APPROVED", { exact: true })).toBeVisible();
+
+      for (const section of copy.sections) {
+        await open(section);
+        const layout = await page.evaluate(() => ({
+          viewport: window.innerWidth,
+          document: document.documentElement.scrollWidth,
+          main: document.querySelector(".adminMain")?.scrollWidth,
+        }));
+        expect(
+          layout.document,
+          `${language} / ${section} at ${width}px: ${JSON.stringify(layout)}`,
+        ).toBeLessThanOrEqual(layout.viewport);
+      }
     }
   }
 });

@@ -47,11 +47,17 @@ export default async function AdminPage() {
         festival: item.festivalSlug,
         source: item.adapter,
         status:
-          item.status === "SUCCEEDED" ? "healthy" : item.status === "FAILED" ? "failed" : "warning",
+          item.status === "SUCCEEDED"
+            ? "healthy"
+            : item.status === "FAILED"
+              ? "failed"
+              : item.status === "RUNNING"
+                ? "running"
+                : "warning",
         lastRun: item.startedAt.toISOString(),
         durationMs: item.durationMs ?? 0,
         extracted: item.extracted,
-        message: item.message ?? "Running",
+        message: item.message,
         log: item.log,
       }))}
       auditEntries={snapshot.audit.map((item) => ({
