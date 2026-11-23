@@ -1,0 +1,39 @@
+{
+  "festivalSlug": "alcatraz",
+  "editionYear": 2027,
+  "city": "Kortrijk",
+  "countryCode": "BE",
+  "organizerHost": "alcatraz.be",
+  "sourceUrl": "https://alcatraz.be/en/camping",
+  "checkedOn": "2026-11-23",
+  "facts": [
+    {
+      "field": "camping",
+      "description": {
+        "en": "Each camper needs a separate campsite ticket.",
+        "de": "Jede Person auf dem Campingplatz benötigt ein separates Campingticket.",
+        "ru": "Для каждого гостя кемпинга требуется отдельный кемпинговый билет."
+      }
+    },
+    {
+      "field": "arrival",
+      "earliestDate": "2027-08-05"
+    },
+    {
+      "field": "facilities",
+      "description": {
+        "en": "The campsite has showers and toilets with running water, available around the clock.",
+        "de": "Auf dem Campingplatz sind Duschen und Toiletten mit fließendem Wasser rund um die Uhr zugänglich.",
+        "ru": "Душевые и туалеты с проточной водой доступны гостям кемпинга круглосуточно."
+      }
+    },
+    {
+      "field": "motorhomes",
+      "description": {
+        "en": "Motorhome pitches include one electrical hookup. A motorhome pitch ticket does not replace the campsite ticket required for each camper.",
+        "de": "Wohnmobilstellplätze haben je einen Stromanschluss. Das Stellplatzticket ersetzt nicht das Campingticket pro Person.",
+        "ru": "На каждом месте для автодома есть одно подключение к электросети. Билет на место не заменяет кемпинговый билет для каждого гостя."
+      }
+    }
+  ]
+}
