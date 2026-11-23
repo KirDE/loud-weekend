@@ -9,10 +9,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { t, ta } = useLanguage();
   const admin = pathname?.startsWith("/admin") ?? false;
 
-  return <>
-    <a className="skipLink" href="#main-content">{admin ? ta("skip") : t("skip")}</a>
-    {!admin && <SiteHeader />}
-    <main id="main-content" className={admin ? "adminPage" : undefined}>{children}</main>
-    {!admin && <SiteFooter />}
-  </>;
+  return (
+    <>
+      <a className="skipLink" href="#main-content">
+        {admin ? ta("skip") : t("skip")}
+      </a>
+      {!admin && <SiteHeader />}
+      <main id="main-content" className={admin ? "adminPage" : undefined}>
+        {children}
+      </main>
+      {!admin && <SiteFooter />}
+    </>
+  );
 }
