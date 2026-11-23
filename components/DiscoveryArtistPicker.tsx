@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   maxSelectedArtists,
   type ArtistMatchMode,
@@ -24,6 +24,8 @@ export function DiscoveryArtistPicker({
   const { t, locale } = useLanguage();
   const [query, setQuery] = useState("");
   const searchId = useId();
+  const search = useRef<HTMLInputElement>(null);
+  const summary = useRef<HTMLElement>(null);
   const normalized = query.trim().toLocaleLowerCase(locale);
   const selectedSet = new Set(selected);
   const bySlug = new Map(artists.map((artist) => [artist.slug, artist.name]));
@@ -54,7 +56,7 @@ export function DiscoveryArtistPicker({
       className="discoveryDates discoveryArtistPicker"
       open={selected.length > 0 || undefined}
     >
-      <summary>{t("matchArtists")}</summary>
+      <summary ref={summary}>{t("matchArtists")}</summary>
       {selected.length > 0 && (
         <ul className="discoveryArtistChoices">
           {selected.map((slug) => (
@@ -63,12 +65,11 @@ export function DiscoveryArtistPicker({
                 type="button"
                 className="outlineButton"
                 aria-label={t("removeMatchedArtist", { name: label(slug) })}
-                onClick={() =>
-                  onChange(
-                    selected.filter((value) => value !== slug),
-                    mode,
-                  )
-                }
+                onClick={() => {
+                  const next = selected.filter((value) => value !== slug);
+                  (next.length ? search.current : summary.current)?.focus();
+                  onChange(next, mode);
+                }}
               >
                 {label(slug)} ×
               </button>
@@ -90,6 +91,7 @@ export function DiscoveryArtistPicker({
       </label>
       <label htmlFor={searchId}>{t("findMatchArtist")}</label>
       <input
+        ref={search}
         id={searchId}
         type="search"
         value={query}
@@ -104,7 +106,10 @@ export function DiscoveryArtistPicker({
               <button
                 type="button"
                 className="outlineButton"
-                onClick={() => onChange([...selected, slug], mode)}
+                onClick={() => {
+                  search.current?.focus();
+                  onChange([...selected, slug], mode);
+                }}
               >
                 {label(slug)}
               </button>

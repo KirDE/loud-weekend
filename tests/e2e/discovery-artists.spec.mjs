@@ -42,9 +42,12 @@ for (const [locale, t] of Object.entries(labels)) {
     await expect(page.locator(".search")).toHaveAttribute("data-ready", "true");
     const picker = page.locator(".discoveryArtistPicker");
     await picker.getByText(t.picker, { exact: true }).press("Enter");
-    await picker.getByRole("button", { name: "Second Artist", exact: true }).click();
-    await picker.getByRole("searchbox", { name: t.search }).fill("Sample");
-    await picker.getByRole("button", { name: "Sample Artist", exact: true }).click();
+    const search = picker.getByRole("searchbox", { name: t.search });
+    await picker.getByRole("button", { name: "Second Artist", exact: true }).press("Enter");
+    await expect(search).toBeFocused();
+    await search.fill("Sample");
+    await picker.getByRole("button", { name: "Sample Artist", exact: true }).press("Enter");
+    await expect(search).toBeFocused();
     const cards = page.locator(".festivalCard h2");
     await expect(cards).toHaveText(["Synthetic Fest"]);
     await expect(page.locator(".artistMatchSummary")).toContainText("Second Artist, Sample Artist");
@@ -76,6 +79,10 @@ for (const [locale, t] of Object.entries(labels)) {
     } finally {
       await recipient.close();
     }
+    await picker.locator("ul").first().getByRole("button").first().press("Enter");
+    await expect(search).toBeFocused();
+    await picker.locator("ul").first().getByRole("button").first().press("Enter");
+    await expect(picker.locator("summary")).toBeFocused();
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(320);
