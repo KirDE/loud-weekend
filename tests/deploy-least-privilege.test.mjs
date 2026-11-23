@@ -6,7 +6,10 @@ test("production workflow uses the constrained deploy identity and wrapper", asy
   const workflow = await readFile(".github/workflows/deploy.yml", "utf8");
   assert.match(workflow, /User festival-radar-deploy/);
   assert.match(workflow, /sudo -n \/usr\/local\/libexec\/festival-radar\/activate-release/);
-  assert.match(workflow, /sudo -n \/usr\/local\/libexec\/festival-radar\/upgrade-deployment-assets/);
+  assert.match(
+    workflow,
+    /sudo -n \/usr\/local\/libexec\/festival-radar\/upgrade-deployment-assets/,
+  );
   assert.doesNotMatch(workflow, /User root/);
   assert.doesNotMatch(workflow, /production:\/tmp/);
 });
@@ -14,7 +17,10 @@ test("production workflow uses the constrained deploy identity and wrapper", asy
 test("bootstrap grants only the reviewed activation wrapper", async () => {
   const bootstrap = await readFile("scripts/deploy/bootstrap-deploy-user.sh", "utf8");
   assert.match(bootstrap, /NOPASSWD: \/usr\/local\/libexec\/festival-radar\/activate-release/);
-  assert.match(bootstrap, /NOPASSWD: \/usr\/local\/libexec\/festival-radar\/upgrade-deployment-assets/);
+  assert.match(
+    bootstrap,
+    /NOPASSWD: \/usr\/local\/libexec\/festival-radar\/upgrade-deployment-assets/,
+  );
   assert.doesNotMatch(bootstrap, /NOPASSWD:\s*ALL/);
   assert.match(bootstrap, /visudo -cf/);
 });
