@@ -77,6 +77,7 @@ test('hidden, duplicate and disabled ordinary admission controls never establish
   h=>h.replace('href="https://www.ticketmaster.dk/','href="https://user@www.ticketmaster.dk/'),
   h=>h.replace('href="https://www.ticketmaster.dk/','href="https://www.ticketmaster.dk:8443/'),
   h=>h.replace('brand=copenhelldk','brand=otherfestival'),
+  h=>h.replace('brand=copenhelldk','brand=copenhelldk&amp;brand=otherfestival'),
   h=>h.replace('23. - 24. - 25. - 26. juni','22. - 23. - 24. - 25. juni'),
   h=>h.replace('Køb nu</a>','Køb nu</a><span>Udsolgt</span>'),
   h=>h.replace('</main>',h+'</main>'),

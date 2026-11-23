@@ -132,7 +132,8 @@ export function extractCopenhellCurrent(html: string, source: FestivalSource, fe
             return u.origin === "https://www.ticketmaster.dk" && !u.username && !u.password && !u.hash
               && /^\/event\/[0-9]+$/.test(u.pathname)
               && [...u.searchParams.keys()].every(key => ["language","brand"].includes(key))
-              && u.searchParams.get("brand") === "copenhelldk";
+              && u.searchParams.getAll("brand").length === 1
+              && u.searchParams.get("brand") === "copenhelldk" && u.searchParams.getAll("language").length <= 1;
           } catch { return false; }
         });
         const ordinary = card.clone();
