@@ -1803,6 +1803,103 @@ test("Provinssi provenance drift rolls back catalogue, completeness and provider
   }
 });
 
+test("free admission survives ingestion/replay and stale rollback without ticket offers", async () => {
+  const { ticketPresentation, hasAvailableTickets } = await import("../lib/tickets.ts");
+  const { festivalMusicEvent } = await import("../lib/seo.ts");
+  const { notificationEventsForChanges } = await import("../lib/ingestion/notification-events.ts");
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+  });
+  const current = async () =>
+    (await readCatalog({ database: db })).festivals.find((f) => f.slug === "synthetic-fest")!;
+  const make = async () => {
+    const c = result("unused").candidate;
+    delete c.lineup;
+    c.ticketStatus = "free";
+    c.evidence = [
+      {
+        field: "ticketStatus",
+        sourceUrl: c.sourceUrl,
+        observedAt: c.fetchedAt,
+        excerpt: "Synthetic current-edition statement: free unticketed general admission",
+      },
+    ];
+    return evaluateCandidate(await current(), c);
+  };
+  try {
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: { ticketStatus: "UNKNOWN", ticketsUrl: "https://festival.example.test/camping" },
+    });
+    const value = await make();
+    assert.equal(value.publishable, true);
+    const attempt = await persist(value);
+    const jobs = await db.catalogPlaylistRefresh.count();
+    const pub = await publishIngestionResult(db, {
+      attemptId: attempt.id,
+      result: value,
+      sourceCommit: suffix,
+    });
+    assert.ok(pub);
+    assert.equal(pub.playlistRefreshRequested, false);
+    const item = await current();
+    assert.equal(item.ticketStatus, "free");
+    assert.equal(ticketPresentation(item).href, item.officialUrl);
+    assert.equal(hasAvailableTickets(item), false);
+    assert.equal(festivalMusicEvent(item).isAccessibleForFree, true);
+    assert.equal(festivalMusicEvent(item).offers, undefined);
+    assert.deepEqual(notificationEventsForChanges(item, value.changes, value.fetchedAt), []);
+    const stored = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    assert.equal((stored.normalized as any).ticketStatus, "free");
+    assert.equal(stored.reviewState, "PUBLISHED");
+    assert.equal(
+      (
+        await publishIngestionResult(db, {
+          attemptId: attempt.id,
+          result: value,
+          sourceCommit: suffix,
+        })
+      )?.id,
+      pub.id,
+    );
+    assert.deepEqual((await make()).changes, []);
+    assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: { ticketStatus: "UNKNOWN" },
+    });
+    const stale = await make();
+    const staleAttempt = await persist(stale);
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: { ticketStatus: "SOLD_OUT" },
+    });
+    const publications = await db.catalogPublication.count();
+    await assert.rejects(
+      publishIngestionResult(db, {
+        attemptId: staleAttempt.id,
+        result: stale,
+        sourceCommit: suffix,
+      }),
+      /Stale ticketStatus/,
+    );
+    assert.equal((await current()).ticketStatus, "sold_out");
+    assert.equal(await db.catalogPublication.count(), publications);
+    assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
+  } finally {
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: {
+        ticketStatus: edition.ticketStatus,
+        ticketsUrl: edition.ticketsUrl,
+        sourceUpdatedAt: edition.sourceUpdatedAt,
+      },
+    });
+  }
+});
+
 test("explicit ticket states survive reviewed publication and canonical public readback", async () => {
   const { ticketPresentation } = await import("../lib/tickets.ts");
   const { festivalMusicEvent } = await import("../lib/seo.ts");
@@ -1817,6 +1914,7 @@ test("explicit ticket states survive reviewed publication and canonical public r
       "low",
       "sold_out",
       "sales_ended",
+      "free",
       "unavailable",
       "unknown",
     ] as const) {

@@ -38,6 +38,7 @@ const ticketStatuses = {
   not_on_sale: TicketStatus.NOT_ON_SALE,
   sold_out: TicketStatus.SOLD_OUT,
   sales_ended: TicketStatus.SALES_ENDED,
+  free: TicketStatus.FREE,
   unavailable: TicketStatus.UNAVAILABLE,
   unknown: TicketStatus.UNKNOWN,
 } as const;

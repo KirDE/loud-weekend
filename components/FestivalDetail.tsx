@@ -107,7 +107,15 @@ export function FestivalDetail({
             data-ticket-status={tickets.status}
           >
             <small>{t(tickets.status === "available" ? "passes" : tickets.label)}</small>
-            <strong>{t(tickets.status === "available" ? tickets.label : "ticketsInfo")}</strong>
+            <strong>
+              {t(
+                tickets.status === "available"
+                  ? tickets.label
+                  : tickets.status === "free"
+                    ? "festivalWebsite"
+                    : "ticketsInfo",
+              )}
+            </strong>
           </a>
         ) : (
           <div className="disabled" data-ticket-status={tickets.status}>
