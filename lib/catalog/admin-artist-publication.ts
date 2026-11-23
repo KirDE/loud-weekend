@@ -44,12 +44,17 @@ function readSite(artist: Artist) {
   return rows[0];
 }
 
-async function assertUniqueName(tx: Prisma.TransactionClient, artist: Artist, name: string) {
+async function nameBelongsToAnotherArtist(
+  tx: Prisma.TransactionClient,
+  artist: Artist,
+  name: string,
+) {
   const identities = await tx.artist.findMany({
     select: { id: true, slug: true, name: true, aliases: true },
   });
-  if (artistAliasIndex(identities, { orthography: true })(name).some(({ id }) => id !== artist.id))
-    throw new Error("The name belongs to another artist identity");
+  return artistAliasIndex(identities, { orthography: true })(name).some(
+    ({ id }) => id !== artist.id,
+  );
 }
 
 export async function prepareArtistDraft(
@@ -64,7 +69,8 @@ export async function prepareArtistDraft(
     switch (field) {
       case "canonicalName": {
         const name = nameValue(value);
-        if (name !== artist.name) await assertUniqueName(tx, artist, name);
+        if (name !== artist.name && (await nameBelongsToAnotherArtist(tx, artist, name)))
+          throw new Error("The name belongs to another artist identity");
         changes.push({ field, beforeValue: artist.name, afterValue: name });
         break;
       }
@@ -98,7 +104,10 @@ export async function publishAdminArtistChange(tx: Prisma.TransactionClient, cha
         throw new CanonicalReviewConflict(
           "The canonical artist name changed after review was queued",
         );
-      await assertUniqueName(tx, artist, name);
+      if (await nameBelongsToAnotherArtist(tx, artist, name))
+        throw new CanonicalReviewConflict(
+          "The reviewed name now belongs to another artist identity",
+        );
       const aliases = artist.aliases.includes(artist.name)
         ? artist.aliases
         : [...artist.aliases, artist.name];
