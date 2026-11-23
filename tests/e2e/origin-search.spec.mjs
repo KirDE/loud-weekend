@@ -74,7 +74,11 @@ for (const [lang, labels] of Object.entries({
     await expect(page.getByRole("button", { name: /Münsingen/ })).toBeVisible();
     await input.fill("72525");
     await input.press("Enter");
-    await page.getByRole("button", { name: /Münsingen, 72525/ }).click();
+    const result = page.getByRole("button", { name: /Münsingen, 72525/ });
+    await result.focus();
+    await result.press("Enter");
+    await expect(input).toBeFocused();
+    await expect(page.locator(".originSearch").getByRole("status")).toContainText("Münsingen");
     await expect(page.locator('.filterBar select option[value="custom"]')).toContainText(
       "Münsingen",
     );

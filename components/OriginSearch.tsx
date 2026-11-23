@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { readCustomOrigin, type CustomOrigin } from "@/lib/discovery-preferences";
 import { useLanguage } from "./LanguageProvider";
 
@@ -13,6 +13,7 @@ const labels = {
     error: "The place index is unavailable.",
     distance: "Distances are straight-line, not travel distances.",
     searching: "Searching…",
+    selected: "Selected origin:",
   },
   de: {
     title: "Anderen Startort finden",
@@ -22,6 +23,7 @@ const labels = {
     error: "Die Ortssuche ist nicht verfügbar.",
     distance: "Entfernungen werden als Luftlinie angegeben.",
     searching: "Suche läuft…",
+    selected: "Ausgewählter Startort:",
   },
   ru: {
     title: "Найти другой пункт отправления",
@@ -31,6 +33,7 @@ const labels = {
     error: "Поиск мест сейчас недоступен.",
     distance: "Расстояние указывается по прямой, а не по маршруту.",
     searching: "Поиск…",
+    selected: "Выбранный пункт отправления:",
   },
 };
 
@@ -39,12 +42,15 @@ type Place = CustomOrigin & { id: string; postalCode: string | null; region: str
 export function OriginSearch({ onPick }: { onPick: (place: CustomOrigin) => void }) {
   const { language, locale } = useLanguage();
   const copy = labels[language];
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [selection, setSelection] = useState<CustomOrigin | null>(null);
   const [query, setQuery] = useState("");
   const [places, setPlaces] = useState<Place[]>([]);
   const [status, setStatus] = useState<"idle" | "searching" | "empty" | "error">("idle");
   const regions = new Intl.DisplayNames([locale], { type: "region" });
 
   async function search() {
+    setSelection(null);
     setStatus("searching");
     setPlaces([]);
     try {
@@ -86,6 +92,7 @@ export function OriginSearch({ onPick }: { onPick: (place: CustomOrigin) => void
         <label>
           {copy.query}{" "}
           <input
+            ref={inputRef}
             type="search"
             required
             minLength={2}
@@ -99,7 +106,14 @@ export function OriginSearch({ onPick }: { onPick: (place: CustomOrigin) => void
           {copy.search}
         </button>
       </form>
-      {status !== "idle" && <p role="status">{copy[status]}</p>}
+      <div role="status">
+        {status !== "idle" && <p>{copy[status]}</p>}
+        {selection && (
+          <p>
+            {copy.selected} {selection.name}, {regions.of(selection.countryCode)}
+          </p>
+        )}
+      </div>
       {places.length > 0 && (
         <ul>
           {places.map(({ id, countryCode, name, latitude, longitude, region, postalCode }) => (
@@ -108,7 +122,10 @@ export function OriginSearch({ onPick }: { onPick: (place: CustomOrigin) => void
                 type="button"
                 className="outlineButton"
                 onClick={() => {
-                  onPick({ countryCode, name, latitude, longitude });
+                  const origin = { countryCode, name, latitude, longitude };
+                  onPick(origin);
+                  setSelection(origin);
+                  inputRef.current?.focus();
                   setQuery("");
                   setPlaces([]);
                 }}
