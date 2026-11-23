@@ -262,6 +262,7 @@ test("expired, malformed and private cached bodies cannot validate or fall back"
     [catalogReply(), Date.now() - 8 * 24 * 60 * 60 * 1000],
     [catalogReply(revisionA, { headers: { "Cache-Control": "private" } })],
     [catalogReply(revisionA, { body: { user: "private" } })],
+    [catalogReply(revisionA, { body: { ...payload(), festivals: [null] } })],
     [new Response("not json", { headers: catalogReply().headers })],
   ];
   for (const [candidate, stamp] of candidates) {
@@ -295,10 +296,33 @@ test("unsafe network responses are never saved and HTTP errors do not become sta
       if (!online) throw new TypeError("offline");
       return catalogReply(revisionA, options);
     } });
-    assert.equal((await dispatch(listeners)).status, options.status || 200);
+    assert.equal((await dispatch(listeners)).status, options.status || 502);
     assert.equal(await cache.match(CATALOG_URL), undefined);
     online = false;
     await assert.rejects(dispatch(listeners), /offline/);
+  }
+});
+
+test("an invalid public-looking catalogue cannot replace or revalidate a good offline copy", async () => {
+  const invalid = [
+    { ...payload(), dataVersion: "different-edition" },
+    { ...payload(), privateNote: "not part of the public projection" },
+    { ...payload(), festivals: [{ ...payload().festivals[0], timetable: null }] },
+    { ...payload(), festivals: [{ ...payload().festivals[0], timetable: [{ artist: "Incomplete" }] }] },
+  ];
+  for (const body of invalid) {
+    const { cache, caches } = memoryCache();
+    const stamp = Date.now() - 60_000;
+    await seed(cache, catalogReply(), stamp);
+    const { listeners } = await loadWorker({ cachesImpl: caches, fetchImpl: async () =>
+      catalogReply(revisionB, { body }),
+    });
+    const response = await dispatch(listeners);
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const stored = await cache.match(CATALOG_URL);
+    assert.equal(stored.headers.get("x-festival-radar-cached-at"), String(stamp));
+    assert.deepEqual(await stored.json(), payload());
   }
 });
 
@@ -385,11 +409,11 @@ test("canonical trailing-slash consumer shares the saved body with the bare endp
   assert.deepEqual(await (await dispatch(listeners, new Request(`${CATALOG_URL}/`))).json(), payload());
 });
 
-test("redirected catalogue responses cannot be cached even with public headers", async () => {
+test("redirected catalogue responses are rejected even with public headers", async () => {
   const { cache, caches } = memoryCache();
   const response = catalogReply();
   Object.defineProperty(response, "redirected", { value: true });
   const { listeners } = await loadWorker({ cachesImpl: caches, fetchImpl: async () => response });
-  assert.equal((await dispatch(listeners)).status, 200);
+  assert.equal((await dispatch(listeners)).status, 502);
   assert.equal(await cache.match(CATALOG_URL), undefined);
 });
