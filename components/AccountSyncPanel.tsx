@@ -34,17 +34,26 @@ const labels = {
   ru: { title: "Синхронизация аккаунта", local: "Без входа локальный план останется доступен.", migrate: "Объединить данные устройства с аккаунтом", replace: "Использовать данные аккаунта на устройстве", noAccountData: "В аккаунте пока нет сохранённых данных.", sync: "Синхронизировать", syncing: "Синхронизация…", current: "Всё синхронизировано.", resolved: "Конфликт решён. Запустите синхронизацию ещё раз, чтобы отправить остальные локальные изменения.", conflict: "На другом устройстве есть более новая версия. Ничего не перезаписано.", keepLocal: "Оставить данные устройства", keepRemote: "Взять данные другого устройства", share: "Создать публичную ссылку на план", expiry: "Срок ссылки", copy: "Копировать ссылку", copied: "Скопировано", expired: "Истёкшие ссылки возвращают «Не найдено».", spotify: "Spotify", connect: "Подключить или переподключить Spotify", import: "Импортировать плейлисты", last: "Последний успешный импорт", imported: "Сохранённые импортированные плейлисты", empty: "Плейлисты ещё не импортированы.", tracks: "треков", failed: "Ошибка синхронизации. Переподключитесь и повторите.", login: "Войдите через меню аккаунта, чтобы включить синхронизацию между устройствами." },
 } as const;
 function payloads(p: ReturnType<typeof useLocalPlanner>): Record<Kind, unknown> { return { favorites: { favoriteFestivals: p.favoriteFestivals, favoriteArtists: p.favoriteArtists }, collections: readCollections({ playlistFestivals: p.playlistFestivals }), "saved-filters": { savedFilters: p.savedFilters }, plans: { attendance: p.attendance } }; }
-function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
-  const favorites = documents.favorites?.payload as z.infer<typeof favoritesPayload> | undefined;
-  const plans = documents.plans?.payload as z.infer<typeof plansPayload> | undefined;
-  const filters = documents["saved-filters"]?.payload as { savedFilters?: unknown } | undefined;
-  return {
-    favoriteFestivals: favorites?.favoriteFestivals ?? emptyPlannerState.favoriteFestivals,
-    favoriteArtists: favorites?.favoriteArtists ?? emptyPlannerState.favoriteArtists,
-    attendance: plans?.attendance ?? emptyPlannerState.attendance,
-    playlistFestivals: readCollections(documents.collections?.payload).playlistFestivals,
-    savedFilters: readDiscoveryPreferences(filters?.savedFilters),
-  };
+function plannerFields(kind: Kind, { payload }: Document): Partial<PlannerState> {
+  switch (kind) {
+    case "favorites": {
+      const favorites = payload as z.infer<typeof favoritesPayload>;
+      return {
+        favoriteFestivals: favorites.favoriteFestivals ?? emptyPlannerState.favoriteFestivals,
+        favoriteArtists: favorites.favoriteArtists ?? emptyPlannerState.favoriteArtists,
+      };
+    }
+    case "collections":
+      return { playlistFestivals: readCollections(payload).playlistFestivals };
+    case "saved-filters": {
+      const filters = payload as z.infer<typeof savedFiltersPayload>;
+      return { savedFilters: readDiscoveryPreferences(filters.savedFilters) };
+    }
+    case "plans": {
+      const plans = payload as z.infer<typeof plansPayload>;
+      return { attendance: plans.attendance ?? emptyPlannerState.attendance };
+    }
+  }
 }
 function mergePayload(kind: Kind, remote: unknown, local: unknown) {
   const a = remote as Partial<PlannerState>; const b = local as Partial<PlannerState>;
@@ -99,19 +108,9 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
     setDocs((current) => ({ ...current, [kind]: document }));
     return document;
   }
-  function applyAccountDocument(kind: Kind, document: Document) {
-    const state = plannerFrom({ [kind]: document });
-    const fields = {
-      favorites: { favoriteFestivals: state.favoriteFestivals, favoriteArtists: state.favoriteArtists },
-      collections: { playlistFestivals: state.playlistFestivals },
-      "saved-filters": { savedFilters: state.savedFilters },
-      plans: { attendance: state.attendance },
-    };
-    planner.replaceFields(fields[kind], planner);
-  }
-
   async function synchronize(mode:"merge"|"remote"|"normal"="normal") {
     setBusy(true);setStatus("");setConflict(null);
+    const merged: Partial<PlannerState> = {};
     try {
       if (mode === "remote") {
         const latest = await readDocuments();
@@ -122,20 +121,25 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
         }
         for (const kind of kinds) {
           const document = latest[kind];
-          if (document) applyAccountDocument(kind, document);
+          if (document) planner.replaceFields(plannerFields(kind, document), planner);
         }
         setStatus(t.current);
         return;
       }
-      const local=payloads(planner),next={...docs};
-      for(const kind of kinds){
-        const content=mode==="merge"&&next[kind]?mergePayload(kind,next[kind]!.payload,local[kind]):local[kind];
-        next[kind]=await put(kind,content,next[kind]?.revision??0,mode==="merge");
+      const local = payloads(planner);
+      for (const kind of kinds) {
+        const remote = docs[kind];
+        const content = mode === "merge" && remote ? mergePayload(kind, remote.payload, local[kind]) : local[kind];
+        const saved = await put(kind, content, remote?.revision ?? 0, mode === "merge");
+        if (mode === "merge") Object.assign(merged, plannerFields(kind, saved));
       }
-      if(mode==="merge")planner.merge(plannerFrom(next), planner);
       setStatus(t.current);
     }catch(reason){if(!(reason instanceof Error&&reason.message==="conflict"))setStatus(reason instanceof Error?reason.message:t.failed);}
-    finally{setBusy(false);}
+    finally {
+      // Earlier writes may have succeeded even if a later document could not be saved.
+      if (Object.keys(merged).length) planner.merge(merged, planner);
+      setBusy(false);
+    }
   }
 
   async function resolve(useLocal: boolean) {
@@ -146,11 +150,12 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
       if (useLocal) {
         const local = payloads(planner)[kind];
         const content = mergeLocal ? mergePayload(kind, remote.payload, local) : local;
-        await put(kind, content, remote.revision, mergeLocal);
+        const saved = await put(kind, content, remote.revision, mergeLocal);
+        if (mergeLocal) planner.merge(plannerFields(kind, saved), planner);
       } else {
         const latest = await readDocument(kind);
         if (!latest || latest.id !== remote.id) throw new Error(t.failed);
-        applyAccountDocument(kind, latest);
+        planner.replaceFields(plannerFields(kind, latest), planner);
         setDocs(current => ({ ...current, [kind]: latest }));
       }
       setConflict(null);

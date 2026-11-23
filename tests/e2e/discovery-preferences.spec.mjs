@@ -327,3 +327,67 @@ test("merging into the account leaves a newer device edit intact", async ({ page
   await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)).attendance, storageKey))
     .toEqual({});
 });
+
+test("retrying a partial account merge keeps remote values already merged", async ({ page, baseURL }) => {
+  await page.addInitScript(key => {
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, JSON.stringify({ favoriteFestivals: ["device-festival"] }));
+    }
+  }, storageKey);
+  const credentials = { email: `discovery-partial-merge-${randomUUID()}@example.test`, password: "synthetic merge test password" };
+  expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
+  const favoritesUrl = "/api/sync/favorites/";
+  const headers = { origin: new URL(baseURL).origin };
+  expect((await page.request.put(favoritesUrl, {
+    headers, data: { revision: 0, payload: { favoriteFestivals: ["account-festival"], favoriteArtists: [] } },
+  })).status()).toBe(201);
+
+  const loaded = page.waitForResponse(response =>
+    response.url().includes(favoritesUrl) && response.request().method() === "GET");
+  await page.goto("/en/planner/");
+  expect((await loaded).status()).toBe(200);
+  const plansRoute = "**/api/sync/plans*";
+  await page.route(plansRoute, route => route.request().method() === "PUT"
+    ? route.fulfill({ status: 503 }) : route.continue());
+  const favoritesSaved = page.waitForResponse(response =>
+    response.url().includes(favoritesUrl) && response.request().method() === "PUT");
+  await page.getByRole("button", { name: "Merge this device into my account", exact: true }).click();
+  expect((await favoritesSaved).status()).toBe(200);
+  await expect(page.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
+  await page.unroute(plansRoute);
+
+  await page.getByRole("button", { name: "Sync now", exact: true }).click();
+  await expect(page.getByText("Everything is synchronized.")).toBeVisible();
+  const { document } = await (await page.request.get(favoritesUrl)).json();
+  expect(document.payload.favoriteFestivals.sort()).toEqual(["account-festival", "device-festival"]);
+});
+
+test("keeping this device in a merge conflict also preserves the merged account favorites", async ({ page }) => {
+  await page.addInitScript(key => {
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, JSON.stringify({ favoriteFestivals: ["device-festival"] }));
+    }
+  }, storageKey);
+  const credentials = { email: `discovery-merge-conflict-${randomUUID()}@example.test`, password: "synthetic merge test password" };
+  expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
+  await page.goto("/en/planner/");
+  const sync = page.getByRole("button", { name: "Sync now", exact: true });
+  await sync.click();
+  await expect(page.getByText("Everything is synchronized.")).toBeVisible();
+
+  const favoritesUrl = "/api/sync/favorites/";
+  const { document: before } = await (await page.request.get(favoritesUrl)).json();
+  expect((await page.request.put(favoritesUrl, {
+    headers: { origin: new URL(page.url()).origin },
+    data: { revision: before.revision, payload: { favoriteFestivals: ["account-festival"], favoriteArtists: [] } },
+  })).status()).toBe(200);
+
+  await page.getByRole("button", { name: "Merge this device into my account", exact: true }).click();
+  await page.getByRole("button", { name: "Keep this device", exact: true }).click();
+  await expect(page.getByText("Conflict resolved. Sync again to send other local changes.")).toBeVisible();
+
+  await sync.click();
+  await expect(page.getByText("Everything is synchronized.")).toBeVisible();
+  const { document } = await (await page.request.get(favoritesUrl)).json();
+  expect(document.payload.favoriteFestivals.sort()).toEqual(["account-festival", "device-festival"]);
+});
