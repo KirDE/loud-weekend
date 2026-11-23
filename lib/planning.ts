@@ -1,4 +1,5 @@
 import type { Festival } from "@/lib/domain/festival";
+import { festivalDateInterval } from "./festival-dates.ts";
 
 export function festivalArtists(item: Festival) {
   return new Set([...item.headliners, ...item.lineup].map((artist) => artist.toLocaleLowerCase()));
@@ -23,8 +24,17 @@ export function similarFestivals(item: Festival, festivals: Festival[], limit = 
     .slice(0, limit);
 }
 
-function compactDate(value: string) {
-  return value.replaceAll("-", "");
+function calendarDates(item: Pick<Festival, "startDate" | "endDate">) {
+  const interval = festivalDateInterval(item);
+  if (!interval) return null;
+  const { start, end } = interval;
+  end.setUTCDate(end.getUTCDate() + 1);
+  // iCalendar DATE uses a four-digit year.
+  if (end.getUTCFullYear() > 9999) return null;
+  return {
+    start: start.toISOString().slice(0, 10).replaceAll("-", ""),
+    end: end.toISOString().slice(0, 10).replaceAll("-", ""),
+  };
 }
 
 function escapeIcs(value: string) {
@@ -65,25 +75,23 @@ function calendarStamp(value: string | undefined, generatedAt: Date) {
 }
 
 export function calendarFile(items: CalendarEvent[], generatedAt = new Date()) {
-  const events = items
-    .filter((item) => item.startDate)
-    .flatMap((item) => {
-      const end = new Date(`${item.endDate || item.startDate}T12:00:00Z`);
-      end.setUTCDate(end.getUTCDate() + 1);
-      const location = [item.city, item.country].filter(Boolean).join(", ");
-      return [
-        "BEGIN:VEVENT",
-        `UID:${item.calendarId ?? `${item.slug}-${item.editionYear || 2027}`}@festival-radar`,
-        `DTSTAMP:${calendarStamp(item.calendarUpdatedAt ?? item.updatedAt, generatedAt)}`,
-        `DTSTART;VALUE=DATE:${compactDate(item.startDate!)}`,
-        `DTEND;VALUE=DATE:${compactDate(end.toISOString().slice(0, 10))}`,
-        `SUMMARY:${escapeIcs(item.name)}`,
-        `LOCATION:${escapeIcs(location)}`,
-        `DESCRIPTION:${escapeIcs(`Official information: ${item.officialUrl}`)}`,
-        `URL:${item.officialUrl.replace(/\r|\n/g, "")}`,
-        "END:VEVENT",
-      ];
-    });
+  const events = items.flatMap((item) => {
+    const dates = calendarDates(item);
+    if (!dates) return [];
+    const location = [item.city, item.country].filter(Boolean).join(", ");
+    return [
+      "BEGIN:VEVENT",
+      `UID:${item.calendarId ?? `${item.slug}-${item.editionYear || 2027}`}@festival-radar`,
+      `DTSTAMP:${calendarStamp(item.calendarUpdatedAt ?? item.updatedAt, generatedAt)}`,
+      `DTSTART;VALUE=DATE:${dates.start}`,
+      `DTEND;VALUE=DATE:${dates.end}`,
+      `SUMMARY:${escapeIcs(item.name)}`,
+      `LOCATION:${escapeIcs(location)}`,
+      `DESCRIPTION:${escapeIcs(`Official information: ${item.officialUrl}`)}`,
+      `URL:${item.officialUrl.replace(/\r|\n/g, "")}`,
+      "END:VEVENT",
+    ];
+  });
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -99,11 +107,9 @@ export function calendarFile(items: CalendarEvent[], generatedAt = new Date()) {
 }
 
 export function calendarUrls(item: Festival) {
-  if (!item.startDate) return null;
-  const end = new Date(`${item.endDate || item.startDate}T12:00:00Z`);
-  end.setUTCDate(end.getUTCDate() + 1);
-  const exclusiveEnd = end.toISOString().slice(0, 10);
-  const dates = `${compactDate(item.startDate)}/${compactDate(exclusiveEnd)}`;
+  const range = calendarDates(item);
+  if (!range) return null;
+  const dates = `${range.start}/${range.end}`;
   const details = `Official information: ${item.officialUrl}`;
   const query = new URLSearchParams({
     action: "TEMPLATE",

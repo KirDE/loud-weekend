@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
-import { festivalDateInterval } from "./festival-dates.ts";
 import { calendarFile } from "./planning.ts";
 
 export const calendarPrivateHeaders = {
@@ -80,17 +79,15 @@ export async function readCalendarFeed(db: PrismaClient, key: string) {
         },
         orderBy: [{ startDate: "asc" }, { id: "asc" }],
       });
-      const events = editions
-        .map((edition) => ({
-          ...edition.festival,
-          city: edition.festival.city ?? undefined,
-          editionYear: edition.year,
-          startDate: isoDate(edition.startDate),
-          endDate: isoDate(edition.endDate),
-          calendarId: edition.id,
-          calendarUpdatedAt: edition.updatedAt.toISOString(),
-        }))
-        .filter(festivalDateInterval);
+      const events = editions.map((edition) => ({
+        ...edition.festival,
+        city: edition.festival.city ?? undefined,
+        editionYear: edition.year,
+        startDate: isoDate(edition.startDate),
+        endDate: isoDate(edition.endDate),
+        calendarId: edition.id,
+        calendarUpdatedAt: edition.updatedAt.toISOString(),
+      }));
       return calendarFile(events);
     },
     { isolationLevel: "RepeatableRead" },
