@@ -159,10 +159,26 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
   await page.unroute(favoritesRoute);
 
   await page.getByRole("button", { name: "Sync now", exact: true }).click();
-  await page.getByRole("button", { name: "Use other device", exact: true }).click();
+  const useRemote = page.getByRole("button", { name: "Use other device", exact: true });
+  await expect(useRemote).toBeVisible();
+
+  // A further account save after the conflict must not be replaced by the stale snapshot.
+  const latest = { ...remote, favoriteArtists: ["new-remote-artist"] };
+  expect((await page.request.put("/api/sync/favorites/", {
+    headers: { origin: new URL(page.url()).origin },
+    data: { revision: document.revision, payload: latest },
+  })).status()).toBe(200);
+
+  await page.route(favoritesRoute, route => route.fulfill({ status: 503 }));
+  await useRemote.click();
+  await expect(page.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
+  await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)), storageKey)).toEqual(local);
+  await page.unroute(favoritesRoute);
+
+  await useRemote.click();
   await expect(page.getByText("Conflict resolved. Sync again to send other local changes.")).toBeVisible();
   await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)), storageKey))
-    .toEqual({ ...local, ...remote });
+    .toEqual({ ...local, ...latest });
 
   const savedFilters = await page.request.get("/api/sync/saved-filters/");
   expect((await savedFilters.json()).document).toBeNull();
