@@ -28,12 +28,19 @@ for (const slug of ["hurricane", "southside"]) {
     assert.deepEqual(candidate.headliners, ["Muse", "MGK", "Phoebe Bridgers"]);
     assert.deepEqual(candidate.lineup, ["Pierce the Veil", "I Prevail", "Feine Sahne Fischfilet"]);
     assert.deepEqual(candidate.warnings, []);
-    assert.deepEqual(candidate.evidence.map(({ field }) => field), ["startDate", "endDate", "headliners", "lineup"]);
+    assert.deepEqual(
+      candidate.evidence.map(({ field }) => field),
+      ["startDate", "endDate", "headliners", "lineup"],
+    );
   });
 
   test(`${slug} fails closed without an edition-matched heading and tiered act links`, () => {
     const source = getFestivalSource(slug);
-    const candidate = extractFestivalCandidate(markup.replace("Line-Up 2027", "Line-Up 2026"), source, "2026-09-16T10:13:00Z");
+    const candidate = extractFestivalCandidate(
+      markup.replace("Line-Up 2027", "Line-Up 2026"),
+      source,
+      "2026-09-16T10:13:00Z",
+    );
     assert.deepEqual(candidate.evidence, []);
     assert.match(candidate.warnings[0], /found no trustworthy fields/);
   });
