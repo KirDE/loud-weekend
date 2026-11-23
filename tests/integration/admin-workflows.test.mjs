@@ -218,6 +218,28 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     return event.offers?.availability;
   }
   assert.equal(await publicAvailability(), undefined);
+
+  // Legacy proposals could accidentally publish to a later edition whose prior
+  // value happened to match. Even an otherwise valid review cannot bind them.
+  const legacyRun = await db.adminParserRun.create({ data: {
+    festivalSlug: "wacken-open-air", sourceId: sourceOrigin + "/primary",
+    adapter: "json_ld_event", status: "SUCCEEDED", log: [],
+  } });
+  const legacyChange = await db.adminChange.create({ data: {
+    resourceKind: "FESTIVAL", resourceKey: "wacken-open-air", field: "ticketStatus",
+    beforeValue: ticketChange.beforeValue, afterValue: ticketChange.afterValue,
+    baseRevision: ticketChange.baseRevision, parserRunId: legacyRun.id,
+    sourceEvidence: ticketChange.sourceEvidence.evidence,
+  } });
+  const legacyPath = `/api/admin/changes/${legacyChange.id}`;
+  const unbound = await admin.json(legacyPath, "POST", { decision: "approve" });
+  assert.equal(unbound.status, 409);
+  assert.match(await unbound.text(), /missing its edition binding/);
+  assert.equal((await db.adminChange.findUniqueOrThrow({ where: { id: legacyChange.id } })).status, "PENDING");
+  assert.equal(await db.catalogPublication.count({ where: { sourceId: `admin:${legacyChange.id}` } }), 0);
+  assert.equal(await publicAvailability(), undefined);
+  assert.equal((await admin.json(legacyPath, "POST", { decision: "reject" })).status, 200);
+
   const attempts = requests.filter((path) => path === "/failing").length;
   const replay = await admin.json(`${refreshPath}?year=2027`, "POST");
   assert.equal(replay.status, 201);
