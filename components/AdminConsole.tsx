@@ -1,4 +1,6 @@
 "use client";
+import Link from "next/link";
+import { correctionQueueLabel } from "./CorrectionQueue";
 
 import { useEffect, useMemo, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
@@ -179,6 +181,7 @@ export function AdminConsole({
             <option value="ru">Русский</option>
           </select>
         </label>
+        <Link href="/admin/corrections/">{correctionQueueLabel[language]}</Link>
         <a href="/">← {ta("publicSite")}</a>
       </nav>
       <section className="adminMain">

@@ -3410,3 +3410,52 @@ summary:focus-visible {
 .plannerReset [role="status"] {
   max-width: 28rem;
 }
+
+.correctionReport {
+  margin-block: 2rem;
+  max-width: 38rem;
+}
+
+.correctionReportSummary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.correctionReportFields,
+.correctionReportLabel {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.correctionReportFields {
+  margin-top: 1rem;
+  gap: 1rem;
+}
+
+.correctionReportInput {
+  width: 100%;
+  min-width: 0;
+  padding: 0.6rem;
+}
+
+.correctionReportSubmit {
+  justify-self: start;
+}
+
+.correctionQueue {
+  max-width: 55rem;
+  margin: 2rem auto;
+  padding-inline: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.correctionQueueNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block: 1rem;
+}
+
+.correctionQueueLink {
+  text-decoration: underline;
+}
