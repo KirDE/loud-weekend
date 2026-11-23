@@ -5,6 +5,7 @@ import robotsParser from "robots-parser";
 
 const site = "https://loudweekend.eu";
 const namespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
+const xhtmlNamespace = "http://www.w3.org/1999/xhtml";
 const languages = ["x-default", "en", "de", "ru"];
 const crawlers = ["Googlebot", "Bingbot"];
 const monitor = "LoudWeekendIndexingCheck/1.0";
@@ -54,13 +55,19 @@ async function get(origin, path, mime, limit) {
   }
 }
 
+function xmlNamespace(element, binding) {
+  for (let node = element; node; node = node.parent) {
+    if (node.attribs && Object.hasOwn(node.attribs, binding)) return node.attribs[binding];
+  }
+}
+
 export function inspectSitemap(xml, now = Date.now()) {
   const $ = load(xml, { xml: true });
   const root = $.root().children();
   assert.equal(root.length, 1, "expected one sitemap root");
   assert.equal(root.get(0)?.name, "urlset");
   assert.equal(root.attr("xmlns"), namespace);
-  assert.equal(root.attr("xmlns:xhtml"), "http://www.w3.org/1999/xhtml");
+  assert.equal(root.attr("xmlns:xhtml"), xhtmlNamespace);
   assert.ok(xml.trimEnd().endsWith("</urlset>"), "unclosed sitemap");
   const entries = new Map();
   const urls = root.children();
@@ -73,21 +80,28 @@ export function inspectSitemap(xml, now = Date.now()) {
   };
   for (const node of urls) {
     assert.equal(node.name, "url");
+    assert.equal(xmlNamespace(node, "xmlns"), namespace, "invalid url namespace");
     const entry = $(node);
-    assert.equal(entry.children("loc").length, 1);
-    const path = canonicalPath(entry.children("loc").text());
+    const location = entry.children("loc");
+    assert.equal(location.length, 1);
+    assert.equal(xmlNamespace(location[0], "xmlns"), namespace, "invalid loc namespace");
+    assert.equal(location.children().length, 0, "invalid loc content");
+    const path = canonicalPath(location.text());
     assert.ok(fixedPaths.includes(path) || localizedDetail.test(path) || routeClasses.some(type => type.test(path)),
       `unsupported sitemap path: ${path}`);
     assert.ok(!entries.has(path), `duplicate sitemap path: ${path}`);
     const timestamps = entry.children("lastmod");
     assert.ok(timestamps.length <= 1, `duplicate lastmod on ${path}`);
     if (timestamps.length) {
+      assert.equal(xmlNamespace(timestamps[0], "xmlns"), namespace, `invalid lastmod namespace on ${path}`);
+      assert.equal(timestamps.children().length, 0, `invalid lastmod content on ${path}`);
       const stamp = timestamps.text(), date = new Date(stamp);
       assert.ok(date.getTime() <= now && (date.toISOString() === stamp || date.toISOString().slice(0, 10) === stamp),
         `invalid/future lastmod on ${path}`);
     }
     const alternates = new Map();
     for (const link of entry.children("xhtml\\:link")) {
+      assert.equal(xmlNamespace(link, "xmlns:xhtml"), xhtmlNamespace, `invalid alternate namespace on ${path}`);
       const attrs = link.attribs;
       assert.equal(attrs.rel, "alternate");
       assert.ok(languages.includes(attrs.hreflang) && !alternates.has(attrs.hreflang), `invalid hreflang on ${path}`);
