@@ -11,7 +11,14 @@ export type PublicFestivalOverview = {
 export function overviewSourceHost(value: string): string | undefined {
   try {
     const url = new URL(value);
-    if (url.protocol === "https:" && !url.username && !url.password && !url.port && !url.search && !url.hash) {
+    if (
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      !url.search &&
+      !url.hash
+    ) {
       return url.hostname.replace(/^www\./, "");
     }
   } catch {
@@ -28,15 +35,32 @@ export async function readFestivalOverview(
 
   const row = await db.editionOverview.findFirst({
     where: {
-      city: item.city, countryCode: item.countryCode, organizerHost,
+      city: item.city,
+      countryCode: item.countryCode,
+      organizerHost,
       edition: {
         year: item.editionYear,
-        festival: { slug: item.slug, city: item.city, countryCode: item.countryCode, officialUrl: item.officialUrl },
+        festival: {
+          slug: item.slug,
+          city: item.city,
+          countryCode: item.countryCode,
+          officialUrl: item.officialUrl,
+        },
       },
     },
-    select: { checkedOn: true, sourceUrls: true, summaryEn: true, summaryDe: true, summaryRu: true },
+    select: {
+      checkedOn: true,
+      sourceUrls: true,
+      summaryEn: true,
+      summaryDe: true,
+      summaryRu: true,
+    },
   });
-  if (!row?.sourceUrls.length || row.sourceUrls.some(url => overviewSourceHost(url) !== organizerHost)) return;
+  if (
+    !row?.sourceUrls.length ||
+    row.sourceUrls.some((url) => overviewSourceHost(url) !== organizerHost)
+  )
+    return;
 
   return {
     checkedOn: row.checkedOn.toISOString().slice(0, 10),

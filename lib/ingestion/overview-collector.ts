@@ -9,8 +9,13 @@ async function readPage(url: string, fetchImpl: typeof fetch) {
     signal: AbortSignal.timeout(15_000),
     headers: { accept: "text/html" },
   });
-  if (response.status !== 200 || response.url !== url || response.redirected || !response.body
-    || !/^text\/html(?:\s*;|$)/i.test(response.headers.get("content-type") ?? "")) {
+  if (
+    response.status !== 200 ||
+    response.url !== url ||
+    response.redirected ||
+    !response.body ||
+    !/^text\/html(?:\s*;|$)/i.test(response.headers.get("content-type") ?? "")
+  ) {
     await response.body?.cancel();
     throw new Error("Unexpected organizer overview response");
   }

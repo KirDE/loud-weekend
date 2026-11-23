@@ -11,15 +11,22 @@ import { LocalPlannerProvider } from "../components/LocalPlanner.tsx";
 import { festival } from "./support/catalog.ts";
 
 const cases = [
-  ["available", "officialTickets", "InStock"], ["low", "ticketsLow", "LimitedAvailability"],
-  ["not_on_sale", "ticketsNotOnSale", undefined], ["sold_out", "ticketsSoldOut", "SoldOut"],
-  ["sales_ended", "ticketsSalesEnded", undefined], ["unavailable", "ticketsUnavailable", undefined],
+  ["available", "officialTickets", "InStock"],
+  ["low", "ticketsLow", "LimitedAvailability"],
+  ["not_on_sale", "ticketsNotOnSale", undefined],
+  ["sold_out", "ticketsSoldOut", "SoldOut"],
+  ["sales_ended", "ticketsSalesEnded", undefined],
+  ["unavailable", "ticketsUnavailable", undefined],
   ["unknown", "ticketsUnknown", undefined],
 ];
 
 for (const [status, label, availability] of cases) {
   test(`${status} keeps its meaning through ingestion, UI, filters and structured offers`, () => {
-    const item = { ...festival, ticketStatus: status, ticketsUrl: "https://festival.example.test/tickets" };
+    const item = {
+      ...festival,
+      ticketStatus: status,
+      ticketsUrl: "https://festival.example.test/tickets",
+    };
     const before = structuredClone(item);
     assert.equal(factsSchema.parse({ ticketStatus: status }).ticketStatus, status);
     assert.deepEqual(ticketPresentation(item), { status, href: item.ticketsUrl, label });
@@ -28,7 +35,17 @@ for (const [status, label, availability] of cases) {
     if (availability) assert.equal(event.offers.availability, `https://schema.org/${availability}`);
     else assert.equal(event.offers, undefined);
     for (const language of ["en", "de", "ru"]) {
-      const html = renderToStaticMarkup(h(LanguageProvider, { initialLanguage: language }, h(LocalPlannerProvider, null, h(FestivalDetail, { item, festivals: [item], artistSlugs: {} }))));
+      const html = renderToStaticMarkup(
+        h(
+          LanguageProvider,
+          { initialLanguage: language },
+          h(
+            LocalPlannerProvider,
+            null,
+            h(FestivalDetail, { item, festivals: [item], artistSlugs: {} }),
+          ),
+        ),
+      );
       assert.ok(html.includes(`data-ticket-status="${status}"`));
       assert.ok(html.includes(translate(language, label).replaceAll("&", "&amp;")));
       if (status !== "available") assert.ok(!html.includes(translate(language, "officialTickets")));
@@ -47,7 +64,14 @@ test("missing links and legacy unavailable never invent sold-out or actionable o
     assert.equal(presentation.status, status === "available" ? "unknown" : status);
   }
   for (const status of ["unknown", "unavailable"]) {
-    assert.equal(festivalMusicEvent({ ...festival, ticketStatus: status, ticketsUrl: "https://festival.example.test/tickets" }).offers, undefined);
+    assert.equal(
+      festivalMusicEvent({
+        ...festival,
+        ticketStatus: status,
+        ticketsUrl: "https://festival.example.test/tickets",
+      }).offers,
+      undefined,
+    );
   }
   assert.equal(factsSchema.safeParse({ ticketStatus: "maybe_sold_out" }).success, false);
 });

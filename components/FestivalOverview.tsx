@@ -18,13 +18,18 @@ export function FestivalOverview({ overview }: { overview?: PublicFestivalOvervi
     <section className="sourceNote" aria-labelledby="festival-overview-title">
       <h2 id="festival-overview-title">{copy.title}</h2>
       <p>{overview.summary[language]}</p>
-      <p>{copy.checked}: <time dateTime={overview.checkedOn}>
-        {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(date)}
-      </time></p>
+      <p>
+        {copy.checked}:{" "}
+        <time dateTime={overview.checkedOn}>
+          {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(date)}
+        </time>
+      </p>
       <ul>
         {overview.sources.map((source) => (
           <li key={source}>
-            <a href={source} rel="noreferrer">{copy.source}: {new URL(source).hostname}</a>
+            <a href={source} rel="noreferrer">
+              {copy.source}: {new URL(source).hostname}
+            </a>
           </li>
         ))}
       </ul>

@@ -11,15 +11,34 @@ import { festivalMusicEvent } from "@/lib/seo";
 export const dynamic = "force-dynamic";
 export const dynamicParams = true;
 
-export async function generateMetadata({ params }: { params: Promise<{ lang: string; slug: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ lang: string; slug: string }>;
+}): Promise<Metadata> {
   const { lang, slug } = await params;
   const { festivals } = await getCatalog();
   const festival = festivals.find((item) => item.slug === slug);
   if (!festival || !supportedLanguages.includes(lang as Language)) return {};
-  return { title: festival.name, alternates: { canonical: `/${lang}/festivals/${festival.slug}/`, languages: { "x-default": `/festivals/${festival.slug}/`, en: `/en/festivals/${festival.slug}/`, de: `/de/festivals/${festival.slug}/`, ru: `/ru/festivals/${festival.slug}/` } } };
+  return {
+    title: festival.name,
+    alternates: {
+      canonical: `/${lang}/festivals/${festival.slug}/`,
+      languages: {
+        "x-default": `/festivals/${festival.slug}/`,
+        en: `/en/festivals/${festival.slug}/`,
+        de: `/de/festivals/${festival.slug}/`,
+        ru: `/ru/festivals/${festival.slug}/`,
+      },
+    },
+  };
 }
 
-export default async function LocalizedFestivalPage({ params }: { params: Promise<{ lang: string; slug: string }> }) {
+export default async function LocalizedFestivalPage({
+  params,
+}: {
+  params: Promise<{ lang: string; slug: string }>;
+}) {
   const { lang, slug } = await params;
   if (!supportedLanguages.includes(lang as Language)) notFound();
   const { festivals, artists, playlists } = await getCatalog();
@@ -28,5 +47,22 @@ export default async function LocalizedFestivalPage({ params }: { params: Promis
   const overview = await readFestivalOverview(db, item);
   const event = festivalMusicEvent(item);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
-  return <><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(event).replace(/</g, "\\u003c") }} /><FestivalDetail overview={overview} item={item} festivals={festivals} artistSlugs={artistSlugs} artistPopularity={Object.fromEntries(artists.map((artist) => [artist.name, artist.spotifyStats?.popularity ?? null]))} playlist={playlists[item.slug]} /></>;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(event).replace(/</g, "\\u003c") }}
+      />
+      <FestivalDetail
+        overview={overview}
+        item={item}
+        festivals={festivals}
+        artistSlugs={artistSlugs}
+        artistPopularity={Object.fromEntries(
+          artists.map((artist) => [artist.name, artist.spotifyStats?.popularity ?? null]),
+        )}
+        playlist={playlists[item.slug]}
+      />
+    </>
+  );
 }

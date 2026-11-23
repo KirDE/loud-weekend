@@ -3,11 +3,17 @@ import test from "node:test";
 import { overviewSourceHost } from "../lib/catalog/festival-overviews.ts";
 
 test("overview evidence must be a public HTTPS URL on the organizer host", () => {
-  assert.equal(overviewSourceHost("https://www.organizer.example.test/stages"), "organizer.example.test");
+  assert.equal(
+    overviewSourceHost("https://www.organizer.example.test/stages"),
+    "organizer.example.test",
+  );
   for (const url of [
-    "not a URL", "http://organizer.example.test/stages",
-    "https://credentials@organizer.example.test/stages", "https://organizer.example.test:8080/stages",
-    "https://organizer.example.test/stages?token=secret", "https://organizer.example.test/stages#section",
+    "not a URL",
+    "http://organizer.example.test/stages",
+    "https://credentials@organizer.example.test/stages",
+    "https://organizer.example.test:8080/stages",
+    "https://organizer.example.test/stages?token=secret",
+    "https://organizer.example.test/stages#section",
   ]) {
     assert.equal(overviewSourceHost(url), undefined);
   }
@@ -30,6 +36,8 @@ test("Wacken event terms must explicitly list the named location and stage scope
     Dazu gehört insbesondere die Eventfläche der Gemeinde Wacken.
     Hierzu gehören auch das Gelände vor den Haupt- und Nebenbühnen.</p>`;
   assert.match(parseFestivalOverview(page, "wacken-open-air", 2027).en, /main and side stage/);
-  assert.equal(parseFestivalOverview(page.replace("Haupt- und Nebenbühnen", "Zelte"), "wacken-open-air", 2027),
-    undefined);
+  assert.equal(
+    parseFestivalOverview(page.replace("Haupt- und Nebenbühnen", "Zelte"), "wacken-open-air", 2027),
+    undefined,
+  );
 });
