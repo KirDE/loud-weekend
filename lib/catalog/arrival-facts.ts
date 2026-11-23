@@ -3,7 +3,7 @@ import type { SupportedLanguage } from "./public";
 
 type Localized = Record<SupportedLanguage, string>;
 type ArrivalFact = {
-  kind: "venue" | "shuttle" | "camper";
+  kind: "venue" | "shuttle" | "railShuttle" | "camper";
   description: Localized;
   source: string;
 };
@@ -37,6 +37,15 @@ export const arrivalRecords: readonly ArrivalRecord[] = [
           ru: "Организатор предлагает платные шаттлы из аэропортов Брюсселя, Брюссель-Шарлеруа и Эйндховена, а также с других остановок в Бельгии и Нидерландах. Бронирование и подробности — в объявлении организатора.",
         },
         source: "https://www.graspop.be/en/news/gmm2027-tickets-accommodations-gmm-app",
+      },
+      {
+        kind: "railShuttle",
+        description: {
+          en: "Paid coaches connect Brussels-Midi and Eindhoven Centraal with the festival. Departure days vary by station, and the Monday return needs its own ticket. Check the shuttle operator’s timetable before booking a train.",
+          de: "Kostenpflichtige Reisebusse verbinden Bruxelles-Midi und Eindhoven Centraal mit dem Festival. Die Abfahrtstage hängen vom Bahnhof ab. Für die Rückfahrt am Montag brauchst du ein eigenes Ticket. Prüfe vor der Zugbuchung den Shuttlefahrplan.",
+          ru: "Платные автобусы идут к фестивалю от вокзалов Брюссель-Миди и Эйндховен-Централ. Дни отправления зависят от вокзала. На обратный шаттл в понедельник нужен отдельный билет. Перед покупкой билета на поезд проверьте расписание шаттла.",
+        },
+        source: "https://www.graspop.be/en/info/shuttles",
       },
     ],
   },
