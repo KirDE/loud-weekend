@@ -4,11 +4,11 @@ import {readFileSync} from 'node:fs';
 import {fetchSource} from '../lib/ingestion/fetch.ts';
 import {extractFestivalCandidate} from '../lib/ingestion/extract.ts';
 import {observeTicketSupplement,ticketSupplementUrl,ticketSupplementPurchaseUrl} from '../lib/ingestion/ticket-supplements.ts';
-import {ALCATRAZ_STOCK,ALCATRAZ_PURCHASE,ALCATRAZ_SHOP,alcatrazProof} from './fixtures/ticket-status/alcatraz-reviewed-proof.ts';
+import {ALCATRAZ_STOCK,ALCATRAZ_PURCHASE} from '../lib/ingestion/alcatraz-ticket-stock.ts';
 import {parserSource} from './support/parser-source.ts';
 const fixture=readFileSync(new URL('./fixtures/ticket-status/alcatraz-public-stock.json',import.meta.url),'utf8');
 const home=readFileSync(new URL('./fixtures/official-markup/alcatraz-current-banner.html',import.meta.url),'utf8');
-const source=parserSource('alcatraz',{url:'https://www.alcatraz.be/',alcatrazProof,strategies:['json_ld_event','html_fallback']});
+const source=parserSource('alcatraz',{url:'https://www.alcatraz.be/',strategies:['json_ld_event','html_fallback']});
 const dates={startDate:'2027-08-05',endDate:'2027-08-08',fetchedAt:'2026-11-22T12:50:00Z'};
 const pass=p=>Object.values(p.tickets).find(t=>t?.name==='Combi - Wave 3');
 test('Alcatraz: actual public ordinary Combi Wave 3 available despite sold-out early waves/VIP',()=>{
@@ -66,4 +66,27 @@ test('Alcatraz: unexpected redirect/media/error is not a healthy empty inventory
  await assert.rejects(pipeline({stockUrl:'https://foreign.test/data'}),/changed identity/);
  await assert.rejects(pipeline({type:'text/html'}),/non-HTML/);
  for(const status of [403,429,503])assert.equal((await pipeline({status})).result.response.status,status);
+});
+
+test('Alcatraz binds the latest ordinary wave to the observed provider event and organizer dates', () => {
+  const shop = JSON.parse(fixture);
+  const event = shop.events.find(item => item.name === 'Alcatraz Open Air 2027');
+  const ticket = pass(shop);
+  const oldId = ticket.guid;
+  const newId = 'aa0ce324-5be6-490c-9ac6-58241245aa43';
+  ticket.name = 'Combi - Wave 4';
+  ticket.guid = newId;
+  shop.tickets[newId] = ticket;
+  delete shop.tickets[oldId];
+  shop.pivots['shops-tickets'].find(item => item.ticket_guid === oldId).ticket_guid = newId;
+  event.start = '2027-08-12T09:00:00+02:00';
+  event.end = '2027-08-16T01:30:00+02:00';
+  const shifted = { ...dates, startDate: '2027-08-12', endDate: '2027-08-15' };
+  const observe = current => observeTicketSupplement(JSON.stringify(shop), source, ALCATRAZ_STOCK, current);
+
+  assert.equal(observe(dates).status, undefined);
+  assert.equal(observe(shifted).status, 'available');
+  assert.match(observe(shifted).excerpt, /Combi - Wave 4/);
+  event.end = undefined;
+  assert.equal(observe(shifted).status, undefined);
 });

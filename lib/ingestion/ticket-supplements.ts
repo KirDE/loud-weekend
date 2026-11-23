@@ -1,7 +1,6 @@
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
-import { observeAlcatrazStock } from "./alcatraz-ticket-stock.ts";
-import { getAlcatrazProof, alcatrazStockUrl, alcatrazPurchaseUrl } from "./alcatraz-ticket-proof.ts";
+import { ALCATRAZ_STOCK, ALCATRAZ_PURCHASE, isAlcatrazStockSource, observeAlcatrazStock } from "./alcatraz-ticket-stock.ts";
 
 export const TICKET_SUPPLEMENT = "official-ticket-supplement-v1";
 type TicketState = NonNullable<FestivalCandidate["ticketStatus"]>;
@@ -12,8 +11,7 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review")) return;
   let url: URL; try { url = new URL(source.url); } catch { return; }
   if (url.protocol !== "https:" || url.username || url.password || url.port || url.search || url.hash) return;
-  const alcatrazProof = getAlcatrazProof(source);
-  if (alcatrazProof) return alcatrazStockUrl(alcatrazProof);
+  if (isAlcatrazStockSource(source)) return ALCATRAZ_STOCK;
   if (source.festivalSlug === "full-rewind" && url.href === "https://full-rewind.de/" && source.strategies.includes("official_markup")
     && Number.isInteger(source.editionYear) && source.editionYear >= 2027 && source.editionYear <= 2100)
     return "https://full-rewind.de/products/full-rewind-weekend-ticket-" + source.editionYear + ".js";
@@ -27,8 +25,7 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
 export function ticketSupplementPurchaseUrl(source: FestivalSource): string | undefined {
   const stockUrl = ticketSupplementUrl(source);
   if (!stockUrl) return;
-  const alcatrazProof = getAlcatrazProof(source);
-  if (alcatrazProof) return alcatrazPurchaseUrl(alcatrazProof);
+  if (stockUrl === ALCATRAZ_STOCK) return ALCATRAZ_PURCHASE;
   return source.festivalSlug === "full-rewind" ? `https://full-rewind.de/collections/tickets-${source.editionYear}` : stockUrl;
 }
 
@@ -72,8 +69,7 @@ export function observeTicketSupplement(html: string, source: FestivalSource, ur
         excerpt: title + "; " + start + "–" + end + "; official Shopify standard weekend variant available=" + product.available };
     } catch { return fail("invalid public weekend product JSON"); }
   }
-  const alcatrazProof = getAlcatrazProof(source);
-  if (alcatrazProof) return observeAlcatrazStock(html, alcatrazProof, dates);
+  if (url === ALCATRAZ_STOCK) return observeAlcatrazStock(html, source.editionYear, dates);
   const $ = load(html);
   const declaredEvents: Array<{ name?: unknown; startDate?: unknown; endDate?: unknown; eventStatus?: unknown }> = [];
   if (source.festivalSlug === "download") $("script[type='application/ld+json']").each((_, element) => {

@@ -1,4 +1,3 @@
-import { withAlcatrazProof } from "../ingestion/alcatraz-ticket-proof.ts";
 import { ticketSupplementUrl, ticketSupplementPurchaseUrl } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
@@ -260,9 +259,9 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     const observed = input.result.candidate;
     const stored = candidate.normalized as unknown as FestivalCandidate;
     if (observed.ticketSupplement || stored.ticketSupplement) {
-      const registeredSource = await withAlcatrazProof(db, { festivalSlug: input.result.festivalSlug,
+      const registeredSource = { festivalSlug: input.result.festivalSlug,
         url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
-        strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true });
+        strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true };
       const ticketUrl = ticketSupplementUrl(registeredSource);
       const purchaseUrl = ticketSupplementPurchaseUrl(registeredSource);
       const provenance = { sourceUrl: input.result.sourceUrl, ticketUrl, editionYear: expectedYear };

@@ -18,21 +18,20 @@ merge or deployment. Not closure of the broader all-festival rollout.
   A direct public GET returned the same current shop/event/ticket status.
 
 The producer verifies the exact shop/current ordinary event, its dates/status,
-EUR currency, ordinary Combi Wave3 GUID/name/event binding and shop-ticket pivot.
+EUR currency, latest ordinary numbered Combi wave and its source-provided GUID/event binding and shop-ticket pivot.
 The ordinary pass must be public (not coupon-gated, hidden or deleted), in its
 active sale window with a valid price/order schema and `status: available`.
 An active automatic status is required; forced/manual status overrides and
-changed phases require a fresh audit. Duplicate/missing/detached products fail
+unknown or ambiguous phases require review. Duplicate/missing/detached products fail
 closed. Primary festival dates and observation time are mandatory.
 
 The API's event end is the final night at 01:30 on 9-Aug, while the official
-festival-day banner ends 8-Aug; both exact reviewed anchors are checked rather
+festival-day banner ends 8-Aug; the source dates must corroborate the organizer dates rather
 than converting the overnight timestamp into a new festival day.
 
 Sold-out early waves, VIP, camping or a later unavailable Wave3 never imply
 whole-event sellout. No global soldout/low-inventory claim is synthesized.
-Routes are audited for2027 only; later editions or a changed ordinary wave need
-new evidence. Last-good stock remains protected on transport/schema failures.
+The shop route is audited for 2027 only; later editions need new source review. Last-good stock remains protected on transport/schema failures.
 
 ## Persistence / provider isolation
 
@@ -64,8 +63,8 @@ This is one more source proposal, not deployed catalogue coverage. Together
 with five proposals in #509 the potential proposal ledger is35/60, leaving25
 without a verified implementation; do not count pending gates as completion.
 
-The reviewed provider identity and edition dates are read from PostgreSQL
-(`ReviewedTicketProof`), keyed by festival, exact primary URL and edition.
-The publisher independently checks the same binding before accepting ticket
-evidence. An edition without a reviewed binding does not fetch this supplement.
-The migration carries forward only the already reviewed source record.
+The production path has no proof seed or side table. The parser matches the
+provider's event against dates parsed from the current official home page,
+then derives the latest ordinary wave from the shop response. The existing
+ingestion pipeline persists its edition/source-bound ticket evidence and the
+site reads published catalogue fields from PostgreSQL.

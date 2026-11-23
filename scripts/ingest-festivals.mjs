@@ -1,4 +1,3 @@
-import { withAlcatrazProof } from "../lib/ingestion/alcatraz-ticket-proof.ts";
 import { drainImportEvents } from "../lib/ingestion/import-events.ts";
 import { sendImportEvent, transportConfigured } from "../lib/ingestion/import-event-transport.mjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -107,7 +106,7 @@ const trigger = process.env.GITHUB_EVENT_NAME === "schedule" ? "SCHEDULE" : "MAN
 if (!dbDue && persistenceEnabled) run = await createIngestionRun(db, { trigger, sourceCommit: process.env.GITHUB_SHA || "local", totalSources: selected.length });
 const summary = { schemaVersion: 1, ingestionRunId: run?.id ?? null, generatedAt: new Date().toISOString(), dryRun: !publish, totalSources: selected.length, attempted: 0, processed: 0, changed: 0, publishable: 0, published: 0, playlistRefreshRequested: 0, reviewRequired: 0, fetchErrors: 0, escalatedFailures: 0, notificationEvents: 0, maxFetchErrors, failureThreshold, status: "RUNNING", results: [] };
 
-for (let source of selected) {
+for (const source of selected) {
   let leaseCompleted = false;
   let publicationCommitted = false;
   let failureOutcome = "pre_attempt_error";
@@ -123,7 +122,6 @@ for (let source of selected) {
   let html;
   failureStage = "fetch";
   try {
-    source = await withAlcatrazProof(db, source);
     if (!fixturePath) {
       const fetched = await fetchSource(source);
       response = fetched.response;
