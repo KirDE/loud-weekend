@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
+import { readTripBudgets } from "@/lib/trip-budget";
 import { readCollections, mergeCollections } from "@/lib/collections";
 import { useLanguage } from "./LanguageProvider";
 import { emptyPlannerState, type PlannerState, useLocalPlanner } from "./LocalPlanner";
-type Kind = "favorites" | "collections" | "saved-filters" | "plans";
+type Kind = "favorites" | "collections" | "saved-filters" | "plans" | "budgets";
 type Document = { id: string; payload: unknown; revision: number; updatedAt: string };
 type Conflict = { kind: Kind; local: unknown; remote: Document };
-const kinds: Kind[] = ["favorites", "collections", "saved-filters", "plans"];
+const kinds: Kind[] = ["favorites", "collections", "saved-filters", "plans", "budgets"];
 const labels = {
   en: {
     title: "Account sync",
@@ -93,6 +94,17 @@ function payloads(p: ReturnType<typeof useLocalPlanner>): Record<Kind, unknown> 
     collections: readCollections({ playlistFestivals: p.playlistFestivals }),
     "saved-filters": { savedFilters: p.savedFilters },
     plans: { attendance: p.attendance },
+    budgets: p.tripBudgets,
+  };
+}
+function payloadPlannerState(p: PlannerState): PlannerState {
+  return {
+    favoriteFestivals: p.favoriteFestivals,
+    favoriteArtists: p.favoriteArtists,
+    attendance: p.attendance,
+    playlistFestivals: p.playlistFestivals,
+    savedFilters: p.savedFilters,
+    tripBudgets: p.tripBudgets,
   };
 }
 function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
@@ -103,6 +115,7 @@ function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
     playlistFestivals: readCollections(documents.collections?.payload).playlistFestivals,
     ...value("saved-filters"),
     ...value("plans"),
+    tripBudgets: readTripBudgets(documents.budgets?.payload),
   };
 }
 function mergePayload(kind: Kind, remote: unknown, local: unknown) {
@@ -119,6 +132,7 @@ function mergePayload(kind: Kind, remote: unknown, local: unknown) {
     };
   if (kind === "collections") return mergeCollections(remote, local);
   if (kind === "plans") return { attendance: { ...a.attendance, ...b.attendance } };
+  if (kind === "budgets") return { ...readTripBudgets(remote), ...readTripBudgets(local) };
   return { ...a, ...b };
 }
 export function AccountSyncPanel({
@@ -201,6 +215,8 @@ export function AccountSyncPanel({
       const local = payloads(planner),
         next = { ...docs };
       for (const kind of kinds) {
+        if (kind === "budgets" && !next.budgets && !Object.keys(planner.tripBudgets).length)
+          continue;
         const content =
           mode === "merge" && next[kind]
             ? mergePayload(kind, next[kind]!.payload, local[kind])
@@ -221,19 +237,23 @@ export function AccountSyncPanel({
     if (!conflict) return;
     setBusy(true);
     try {
-      if (useLocal) await put(conflict.kind, conflict.local, conflict.remote.revision);
-      else {
+      if (useLocal) {
+        await put(conflict.kind, conflict.local, conflict.remote.revision);
+      } else {
         const next = { ...docs, [conflict.kind]: conflict.remote };
         setDocs(next);
-        if (conflict.kind === "collections")
-          planner.replace({
-            favoriteFestivals: planner.favoriteFestivals,
-            favoriteArtists: planner.favoriteArtists,
-            attendance: planner.attendance,
-            savedFilters: planner.savedFilters,
-            playlistFestivals: readCollections(conflict.remote.payload).playlistFestivals,
-          });
-        else planner.replace(plannerFrom(next));
+        const remote = plannerFrom({ [conflict.kind]: conflict.remote });
+        const updates: Record<Kind, Partial<PlannerState>> = {
+          favorites: {
+            favoriteFestivals: remote.favoriteFestivals,
+            favoriteArtists: remote.favoriteArtists,
+          },
+          collections: { playlistFestivals: remote.playlistFestivals },
+          "saved-filters": { savedFilters: remote.savedFilters },
+          plans: { attendance: remote.attendance },
+          budgets: { tripBudgets: remote.tripBudgets },
+        };
+        planner.replace({ ...payloadPlannerState(planner), ...updates[conflict.kind] });
       }
       setConflict(null);
       setStatus(t.current);
@@ -248,7 +268,7 @@ export function AccountSyncPanel({
     setStatus("");
     try {
       let plan = docs.plans;
-      if (!plan) plan = await put("plans", payloads(planner).plans, 0);
+      if (!plan) plan = await put("plans", { attendance: planner.attendance }, 0);
       const response = await fetch("/api/share", {
         method: "POST",
         headers: { "content-type": "application/json" },

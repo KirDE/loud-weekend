@@ -2,11 +2,13 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
 import { parsePlannerState, serializePlannerState } from "@/lib/planner-storage";
+import { type TripBudget, type TripBudgets, maxTripBudgets } from "@/lib/trip-budget";
 export type Attendance = "going" | "maybe" | "not-going";
 export type PlannerState = {
   favoriteFestivals: string[];
   favoriteArtists: string[];
   attendance: Record<string, Attendance>;
+  tripBudgets: TripBudgets;
   playlistFestivals: string[];
   savedFilters: {
     query: string;
@@ -20,6 +22,7 @@ export const emptyPlannerState: PlannerState = {
   favoriteFestivals: [],
   favoriteArtists: [],
   attendance: {},
+  tripBudgets: {},
   playlistFestivals: [],
   savedFilters: {
     query: "",
@@ -34,6 +37,7 @@ const Context = createContext<
       ready: boolean;
       toggleFestival: (v: string) => void;
       toggleArtist: (v: string) => void;
+      setTripBudget: (key: string, value?: TripBudget) => boolean;
       setAttendance: (v: string, a?: Attendance) => void;
       togglePlaylistFestival: (v: string) => void;
       setSavedFilters: (value: PlannerState["savedFilters"]) => void;
@@ -80,6 +84,21 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           else delete attendance[v];
           return { ...s, attendance };
         }),
+      setTripBudget: (key: string, estimate?: TripBudget) => {
+        if (
+          estimate &&
+          !state.tripBudgets[key] &&
+          Object.keys(state.tripBudgets).length >= maxTripBudgets
+        )
+          return false;
+        setState((current) => {
+          const tripBudgets = { ...current.tripBudgets };
+          if (estimate) tripBudgets[key] = estimate;
+          else delete tripBudgets[key];
+          return { ...current, tripBudgets };
+        });
+        return true;
+      },
       togglePlaylistFestival: (v: string) =>
         setState((s) => ({
           ...s,
@@ -89,19 +108,24 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
         setState((s) => ({ ...s, savedFilters })),
       replace: (next: PlannerState) => setState({ ...emptyPlannerState, ...next }),
       merge: (next: Partial<PlannerState>) =>
-        setState((current) => ({
-          favoriteFestivals: Array.from(
-            new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])]),
-          ),
-          favoriteArtists: Array.from(
-            new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])]),
-          ),
-          attendance: { ...next.attendance, ...current.attendance },
-          playlistFestivals: Array.from(
-            new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]),
-          ),
-          savedFilters: { ...current.savedFilters, ...next.savedFilters },
-        })),
+        setState((current) => {
+          const tripBudgets = { ...next.tripBudgets, ...current.tripBudgets };
+          return {
+            favoriteFestivals: Array.from(
+              new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])]),
+            ),
+            favoriteArtists: Array.from(
+              new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])]),
+            ),
+            attendance: { ...next.attendance, ...current.attendance },
+            tripBudgets:
+              Object.keys(tripBudgets).length <= maxTripBudgets ? tripBudgets : current.tripBudgets,
+            playlistFestivals: Array.from(
+              new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]),
+            ),
+            savedFilters: { ...current.savedFilters, ...next.savedFilters },
+          };
+        }),
       clear: () => setState(emptyPlannerState),
     }),
     [ready, state],
