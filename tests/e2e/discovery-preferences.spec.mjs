@@ -216,3 +216,52 @@ test("keeping this device during a sync conflict sends the newest local attendan
   const saved = await (await page.request.get(plansUrl)).json();
   expect(saved.document.payload.attendance).toEqual({ "synthetic-fest": "maybe" });
 });
+
+test("taking a remote plan preserves attendance changed while the account read is pending", async ({ page }) => {
+  await page.addInitScript(key => {
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, JSON.stringify({ attendance: { "synthetic-fest": "going" } }));
+    }
+  }, storageKey);
+  const credentials = { email: `discovery-pending-remote-${randomUUID()}@example.test`, password: "synthetic conflict test password" };
+  expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
+  await page.goto("/en/planner/");
+  const sync = page.getByRole("button", { name: "Sync now", exact: true });
+  await sync.click();
+  await expect(page.getByText("Everything is synchronized.")).toBeVisible();
+
+  const plansUrl = "/api/sync/plans/";
+  const { document } = await (await page.request.get(plansUrl)).json();
+  expect((await page.request.put(plansUrl, {
+    headers: { origin: new URL(page.url()).origin },
+    data: { revision: document.revision, payload: { attendance: { "synthetic-fest": "not-going" } } },
+  })).status()).toBe(200);
+  await sync.click();
+  const useRemote = page.getByRole("button", { name: "Use other device", exact: true });
+  await expect(useRemote).toBeVisible();
+
+  const readStarted = Promise.withResolvers();
+  const releaseRead = Promise.withResolvers();
+  const pattern = "**/api/sync/plans*";
+  await page.route(pattern, async route => {
+    readStarted.resolve();
+    await releaseRead.promise;
+    await route.continue();
+  });
+  const attendance = page.locator(".planList select");
+  try {
+    await useRemote.click();
+    await readStarted.promise;
+    await attendance.selectOption("maybe");
+  } finally {
+    releaseRead.resolve();
+  }
+  await expect(page.getByText("Conflict resolved. Sync again to send other local changes.")).toBeVisible();
+  await expect(attendance).toHaveValue("maybe", { timeout: 4000 });
+  await page.unroute(pattern);
+
+  await sync.click();
+  await expect(page.getByText("Everything is synchronized.")).toBeVisible();
+  const saved = await (await page.request.get(plansUrl)).json();
+  expect(saved.document.payload.attendance).toEqual({ "synthetic-fest": "maybe" });
+});
