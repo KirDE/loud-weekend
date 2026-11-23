@@ -4,9 +4,21 @@ import { authErrorMessage } from "../lib/auth-error-copy";
 
 const examples = [
   ["Invalid credentials.", "E-Mail oder Passwort ungültig.", "Неверный адрес почты или пароль."],
-  ["This email is already registered.", "Diese E-Mail ist bereits registriert.", "Этот адрес почты уже зарегистрирован."],
-  ["Passkey sign-in expired. Please try again.", "Die Passkey-Anfrage ist abgelaufen. Versuche es erneut.", "Запрос паскея истёк. Повторите попытку."],
-  ["This email or passkey is already registered.", "Diese E-Mail oder dieser Passkey ist bereits registriert.", "Этот адрес почты или паскей уже зарегистрирован."],
+  [
+    "This email is already registered.",
+    "Diese E-Mail ist bereits registriert.",
+    "Этот адрес почты уже зарегистрирован.",
+  ],
+  [
+    "Passkey sign-in expired. Please try again.",
+    "Die Passkey-Anfrage ist abgelaufen. Versuche es erneut.",
+    "Запрос паскея истёк. Повторите попытку.",
+  ],
+  [
+    "This email or passkey is already registered.",
+    "Diese E-Mail oder dieser Passkey ist bereits registriert.",
+    "Этот адрес почты или паскей уже зарегистрирован.",
+  ],
 ] as const;
 
 test("known password and passkey errors retain actionable localized detail", () => {
@@ -17,8 +29,16 @@ test("known password and passkey errors retain actionable localized detail", () 
 });
 
 test("unknown server or network errors never leak raw English copy", () => {
-  for (const error of ["Untrusted request origin.", "Unexpected server text", null, { error: "Internal" }]) {
-    assert.equal(authErrorMessage("de", error, "Bitte erneut versuchen."), "Bitte erneut versuchen.");
+  for (const error of [
+    "Untrusted request origin.",
+    "Unexpected server text",
+    null,
+    { error: "Internal" },
+  ]) {
+    assert.equal(
+      authErrorMessage("de", error, "Bitte erneut versuchen."),
+      "Bitte erneut versuchen.",
+    );
     assert.equal(authErrorMessage("ru", error, "Повторите попытку."), "Повторите попытку.");
   }
 });
