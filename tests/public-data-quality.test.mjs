@@ -15,6 +15,7 @@ const performance = {
   observedAt: checkedAt,
 };
 const festival = {
+  officialUrl: "https://festival.example.test/",
   startDate: "2027-06-17",
   endDate: "2027-06-19",
   status: "confirmed",
@@ -130,4 +131,24 @@ test("undated editions do not count performances from another season", () => {
     }),
     1,
   );
+});
+
+test("schedule coverage requires the same official source host as reviewed import", () => {
+  const tally = summarizeDataQuality(
+    {
+      festivals: [
+        {
+          ...festival,
+          timetable: [
+            { ...performance, sourceUrl: "https://festival.example.test.unofficial.test/schedule" },
+          ],
+        },
+        { ...festival, officialUrl: "invalid legacy URL" },
+        festival,
+      ],
+      editions: [],
+    },
+    now,
+  );
+  assert.equal(tally.timetable, 1);
 });
