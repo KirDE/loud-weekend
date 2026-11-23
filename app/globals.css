@@ -407,6 +407,10 @@
   margin-top: 1rem;
 }
 
+.siteInformation p {
+  line-height: 1.6;
+}
+
 .plannerSection details p {
   max-width: 54rem;
 }
@@ -619,6 +623,10 @@
   background: var(--paper);
   border: 2px solid var(--ink);
   box-shadow: 7px 7px 0 #17171244;
+}
+
+.siteInformation a {
+  text-decoration: underline;
 }
 
 .mapMarker > div a {
@@ -2163,10 +2171,6 @@ main {
     margin-left: auto;
   }
 
-  .siteHeader nav a:last-child {
-    display: none;
-  }
-
   .hero {
     padding-top: 45px;
   }
@@ -3409,4 +3413,36 @@ summary:focus-visible {
 
 .plannerReset [role="status"] {
   max-width: 28rem;
+}
+
+.siteFooterLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.siteInformation {
+  max-width: 760px;
+  margin-inline: auto;
+  padding: 36px clamp(20px, 6vw, 44px);
+}
+
+.siteInformation h1 {
+  margin-block: 0 12px;
+}
+
+.siteInformation details {
+  border-block-start: 1px solid var(--line);
+  padding-block: 12px;
+}
+
+.siteInformation summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding-block: 8px;
+}
+
+.siteInformation details:last-of-type {
+  border-block-end: 1px solid var(--line);
+  margin-block-end: 20px;
 }
