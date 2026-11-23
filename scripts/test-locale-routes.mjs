@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { checkIndexing } from "./check-indexing.mjs";
 import { spawn } from "node:child_process";
 
 const port = 3421;
@@ -87,6 +88,8 @@ try {
     assert.equal(pwa.lang, lang);
     assert.equal(pwa.start_url, `/${lang}/`);
   }
+  const indexing = await checkIndexing(origin);
+  console.log(`Indexing smoke passed: ${indexing.entries} sitemap URLs, ${indexing.sampled} pages sampled.`);
   console.log("Locale route browser smoke passed for en, de and ru.");
 } finally {
   server.kill("SIGTERM");

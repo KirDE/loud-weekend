@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { ArtistDetail } from "@/components/ArtistDetail";
 import { getCatalog } from "@/lib/catalog/repository";
+import { localizedAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 export const dynamicParams = true;
@@ -9,7 +10,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { artists } = await getCatalog();
   const requestedSlug = (await params).slug;
   const artist = artists.find(({ slug }) => slug === requestedSlug);
-  return artist ? { title: artist.name, alternates: { canonical: `/artists/${artist.slug}/` } } : {};
+  return artist ? { title: artist.name, alternates: { canonical: `/artists/${artist.slug}/`, languages: localizedAlternates(`/artists/${artist.slug}/`) } } : {};
 }
 
 export default async function ArtistPage({ params }: { params: Promise<{ slug: string }> }) {

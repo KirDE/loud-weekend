@@ -8,7 +8,7 @@ const sitemapSource = await readFile(new URL("../app/sitemap.ts", import.meta.ur
 test("all indexable route classes define self-canonical metadata", async () => {
   const routes = [
     "festivals/[slug]", "artists/[slug]", "countries/[code]", "months/[month]",
-    "archive", "submit", "[lang]",
+    "archive", "submit", "[lang]", "editions/[year]", "festivals/[slug]/[year]",
   ];
   for (const route of routes) {
     const source = await readFile(new URL(`../app/${route}/page.tsx`, import.meta.url), "utf8");
@@ -17,7 +17,7 @@ test("all indexable route classes define self-canonical metadata", async () => {
 });
 
 test("sitemap uses content timestamps rather than future event dates", () => {
-  assert.match(sitemapSource, /lastModified:.*lastPublishedAt/);
+  assert.match(sitemapSource, /readSitemapPublications/);
   assert.doesNotMatch(sitemapSource, /CATALOG_UPDATED_AT|lastModified:\s*(?:startDate|updatedAt)/);
 });
 

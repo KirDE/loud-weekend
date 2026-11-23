@@ -9,7 +9,7 @@ test("public catalogue routes resolve fresh data at request time", async () => {
   const catalogueRoutes = [];
   for (const file of files) {
     const source = await readFile(path.join("app", file), "utf8");
-    if (!/\b(?:getCatalog|getHomeCatalog)\b/.test(source)) continue;
+    if (!/\b(?:getCatalog|getHomeCatalog|readSitemapPublications)\b/.test(source)) continue;
     catalogueRoutes.push(file);
     assert.match(source, /export const dynamic = "force-dynamic"/);
     if (file !== "[lang]/page.tsx") assert.doesNotMatch(source, /generateStaticParams/);

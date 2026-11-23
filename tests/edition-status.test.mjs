@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "esbuild";
 import { editionStatusLabel } from "../lib/edition-status.ts";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
+import { canonicalPath } from "../lib/seo.ts";
 import { LanguageProvider } from "../components/LanguageProvider.tsx";
 
 function makeEdition(overrides = {}) {
@@ -32,6 +33,7 @@ function loadPage(editions, artists = []) {
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": { notFound() { throw new Error("NEXT_NOT_FOUND"); } },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
+    "@/lib/seo": { canonicalPath },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
   };
   new Function("require", "module", "exports", outputText)((id) => {
