@@ -195,6 +195,7 @@ model User {
   submissionAuditEntries    FestivalSubmissionAudit[]
   emailVerificationTokens   EmailVerificationToken[]
   passkeys                  Passkey[]
+  googleIdentity            GoogleIdentity?
 }
 
 model Passkey {
@@ -672,6 +673,7 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  googleAttempts GoogleOAuthAttempt[]
 
   @@index([userId])
   @@index([expiresAt])
@@ -902,4 +904,24 @@ model OperationalState {
   leaseOwner     String?
   leaseExpiresAt DateTime?
   updatedAt      DateTime @updatedAt
+}
+
+model GoogleOAuthAttempt {
+  stateHash    String   @id
+  browserHash  String
+  nonce        String
+  encryptedVerifier String
+  expiresAt    DateTime
+  sessionId    String?
+  session      Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([sessionId])
+}
+
+model GoogleIdentity {
+  subject   String   @id
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

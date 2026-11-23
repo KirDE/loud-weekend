@@ -8,6 +8,36 @@ import { authErrorMessage } from "@/lib/auth-error-copy";
 type User = { id: string; email: string };
 type Mode = "login" | "register";
 
+const googleCopy = {
+  en: {
+    login: "Continue with Google",
+    link: "Link a Google account",
+    connected: "Google authentication completed.",
+    conflict:
+      "This Google identity cannot be used here. " +
+      "If you already have an account, sign in the usual way and link Google explicitly.",
+    failed: "Google authentication did not complete.",
+  },
+  de: {
+    login: "Mit Google fortfahren",
+    link: "Google-Konto verknüpfen",
+    connected: "Die Google-Authentifizierung war erfolgreich.",
+    conflict:
+      "Dieses Google-Konto kann hier nicht verwendet werden. " +
+      "Wenn du bereits ein Konto hast, melde dich wie gewohnt an und verknüpfe es ausdrücklich.",
+    failed: "Die Google-Authentifizierung wurde nicht abgeschlossen.",
+  },
+  ru: {
+    login: "Продолжить с Google",
+    link: "Привязать аккаунт Google",
+    connected: "Аутентификация через Google завершена.",
+    conflict:
+      "Этот аккаунт Google нельзя использовать здесь. " +
+      "Если у вас уже есть аккаунт, войдите обычным способом и отдельно привяжите Google.",
+    failed: "Не удалось завершить аутентификацию через Google.",
+  },
+} as const;
+
 const copy = {
   en: {
     account: "Account",
@@ -70,6 +100,7 @@ const copy = {
 export function AccountMenu() {
   const { language } = useLanguage();
   const t = copy[language];
+  const google = googleCopy[language];
   const [user, setUser] = useState<User | null>(null);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("login");
@@ -77,9 +108,27 @@ export function AccountMenu() {
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
   const [passkeySupported, setPasskeySupported] = useState(false);
+  const [googleAvailable, setGoogleAvailable] = useState(false);
+  const [googleResult, setGoogleResult] = useState<"connected" | "conflict" | "failed" | null>(
+    null,
+  );
 
   useEffect(() => {
     setPasskeySupported(Boolean(window.PublicKeyCredential && navigator.credentials));
+    const url = new URL(window.location.href);
+    const result = url.searchParams.get("google");
+    if (result === "connected" || result === "conflict" || result === "failed") {
+      setGoogleResult(result);
+      setOpen(true);
+      url.searchParams.delete("google");
+      window.history.replaceState(window.history.state, "", url);
+    }
+    fetch("/api/auth/google/status/", { cache: "no-store" })
+      .then(
+        async (response) =>
+          response.ok && setGoogleAvailable((await response.json()).available === true),
+      )
+      .catch(() => undefined);
     fetch("/api/auth/me", { cache: "no-store" })
       .then(async (response) => response.ok && setUser((await response.json()).user))
       .catch(() => undefined);
@@ -173,6 +222,15 @@ export function AccountMenu() {
     }
   }
 
+  const googleForm = (mode: "link" | "login") =>
+    googleAvailable && (
+      <form method="post" action={`/api/auth/google/start/?mode=${mode}`}>
+        <button type="submit" disabled={busy}>
+          {google[mode]}
+        </button>
+      </form>
+    );
+
   return (
     <div className="accountMenu">
       <button
@@ -185,9 +243,13 @@ export function AccountMenu() {
       </button>
       {open && (
         <section className="accountPopover" aria-label={t.account}>
+          {googleResult && (
+            <p role={googleResult === "connected" ? "status" : "alert"}>{google[googleResult]}</p>
+          )}
           {user ? (
             <>
               <strong>{user.email}</strong>
+              {googleForm("link")}
               {error && <p role="alert">{error}</p>}
               <button type="button" disabled={busy} onClick={logout}>
                 {busy ? t.loading : t.logout}
@@ -274,6 +336,7 @@ export function AccountMenu() {
                   {busy ? t.loading : mode === "login" ? t.signIn : t.register}
                 </button>
               </form>
+              {googleForm("login")}
               <p className="accountHint">{t.local}</p>
             </>
           )}
