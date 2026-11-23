@@ -2,20 +2,21 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
 import { parsePlannerState, serializePlannerState } from "@/lib/planner-storage";
+import { defaultDiscoveryPreferences, readDiscoveryPreferences, type DiscoveryPreferences } from "@/lib/discovery-preferences";
 export type Attendance = "going" | "maybe" | "not-going";
 export type PlannerState = {
   favoriteFestivals: string[];
   favoriteArtists: string[];
   attendance: Record<string, Attendance>;
   playlistFestivals: string[];
-  savedFilters: { query: string; country: string; announcedOnly: boolean; month: string; ticketsOnly: boolean };
+  savedFilters: DiscoveryPreferences;
 };
 export const emptyPlannerState: PlannerState = {
   favoriteFestivals: [],
   favoriteArtists: [],
   attendance: {},
   playlistFestivals: [],
-  savedFilters: { query: "", country: "all", announcedOnly: false, month: "all", ticketsOnly: false },
+  savedFilters: defaultDiscoveryPreferences,
 };
 const Context = createContext<
   | (PlannerState & {
@@ -24,7 +25,8 @@ const Context = createContext<
       toggleArtist: (v: string) => void;
       setAttendance: (v: string, a?: Attendance) => void;
       togglePlaylistFestival: (v: string) => void;
-      setSavedFilters: (value: PlannerState["savedFilters"]) => void;
+      setSavedFilters: (value: DiscoveryPreferences) => void;
+      updateSavedFilters: (patch: Partial<DiscoveryPreferences>) => void;
       replace: (value: PlannerState) => void;
       merge: (value: Partial<PlannerState>) => void;
       clear: () => void;
@@ -41,7 +43,10 @@ export function LocalPlannerProvider({
   useEffect(() => {
     try {
       const value = localStorage.getItem("festival-radar-planner-v1");
-      if (value) setState({ ...emptyPlannerState, ...parsePlannerState(value) });
+      if (value) {
+        const restored = parsePlannerState(value);
+        setState({ ...emptyPlannerState, ...restored, savedFilters: readDiscoveryPreferences(restored.savedFilters) });
+      }
     } catch {
       localStorage.removeItem("festival-radar-planner-v1");
     }
@@ -79,14 +84,18 @@ export function LocalPlannerProvider({
           ...s,
           playlistFestivals: toggle(s.playlistFestivals, v),
         })),
-      setSavedFilters: (savedFilters: PlannerState["savedFilters"]) => setState((s) => ({ ...s, savedFilters })),
-      replace: (next: PlannerState) => setState({ ...emptyPlannerState, ...next }),
+      setSavedFilters: (savedFilters: DiscoveryPreferences) => setState((s) => ({ ...s, savedFilters })),
+      updateSavedFilters: (patch: Partial<DiscoveryPreferences>) =>
+        setState((s) => ({ ...s, savedFilters: { ...s.savedFilters, ...patch } })),
+      replace: (next: PlannerState) => setState({
+        ...emptyPlannerState, ...next, savedFilters: readDiscoveryPreferences(next.savedFilters),
+      }),
       merge: (next: Partial<PlannerState>) => setState((current) => ({
         favoriteFestivals: Array.from(new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])])),
         favoriteArtists: Array.from(new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])])),
         attendance: { ...(next.attendance || {}), ...current.attendance },
         playlistFestivals: Array.from(new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])])),
-        savedFilters: { ...current.savedFilters, ...(next.savedFilters || {}) },
+        savedFilters: readDiscoveryPreferences({ ...current.savedFilters, ...next.savedFilters }),
       })),
       clear: () => setState(emptyPlannerState),
     }),
