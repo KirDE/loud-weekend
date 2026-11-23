@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 const copy = {
   en: {
+    clear: "Clear local data",
+    confirm: "Reset local plan",
     import: "Import playlists",
     sync: "Sync now",
     remote: "Use account data on this device",
@@ -11,6 +13,8 @@ const copy = {
     keep: "Keep this device",
   },
   de: {
+    clear: "Lokale Daten löschen",
+    confirm: "Lokalen Plan zurücksetzen",
     import: "Playlists importieren",
     sync: "Jetzt synchronisieren",
     remote: "Kontodaten auf diesem Gerät verwenden",
@@ -21,6 +25,8 @@ const copy = {
     keep: "Dieses Gerät behalten",
   },
   ru: {
+    clear: "Удалить локальные данные",
+    confirm: "Сбросить локальный план",
     import: "Импортировать плейлисты",
     sync: "Синхронизировать",
     remote: "Использовать данные аккаунта на устройстве",
@@ -230,14 +236,14 @@ for (const [locale, t] of Object.entries(copy))
       for (const field of ["favoriteFestivals", "favoriteArtists", "attendance", "savedFilters"])
         expect(retained[field]).toEqual(unsynced[field]);
 
-      await page.evaluate(() => {
-        const key = "festival-radar-planner-v1";
-        const state = JSON.parse(localStorage.getItem(key));
-        state.playlistExcludedArtists = [];
-        localStorage.setItem(key, JSON.stringify(state));
-      });
-      await page.reload();
-      await expect(link).toBeVisible();
+      expect(docs.collections.payload.playlistExcludedArtists).toEqual(["sample-artist"]);
+      await page.getByRole("button", { name: t.clear, exact: true }).click();
+      await page.getByRole("button", { name: t.confirm, exact: true }).click();
+      await page.getByRole("checkbox", { name: "Synthetic Fest", exact: true }).check();
+      await panel.getByRole("button", { name: t.sync, exact: true }).click();
+      await expect(panel).toHaveAttribute("aria-busy", "false");
+      expect(docs.collections.payload.playlistExcludedArtists).toEqual([]);
+      expect(docs.collections.payload.spotify).toEqual(imported);
       failImport = true;
       await panel.getByRole("button", { name: t.import, exact: true }).click();
       await expect(panel).toHaveAttribute("aria-busy", "false");

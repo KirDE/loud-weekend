@@ -124,7 +124,7 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           playlistExcludedArtists: next.playlistExcludedArtists ?? current.playlistExcludedArtists,
           savedFilters: readDiscoveryPreferences({ ...current.savedFilters, ...next.savedFilters }),
         })),
-      clear: () => setState(emptyPlannerState),
+      clear: () => setState({ ...emptyPlannerState, playlistExcludedArtists: [] }),
     }),
     [ready, state],
   );
