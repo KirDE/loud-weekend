@@ -7,7 +7,7 @@ import { useLanguage } from "./LanguageProvider";
 import { emptyPlannerState, type PlannerState, useLocalPlanner } from "./LocalPlanner";
 type Kind = "favorites" | "collections" | "saved-filters" | "plans";
 type Document = { id: string; payload: unknown; revision: number; updatedAt: string };
-type Conflict = { kind: Kind; local: unknown; remote: Document };
+type Conflict = { kind: Kind; remote: Document; mergeLocal: boolean };
 const kinds: Kind[] = ["favorites", "collections", "saved-filters", "plans"];
 const favoritesPayload = z.object({
   favoriteFestivals: z.array(z.string()).optional(),
@@ -227,7 +227,7 @@ export function AccountSyncPanel({
     window.addEventListener("loud-weekend-authenticated", listener);
     return () => window.removeEventListener("loud-weekend-authenticated", listener);
   }, []);
-  async function put(kind: Kind, payload: unknown, revision: number) {
+  async function put(kind: Kind, payload: unknown, revision: number, mergeLocal = false) {
     const response = await fetch(`/api/sync/${kind}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -236,7 +236,7 @@ export function AccountSyncPanel({
     if (response.status === 409) {
       const latest = await readDocument(kind);
       if (!latest) throw new Error(t.failed);
-      setConflict({ kind, local: payload, remote: latest });
+      setConflict({ kind, remote: latest, mergeLocal });
       throw new Error("conflict");
     }
     if (!response.ok) throw new Error(t.failed);
@@ -263,7 +263,7 @@ export function AccountSyncPanel({
           mode === "merge" && next[kind]
             ? mergePayload(kind, next[kind]!.payload, local[kind])
             : local[kind];
-        next[kind] = await put(kind, content, next[kind]?.revision ?? 0);
+        next[kind] = await put(kind, content, next[kind]?.revision ?? 0, mode === "merge");
       }
       if (mode === "merge") planner.merge(plannerFrom(next));
       setStatus(t.current);
@@ -279,9 +279,11 @@ export function AccountSyncPanel({
     if (!conflict) return;
     setBusy(true);
     try {
-      const { kind, local, remote } = conflict;
+      const { kind, remote, mergeLocal } = conflict;
       if (useLocal) {
-        await put(kind, local, remote.revision);
+        const local = payloads(planner)[kind];
+        const content = mergeLocal ? mergePayload(kind, remote.payload, local) : local;
+        await put(kind, content, remote.revision, mergeLocal);
       } else {
         const state = plannerFrom({ [kind]: remote });
         const fields = {
@@ -299,7 +301,7 @@ export function AccountSyncPanel({
       setConflict(null);
       setStatus(t.resolved);
     } catch (reason) {
-      setStatus(reason instanceof Error ? reason.message : t.failed);
+      if (!(reason instanceof Error && reason.message === "conflict")) setStatus(t.failed);
     } finally {
       setBusy(false);
     }
@@ -336,7 +338,7 @@ export function AccountSyncPanel({
       // Preserve unsynchronized device selection first, under the same revision
       // checks as normal sync. A conflict aborts before calling the provider.
       const selection = mergeCollections(docs.collections?.payload, payloads(planner).collections);
-      const saved = await put("collections", selection, docs.collections?.revision ?? 0);
+      const saved = await put("collections", selection, docs.collections?.revision ?? 0, true);
       planner.merge({ playlistFestivals: readCollections(saved.payload).playlistFestivals });
       const response = await fetch("/api/spotify/sync", {
         method: "POST",
@@ -346,7 +348,7 @@ export function AccountSyncPanel({
       if (response.status === 409) {
         const document = await readDocument("collections");
         if (!document) throw new Error(t.failed);
-        setConflict({ kind: "collections", local: selection, remote: document });
+        setConflict({ kind: "collections", remote: document, mergeLocal: true });
         setStatus(t.conflict);
         return;
       }
