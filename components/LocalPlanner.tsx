@@ -27,7 +27,6 @@ const Context = createContext<
       togglePlaylistFestival: (v: string) => void;
       setSavedFilters: (value: DiscoveryPreferences) => void;
       updateSavedFilters: (patch: Partial<DiscoveryPreferences>) => void;
-      replace: (value: PlannerState) => void;
       replaceFields: (value: Partial<PlannerState>, expected: PlannerState) => void;
       merge: (value: Partial<PlannerState>) => void;
       clear: () => void;
@@ -88,9 +87,6 @@ export function LocalPlannerProvider({
       setSavedFilters: (savedFilters: DiscoveryPreferences) => setState((s) => ({ ...s, savedFilters })),
       updateSavedFilters: (patch: Partial<DiscoveryPreferences>) =>
         setState((s) => ({ ...s, savedFilters: { ...s.savedFilters, ...patch } })),
-      replace: (next: PlannerState) => setState({
-        ...emptyPlannerState, ...next, savedFilters: readDiscoveryPreferences(next.savedFilters),
-      }),
       replaceFields: (fields: Partial<PlannerState>, expected: PlannerState) => setState((current) => {
         // The selected account document may have been loading while the device was edited.
         const keys = Object.keys(fields) as (keyof PlannerState)[];

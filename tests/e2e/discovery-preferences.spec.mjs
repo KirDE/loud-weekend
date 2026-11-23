@@ -268,7 +268,7 @@ test("taking a remote plan preserves attendance changed while the account read i
 test("pull finds the first account document created after the planner opened", async ({ page }) => {
   await page.addInitScript(({ key, filters }) => {
     if (!localStorage.getItem(key)) {
-      localStorage.setItem(key, JSON.stringify({ savedFilters: filters }));
+      localStorage.setItem(key, JSON.stringify({ savedFilters: filters, attendance: { "synthetic-fest": "going" } }));
     }
   }, { key: storageKey, filters: activeFilters });
   const credentials = { email: `discovery-first-pull-${randomUUID()}@example.test`, password: "synthetic filter test password" };
@@ -291,4 +291,5 @@ test("pull finds the first account document created after the planner opened", a
   await expect(page.getByText("Everything is synchronized.")).toBeVisible();
   await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)).savedFilters, storageKey))
     .toEqual(latest);
+  await expect(page.locator(".planList select")).toHaveValue("going", { timeout: 4000 });
 });

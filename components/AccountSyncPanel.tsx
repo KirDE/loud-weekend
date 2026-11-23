@@ -99,6 +99,17 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
     setDocs((current) => ({ ...current, [kind]: document }));
     return document;
   }
+  function applyAccountDocument(kind: Kind, document: Document) {
+    const state = plannerFrom({ [kind]: document });
+    const fields = {
+      favorites: { favoriteFestivals: state.favoriteFestivals, favoriteArtists: state.favoriteArtists },
+      collections: { playlistFestivals: state.playlistFestivals },
+      "saved-filters": { savedFilters: state.savedFilters },
+      plans: { attendance: state.attendance },
+    };
+    planner.replaceFields(fields[kind], planner);
+  }
+
   async function synchronize(mode:"merge"|"remote"|"normal"="normal") {
     setBusy(true);setStatus("");setConflict(null);
     try {
@@ -109,7 +120,10 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
           setStatus(t.noAccountData);
           return;
         }
-        planner.replace(plannerFrom(latest));
+        for (const kind of kinds) {
+          const document = latest[kind];
+          if (document) applyAccountDocument(kind, document);
+        }
         setStatus(t.current);
         return;
       }
@@ -136,14 +150,7 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
       } else {
         const latest = await readDocument(kind);
         if (!latest || latest.id !== remote.id) throw new Error(t.failed);
-        const state = plannerFrom({ [kind]: latest });
-        const fields = {
-          favorites: { favoriteFestivals: state.favoriteFestivals, favoriteArtists: state.favoriteArtists },
-          collections: { playlistFestivals: state.playlistFestivals },
-          "saved-filters": { savedFilters: state.savedFilters },
-          plans: { attendance: state.attendance },
-        };
-        planner.replaceFields(fields[kind], planner);
+        applyAccountDocument(kind, latest);
         setDocs(current => ({ ...current, [kind]: latest }));
       }
       setConflict(null);
