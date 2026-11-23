@@ -285,7 +285,9 @@ export function AccountSyncPanel({
         const content = mergeLocal ? mergePayload(kind, remote.payload, local) : local;
         await put(kind, content, remote.revision, mergeLocal);
       } else {
-        const state = plannerFrom({ [kind]: remote });
+        const latest = await readDocument(kind);
+        if (!latest || latest.id !== remote.id) throw new Error(t.failed);
+        const state = plannerFrom({ [kind]: latest });
         const fields = {
           favorites: {
             favoriteFestivals: state.favoriteFestivals,
@@ -296,7 +298,7 @@ export function AccountSyncPanel({
           plans: { attendance: state.attendance },
         };
         planner.replaceFields(fields[kind]);
-        setDocs((current) => ({ ...current, [kind]: remote }));
+        setDocs((current) => ({ ...current, [kind]: latest }));
       }
       setConflict(null);
       setStatus(t.resolved);
