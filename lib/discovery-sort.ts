@@ -1,3 +1,4 @@
+import { favoriteArtistSlug } from "./favorite-artists.ts";
 import type { Festival } from "./domain/festival.ts";
 import { distanceKm, type Coordinates } from "./festival-discovery.ts";
 import { festivalDateInterval } from "./festival-dates.ts";
@@ -39,11 +40,7 @@ export function sortDiscoveryFestivals(
   const collator = new Intl.Collator(options.locale, { sensitivity: "base" });
   const favoriteSlugs = new Set(
     options.favorites.map((key) =>
-      key.startsWith("artist:")
-        ? key.slice("artist:".length)
-        : options.lineups && Object.hasOwn(options.lineups.legacyFavoriteSlugs, key)
-          ? options.lineups.legacyFavoriteSlugs[key]
-          : null,
+      favoriteArtistSlug(key, options.lineups?.legacyFavoriteSlugs ?? {}),
     ),
   );
 

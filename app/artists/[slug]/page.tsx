@@ -20,12 +20,22 @@ export async function generateMetadata({
 
 export default async function ArtistPage({ params }: { params: Promise<{ slug: string }> }) {
   const slug = (await params).slug;
-  const { artists, festivals } = await getCatalog();
+  const { artists, festivals, discoveryLineups } = await getCatalog();
   const artist = artists.find((item) => item.slug === slug);
   if (!artist) notFound();
   const appearances = festivals.filter((festival) =>
     [...festival.headliners, ...festival.lineup].includes(artist.name),
   );
-  return <ArtistDetail artist={artist} appearances={appearances} />;
+  return (
+    <ArtistDetail
+      artist={artist}
+      legacySlugs={Object.fromEntries(
+        Object.entries(discoveryLineups.legacyFavoriteSlugs).filter(
+          ([, slug]) => slug === artist.slug,
+        ),
+      )}
+      appearances={appearances}
+    />
+  );
 }
 import type { Metadata } from "next";

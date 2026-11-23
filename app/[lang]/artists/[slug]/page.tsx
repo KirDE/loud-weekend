@@ -38,11 +38,21 @@ export default async function LocalizedArtistPage({
 }) {
   const { lang, slug } = await params;
   if (!supportedLanguages.includes(lang as Language)) notFound();
-  const { artists, festivals } = await getCatalog();
+  const { artists, festivals, discoveryLineups } = await getCatalog();
   const artist = artists.find((item) => item.slug === slug);
   if (!artist) notFound();
   const appearances = festivals.filter((festival) =>
     [...festival.headliners, ...festival.lineup].includes(artist.name),
   );
-  return <ArtistDetail artist={artist} appearances={appearances} />;
+  return (
+    <ArtistDetail
+      artist={artist}
+      legacySlugs={Object.fromEntries(
+        Object.entries(discoveryLineups.legacyFavoriteSlugs).filter(
+          ([, slug]) => slug === artist.slug,
+        ),
+      )}
+      appearances={appearances}
+    />
+  );
 }

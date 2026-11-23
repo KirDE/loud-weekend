@@ -223,7 +223,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           ],
         ]),
     );
-    const visibleSlugs = new Set(Object.values(artistSlugsByFestival).flat());
+    const visibleSlugs = new Set(artists.map((artist) => artist.slug));
     const discoveryLineups = {
       artistSlugsByFestival,
       legacyFavoriteSlugs: uniqueFavoriteSlugs(artistRows, visibleSlugs),

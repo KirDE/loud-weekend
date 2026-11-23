@@ -76,7 +76,7 @@ export function FestivalDetail({
         </div>
       </section>
       <section className="localActions">
-        <FavoriteButton kind="festival" value={item.slug} />
+        <FavoriteButton value={item.slug} />
         <select
           aria-label={t("attendanceFor", { festival: item.name })}
           value={planner.attendance[item.slug] || ""}

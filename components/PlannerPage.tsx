@@ -60,7 +60,7 @@ const plannerLabels: Record<Language, PlannerLabels> = {
     selection: "SELECTION PLAYLIST",
     build: "Build your lineup",
     artists: (count) => `${count} ${count === 1 ? "artist" : "artists"}`,
-    favorites: "FAVORITE ARTISTS",
+    favorites: "My artists",
     attendance: "Attendance for",
     creating: "Creating…",
     createPlaylist: "Create private Spotify playlist",
@@ -98,7 +98,7 @@ const plannerLabels: Record<Language, PlannerLabels> = {
     selection: "PLAYLIST-AUSWAHL",
     build: "Stelle dein Line-up zusammen",
     artists: (count) => `${count} Künstler`,
-    favorites: "LIEBLINGSKÜNSTLER",
+    favorites: "Meine Künstler",
     attendance: "Teilnahme an",
     creating: "Wird erstellt…",
     createPlaylist: "Private Spotify-Playlist erstellen",
@@ -136,7 +136,7 @@ const plannerLabels: Record<Language, PlannerLabels> = {
     selection: "ПЛЕЙЛИСТ ПО ВЫБОРУ",
     build: "Соберите свой лайнап",
     artists: (count) => `${count} артистов`,
-    favorites: "ЛЮБИМЫЕ АРТИСТЫ",
+    favorites: "Мои артисты",
     attendance: "Посещение",
     creating: "Создание…",
     createPlaylist: "Создать приватный плейлист Spotify",
@@ -331,16 +331,11 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
               </div>
             )}
           </section>
-          {!!p.favoriteArtists.length && (
-            <section className="plannerSection">
-              <div className="eyebrow">{t.favorites}</div>
-              <div className="artistChips">
-                {p.favoriteArtists.map((a) => (
-                  <span key={a}>{a}</span>
-                ))}
-              </div>
-            </section>
-          )}
+          <section className="plannerSection">
+            <Link className="outlineButton" href={`/${language}/planner/artists/`}>
+              {t.favorites}
+            </Link>
+          </section>
         </>
       )}
     </div>

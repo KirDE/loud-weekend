@@ -3486,3 +3486,39 @@ summary:focus-visible {
   justify-content: flex-end;
   margin-block: 12px 0;
 }
+
+.favoriteArtistsPage .plannerHero > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.favoriteArtistsPage input[type="search"] {
+  width: min(100%, 28rem);
+  padding: 10px;
+  border: 1px solid var(--line);
+  color: inherit;
+}
+
+.favoriteArtistList article {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.favoriteArtistsPage .favoriteArtistList article > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.favoriteArtistList h3 {
+  margin: 0;
+}
+
+.favoriteArtistsPage .favoriteArtistList li span,
+.favoriteArtistsPage .favoriteArtistList article > div > span {
+  display: block;
+  color: var(--muted);
+}

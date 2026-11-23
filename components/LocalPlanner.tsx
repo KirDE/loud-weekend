@@ -7,6 +7,7 @@ import {
   readDiscoveryPreferences,
   type DiscoveryPreferences,
 } from "@/lib/discovery-preferences";
+import { favoriteArtistSlug, toggleFavoriteArtist } from "@/lib/favorite-artists";
 export type Attendance = "going" | "maybe" | "not-going";
 export type PlannerState = {
   favoriteFestivals: string[];
@@ -26,7 +27,8 @@ const Context = createContext<
   | (PlannerState & {
       ready: boolean;
       toggleFestival: (v: string) => void;
-      toggleArtist: (v: string) => void;
+      toggleArtist: (slug: string, legacySlugs: Readonly<Record<string, string>>) => void;
+      removeArtistKey: (key: string) => void;
       setAttendance: (v: string, a?: Attendance) => void;
       togglePlaylistFestival: (v: string) => void;
       setSavedFilters: (value: DiscoveryPreferences) => void;
@@ -69,10 +71,15 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           ...s,
           favoriteFestivals: toggle(s.favoriteFestivals, v),
         })),
-      toggleArtist: (v: string) =>
+      toggleArtist: (slug: string, legacySlugs: Readonly<Record<string, string>>) =>
         setState((s) => ({
           ...s,
-          favoriteArtists: toggle(s.favoriteArtists, v),
+          favoriteArtists: toggleFavoriteArtist(s.favoriteArtists, slug, legacySlugs),
+        })),
+      removeArtistKey: (key: string) =>
+        setState((s) => ({
+          ...s,
+          favoriteArtists: s.favoriteArtists.filter((item) => item !== key),
         })),
       setAttendance: (v: string, a?: Attendance) =>
         setState((s) => {
@@ -121,16 +128,39 @@ export function useLocalPlanner() {
   if (!value) throw new Error("Missing LocalPlannerProvider");
   return value;
 }
-export function FavoriteButton({ kind, value }: { kind: "festival" | "artist"; value: string }) {
+export function FavoriteButton({ value }: { value: string }) {
   const p = useLocalPlanner();
   const { t } = useLanguage();
-  const selected = (kind === "festival" ? p.favoriteFestivals : p.favoriteArtists).includes(value);
+  const selected = p.favoriteFestivals.includes(value);
   return (
     <button
       className={`favoriteButton${selected ? " selected" : ""}`}
       type="button"
       aria-pressed={selected}
-      onClick={() => (kind === "festival" ? p.toggleFestival(value) : p.toggleArtist(value))}
+      onClick={() => p.toggleFestival(value)}
+    >
+      {t(selected ? "saved" : "save")}
+    </button>
+  );
+}
+
+export function ArtistFavoriteButton({
+  slug,
+  legacySlugs,
+}: {
+  slug: string;
+  legacySlugs: Readonly<Record<string, string>>;
+}) {
+  const p = useLocalPlanner();
+  const { t } = useLanguage();
+  const selected = p.favoriteArtists.some((key) => favoriteArtistSlug(key, legacySlugs) === slug);
+  return (
+    <button
+      className={`favoriteButton${selected ? " selected" : ""}`}
+      type="button"
+      disabled={!p.ready}
+      aria-pressed={selected}
+      onClick={() => p.toggleArtist(slug, legacySlugs)}
     >
       {t(selected ? "saved" : "save")}
     </button>
