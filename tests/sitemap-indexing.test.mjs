@@ -44,6 +44,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
     otherPaths.map(path => `<url><loc>${site}${path}</loc></url>`).join(""));
   const entries = inspectSitemap(xml);
   const openRobots = `User-agent: *\nAllow: /\nSitemap: ${site}/sitemap.xml\n`;
+  let sitemapBody = xml;
   let robotsBody = openRobots;
   let robotsHeader;
   let robotsMeta = '<meta name="robots" content="index, max-image-preview:none">';
@@ -54,7 +55,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
     if (path === "/robots.txt") {
       response.writeHead(200, { "content-type": "text/plain" }).end(robotsBody);
     } else if (path === "/sitemap.xml") {
-      response.writeHead(200, { "content-type": "application/xml" }).end(xml);
+      response.writeHead(200, { "content-type": "application/xml" }).end(sitemapBody);
     } else if (entries.has(path)) {
       const lang = /^\/(en|de|ru)\//.exec(path)?.[1] ?? "en";
       const links = [...entries.get(path)].map(([code, target]) =>
@@ -74,6 +75,14 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
   const origin = `http://127.0.0.1:${server.address().port}`;
   await t.test("allows pages that only suppress the image preview", async () => {
     assert.deepEqual(await checkIndexing(origin), { entries: 22, sampled: 18 });
+  });
+  await t.test("rejects unsupported routes even when robots.txt allows them", async () => {
+    try {
+      sitemapBody = xml.replace("</urlset>", `<url><loc>${site}/planner/</loc></url></urlset>`);
+      await assert.rejects(checkIndexing(origin), /unsupported sitemap path: \/planner\//);
+    } finally {
+      sitemapBody = xml;
+    }
   });
   await t.test("requires canonical and alternate links outside inert templates", async () => {
     try {
