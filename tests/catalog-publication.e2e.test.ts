@@ -196,6 +196,8 @@ test("commits catalog rows, candidate state, audit snapshot and playlist request
   assert.equal(stored.catalogueVersion, publication.id);
   const lineup = await db.lineupEntry.findFirst({ where: { edition: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" }, artist: { name: artist } } });
   assert.ok(lineup);
+  const visible = (await readCatalog({ database: db })).festivals.find(festival => festival.slug === value.festivalSlug);
+  assert.equal(visible?.updatedAt, value.fetchedAt);
   const queued = await db.catalogPlaylistRefresh.findUniqueOrThrow({ where: { publicationId: publication.id } });
   assert.equal(queued.status, "PENDING");
 

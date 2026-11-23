@@ -207,6 +207,12 @@ async function applyFestivalChanges(db: Database, input: {
     }
     if (changed) changedFields.push(change.field);
   }
+  if (changedFields.includes("lineup") || changedFields.includes("headliners")) {
+    await db.festivalEdition.updateMany({
+      where: { id: edition.id, sourceUpdatedAt: { lt: input.observedAt } },
+      data: { sourceUpdatedAt: input.observedAt },
+    });
+  }
   return { edition, changedFields: [...new Set(changedFields)] };
 }
 
