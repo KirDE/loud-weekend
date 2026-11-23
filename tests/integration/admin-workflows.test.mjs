@@ -20,6 +20,7 @@ let primaryOffersWithoutEdition = false;
 let primaryHasDatedFallback = false;
 let observedTicketsUrl = ticketsUrl;
 let includePerformer = false;
+let includeAnotherEvent = false;
 let observedCity = "Wacken Preview";
 const performer = "Example Metal Band";
 const replacementTicketsUrl = "https://tickets.example.test/replacement";
@@ -43,7 +44,10 @@ const sourceServer = createServer((request, response) => {
     response.end(`${fallback}<script type="application/ld+json">{"@type":"MusicEvent","name":"Wacken Open Air","location":{"address":{"addressLocality":"${observedCity}"}}${performers},"offers":{"@type":"Offer","url":"${observedTicketsUrl}","availability":"https://schema.org/InStock"}}</script>`);
     return;
   }
-  response.end(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicEvent","name":"Wacken Open Air","startDate":"${startDate}","endDate":"2027-07-31","location":{"@type":"Place","address":{"addressLocality":"${observedCity}"}}${performers},"offers":{"@type":"Offer","url":"${observedTicketsUrl}"${availability}}}</script>`);
+  const otherEvent = request.url === "/primary" && includeAnotherEvent
+    ? '<script type="application/ld+json">{"@type":"MusicEvent","name":"Another event","startDate":"2027-08-01"}</script>'
+    : "";
+  response.end(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicEvent","name":"Wacken Open Air","startDate":"${startDate}","endDate":"2027-07-31","location":{"@type":"Place","address":{"addressLocality":"${observedCity}"}}${performers},"offers":{"@type":"Offer","url":"${observedTicketsUrl}"${availability}}}</script>${otherEvent}`);
 });
 
 class Client {
@@ -360,6 +364,16 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.ok(cityLog.log.some(({ reviewReasons }) => reviewReasons?.includes("City could not be verified for the selected edition.")));
 
   primaryOffersWithoutEdition = false;
+  includeAnotherEvent = true;
+  const ambiguousCity = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(ambiguousCity.status, 201);
+  const ambiguousRun = await ambiguousCity.json();
+  assert.equal(ambiguousRun.queued, 0);
+  assert.equal(ambiguousRun.status, "PARTIAL");
+  const ambiguousLog = await (await admin.json(`/api/admin/parser-runs/${ambiguousRun.id}/log`)).json();
+  assert.ok(ambiguousLog.log.some(({ reviewReasons }) => reviewReasons?.some(reason => reason.includes("Multiple JSON-LD Events"))));
+  includeAnotherEvent = false;
+
   const scopedCity = await admin.json(`${refreshPath}?year=2027`, "POST");
   assert.equal(scopedCity.status, 201);
   const scopedCityRun = await scopedCity.json();
