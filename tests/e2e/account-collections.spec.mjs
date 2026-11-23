@@ -63,6 +63,7 @@ for (const [locale, t] of Object.entries(copy))
           payload: { schemaVersion: 1, playlistFestivals: ["graspop"], spotify: null },
         },
       };
+      let waitForCollectionSave;
       let failImport = false,
         conflictNext = false,
         importRevisionConflict = false;
@@ -83,6 +84,7 @@ for (const [locale, t] of Object.entries(copy))
           kind = new URL(req.url()).pathname.split("/").filter(Boolean).at(-1);
         if (req.method() === "GET")
           return route.fulfill({ json: { document: docs[kind] ?? null } });
+        if (kind === "collections" && waitForCollectionSave) await waitForCollectionSave;
         const body = req.postDataJSON(),
           previous = docs[kind];
         if (kind === "collections" && conflictNext) {
@@ -245,8 +247,28 @@ for (const [locale, t] of Object.entries(copy))
       expect(docs.collections.payload.playlistExcludedArtists).toEqual([]);
       expect(docs.collections.payload.spotify).toEqual(imported);
       failImport = true;
-      await panel.getByRole("button", { name: t.import, exact: true }).click();
+      const artistPicker = page.locator(".playlistArtistPicker");
+      await artistPicker.locator("summary").click();
+      const artist = artistPicker.getByRole("checkbox", { name: "Sample Artist", exact: true });
+      await expect(artist).toBeEnabled();
+      let releaseSave;
+      waitForCollectionSave = new Promise((resolve) => {
+        releaseSave = resolve;
+      });
+      const presave = page.waitForRequest(
+        (request) =>
+          request.method() === "PUT" && /\/api\/sync\/collections\/?$/.test(request.url()),
+      );
+      try {
+        await panel.getByRole("button", { name: t.import, exact: true }).click();
+        await presave;
+        await expect(artist).toBeDisabled();
+      } finally {
+        releaseSave();
+        waitForCollectionSave = undefined;
+      }
       await expect(panel).toHaveAttribute("aria-busy", "false");
+      await expect(artist).toBeEnabled();
       await expect(link).toBeVisible();
       await expect(panel.locator("time")).toHaveAttribute("datetime", imported.syncedAt);
       expect(docs.collections.payload.playlistExcludedArtists).toEqual([]);

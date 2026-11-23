@@ -345,6 +345,7 @@ export function PlannerPage({
                 <label key={f.slug}>
                   <input
                     type="checkbox"
+                    disabled={syncBusy}
                     checked={p.playlistFestivals.includes(f.slug)}
                     onChange={() => p.togglePlaylistFestival(f.slug)}
                   />
@@ -359,6 +360,7 @@ export function PlannerPage({
                   <button
                     type="button"
                     className="outlineButton"
+                    disabled={syncBusy}
                     onClick={() => selectArtists(false)}
                   >
                     {copy.all}
@@ -366,6 +368,7 @@ export function PlannerPage({
                   <button
                     type="button"
                     className="outlineButton"
+                    disabled={syncBusy}
                     onClick={() => selectArtists(true)}
                   >
                     {copy.favorites}
@@ -376,6 +379,7 @@ export function PlannerPage({
                     <label key={slug}>
                       <input
                         type="checkbox"
+                        disabled={syncBusy}
                         checked={!excluded.has(slug)}
                         onChange={() => p.togglePlaylistArtist(slug)}
                       />
