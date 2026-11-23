@@ -4,19 +4,20 @@ import {readFileSync} from 'node:fs';
 import {fetchSource} from '../lib/ingestion/fetch.ts';
 import {extractFestivalCandidate} from '../lib/ingestion/extract.ts';
 import {heavyMetadata,heavyStockHtml,heavyStockResponse} from './support/heavy-stock-fixture.ts';
-import {HEAVY_WIDGET,HEAVY_WIDGET_API,HEAVY_STOCK,HEAVY_PURCHASE,HEAVY_STOCK_DOCUMENTS,heavyRenderAction,reduceHeavyStockDocument,observeHeavyStock} from '../lib/ingestion/heavy-ticket-stock.ts';
+import {heavyProof,HEAVY_WIDGET,HEAVY_WIDGET_API,HEAVY_STOCK,HEAVY_PURCHASE} from './fixtures/ticket-status/heavy-reviewed-proof.ts';
+import {HEAVY_STOCK_DOCUMENTS,heavyRenderAction,reduceHeavyStockDocument,observeHeavyStock} from '../lib/ingestion/heavy-ticket-stock.ts';
 import {ticketSupplementUrl} from '../lib/ingestion/ticket-supplements.ts';
 const dates={startDate:'2027-06-04',endDate:'2027-06-06'};
-const meta=heavyRenderAction(heavyMetadata()).meta;
+const meta=heavyRenderAction(heavyMetadata(),heavyProof).meta;
 const doc=(html=heavyStockHtml)=>({kind:HEAVY_STOCK_DOCUMENTS,apiUrl:HEAVY_WIDGET_API,renderUrl:HEAVY_STOCK,meta,html});
-const observe=(d=doc(),dts=dates)=>observeHeavyStock(JSON.stringify(d),dts);
+const observe=(d=doc(),dts=dates)=>observeHeavyStock(JSON.stringify(d),heavyProof,dts);
 const primary=JSON.parse(readFileSync(new URL('./fixtures/official-markup/heavy-weekend-linked-2027.json',import.meta.url),'utf8'));
 const logo=readFileSync(new URL('./fixtures/official-markup/heavy-slash-logo.png',import.meta.url));
-const source={festivalSlug:'heavy-weekend',url:'https://www.heavyweekend.live/',editionYear:2027,strategies:['official_markup'],enabled:true,refreshPolicy:'weekly'};
+const source={festivalSlug:'heavy-weekend',url:'https://www.heavyweekend.live/',heavyProof,editionYear:2027,strategies:['official_markup'],enabled:true,refreshPolicy:'weekly'};
 const primaryResponse=url=>url===source.url?new Response(primary.home):String(url).includes('cdn.prod')?new Response(logo):new Response(primary.documents.find(d=>d.url===url).html);
 test('actual ordinary unrestricted pass has independently bound public stock and human purchase URL',()=>{
  assert.equal(observe().status,'available');assert.equal(observe().ticketsUrl,HEAVY_PURCHASE);
- assert.ok(observe().excerpt.includes('rate5629650'));assert.equal(ticketSupplementUrl(source),HEAVY_STOCK);
+ assert.ok(observe().excerpt.includes('rate 5629650'));assert.equal(ticketSupplementUrl(source),HEAVY_STOCK);
  for(const s of [{...source,editionYear:2026},{...source,fetchUrl:source.url},{...source,followLinkPattern:'tickets'},{...source,url:source.url+'other'}])assert.equal(ticketSupplementUrl(s),undefined);
  for(const d of [{...doc(),renderUrl:HEAVY_STOCK+'&foreign=1'},{...doc(),apiUrl:'https://evil.invalid'},{...doc(),meta:{...meta,eventId:1}},{...doc(),meta:{...meta,currency:'GBP'}}])assert.equal(observe(d).status,undefined);
  assert.equal(observe(doc(),{...dates,endDate:'2027-06-07'}).status,undefined);
@@ -47,11 +48,11 @@ const htmlCases=[
 for(const[name,mutate]of htmlCases)test(name+' fails closed',()=>assert.equal(observe(doc(mutate(heavyStockHtml))).status,undefined));
 test('DOM reduction removes unneeded session/form/telemetry content before persistence',()=>{
  const raw=heavyStockHtml.replace('<select ','<input name="csrf" value="synthetic-do-not-store"><script>session="synthetic"</script><select ');
- const safe=reduceHeavyStockDocument(raw);assert.doesNotMatch(safe,/csrf|session|synthetic|input|script/i);assert.equal(observe(doc(safe)).status,'available');
+ const safe=reduceHeavyStockDocument(raw,heavyProof);assert.doesNotMatch(safe,/csrf|session|synthetic|input|script/i);assert.equal(observe(doc(safe)).status,'available');
 });
-for(const[name,changes]of [['wrong event',{event_id:1}],['wrong widget',{widget_key:'other'}],['not allowed',{access:false}],['wrong rank',{rank:2}],['expired',{exp:1}],['future not-before',{nbf:9999999999}],['customer payload',{widget_data:{customer:'synthetic'}}],['unexpected claim',{unknown:true}]])test('render token '+name+' is not forwarded',()=>assert.throws(()=>heavyRenderAction(heavyMetadata(changes)),/contract/));
+for(const[name,changes]of [['wrong event',{event_id:1}],['wrong widget',{widget_key:'other'}],['not allowed',{access:false}],['wrong rank',{rank:2}],['expired',{exp:1}],['future not-before',{nbf:9999999999}],['customer payload',{widget_data:{customer:'synthetic'}}],['unexpected claim',{unknown:true}]])test('render token '+name+' is not forwarded',()=>assert.throws(()=>heavyRenderAction(heavyMetadata(changes),heavyProof),/contract/));
 test('public action must be exactly reviewed metadata render, never checkout/quantity',()=>{
- for(const mutate of [d=>d.widget_key='other',d=>d.widget_events[0].event.start_date='2026-06-04T15:30:00Z',d=>d.first_step.slug='order',d=>d.first_step.data.actions[0].args[0].url='https://evil.invalid/',d=>d.first_step.data.actions[0].args[0].query.id_evenement=1,d=>d.first_step.data.actions[0].args[0].parameters.quantity=1]){const d=heavyMetadata();mutate(d);assert.throws(()=>heavyRenderAction(d),/contract/);}
+ for(const mutate of [d=>d.widget_key='other',d=>d.widget_events[0].event.start_date='2026-06-04T15:30:00Z',d=>d.first_step.slug='order',d=>d.first_step.data.actions[0].args[0].url='https://evil.invalid/',d=>d.first_step.data.actions[0].args[0].query.id_evenement=1,d=>d.first_step.data.actions[0].args[0].parameters.quantity=1]){const d=heavyMetadata();mutate(d);assert.throws(()=>heavyRenderAction(d,heavyProof),/contract/);}
 });
 test('10-request real producer path forwards only metadata token and never persists it',async()=>{
  let renders=0;const input=heavyMetadata(),token=input.first_step.data.actions[0].args[0].parameters.token;

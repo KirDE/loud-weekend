@@ -902,3 +902,12 @@ model OperationalState {
   leaseExpiresAt DateTime?
   updatedAt      DateTime @updatedAt
 }
+
+model ReviewedTicketProof {
+  festivalSlug String
+  sourceUrl    String
+  editionYear  Int
+  proof        Json
+
+  @@id([festivalSlug, sourceUrl, editionYear])
+}

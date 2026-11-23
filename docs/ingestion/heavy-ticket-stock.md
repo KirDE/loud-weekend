@@ -50,3 +50,9 @@ session-bearing URL is exposed as a purchase link or normalized evidence.
   frozen minimal fixture uses ten requests including metadata and render.
 - Local `npm run typecheck`, `npm run test:data`, source tests and DB chain pass.
   PR CI/review results must be checked separately against the published head.
+
+PostgreSQL stores the reviewed widget, event, rate, category and dates in
+`ReviewedTicketProof`, keyed by festival, exact primary source and edition.
+The publisher independently resolves the same binding. An edition without a
+reviewed binding does not request this supplement. The migration carries
+forward the existing reviewed record; render and privacy guards are unchanged.

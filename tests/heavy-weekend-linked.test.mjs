@@ -1,8 +1,9 @@
+import {heavyProof} from "./fixtures/ticket-status/heavy-reviewed-proof.ts";
 import {heavyStockResponse} from "./support/heavy-stock-fixture.ts";
 import assert from 'node:assert/strict';import test from 'node:test';import {readFileSync} from 'node:fs';
 import {extractFestivalCandidate} from '../lib/ingestion/extract.ts';import {evaluateCandidate} from '../lib/ingestion/policy.ts';import {fetchSource} from '../lib/ingestion/fetch.ts';import {heavyMissingArtistUrls} from '../lib/ingestion/adapters/heavy-weekend.ts';
 const capture=JSON.parse(readFileSync(new URL('./fixtures/official-markup/heavy-weekend-linked-2027.json',import.meta.url),'utf8')),saved=JSON.parse(readFileSync(new URL('./fixtures/official-markup/heavy-weekend-reviewed.json',import.meta.url),'utf8'));
-const source={festivalSlug:'heavy-weekend',url:'https://www.heavyweekend.live/',editionYear:2027,strategies:['official_markup'],enabled:true,refreshPolicy:'weekly'};
+const source={festivalSlug:'heavy-weekend',url:'https://www.heavyweekend.live/',editionYear:2027,heavyProof,strategies:['official_markup'],enabled:true,refreshPolicy:'weekly'};
 const parse=(d=capture,s=source)=>extractFestivalCandidate(typeof d==='string'?d:JSON.stringify(d),s,'2026-11-10T19:27:00Z');
 test('actual empty logo labels use linked title+h1 and retain additive provider review',()=>{
  assert.deepEqual(parse(capture.home).evidence,[]);const c=parse();assert.deepEqual(c.lineup,['HELLOWEEN','AMON AMARTH','FALLING IN REVERSE','FIT FOR A KING','MARILYN MANSON','SLASH featuring MYLES KENNEDY AND THE CONSPIRATORS']);assert.deepEqual(c.warnings,[]);assert.equal(c.startDate,'2027-06-04');assert.equal(c.endDate,'2027-06-06');assert.equal(c.headliners,undefined);assert.equal(c.ticketStatus,undefined);assert.equal(c.artistListMode,'additive');

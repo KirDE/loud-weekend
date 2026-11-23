@@ -1,5 +1,7 @@
 import type { Festival } from "../domain/festival.ts";
 
+import type { HeavyProof } from "./heavy-ticket-proof.ts";
+
 export const INGESTION_SCHEMA_VERSION = 1 as const;
 export type RefreshPolicy = "daily" | "every_3_days" | "weekly" | "archived";
 export type ParserStrategy = "json_ld_event" | "html_fallback" | "official_markup" | "manual_review";
@@ -16,6 +18,7 @@ export type FestivalSource = {
   followLinkPattern?: string;
   headers?: Record<string, string>;
   manualReviewReason?: string;
+  heavyProof?: HeavyProof;
 };
 
 export type FieldEvidence = {
