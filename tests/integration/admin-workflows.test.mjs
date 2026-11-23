@@ -512,6 +512,40 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     artistName,
   );
 
+  // A rejection does not change the live revision and must not prevent a
+  // corrected proposal from using that same base. Keep the old audit record.
+  const submitArtistCorrection = (canonicalName) =>
+    admin.json("/api/admin", "POST", {
+      resourceKind: "artist",
+      resourceKey: artistSlug,
+      baseRevision: 3,
+      values: { canonicalName },
+    });
+  const correctionResponse = await submitArtistCorrection("Integration Reviewer Correction");
+  assert.equal(correctionResponse.status, 201);
+  const correction = await correctionResponse.json();
+  assert.ok(correction.revision > rejectedDraft.revision);
+  assert.equal(correction.baseRevision, rejectedDraft.baseRevision);
+  const competingResponse = await submitArtistCorrection("Integration Competing Correction");
+  assert.equal(competingResponse.status, 201);
+  const competing = await competingResponse.json();
+  assert.ok(competing.revision > correction.revision);
+
+  const correctedName = await db.adminChange.findFirstOrThrow({
+    where: { draftId: correction.id },
+  });
+  const competingName = await db.adminChange.findFirstOrThrow({ where: { draftId: competing.id } });
+  assert.equal((await decideArtist(correctedName.id)).status, 200);
+  assert.equal((await decideArtist(competingName.id)).status, 409);
+  assert.equal(
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: rejectedDraft.id } })).status,
+    "REJECTED",
+  );
+  assert.equal(
+    (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
+    "Integration Reviewer Correction",
+  );
+
   const logoBytes = await sharp({
     create: { width: 2, height: 2, channels: 3, background: "#c05040" },
   })
