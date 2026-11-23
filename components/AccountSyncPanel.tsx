@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { z } from "zod";
 import { readDiscoveryPreferences } from "@/lib/discovery-preferences";
 import { readCollections, mergeCollections } from "@/lib/collections";
 import { useLanguage } from "./LanguageProvider";
@@ -8,13 +9,31 @@ type Kind = "favorites" | "collections" | "saved-filters" | "plans";
 type Document = { id: string; payload: unknown; revision: number; updatedAt: string };
 type Conflict = { kind: Kind; local: unknown; remote: Document };
 const kinds: Kind[] = ["favorites", "collections", "saved-filters", "plans"];
+const favoritesPayload = z.object({
+  favoriteFestivals: z.array(z.string()).optional(),
+  favoriteArtists: z.array(z.string()).optional(),
+});
+const plansPayload = z.object({
+  attendance: z.record(z.string(), z.enum(["going", "maybe", "not-going"])).optional(),
+});
 const labels = {
   en: { title: "Account sync", local: "Your local plan remains available while signed out.", migrate: "Merge this device into my account", replace: "Use account data on this device", sync: "Sync now", syncing: "Syncing…", current: "Everything is synchronized.", resolved: "Conflict resolved. Sync again to send other local changes.", conflict: "A newer version exists on another device. Nothing was overwritten.", keepLocal: "Keep this device", keepRemote: "Use other device", share: "Create public plan link", expiry: "Link expiry", copy: "Copy link", copied: "Copied", expired: "Expired links return Not Found.", spotify: "Spotify", connect: "Connect or reconnect Spotify", import: "Import playlists", last: "Last successful import", imported: "Saved imported playlists", empty: "No imported playlists yet.", tracks: "tracks", failed: "Sync failed. Reconnect and try again.", login: "Sign in from the Account menu to enable cross-device sync." },
   de: { title: "Konto-Synchronisierung", local: "Dein lokaler Plan bleibt ohne Anmeldung verfügbar.", migrate: "Dieses Gerät mit meinem Konto zusammenführen", replace: "Kontodaten auf diesem Gerät verwenden", sync: "Jetzt synchronisieren", syncing: "Synchronisiere…", current: "Alles ist synchronisiert.", resolved: "Konflikt gelöst. Synchronisiere erneut, um weitere lokale Änderungen zu übertragen.", conflict: "Auf einem anderen Gerät gibt es eine neuere Version. Nichts wurde überschrieben.", keepLocal: "Dieses Gerät behalten", keepRemote: "Anderes Gerät verwenden", share: "Öffentlichen Plan-Link erstellen", expiry: "Link-Ablauf", copy: "Link kopieren", copied: "Kopiert", expired: "Abgelaufene Links zeigen „Nicht gefunden“.", spotify: "Spotify", connect: "Spotify verbinden oder neu verbinden", import: "Playlists importieren", last: "Letzter erfolgreicher Import", imported: "Gespeicherte importierte Playlists", empty: "Noch keine Playlists importiert.", tracks: "Titel", failed: "Synchronisierung fehlgeschlagen. Neu verbinden und erneut versuchen.", login: "Im Konto-Menü anmelden, um geräteübergreifend zu synchronisieren." },
   ru: { title: "Синхронизация аккаунта", local: "Без входа локальный план останется доступен.", migrate: "Объединить данные устройства с аккаунтом", replace: "Использовать данные аккаунта на устройстве", sync: "Синхронизировать", syncing: "Синхронизация…", current: "Всё синхронизировано.", resolved: "Конфликт решён. Запустите синхронизацию ещё раз, чтобы отправить остальные локальные изменения.", conflict: "На другом устройстве есть более новая версия. Ничего не перезаписано.", keepLocal: "Оставить данные устройства", keepRemote: "Взять данные другого устройства", share: "Создать публичную ссылку на план", expiry: "Срок ссылки", copy: "Копировать ссылку", copied: "Скопировано", expired: "Истёкшие ссылки возвращают «Не найдено».", spotify: "Spotify", connect: "Подключить или переподключить Spotify", import: "Импортировать плейлисты", last: "Последний успешный импорт", imported: "Сохранённые импортированные плейлисты", empty: "Плейлисты ещё не импортированы.", tracks: "треков", failed: "Ошибка синхронизации. Переподключитесь и повторите.", login: "Войдите через меню аккаунта, чтобы включить синхронизацию между устройствами." },
 } as const;
 function payloads(p: ReturnType<typeof useLocalPlanner>): Record<Kind, unknown> { return { favorites: { favoriteFestivals: p.favoriteFestivals, favoriteArtists: p.favoriteArtists }, collections: readCollections({ playlistFestivals: p.playlistFestivals }), "saved-filters": { savedFilters: p.savedFilters }, plans: { attendance: p.attendance } }; }
-function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState { const value = (kind: Kind) => (documents[kind]?.payload || {}) as Partial<PlannerState>; return { ...emptyPlannerState, ...value("favorites"), playlistFestivals: readCollections(documents.collections?.payload).playlistFestivals, savedFilters: readDiscoveryPreferences(value("saved-filters").savedFilters), ...value("plans") }; }
+function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
+  const favorites = documents.favorites?.payload as z.infer<typeof favoritesPayload> | undefined;
+  const plans = documents.plans?.payload as z.infer<typeof plansPayload> | undefined;
+  const filters = documents["saved-filters"]?.payload as { savedFilters?: unknown } | undefined;
+  return {
+    favoriteFestivals: favorites?.favoriteFestivals ?? emptyPlannerState.favoriteFestivals,
+    favoriteArtists: favorites?.favoriteArtists ?? emptyPlannerState.favoriteArtists,
+    attendance: plans?.attendance ?? emptyPlannerState.attendance,
+    playlistFestivals: readCollections(documents.collections?.payload).playlistFestivals,
+    savedFilters: readDiscoveryPreferences(filters?.savedFilters),
+  };
+}
 function mergePayload(kind: Kind, remote: unknown, local: unknown) {
   const a = remote as Partial<PlannerState>; const b = local as Partial<PlannerState>;
   if (kind === "favorites") return { favoriteFestivals: Array.from(new Set([...(a.favoriteFestivals || []), ...(b.favoriteFestivals || [])])), favoriteArtists: Array.from(new Set([...(a.favoriteArtists || []), ...(b.favoriteArtists || [])])) };
@@ -34,6 +53,8 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
       throw new Error(t.failed);
     }
     if (kind === "collections" && document) readCollections(document.payload);
+    if (kind === "favorites" && document && !favoritesPayload.safeParse(document.payload).success) throw new Error(t.failed);
+    if (kind === "plans" && document && !plansPayload.safeParse(document.payload).success) throw new Error(t.failed);
     if (kind === "saved-filters" && document) {
       const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
       if (!filters || typeof filters !== "object" || Array.isArray(filters)) throw new Error(t.failed);
