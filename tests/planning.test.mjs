@@ -15,6 +15,7 @@ const festival = {
   officialUrl: "https://example.com/fest",
   status: "confirmed",
   editionYear: 2027,
+  updatedAt: "2026-11-22T15:35:17.298Z",
 };
 
 test("calendar export uses an exclusive end date and escaped text", () => {
@@ -23,7 +24,8 @@ test("calendar export uses an exclusive end date and escaped text", () => {
   assert.match(payload, /DTEND;VALUE=DATE:20270607/);
   assert.match(payload, /SUMMARY:Test\\, Rock\\; Fest/);
   assert.match(payload, /LOCATION:Köln\\, Germany/);
-  assert.match(payload, /UID:test-fest-2027@festival-radar/);
+  assert.match(payload, /UID:test-fest-2027@festival-radar\r\nDTSTAMP:20261122T153517Z\r\n/);
+  assert.equal(payload.match(/^DTSTAMP:/gm).length, 1);
 });
 
 test("calendar links provide distinct explicit Google, ICS and Apple flows", () => {
@@ -37,4 +39,16 @@ test("calendar links provide distinct explicit Google, ICS and Apple flows", () 
 
 test("undated festivals do not expose invalid calendar actions", () => {
   assert.equal(calendarUrls({ ...festival, startDate: undefined, endDate: undefined }), null);
+});
+
+test("calendar stamps normalize offsets and fall back when a source stamp is invalid", () => {
+  assert.match(
+    calendarFile([{ ...festival, calendarUpdatedAt: "2026-11-22T16:35:18+01:00" }]),
+    /DTSTAMP:20261122T153518Z\r\n/,
+  );
+  const generatedAt = new Date("2026-11-23T10:00:15.034Z");
+  assert.match(
+    calendarFile([{ ...festival, updatedAt: "not a date" }], generatedAt),
+    /DTSTAMP:20261123T100015Z\r\n/,
+  );
 });
