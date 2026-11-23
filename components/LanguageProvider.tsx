@@ -389,6 +389,18 @@ const translations = {
     noLineupOverlap: "No announced lineup overlap yet",
     noDiscoveryMatches:
       "Try a wider distance, another origin, or remove a genre filter. Your comparison selections are preserved.",
+    dateFilters: "Date filters",
+    dateFrom: "From",
+    dateTo: "Through",
+    dateWeekend: "Includes a Saturday or Sunday",
+    dateMaxDays: "Maximum festival days",
+    dateAnyDuration: "Any duration",
+    dateUnknownExcluded: "Unknown dates are excluded when a date filter is active.",
+    dateReversed: "The end date must be on or after the start date.",
+    copyDateFilters: "Copy date filter link",
+    dateFiltersCopied: "Date filter link copied.",
+    noDateMatches:
+      "No festivals match all the current filters. Try broadening the date range or clearing a filter.",
   },
   de: {
     sourceDeprecated: "Quelle veraltet (deprecated)",
@@ -546,6 +558,19 @@ const translations = {
       "Wähle eine größere Entfernung oder einen anderen Ausgangspun" +
       "kt oder entferne den Genre-Filter. Deine Vergleichsauswahl b" +
       "leibt erhalten.",
+    dateFilters: "Datumsfilter",
+    dateFrom: "Von",
+    dateTo: "Bis einschließlich",
+    dateWeekend: "Mit Samstag oder Sonntag",
+    dateMaxDays: "Maximale Festivaltage",
+    dateAnyDuration: "Beliebige Dauer",
+    dateUnknownExcluded:
+      "Bei aktiven Datumsfiltern werden Festivals ohne bekannte Termine ausgeblendet.",
+    dateReversed: "Das Enddatum darf nicht vor dem Startdatum liegen.",
+    copyDateFilters: "Link zu Datumsfiltern kopieren",
+    dateFiltersCopied: "Link zu Datumsfiltern kopiert.",
+    noDateMatches:
+      "Kein Festival passt zu allen Filtern. Erweitere den Zeitraum oder entferne einen Filter.",
   },
   ru: {
     sourceDeprecated: "Источник устарел (deprecated)",
@@ -698,6 +723,19 @@ const translations = {
       "Увеличьте расстояние, выберите другую точку отсчёта или убер" +
       "ите фильтр по жанру. Выбранные для сравнения фестивали сохра" +
       "нятся.",
+    dateFilters: "Фильтры по датам",
+    dateFrom: "С",
+    dateTo: "По включительно",
+    dateWeekend: "Захватывает субботу или воскресенье",
+    dateMaxDays: "Максимум дней фестиваля",
+    dateAnyDuration: "Любая длительность",
+    dateUnknownExcluded:
+      "При активных фильтрах по датам фестивали без известных дат не показываются.",
+    dateReversed: "Дата окончания не может быть раньше даты начала.",
+    copyDateFilters: "Скопировать ссылку на фильтры по датам",
+    dateFiltersCopied: "Ссылка на фильтры по датам скопирована.",
+    noDateMatches:
+      "Ни один фестиваль не подходит под все фильтры. Расширьте диапазон дат или сбросьте один из фильтров.",
   },
 } as const;
 
