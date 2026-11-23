@@ -367,3 +367,19 @@ test("a visible disabled sold-out notice still contradicts an ordinary purchase 
   assert.equal(candidate.ticketStatus, undefined);
   assert.equal(evaluateCandidate(current, candidate).publishable, false);
 });
+
+test("commented purchase sections and headings do not affect live admission stock", () => {
+  const { tickets } = copy();
+  const heading = '<h2 style="text-align:center">ABONO LEYENDAS DEL ROCK</h2>';
+  assert.ok(tickets.includes(heading));
+  const hiddenOffer = [
+    heading,
+    "<p>Ya se pueden adquirir los abonos para la XXI edición de Leyendas del Rock</p>",
+    '<a href="https://www.enterticket.es/eventos/leyendas-del-rock-999">COMPRAR ABONO</a>',
+  ].join("");
+  const soldOut = tickets.replace(heading, `<!--${hiddenOffer}-->${heading}<p>Agotado</p>`);
+  assert.equal(parse({ ...copy(), tickets: soldOut }).ticketStatus, undefined);
+
+  const liveOffer = tickets.replace(heading, `${heading}<!--<h2>CAMPING</h2>-->`);
+  assert.equal(parse({ ...copy(), tickets: liveOffer }).ticketStatus, "available");
+});

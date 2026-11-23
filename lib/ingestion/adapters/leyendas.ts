@@ -193,6 +193,12 @@ export function leyendas(html: string, source: FestivalSource) {
   if (links.slice(0, 8).some((url) => !data.posts.some((p) => p.url === url)))
     warnings.push("Leyendas current-edition article was not fetched");
   const $tickets = load(data.tickets);
+  // Ignore inert comments before locating either serialized heading boundary.
+  $tickets("*")
+    .add($tickets.root())
+    .contents()
+    .filter((_, node) => node.type === "comment")
+    .remove();
   $tickets(
     "script, style, template, noscript, nav, header, footer, [hidden], [inert], [aria-hidden='true']",
   ).remove();
