@@ -20,8 +20,8 @@ export function similarFestivals(item: Festival, festivals: Festival[], limit = 
 
 function compactDate(value: string) { return value.replaceAll("-", ""); }
 
-function escapeIcs(value: string) {
-  return value.replaceAll("\\", "\\\\").replaceAll(";", "\\;").replaceAll(",", "\\,").replaceAll(/\r?\n/g, "\\n");
+export function escapeIcs(value: string) {
+  return value.replaceAll("\\", "\\\\").replaceAll(";", "\\;").replaceAll(",", "\\,").replaceAll(/\r\n|\r|\n/g, "\\n");
 }
 
 export function calendarFile(items: Festival[]) {

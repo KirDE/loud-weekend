@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { assessPerformanceSelections } from "@/lib/timetable-plan";
+import { assessPerformanceSelections, runningOrderCalendar } from "@/lib/timetable-plan";
 import { useTimetablePlan } from "./useTimetablePlan";
 import type { TimetableEntry } from "@/lib/domain/festival";
 import { useLanguage, type Language } from "./LanguageProvider";
@@ -23,16 +23,19 @@ const plannerCopy = {
   en: {
     title: "My running order", local: "Saved on this device only.", add: "Save", remove: "Remove",
     toggle: "Save to running order", clear: "Clear running order", conflict: "Verified overlap", incomplete: "Some saved performances have no verified end time. Overlap could not be checked for those.",
+    download: "Download running order (.ics)", calendarHint: "Calendar files include only scheduled sets with verified times and do not update automatically.",
     storageFailed: "This browser could not save the running order.",
   },
   de: {
     title: "Mein Bühnenplan", local: "Nur auf diesem Gerät gespeichert.", add: "Speichern", remove: "Entfernen",
     toggle: "Im Bühnenplan speichern", clear: "Bühnenplan leeren", conflict: "Bestätigte Überschneidung", incomplete: "Für einige gespeicherte Auftritte fehlt eine bestätigte Endzeit. Für diese ist keine Prüfung möglich.",
+    download: "Bühnenplan herunterladen (.ics)", calendarHint: "Die Kalenderdatei enthält nur angesetzte Auftritte mit bestätigten Zeiten und wird nicht automatisch aktualisiert.",
     storageFailed: "Dieser Browser konnte den Bühnenplan nicht speichern.",
   },
   ru: {
     title: "Моё расписание", local: "Хранится только на этом устройстве.", add: "Сохранить", remove: "Убрать",
     toggle: "Сохранить в расписание", clear: "Очистить расписание", conflict: "Подтверждённое пересечение", incomplete: "У некоторых сохранённых выступлений нет подтверждённого времени окончания. Для них нельзя проверить пересечение.",
+    download: "Скачать расписание (.ics)", calendarHint: "В файл входят только запланированные выступления с подтверждённым временем. Файл не обновляется автоматически.",
     storageFailed: "Браузер не смог сохранить расписание.",
   },
 };
@@ -49,6 +52,7 @@ export function StageTimetable({ entries, slug, year }: { entries?: readonly Tim
   const selected = entries.filter(entry => entry.sourcePerformanceId && plan.selected.includes(entry.sourcePerformanceId))
     .sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
   const { conflicts: overlaps, incomplete } = assessPerformanceSelections(selected);
+  const calendar = slug && year ? runningOrderCalendar(selected, slug, year) : null;
   const dates = [...new Set(entries.map(({ date }) => date))].sort();
   const stages = [...new Set(entries.map(({ stage }) => stage))].sort((a, b) => a.localeCompare(b, locale));
   const dayFilter = dates.includes(selectedDay) ? selectedDay : "";
@@ -90,6 +94,9 @@ export function StageTimetable({ entries, slug, year }: { entries?: readonly Tim
         <p key={`${left.sourcePerformanceId}|${right.sourcePerformanceId}`}>{planner.conflict}: {left.artist} / {right.artist}</p>
       )}</div>}
       {incomplete && <p>{planner.incomplete}</p>}
+      {calendar && <p><a download={`${slug}-${year}-running-order.ics`}
+        href={`data:text/calendar;charset=utf-8,${encodeURIComponent(calendar)}`}>{planner.download}</a></p>}
+      {calendar && <p>{planner.calendarHint}</p>}
       <button type="button" onClick={plan.clear}>{planner.clear}</button>
     </section>}
     {!matches.length && <p role="status">{labels.empty}</p>}
