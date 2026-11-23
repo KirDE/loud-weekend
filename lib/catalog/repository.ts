@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
 import type { PrismaClient } from "@prisma/client";
 import type { ArtistProfile } from "../domain/artist.ts";
@@ -45,7 +46,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     ]);
     if (!editionRows.length || !artistRows.length) throw new Error("database catalogue is empty or incomplete");
 
-    const editions: FestivalEdition[] = editionRows.map((row) => {
+    const editions = editionRows.map((row) => {
       const headliners = row.lineup.filter(({ billing }) => billing === "HEADLINER").map(({ artist }) => artist.name);
       const lineup = row.lineup.filter(({ billing }) => billing === "LINEUP").map(({ artist }) => artist.name);
       return {
@@ -64,7 +65,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         timetable: row.timetable.length ? row.timetable.map((performance) => ({
           date: dateOnly(performance.date)!, stage: performance.stage, start: performance.start,
           artist: performance.artistName, timeZone: performance.timeZone ?? "UTC",
-          status: performance.status === "CANCELLED" ? "cancelled" : "scheduled",
+          status: performance.status === "CANCELLED" ? "cancelled" as const : "scheduled" as const,
           sourceUrl: performance.sourceUrl ?? row.festival.officialUrl,
           observedAt: instant(performance.observedAt) ?? row.sourceUpdatedAt.toISOString(),
         })) : undefined,
@@ -74,24 +75,17 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           field: source.field as "edition" | "dates" | "lineup", url: source.url,
           checkedAt: source.checkedAt.toISOString(), note: source.note,
         })),
-      };
+      } satisfies FestivalEdition;
     });
     const currentEditions = editions.filter(({ recordState }) => recordState === "current");
     const currentArtistNames = new Set(currentEditions.flatMap(({ headliners, lineup }) => [...headliners, ...lineup]));
     const festivalsFromDatabase: Festival[] = currentEditions.map((edition) => {
       const { recordState: _recordState, snapshotAt: _snapshotAt, provenance: _provenance, ...festival } = edition;
-      const row = editionRows.find(({ festival: item, year }) => item.slug === edition.slug && year === edition.editionYear)!;
       return {
         ...festival,
         headliners: [...festival.headliners],
         lineup: [...festival.lineup],
-        timetable: row.timetable.length ? row.timetable.map((performance) => ({
-          date: dateOnly(performance.date)!, stage: performance.stage, start: performance.start,
-          artist: performance.artistName, timeZone: performance.timeZone ?? "UTC",
-          status: performance.status === "CANCELLED" ? "cancelled" : "scheduled",
-          sourceUrl: performance.sourceUrl ?? row.festival.officialUrl,
-          observedAt: instant(performance.observedAt) ?? row.sourceUpdatedAt.toISOString(),
-        })) : undefined,
+        timetable: festival.timetable?.map((performance) => ({ ...performance })),
       };
     });
     const artists: ArtistProfile[] = artistRows
@@ -136,6 +130,6 @@ export async function readCatalog(options: { database?: PrismaClient } = {}): Pr
   return new DatabaseCatalogRepository(database).read();
 }
 
-export function getCatalog() {
-  return readCatalog();
-}
+// Metadata and page rendering share the publication snapshot within one render.
+// React does not retain this cache across requests; workers use readCatalog directly.
+export const getCatalog = cache(() => readCatalog());
