@@ -49,6 +49,8 @@ const dateOnly = (value: unknown) =>
 const isoDate = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 const same = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+const normalizeTicketLink = (value: unknown) =>
+  typeof value === "string" ? value.trim() || null : value;
 
 function artistSlug(name: string) {
   return encodeURIComponent(
@@ -280,19 +282,19 @@ async function applyFestivalChanges(
         break;
       }
       case "ticketsUrl": {
-        current = edition.ticketsUrl;
-        if (input.strictBefore && !same(current, change.before) && !same(current, change.after))
+        current = normalizeTicketLink(edition.ticketsUrl);
+        const next = normalizeTicketLink(change.after);
+        if (next !== null && typeof next !== "string") throw new Error("Invalid ticketsUrl");
+        if (
+          input.strictBefore &&
+          !same(current, normalizeTicketLink(change.before)) &&
+          !same(current, next)
+        )
           throw new Error(`Stale ticketsUrl value for ${input.festivalSlug}`);
-        if (!same(current, change.after)) {
-          if (
-            change.after !== undefined &&
-            change.after !== null &&
-            typeof change.after !== "string"
-          )
-            throw new Error("Invalid ticketsUrl");
+        if (!same(current, next)) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { ticketsUrl: change.after as string | null | undefined },
+            data: { ticketsUrl: next },
           });
           changed = true;
         }

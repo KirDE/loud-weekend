@@ -2931,3 +2931,60 @@ test("an already unknown date does not record a new catalogue publication", asyn
     (error) => error === rollback,
   );
 });
+
+test("blank ticket links do not publish a change unless a known link was cleared", async () => {
+  const slug = "synthetic-fest";
+  const rollback = new Error("rollback blank ticket link fixture");
+  await assert.rejects(
+    db.$transaction(async (tx) => {
+      const edition = await tx.festivalEdition.findFirstOrThrow({
+        where: { festival: { slug }, recordState: "CURRENT" },
+      });
+      const observedAt = new Date("2026-01-01T10:00:00Z");
+      await tx.festivalEdition.update({
+        where: { id: edition.id },
+        data: { ticketsUrl: null, sourceUpdatedAt: observedAt },
+      });
+      const change = {
+        id: randomUUID(),
+        resourceKey: slug,
+        field: "ticketsUrl",
+        beforeValue: null,
+        afterValue: "  ",
+        sourceEvidence: [],
+        parserRunId: null,
+      };
+      assert.equal(
+        await publishAdminFestivalChange(tx, { actorLabel: "synthetic-review", change }),
+        null,
+      );
+      const unchanged = await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } });
+      assert.deepEqual([unchanged.ticketsUrl, unchanged.sourceUpdatedAt], [null, observedAt]);
+
+      const ticketsUrl = "https://festival.example.test/tickets";
+      await tx.festivalEdition.update({ where: { id: edition.id }, data: { ticketsUrl } });
+      assert.equal(
+        await publishAdminFestivalChange(tx, {
+          actorLabel: "synthetic-review",
+          change: {
+            ...change,
+            id: randomUUID(),
+            beforeValue: ticketsUrl,
+            afterValue: `  ${ticketsUrl}  `,
+          },
+        }),
+        null,
+      );
+      const cleared = await publishAdminFestivalChange(tx, {
+        actorLabel: "synthetic-review",
+        change: { ...change, id: randomUUID(), beforeValue: ticketsUrl },
+      });
+      assert.deepEqual(cleared?.fields, ["ticketsUrl"]);
+      const current = await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } });
+      assert.equal(current.ticketsUrl, null);
+      assert.ok(current.sourceUpdatedAt > observedAt);
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
+});
