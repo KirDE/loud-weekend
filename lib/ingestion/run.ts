@@ -1,3 +1,4 @@
+import { isRfpStockSource, withRfpStockDates } from "./rfp-stock-dates.ts";
 import type { AliasArtist } from "../catalog/artist-aliases.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -26,11 +27,14 @@ export async function runIngestion(input: { sources: FestivalSource[]; artists?:
   const summary = { schemaVersion: 2, generatedAt: now().toISOString(), status: "healthy" as "healthy" | "degraded" | "failed", processed: 0, changed: 0, publishable: 0, reviewRequired: 0, fetchErrors: 0, escalatedFailures: 0, results: [] as Record<string, unknown>[] };
   await mkdir(input.outputDirectory, { recursive: true });
 
-  for (const source of input.sources) {
+  for (let source of input.sources) {
     const current = input.festivals.find(({ slug }) => slug === source.festivalSlug);
     if (!current) throw new Error(`No current festival for ${source.festivalSlug}`);
     const fetchedAt = now().toISOString();
     try {
+      if (isRfpStockSource(source) && !source.rfpStockDates) {
+        source = await withRfpStockDates((await import("../db.ts")).db, source);
+      }
       const { response, attempts } = await fetchSource(source, input.fetchOptions);
       if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`), { httpStatus: response.status, attempts });
       const candidate = extractFestivalCandidate(await response.text(), source, fetchedAt);

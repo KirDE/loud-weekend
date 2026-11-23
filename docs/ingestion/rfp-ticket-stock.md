@@ -37,3 +37,7 @@ canonical public reader, idempotent replay, archived-source rejection and stale
 publication rollback in disposable local PostgreSQL, without provider jobs.
 Full typecheck and test:data pass. Full PR Quality/Codex must be observed on the
 published exact head, separately from this local receipt.
+
+The exact festival dates, sale start, seller schedule and ordinary rate start used
+by this verification are read from the reviewed PostgreSQL schedule. A missing
+or malformed schedule must not be reported as verified stock.
