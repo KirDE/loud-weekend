@@ -157,11 +157,7 @@ const railStations = [
 
 const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export function parseGraspopRailShuttle(
-  organizerHtml: string,
-  timetableHtml: string,
-  year: number,
-) {
+export function graspopRailOrganizerStations(organizerHtml: string) {
   const organizer = visiblePage(organizerHtml);
   const details = organizer("details.faq-item").filter(
     (_, el) => plain(organizer(el).children("summary").text()) === "AIRPORT / RAILWAY SHUTTLES",
@@ -185,10 +181,26 @@ export function parseGraspopRailShuttle(
   );
   if (!policy) return;
 
-  const listed = details
+  return details
     .find("li")
     .map((_, el) => plain(organizer(el).text()))
     .get();
+}
+
+export function parseGraspopRailShuttle(
+  organizerHtml: string,
+  timetableHtml: string,
+  year: number,
+  interval: { startDate: string; endDate: string },
+) {
+  const listed = graspopRailOrganizerStations(organizerHtml);
+  if (!listed) return;
+  const start = Date.parse(interval.startDate);
+  const end = Date.parse(interval.endDate);
+  const dayMs = 86_400_000;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) return;
+  const daysToMonday = (8 - new Date(end).getUTCDay()) % 7 || 7;
+  const mondayReturn = end + daysToMonday * dayMs;
   const timetable = visiblePage(timetableHtml);
   const tables = timetable("table").filter((_, el) =>
     timetable(el)
@@ -227,8 +239,13 @@ export function parseGraspopRailShuttle(
         return;
       }
       dateCount++;
-      if (kind === "inbound" || weekday === "Monday") {
-        section = { direction: kind === "inbound" ? "inbound" : "outbound", date: date.getTime() };
+      const timestamp = date.getTime();
+      if (
+        kind === "inbound"
+          ? timestamp >= start - 2 * dayMs && timestamp <= end
+          : timestamp === mondayReturn
+      ) {
+        section = { direction: kind === "inbound" ? "inbound" : "outbound", date: timestamp };
       }
       return;
     }

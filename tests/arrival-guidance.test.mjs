@@ -50,20 +50,13 @@ test("Wacken requires the edition-specific vehicle, drop-off and route rules", (
 
 test("rail shuttles require linked edition-specific proof in both directions", () => {
   const [, operatorUrl] = graspopRailSources("graspop");
-  const organizer = `<div class="pagecontent-row-container">
-    <details class="faq-item"><summary>AIRPORT / RAILWAY SHUTTLES</summary>
-    <ul><li>Brussels South railway station</li><li>Eindhoven Central Station</li></ul>
-    <p>On the Monday after the festival, you can take a shuttle straight back to the airports or railway stations.
-    A separate ticket is required for this journey.</p></details>
-    <a href="${operatorUrl}">Airport / Railway Shuttles Tickets</a></div>`;
-  const timetable = `<table>
-    <tr><td>Wednesday - 16/06/2027 - one-way inbound transfer</td></tr>
-    <tr><td>Brussels Midi Station</td><td>12h00</td><td>GMM Dessel</td><td>13h00</td></tr>
-    <tr><td>Eindhoven Railway station</td><td>12h00</td><td>GMM Dessel</td><td>13h00</td></tr>
-    <tr><td>Monday - 21/06/2027 - one-way outbound transfer</td></tr>
-    <tr><td>GMM busparking</td><td>12h00</td><td>Station Brussels South (Gare du Midi)</td><td>13h00</td></tr>
-    <tr><td>GMM busparking</td><td>12h00</td><td>Eindhoven Railway station</td><td>13h00</td></tr></table>`;
-  const parse = (html, list = organizer) => parseGraspopRailShuttle(list, html, 2027);
+  const organizer = read("graspop-rail-organizer");
+  const timetable = read("graspop-rail-operator");
+  const parse = (html, list = organizer) =>
+    parseGraspopRailShuttle(list, html, 2027, {
+      startDate: "2027-06-17",
+      endDate: "2027-06-20",
+    });
   const complete = parse(timetable);
   assert.match(complete.description.en, /Brussels-Midi, Eindhoven Centraal/);
   assert.equal(complete.supportingSourceUrl, operatorUrl);
@@ -75,6 +68,8 @@ test("rail shuttles require linked edition-specific proof in both directions", (
   assert.equal(parse(timetable.replace("21/06/2027", "20/06/2027")), undefined);
   assert.equal(parse(timetable.replace("21/06/2027", "14/06/2027")), undefined);
   assert.equal(parse(timetable.replace("16/06/2027", "23/06/2027")), undefined);
+  assert.equal(parse(timetable.replace("16/06/2027", "09/06/2027")), undefined);
+  assert.equal(parse(timetable.replace("21/06/2027", "28/06/2027")), undefined);
   assert.equal(
     parse(timetable, organizer.replace(operatorUrl, "https://elsewhere.example/")),
     undefined,

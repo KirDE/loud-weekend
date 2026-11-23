@@ -1,17 +1,19 @@
-# Organizer arrival guidance
+# Reviewed festival arrival guidance
 
-The site reads approved guidance from the matching edition in PostgreSQL. No arrival facts are shipped
-with the application. The public section is omitted when no matching rows are present.
+The arrival adapter extracts guidance only for explicitly registered, edition-bound
+organizer URLs using the `manual_review` strategy. The database-due ingestion
+worker holds the source lease, and stages the normalized arrival observation and
+per-document evidence as an ingestion candidate. This change does not activate
+or populate any production sources.
 
-Use `npm run arrival:import -- --festival=<slug> --edition=YYYY` to preview parsed organizer guidance.
-Review the facts, source links, and edition, then apply with `--apply=<fingerprint> --actor=<label>`. Applying re-fetches
-the organizer sources and rejects incomplete, changed, or mismatched evidence. Approved observations
-update only the included fact kinds. The collector supports Graspop and Wacken.
+Review the pending case through the protected importer API. Claim the current
+case, then resolve it with `action: "apply"` and `arrival` set to the candidate's
+`arrivalFingerprint`. Supply a review reason. The server uses the persisted
+facts and evidence, not caller-supplied text or URLs, and commits the edition
+projection, candidate disposition and append-only audit together. There is no
+direct-write import command.
 
-The apply transaction records the reviewer label, exact edition, approved facts, source links, document digest,
-preview fingerprint, and observation time in the append-only audit. An identical replay does not add an audit entry.
-
-For Graspop rail shuttles, also pass `--rail-shuttle`. It requires the organizer
-to link the shuttle operator and both pages to agree about the stations. Only
-inbound and Monday return rows from the requested edition count. It never
-updates airport shuttles, venue guidance, ticket availability, prices or times.
+Rail shuttle guidance uses its own explicitly registered organizer source. The
+organizer must link the recognized operator before its timetable is fetched.
+The edition's persisted dates bound eligible inbound transfers and the first
+Monday return after the event. The protected resolution rechecks that interval.
