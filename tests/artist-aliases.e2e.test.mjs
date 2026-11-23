@@ -229,6 +229,8 @@ test("persisted observed artist list retains the exact extracted alias", async (
 });
 test("publication refuses alias-driven cross-billing changes and global collisions", async () => {
   let value = result("Alternate Name");
+  value.candidate.headliners = undefined;
+  value.candidate.lineup = ["Alternate Name"];
   value.changes = [
     { kind: "artist_added", field: "lineup", after: "Alternate Name", reviewRequired: false },
   ];

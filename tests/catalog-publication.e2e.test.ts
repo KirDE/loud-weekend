@@ -1283,10 +1283,12 @@ test(
         publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
         drift === "removal"
           ? /Invalid automatic lineup addition/
-          : new RegExp(
-              "Graspop publication requires|Candidate edition 2026 does not match catalogue edition 2027|" +
-                "publication scope does not match",
-            ),
+          : drift === "persisted-value"
+            ? /Lineup addition is missing from the observed billing/
+            : new RegExp(
+                "Graspop publication requires|Candidate edition 2026 does not match catalogue edition 2027|" +
+                  "publication scope does not match",
+              ),
       );
       assert.deepEqual(await counts(), before);
       assert.equal(
@@ -1928,7 +1930,9 @@ test("Provinssi provenance drift rolls back catalogue, completeness and provider
       publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
       drift === "removal"
         ? /Invalid automatic lineup addition/
-        : /Provinssi publication requires|Candidate edition 2026|publication scope does not match/,
+        : drift === "persisted-value"
+          ? /Lineup addition is missing from the observed billing/
+          : /Provinssi publication requires|Candidate edition 2026|publication scope does not match/,
     );
     assert.deepEqual(await counts(), before);
   }
@@ -3102,4 +3106,37 @@ test("a persisted automatic roster change without an artist value cannot publish
     await db.catalogPublication.count({ where: { sourceId: `ingestion:${candidate.id}` } }),
     0,
   );
+});
+
+test("automatic additions must appear in both observed rosters under the proposed billing", async () => {
+  const artist = `Unobserved support ${suffix}`;
+  createdArtists.push(artist.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+  const fixture = result(artist);
+  const wrongBilling = { ...fixture.candidate, lineup: [], headliners: [artist] };
+  const otherArtist = { ...fixture.candidate, lineup: ["Different Artist"] };
+
+  for (const [persisted, observed] of [
+    [wrongBilling, fixture.candidate],
+    [fixture.candidate, otherArtist],
+    [otherArtist, otherArtist],
+  ]) {
+    const attempt = await persist({ ...fixture, candidate: persisted });
+    await assert.rejects(
+      publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: { ...fixture, candidate: observed },
+        sourceCommit: suffix,
+      }),
+      /Lineup addition is missing from the observed billing/,
+    );
+    const candidate = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    assert.equal(candidate.reviewState, "PENDING");
+    assert.equal(
+      await db.catalogPublication.count({ where: { sourceId: `ingestion:${candidate.id}` } }),
+      0,
+    );
+  }
+  assert.equal(await db.artist.count({ where: { name: artist } }), 0);
 });

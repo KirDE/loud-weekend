@@ -537,15 +537,21 @@ export async function publishIngestionResult(
       );
       if (artistChanges.length && !expectedYear)
         throw new Error("Cannot publish a lineup without one verified edition year");
-      if (
-        artistChanges.some(
-          ({ kind, field, after }) =>
-            kind !== (field === "headliners" ? "headliner_added" : "artist_added") ||
-            typeof after !== "string" ||
-            !after.trim(),
+      for (const { kind, field, after } of artistChanges) {
+        const billing = field === "headliners" ? "headliners" : "lineup";
+        if (
+          kind !== (billing === "headliners" ? "headliner_added" : "artist_added") ||
+          typeof after !== "string" ||
+          !after.trim()
         )
-      )
-        throw new Error("Invalid automatic lineup addition");
+          throw new Error("Invalid automatic lineup addition");
+        if (
+          ![stored[billing], observed[billing]].every(
+            (roster) => Array.isArray(roster) && roster.includes(after),
+          )
+        )
+          throw new Error("Lineup addition is missing from the observed billing");
+      }
       // Secondary ticket observations are publishable only with the same exact
       // source, edition, value and durable evidence that passed the producer.
       // Do not extend the separate Impericon/I-Days publication paths here (#497).
