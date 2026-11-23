@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { PlaylistDepth } from "./playlist-depth.ts";
 import { executePlaylistJson } from "./catalog/python-playlist-rpc.ts";
 import {
   spotifyRepertoireSchema,
@@ -26,8 +27,12 @@ export function deduplicateArtists(values: string[]) {
     });
 }
 
+export class SelectionPlaylistRateLimit extends Error {}
+export class SelectionPlaylistWriteUnconfirmed extends Error {}
+
 async function spotifyJson<T>(request: SpotifyRequest, url: string, init?: RequestInit) {
   const response = await request(url, init);
+  if (response.status === 429) throw new SelectionPlaylistRateLimit("Spotify rate limit");
   if (!response.ok) throw new Error(`Spotify request failed (${response.status})`);
   return response.json() as Promise<T>;
 }
@@ -116,9 +121,11 @@ export async function createSelectionPlaylist(input: {
   festivals: string[];
   canonicalArtists: SelectionArtist[];
   request?: SpotifyRequest;
+  depth?: PlaylistDepth;
 }) {
   const request = input.request ?? fetch,
     names = deduplicateArtists(input.artists).slice(0, 250);
+  const depth = input.depth ?? "quick";
   const headers = { Authorization: "Bearer " + input.token, "Content-Type": "application/json" };
   const seen = new Set<string>(),
     artists: SelectionArtist[] = [];
@@ -143,7 +150,7 @@ export async function createSelectionPlaylist(input: {
       path.join(process.cwd(), "scripts/spotify_gmm_2026/playlist_worker_rpc.py"),
       "select-user-tracks",
     ],
-    { artists: pools },
+    { artists: pools, depth },
     {
       cwd: process.cwd(),
       env: {
@@ -166,33 +173,58 @@ export async function createSelectionPlaylist(input: {
   if (!tracks.length) throw new Error("Spotify could not resolve any selected artists");
   const suffix =
     input.festivals.length === 1 ? input.festivals[0] : input.festivals.length + " festivals";
-  const playlist = await spotifyJson<{ id: string; external_urls: { spotify: string } }>(
-    request,
-    "https://api.spotify.com/v1/users/" + encodeURIComponent(input.spotifyUserId) + "/playlists",
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        name: "Loud Weekend · " + suffix,
-        description:
-          "One verified track per deduplicated artist selected in Loud Weekend (" +
-          artists.length +
-          " artists).",
-        public: false,
-      }),
-    },
-  );
-  for (let index = 0; index < tracks.length; index += 100)
-    await spotifyJson(request, "https://api.spotify.com/v1/playlists/" + playlist.id + "/tracks", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ uris: tracks.slice(index, index + 100) }),
-    });
-  return {
-    playlistUrl: playlist.external_urls.spotify,
-    playlistId: playlist.id,
-    trackCount: tracks.length,
-    artistCount: artists.length,
-    unresolved: result.unresolved,
-  };
+  const trackDescription =
+    depth === "quick"
+      ? "One verified track"
+      : depth === "preview"
+        ? "Up to four verified tracks"
+        : "Up to eight verified tracks";
+  try {
+    const playlist = await spotifyJson<{ id: string; external_urls: { spotify: string } }>(
+      request,
+      "https://api.spotify.com/v1/users/" + encodeURIComponent(input.spotifyUserId) + "/playlists",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: "Loud Weekend · " + suffix,
+          description:
+            trackDescription +
+            " per deduplicated artist selected in Loud Weekend (" +
+            artists.length +
+            " artists).",
+          public: false,
+        }),
+      },
+    );
+    if (
+      !providerId.test(playlist.id) ||
+      playlist.external_urls?.spotify !== "https://open.spotify.com/playlist/" + playlist.id
+    ) {
+      throw new Error("Invalid Spotify playlist identity");
+    }
+    for (let index = 0; index < tracks.length; index += 100) {
+      await spotifyJson(
+        request,
+        "https://api.spotify.com/v1/playlists/" + playlist.id + "/tracks",
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ uris: tracks.slice(index, index + 100) }),
+        },
+      );
+    }
+    return {
+      playlistUrl: playlist.external_urls.spotify,
+      playlistId: playlist.id,
+      trackCount: tracks.length,
+      artistCount: artists.length,
+      unresolved: result.unresolved,
+    };
+  } catch {
+    // Creation may already have succeeded. Do not automatically repeat any provider write.
+    throw new SelectionPlaylistWriteUnconfirmed(
+      "Spotify playlist creation or track writes could not be confirmed",
+    );
+  }
 }
