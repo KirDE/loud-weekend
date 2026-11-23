@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
+import { FestivalOverview } from "./FestivalOverview";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import { PlanningTools } from "./PlanningTools";
@@ -146,6 +147,7 @@ export function FestivalDetail({
           </div>
         )}
       </div>
+      <FestivalOverview festival={item} />
       <section className="lineupSection">
         <div className="sectionHeading">
           <div>
