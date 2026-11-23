@@ -10,12 +10,12 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review")) return;
   let url: URL; try { url = new URL(source.url); } catch { return; }
   if (url.protocol !== "https:" || url.username || url.password || url.port || url.search || url.hash) return;
-  if (source.festivalSlug === "motocultor" && url.hostname === "www.motocultor-festival.com" && ["/", "/actualites/"].includes(url.pathname))
-    return "https://www.motocultor-festival.com/";
   if (source.festivalSlug === "download" && url.hostname === "downloadfestival.co.uk" && url.pathname === "/")
     return "https://downloadfestival.co.uk/tickets/";
   if (source.festivalSlug === "wacken-open-air" && url.hostname === "www.wacken.com" && url.pathname === "/")
     return `https://www.wacken.com/de/tickets-shop/ticket-uebersicht-${source.editionYear}/`;
+  if (source.festivalSlug === "motocultor" && url.hostname === "www.motocultor-festival.com" && ["/", "/actualites/"].includes(url.pathname))
+    return "https://www.motocultor-festival.com/";
 }
 
 export function isTicketSupplementUrl(source: FestivalSource, actual: string): boolean {
