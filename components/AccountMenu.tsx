@@ -18,6 +18,7 @@ export function AccountMenu() {
   const { language } = useLanguage();
   const t = copy[language];
   const [user, setUser] = useState<User | null>(null);
+  const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("login");
   const [busy, setBusy] = useState(false);
@@ -29,7 +30,8 @@ export function AccountMenu() {
     setPasskeySupported(Boolean(window.PublicKeyCredential && navigator.credentials));
     fetch("/api/auth/me", { cache: "no-store" })
       .then(async (response) => response.ok && setUser((await response.json()).user))
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setReady(true));
   }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -94,7 +96,7 @@ export function AccountMenu() {
   }
 
   return <div className="accountMenu">
-    <button type="button" className="accountButton" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{user?.email ?? t.account}</button>
+    <button type="button" className="accountButton" disabled={!ready} aria-expanded={open} onClick={() => setOpen((value) => !value)}>{user?.email ?? t.account}</button>
     {open && <section className="accountPopover" aria-label={t.account}>
       {user ? <>
         <strong>{user.email}</strong>
