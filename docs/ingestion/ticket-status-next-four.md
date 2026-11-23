@@ -82,5 +82,7 @@ source transport or offline success is never release acceptance.
 The reviewed shop identities for these four sources are stored in PostgreSQL
 and keyed by exact festival, primary URL and edition. The publisher resolves
 the same binding independently. Missing bindings do not trigger supplemental
-requests. The separate Resurrection Fest route and signed-off product scope
-are unchanged by this migration.
+requests. Resurrection Fest uses a separate, versioned public sale record in
+`lib/ingestion/config/resurrection-stock.json`, shared by the parser,
+synchronous policy and publisher. The actual exact product scope and
+read-only request sequence are unchanged.

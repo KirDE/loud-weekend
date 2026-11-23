@@ -1,12 +1,12 @@
 import { getRemainingProof } from "./remaining-ticket-proof.ts";
-import { RESURRECTION_PRODUCTS, observeResurrectionStock } from "./resurrection-ticket-stock.ts";
+import { RESURRECTION_PRODUCTS, RESURRECTION_YEAR, observeResurrectionStock } from "./resurrection-ticket-stock.ts";
 import { load, type CheerioAPI } from "cheerio";
 import type { FestivalSource } from "./types.ts";
 import type { TicketObservation } from "./ticket-supplements.ts";
 
 /** Stock destinations are limited to the reviewed provider host and route. */
 export function remainingTicketUrl(source: FestivalSource): string | undefined {
-  if (source.festivalSlug === "resurrection-fest" && source.url === "https://www.resurrectionfest.es/" && source.editionYear === 2027)
+  if (source.festivalSlug === "resurrection-fest" && source.url === "https://www.resurrectionfest.es/" && source.editionYear === RESURRECTION_YEAR)
     return RESURRECTION_PRODUCTS;
   const proof = getRemainingProof(source);
   switch (proof?.kind) {
