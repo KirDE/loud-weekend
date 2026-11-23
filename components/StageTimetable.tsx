@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { TimetableEntry } from "@/lib/domain/festival";
 import { useLanguage, type Language } from "./LanguageProvider";
-import { findTimetableConflicts, groupTimetable } from "@/lib/timetables";
+import { findTimetableConflicts, groupTimetable, timetableLocalDateTime } from "@/lib/timetables";
 
 const copy: Record<
   Language,
@@ -173,16 +173,40 @@ export function StageTimetable({ entries }: { entries?: TimetableEntry[] }) {
               <div className="timetableStage" key={stage.stage}>
                 <h4>{stage.stage}</h4>
                 <ol>
-                  {stage.entries.map((entry) => (
-                    <li
-                      className={entry.status === "cancelled" ? "cancelled" : undefined}
-                      key={`${entry.start}-${entry.artist}`}
-                    >
-                      <time dateTime={`${entry.date}T${entry.start}`}>{entry.start}</time>
-                      <span>{entry.artist}</span>
-                      {entry.status === "cancelled" && <em>{t.cancelled}</em>}
-                    </li>
-                  ))}
+                  {stage.entries.map((entry) => {
+                    const start = entry.window
+                      ? timetableLocalDateTime(entry.window.startsAt, entry.timeZone)
+                      : null;
+                    const end = entry.window
+                      ? timetableLocalDateTime(entry.window.endsAt, entry.timeZone)
+                      : null;
+                    const showOffsets = start?.offset !== end?.offset;
+                    return (
+                      <li
+                        className={entry.status === "cancelled" ? "cancelled" : undefined}
+                        key={`${entry.start}-${entry.artist}`}
+                      >
+                        <span className="timetableSlotTime">
+                          <time dateTime={entry.window?.startsAt ?? `${entry.date}T${entry.start}`}>
+                            {entry.start}
+                            {showOffsets && ` ${start?.offset}`}
+                          </time>
+                          {end && entry.window && (
+                            <>
+                              –
+                              <time dateTime={entry.window.endsAt}>
+                                {end.time}
+                                {showOffsets && ` ${end.offset}`}
+                                {end.date !== entry.date && ` (${dayLabel(end.date)})`}
+                              </time>
+                            </>
+                          )}
+                        </span>
+                        <span>{entry.artist}</span>
+                        {entry.status === "cancelled" && <em>{t.cancelled}</em>}
+                      </li>
+                    );
+                  })}
                 </ol>
               </div>
             ))}

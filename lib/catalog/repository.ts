@@ -92,6 +92,13 @@ export class DatabaseCatalogRepository implements CatalogRepository {
               start: performance.start,
               artist: performance.artistName,
               timeZone: performance.timeZone ?? "UTC",
+              window:
+                performance.startsAt && performance.endsAt
+                  ? {
+                      startsAt: performance.startsAt.toISOString(),
+                      endsAt: performance.endsAt.toISOString(),
+                    }
+                  : undefined,
               status: performance.status === "CANCELLED" ? "cancelled" : "scheduled",
               sourceUrl: performance.sourceUrl ?? row.festival.officialUrl,
               observedAt: instant(performance.observedAt) ?? row.sourceUpdatedAt.toISOString(),
@@ -133,6 +140,13 @@ export class DatabaseCatalogRepository implements CatalogRepository {
               start: performance.start,
               artist: performance.artistName,
               timeZone: performance.timeZone ?? "UTC",
+              window:
+                performance.startsAt && performance.endsAt
+                  ? {
+                      startsAt: performance.startsAt.toISOString(),
+                      endsAt: performance.endsAt.toISOString(),
+                    }
+                  : undefined,
               status: performance.status === "CANCELLED" ? "cancelled" : "scheduled",
               sourceUrl: performance.sourceUrl ?? row.festival.officialUrl,
               observedAt: instant(performance.observedAt) ?? row.sourceUpdatedAt.toISOString(),
