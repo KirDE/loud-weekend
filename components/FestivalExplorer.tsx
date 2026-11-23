@@ -6,6 +6,12 @@ import { useMemo, useRef, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
+import {
+  discoverySorts,
+  sortDiscoveryFestivals,
+  type DiscoveryLineups,
+  type DiscoverySort,
+} from "@/lib/discovery-sort";
 import { DiscoveryDateFilters } from "./DiscoveryDateFilters";
 import {
   datesFromQuery,
@@ -36,10 +42,16 @@ import {
   type DiscoveryPreferences,
 } from "@/lib/discovery-preferences";
 
-export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
+export function FestivalExplorer({
+  festivals,
+  discoveryLineups,
+}: {
+  festivals: Festival[];
+  discoveryLineups?: DiscoveryLineups;
+}) {
   const { locale, t } = useLanguage();
   const planner = useLocalPlanner();
-  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance } =
+  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance, sort } =
     planner.savedFilters;
   const filtersReady = planner.ready;
   const queryParams = useSearchParams();
@@ -77,28 +89,26 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
     return genre === "all" || available.includes(genre) ? available : [...available, genre].sort();
   }, [festivals, genre]);
   const originCoordinates = origins[origin].coordinates;
-  const visible = useMemo(
+  const filtered = useMemo(
     () =>
-      festivals
-        .filter((item) => {
-          const haystack = [item.name, item.country, item.city, ...item.headliners, ...item.lineup]
-            .join(" ")
-            .toLowerCase();
-          return (
-            haystack.includes(query.toLowerCase()) &&
-            (country === "all" || item.countryCode === country) &&
-            (!announcedOnly || hasAnnouncedLineup(item)) &&
-            (month === "all" || festivalOverlapsMonth(item, Number(month))) &&
-            (!ticketsOnly || hasAvailableTickets(item)) &&
-            matchesDiscoveryDates(item, dateFilters) &&
-            festivalMatchesDiscoveryFilters(item, {
-              genre: genre === "all" ? undefined : genre,
-              origin: originCoordinates,
-              maxDistanceKm: maxDistance === "all" ? undefined : Number(maxDistance),
-            })
-          );
-        })
-        .sort((a, b) => (a.startDate || "9999").localeCompare(b.startDate || "9999")),
+      festivals.filter((item) => {
+        const haystack = [item.name, item.country, item.city, ...item.headliners, ...item.lineup]
+          .join(" ")
+          .toLowerCase();
+        return (
+          haystack.includes(query.toLowerCase()) &&
+          (country === "all" || item.countryCode === country) &&
+          (!announcedOnly || hasAnnouncedLineup(item)) &&
+          (month === "all" || festivalOverlapsMonth(item, Number(month))) &&
+          (!ticketsOnly || hasAvailableTickets(item)) &&
+          matchesDiscoveryDates(item, dateFilters) &&
+          festivalMatchesDiscoveryFilters(item, {
+            genre: genre === "all" ? undefined : genre,
+            origin: originCoordinates,
+            maxDistanceKm: maxDistance === "all" ? undefined : Number(maxDistance),
+          })
+        );
+      }),
     [
       festivals,
       query,
@@ -111,6 +121,16 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
       maxDistance,
       dateFilters,
     ],
+  );
+  const visible = useMemo(
+    () =>
+      sortDiscoveryFestivals(filtered, sort, {
+        locale,
+        origin: originCoordinates,
+        favorites: planner.favoriteArtists,
+        lineups: discoveryLineups,
+      }),
+    [filtered, sort, locale, originCoordinates, planner.favoriteArtists, discoveryLineups],
   );
   const compared = festivals.filter((item) => selected.includes(item.slug));
   const overlap = lineupOverlap(compared);
@@ -352,6 +372,22 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
           )}
         </div>
       )}
+      <div className="discoveryOrder">
+        <label>
+          {t("discoverySort")}{" "}
+          <select
+            value={sort}
+            disabled={!filtersReady}
+            onChange={(event) => updateFilters({ sort: event.target.value as DiscoverySort })}
+          >
+            {discoverySorts.map((value) => (
+              <option key={value} value={value}>
+                {t(`discoverySort_${value}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="resultMeta">
         <span>
           {visible.length} {t("festivals")}

@@ -1,3 +1,4 @@
+import { uniqueFavoriteSlugs, type DiscoveryLineups } from "../discovery-sort.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
 import type { PrismaClient } from "@prisma/client";
 import type { ArtistProfile } from "../domain/artist.ts";
@@ -9,6 +10,7 @@ export type CatalogSnapshot = Readonly<{
   editions: readonly FestivalEdition[];
   artists: ArtistProfile[];
   playlists: Readonly<Record<string, PlaylistStatus>>;
+  discoveryLineups: DiscoveryLineups;
 }>;
 export interface CatalogRepository {
   read(): Promise<CatalogSnapshot>;
@@ -207,7 +209,32 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         updatedAt: instant(spotify.syncedAt) ?? row.sourceUpdatedAt.toISOString(),
       };
     }
-    return Object.freeze({ festivals: festivalsFromDatabase, editions, artists, playlists });
+    const artistSlugsByFestival = Object.fromEntries(
+      editionRows
+        .filter((row) => row.recordState === "CURRENT")
+        .map((row) => [
+          row.festival.slug,
+          [
+            ...new Set(
+              row.lineup
+                .filter((entry) => entry.billing === "HEADLINER" || entry.billing === "LINEUP")
+                .map((entry) => entry.artist.slug),
+            ),
+          ],
+        ]),
+    );
+    const visibleSlugs = new Set(Object.values(artistSlugsByFestival).flat());
+    const discoveryLineups = {
+      artistSlugsByFestival,
+      legacyFavoriteSlugs: uniqueFavoriteSlugs(artistRows, visibleSlugs),
+    };
+    return Object.freeze({
+      festivals: festivalsFromDatabase,
+      editions,
+      artists,
+      playlists,
+      discoveryLineups,
+    });
   }
 }
 
