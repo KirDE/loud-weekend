@@ -267,6 +267,27 @@ test("Graspop arrival comes from the reviewed organizer observation", async ({ p
     expect(
       await db.ingestionCandidate.findUnique({ where: { id: fresh.candidate.id } }),
     ).toMatchObject({ reviewState: "PUBLISHED", catalogueVersion: result.publicationId });
+    const earlier = new Date();
+    earlier.setUTCDate(earlier.getUTCDate() - 8);
+    const arrivalScope = { edition: { festivalId } };
+    await db.editionArrivalFact.updateMany({ where: arrivalScope, data: { checkedOn: earlier } });
+    await db.operationalState.update({
+      where: { key: revised.key },
+      data: { payload: { status: "resolved", retryAt: earlier.toISOString() } },
+    });
+    const observedAgain = await stageArrivalFixture(db, item, pages);
+    expect(observedAgain.issueId).toBe(revised.issueId);
+    const check = approve(await claimAgentIssue(db, observedAgain.sourceId, observedAgain.issueId));
+    const freshness = await resolveAgentIssue(db, check);
+    expect(freshness.publicationId).toBeNull();
+    expect(freshness.arrivalPublished).toBe(false);
+    expect(await resolveAgentIssue(db, check)).toEqual(freshness);
+    const observationDay = observedAgain.candidate.arrival.facts[0].checkedOn;
+    const refreshed = await db.editionArrivalFact.findMany({ where: arrivalScope });
+    expect(refreshed.map(({ checkedOn }) => checkedOn.toISOString().slice(0, 10))).toEqual([
+      observationDay,
+      observationDay,
+    ]);
     await db.festivalSource.update({
       where: { id: revised.sourceId },
       data: { consecutiveFailures: 1 },
@@ -315,6 +336,7 @@ test("Graspop arrival comes from the reviewed organizer observation", async ({ p
     await expect(panel.locator("dd")).toHaveCount(2);
     await expect(panel.getByText(/Antwerp Airport/)).toBeVisible();
     await expect(panel.getByText(/Eindhoven Airport/)).toHaveCount(0);
+    await expect(panel.locator(`time[datetime="${observationDay}"]`)).toHaveCount(2);
 
     const [organizer, operator] = graspopRailSources("graspop");
     const rail = await stageArrivalFixture(

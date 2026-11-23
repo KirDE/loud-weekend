@@ -79,7 +79,16 @@ export async function publishArrivalObservation(
     };
     if (existing) {
       const { editionId: _editionId, kind: _kind, checkedOn: _checkedOn, ...previous } = existing;
-      if (isDeepStrictEqual(previous, data)) continue;
+      if (isDeepStrictEqual(previous, data)) {
+        if (existing.checkedOn < checkedOn) {
+          // A newer verified observation is not a canonical guidance change.
+          await tx.editionArrivalFact.update({
+            where: { editionId_kind: { editionId: record.editionId, kind: fact.kind } },
+            data: { checkedOn },
+          });
+        }
+        continue;
+      }
     }
     changed = true;
     await tx.editionArrivalFact.upsert({
