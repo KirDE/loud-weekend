@@ -127,28 +127,44 @@ async function usableCatalog(response) {
   } catch { return false; }
 }
 
+// Keep cache mutations ordered without making one network request wait for another.
+let catalogCacheWork = Promise.resolve();
+let nextCatalogRequest = 0;
+let lastCachedRequest = 0;
+
+function accessCatalogCache(operation) {
+  const result = catalogCacheWork.then(operation);
+  catalogCacheWork = result.catch(() => undefined);
+  return result;
+}
+
+async function readCachedCatalog(cache) {
+  const candidate = await freshCached(cache, CATALOG);
+  if (await usableCatalog(candidate)) return candidate;
+  if (candidate) await cache.delete(CATALOG);
+  return undefined;
+}
+
 async function catalogResponse() {
+  const order = ++nextCatalogRequest;
   // Cache Storage may be unavailable (quota/privacy settings). First fetch must still work.
   const cache = await caches.open(CACHE_VERSION).catch(() => undefined);
-  let cached;
-  if (cache) {
-    try {
-      const candidate = await freshCached(cache, CATALOG);
-      if (await usableCatalog(candidate)) cached = candidate;
-      else if (candidate) await cache.delete(CATALOG);
-    } catch { /* Fetch unconditionally if storage cannot be read. */ }
-  }
+  const cached = cache ? await accessCatalogCache(() => readCachedCatalog(cache)).catch(() => undefined) : undefined;
   // Next's trailingSlash configuration redirects the bare API path. Fetch its canonical URL.
   const request = (etag) => new Request(new URL(`${CATALOG}/`, self.location.origin), {
     credentials: "omit", cache: "no-store", redirect: "error",
     headers: { Accept: "application/json", ...(etag ? { "If-None-Match": etag } : {}) },
   });
   const save = async (response) => {
-    if (cache) {
-      try { await cache.put(CATALOG, await stamped(response)); await trim(cache); }
-      catch { /* A successful network response remains usable even when storage fails. */ }
-    }
-    return response;
+    if (!cache) return response;
+    return accessCatalogCache(async () => {
+      // An earlier 304 only describes the body used for that request, not the newer cache entry.
+      if (order < lastCachedRequest) return (await readCachedCatalog(cache)) ?? response;
+      await cache.put(CATALOG, await stamped(response));
+      lastCachedRequest = order;
+      await trim(cache);
+      return response;
+    }).catch(() => response);
   };
   let response;
   try {
