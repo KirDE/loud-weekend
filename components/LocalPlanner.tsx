@@ -28,6 +28,7 @@ const Context = createContext<
       setSavedFilters: (value: DiscoveryPreferences) => void;
       updateSavedFilters: (patch: Partial<DiscoveryPreferences>) => void;
       replace: (value: PlannerState) => void;
+      replaceFields: (value: Partial<PlannerState>) => void;
       merge: (value: Partial<PlannerState>) => void;
       clear: () => void;
     })
@@ -90,6 +91,7 @@ export function LocalPlannerProvider({
       replace: (next: PlannerState) => setState({
         ...emptyPlannerState, ...next, savedFilters: readDiscoveryPreferences(next.savedFilters),
       }),
+      replaceFields: (fields: Partial<PlannerState>) => setState((current) => ({ ...current, ...fields })),
       merge: (next: Partial<PlannerState>) => setState((current) => ({
         favoriteFestivals: Array.from(new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])])),
         favoriteArtists: Array.from(new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])])),
