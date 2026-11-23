@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useId, useRef, useState } from "react";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { useLanguage } from "./LanguageProvider";
 import { authErrorMessage } from "@/lib/auth-error-copy";
@@ -19,6 +19,8 @@ export function AccountMenu() {
   const t = copy[language];
   const [user, setUser] = useState<User | null>(null);
   const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   const [mode, setMode] = useState<Mode>("login");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -31,6 +33,11 @@ export function AccountMenu() {
       .then(async (response) => response.ok && setUser((await response.json()).user))
       .catch(() => undefined);
   }, []);
+
+  function dismiss() {
+    setOpen(false);
+    trigger.current?.focus();
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -89,9 +96,13 @@ export function AccountMenu() {
     finally { setBusy(false); }
   }
 
-  return <div className="accountMenu">
-    <button type="button" className="accountButton" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{user?.email ?? t.account}</button>
-    {open && <section className="accountPopover" aria-label={t.account}>
+  return <div className="accountMenu" onKeyDown={(event) => {
+    if (!open || event.key !== "Escape" || event.defaultPrevented) return;
+    event.preventDefault();
+    dismiss();
+  }}>
+    <button ref={trigger} type="button" className="accountButton" aria-controls={open ? panelId : undefined} aria-expanded={open} onClick={() => setOpen((value) => !value)}>{user?.email ?? t.account}</button>
+    {open && <section id={panelId} className="accountPopover" aria-label={t.account}>
       {user ? <>
         <strong>{user.email}</strong>
         {error && <p role="alert">{error}</p>}
@@ -119,7 +130,7 @@ export function AccountMenu() {
         </form>
         <p className="accountHint">{t.local}</p>
       </>}
-      <button type="button" className="accountClose" onClick={() => setOpen(false)} aria-label={t.close}>×</button>
+      <button type="button" className="accountClose" onClick={dismiss} aria-label={t.close}>×</button>
     </section>}
   </div>;
 }
