@@ -16,24 +16,44 @@ test("search clear icon resets query and restores input focus", async ({ page })
 
 test("square festival logos fit inside mobile card tiles without clipping", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  const squarePng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==", "base64");
-  await page.route("**/api/logos/synthetic-fest.png", (route) => route.fulfill({ status: 200, contentType: "image/png", body: squarePng }));
+  const squarePng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await page.route("**/api/logos/synthetic-fest.png", (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: squarePng }),
+  );
   await page.goto("/en/");
-  const tile = page.locator(".festivalCard").filter({ hasText: "Synthetic Fest" }).locator(".festivalLogo");
+  const tile = page
+    .locator(".festivalCard")
+    .filter({ hasText: "Synthetic Fest" })
+    .locator(".festivalLogo");
   const image = tile.locator("img");
   await expect(image).toHaveJSProperty("naturalWidth", 1);
   const fit = await tile.evaluate((node) => {
     const box = node.getBoundingClientRect();
     const imageBox = node.querySelector("img").getBoundingClientRect();
-    return { left: imageBox.left - box.left, top: imageBox.top - box.top,
-      right: box.right - imageBox.right, bottom: box.bottom - imageBox.bottom };
+    return {
+      left: imageBox.left - box.left,
+      top: imageBox.top - box.top,
+      right: box.right - imageBox.right,
+      bottom: box.bottom - imageBox.bottom,
+    };
   });
-  for (const inset of Object.values(fit)) expect(inset, JSON.stringify(fit)).toBeGreaterThanOrEqual(8);
+  for (const inset of Object.values(fit))
+    expect(inset, JSON.stringify(fit)).toBeGreaterThanOrEqual(8);
 });
 
-test("missing festival logo initials contrast against the white tile in a dark hero", async ({ page }) => {
-  const squarePng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==", "base64");
-  await page.route("**/api/logos/synthetic-fest.png", (route) => route.fulfill({ status: 200, contentType: "image/png", body: squarePng }));
+test("missing festival logo initials contrast against the white tile in a dark hero", async ({
+  page,
+}) => {
+  const squarePng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await page.route("**/api/logos/synthetic-fest.png", (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: squarePng }),
+  );
   await page.goto("/en/festivals/synthetic-fest/");
   const image = page.locator(".detailHero .festivalLogo img");
   await expect(image).toHaveJSProperty("naturalWidth", 1);

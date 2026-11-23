@@ -24,20 +24,33 @@ test("M'era Luna extracts its verified 2027 dates and official act links", () =>
   assert.deepEqual(candidate.headliners, undefined);
   assert.deepEqual(candidate.lineup, ["VNV Nation", "The Sisters of Mercy", "Feuerschwanz"]);
   assert.deepEqual(candidate.warnings, []);
-  assert.deepEqual(candidate.evidence.map(({ field }) => field), ["startDate", "endDate", "lineup"]);
+  assert.deepEqual(
+    candidate.evidence.map(({ field }) => field),
+    ["startDate", "endDate", "lineup"],
+  );
 });
 
 test("M'era Luna fails closed without an edition-matched heading and official act links", () => {
   const source = getFestivalSource("mera-luna");
-  const candidate = extractFestivalCandidate(markup.replace("Line-Up 2027", "Line-Up 2026"), source, "2026-09-18T16:30:00Z");
+  const candidate = extractFestivalCandidate(
+    markup.replace("Line-Up 2027", "Line-Up 2026"),
+    source,
+    "2026-09-18T16:30:00Z",
+  );
   assert.deepEqual(candidate.evidence, []);
   assert.match(candidate.warnings[0], /found no trustworthy fields/);
 });
 
-const liveMarkup = readFileSync(new URL("./fixtures/mera-luna-2027-partial.html", import.meta.url), "utf8");
-const saved = JSON.parse(readFileSync(new URL("./fixtures/mera-luna-2027-current.json", import.meta.url), "utf8"));
+const liveMarkup = readFileSync(
+  new URL("./fixtures/mera-luna-2027-partial.html", import.meta.url),
+  "utf8",
+);
+const saved = JSON.parse(
+  readFileSync(new URL("./fixtures/mera-luna-2027-current.json", import.meta.url), "utf8"),
+);
 const current = { ...saved, slug: "mera-luna", editionYear: saved.year };
-const parse = (html) => extractFestivalCandidate(html, getFestivalSource("mera-luna"), "2026-10-22T09:11:12Z");
+const parse = (html) =>
+  extractFestivalCandidate(html, getFestivalSource("mera-luna"), "2026-10-22T09:11:12Z");
 
 test("M'era Luna real incomplete homepage neither imports TBA nor removes saved artists", () => {
   const candidate = parse(liveMarkup);
@@ -53,15 +66,28 @@ test("M'era Luna real incomplete homepage neither imports TBA nor removes saved 
 });
 
 test("M'era Luna later incomplete wave adds a real act without deleting reviewed names", () => {
-  const candidate = parse(liveMarkup.replace('<span>- TBA -</span>', '<span> T.B.A. </span>').replace('</lineup-block>', '<a href="/line-up/act/new-official-act/">NEW OFFICIAL ACT</a></lineup-block>'));
+  const candidate = parse(
+    liveMarkup
+      .replace("<span>- TBA -</span>", "<span> T.B.A. </span>")
+      .replace(
+        "</lineup-block>",
+        '<a href="/line-up/act/new-official-act/">NEW OFFICIAL ACT</a></lineup-block>',
+      ),
+  );
   const result = evaluateCandidate(current, candidate);
-  assert.deepEqual(result.changes.map(({kind, after}) => ({kind, after})), [{kind:"artist_added", after:"New Official Act"}]);
+  assert.deepEqual(
+    result.changes.map(({ kind, after }) => ({ kind, after })),
+    [{ kind: "artist_added", after: "New Official Act" }],
+  );
   assert.ok(candidate.lineup.includes("[:sitd:]"));
   assert.ok(candidate.lineup.includes("A.a. Williams"));
 });
 
 test("M'era Luna placeholder-only and wrong edition pages fail closed", () => {
-  for (const html of [liveMarkup.replace(/<a\b[^>]*href="\/line-up\/act\/(?!tba\/)[^>]*>[\s\S]*?<\/a>/gi, ''), liveMarkup.replace('Line-Up 2027', 'Line-Up 2026')]) {
+  for (const html of [
+    liveMarkup.replace(/<a\b[^>]*href="\/line-up\/act\/(?!tba\/)[^>]*>[\s\S]*?<\/a>/gi, ""),
+    liveMarkup.replace("Line-Up 2027", "Line-Up 2026"),
+  ]) {
     const candidate = parse(html);
     assert.equal(candidate.lineup, undefined);
     assert.ok(candidate.warnings.length);
@@ -69,17 +95,26 @@ test("M'era Luna placeholder-only and wrong edition pages fail closed", () => {
 });
 
 test("M'era Luna a list without a placeholder retains removal review", () => {
-  const candidate = parse(liveMarkup.replace(/<a href="\/line-up\/act\/tba\/">[\s\S]*?<\/a>/, ''));
+  const candidate = parse(liveMarkup.replace(/<a href="\/line-up\/act\/tba\/">[\s\S]*?<\/a>/, ""));
   assert.equal(candidate.artistListMode, undefined);
   const result = evaluateCandidate(current, candidate);
-  assert.ok(result.changes.some(({kind,before}) => kind === 'artist_removed' && before === 'Das Ich'));
-  assert.ok(result.reviewReasons.includes('Removals require confirmation'));
+  assert.ok(
+    result.changes.some(({ kind, before }) => kind === "artist_removed" && before === "Das Ich"),
+  );
+  assert.ok(result.reviewReasons.includes("Removals require confirmation"));
   assert.equal(result.publishable, false);
 });
 
 test("M'era Luna recognizes placeholder labels on later official slot URLs and editions", () => {
-  const later = liveMarkup.replaceAll("2027", "2028").replace('/act/tba/', '/act/to-be-announced/').replace('<span>- TBA -</span>', '<span> — T.B.A. — </span>');
-  const candidate = extractFestivalCandidate(later, getFestivalSource("mera-luna", {editionYear:2028}), "2027-10-22T09:11:12Z");
+  const later = liveMarkup
+    .replaceAll("2027", "2028")
+    .replace("/act/tba/", "/act/to-be-announced/")
+    .replace("<span>- TBA -</span>", "<span> — T.B.A. — </span>");
+  const candidate = extractFestivalCandidate(
+    later,
+    getFestivalSource("mera-luna", { editionYear: 2028 }),
+    "2027-10-22T09:11:12Z",
+  );
   assert.deepEqual(candidate.observedEditionYears, [2028]);
   assert.equal(candidate.startDate, "2028-08-07");
   assert.equal(candidate.lineup.length, 31);

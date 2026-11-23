@@ -2,10 +2,14 @@ import type { EditionCampingField, PrismaClient } from "@prisma/client";
 import type { Festival } from "../domain/festival.ts";
 
 type Source = { sourceUrl: string; checkedOn: string };
-export type PublicCampingFact = Source & (
-  | { field: "arrival"; earliestDate: string }
-  | { field: Exclude<EditionCampingField, "arrival">; description: Record<"en" | "de" | "ru", string> }
-);
+export type PublicCampingFact = Source &
+  (
+    | { field: "arrival"; earliestDate: string }
+    | {
+        field: Exclude<EditionCampingField, "arrival">;
+        description: Record<"en" | "de" | "ru", string>;
+      }
+  );
 
 export function campingSourceHost(value: string): string | undefined {
   try {
@@ -34,27 +38,43 @@ export async function readCampingFacts(
       edition: {
         year: item.editionYear,
         festival: {
-          slug: item.slug, city: item.city, countryCode: item.countryCode, officialUrl: item.officialUrl,
+          slug: item.slug,
+          city: item.city,
+          countryCode: item.countryCode,
+          officialUrl: item.officialUrl,
         },
       },
     },
     select: {
-      field: true, descriptionEn: true, descriptionDe: true, descriptionRu: true,
-      earliestDate: true, sourceUrl: true, checkedOn: true,
+      field: true,
+      descriptionEn: true,
+      descriptionDe: true,
+      descriptionRu: true,
+      earliestDate: true,
+      sourceUrl: true,
+      checkedOn: true,
     },
     orderBy: { field: "asc" },
   });
   const facts: PublicCampingFact[] = [];
   for (const row of rows) {
     if (campingSourceHost(row.sourceUrl) !== organizerHost) continue;
-    const source = { sourceUrl: row.sourceUrl, checkedOn: row.checkedOn.toISOString().slice(0, 10) };
+    const source = {
+      sourceUrl: row.sourceUrl,
+      checkedOn: row.checkedOn.toISOString().slice(0, 10),
+    };
     if (row.field === "arrival") {
-      if (row.earliestDate) facts.push({
-        ...source, field: row.field, earliestDate: row.earliestDate.toISOString().slice(0, 10),
-      });
+      if (row.earliestDate)
+        facts.push({
+          ...source,
+          field: row.field,
+          earliestDate: row.earliestDate.toISOString().slice(0, 10),
+        });
     } else if (row.descriptionEn && row.descriptionDe && row.descriptionRu) {
       facts.push({
-        ...source, field: row.field, description: { en: row.descriptionEn, de: row.descriptionDe, ru: row.descriptionRu },
+        ...source,
+        field: row.field,
+        description: { en: row.descriptionEn, de: row.descriptionDe, ru: row.descriptionRu },
       });
     }
   }
