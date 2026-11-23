@@ -104,10 +104,14 @@ test('EN/DE/RU label followers and unknowns, keeping popularity only as a lineup
 test('repository projects serializable Spotify stats and suppresses a stale or unverified binding', async () => {
   const { DatabaseCatalogRepository } = await import('../lib/catalog/repository.ts');
   const f = fixture(); Object.assign(f.artist, { name: 'Synthetic', aliases: [], genres: [], provenance: [], topTracks: [], recentSetlists: [], freshness: {} });
-  const row = { festival: { slug: 'synthetic-fest', name: 'Synthetic Fest', countryCode: 'DE', country: 'Germany', officialUrl: 'https://example.test', genres: [], latitude: null, longitude: null },
+  const row = { id: 'synthetic-edition', festival: { slug: 'synthetic-fest', name: 'Synthetic Fest', countryCode: 'DE', country: 'Germany', officialUrl: 'https://example.test', genres: [], latitude: null, longitude: null },
     year: 2027, startDate: null, endDate: null, snapshotAt: null, sourceUpdatedAt: checkedAt, status: 'PARTIAL', ticketStatus: 'UNKNOWN', recordState: 'CURRENT', completeness: 'PARTIAL',
     lineup: [{ billing: 'LINEUP', artist: { name: 'Synthetic' } }], timetable: [], provenance: [], playlists: [] };
-  const repository = new DatabaseCatalogRepository({ artist: { findMany: async () => [f.artist] }, festivalEdition: { findMany: async () => [row] } });
+  const repository = new DatabaseCatalogRepository({
+    artist: { findMany: async () => [f.artist] },
+    festivalEdition: { findMany: async () => [row] },
+    ticketOfferProposalSnapshot: { findMany: async () => [] },
+  });
   let snapshot = await repository.read();
   assert.equal(snapshot.artists[0].spotifyStats.followers, 123);
   assert.equal(snapshot.artists[0].spotifyStats.checkedAt, '2026-10-01T00:00:00.000Z');
