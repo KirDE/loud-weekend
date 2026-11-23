@@ -10,7 +10,7 @@ for (const locale of ['en', 'de', 'ru']) {
       const layout = await bar.evaluate(node => {
         const rect = selector => node.querySelector(selector).getBoundingClientRect().toJSON();
         return { search: rect('.search'), clear: rect('.clearFilters'),
-          selects: [...node.querySelectorAll('select')].map(el => el.getBoundingClientRect().toJSON()),
+          selects: [...node.querySelectorAll(':scope > select')].map(el => el.getBoundingClientRect().toJSON()),
           toggles: [...node.querySelectorAll('.toggle')].map(el => el.getBoundingClientRect().toJSON()),
           overflow: document.documentElement.scrollWidth > innerWidth };
       });

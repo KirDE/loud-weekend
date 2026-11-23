@@ -18,7 +18,7 @@ test("public catalogue routes resolve fresh data at request time", async () => {
   assert.ok(catalogueRoutes.includes("page.tsx"), "root homepage must remain in the freshness check");
   assert.ok(catalogueRoutes.length >= 16);
   const homeLoader = await readFile("lib/home-metadata.ts", "utf8");
-  assert.match(homeLoader, /getHomeCatalog\s*=\s*cache\(getCatalog\)/);
+  assert.match(homeLoader, /getHomeCatalog\s*=\s*cache\(async\s*\(\)\s*=>\s*\{\s*const catalogue = await getCatalog\(\)/);
 });
 
 test("festival details receive related catalogue data from the database snapshot", async () => {
