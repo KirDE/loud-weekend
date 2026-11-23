@@ -24,7 +24,7 @@ export function PlanningTools({ item, festivals }: { item: Festival; festivals: 
       {calendar ? <><a href={calendar.ics} download={`${item.slug}-2027.ics`}>{t.download}</a><a href={calendar.google} target="_blank" rel="noreferrer">Google Calendar ↗</a><a href={calendar.apple} download={`${item.slug}-apple-calendar-2027.ics`}>{t.apple}</a></> : <span>{t.pending}</span>}
       <a href={map} target="_blank" rel="noreferrer">{t.map}</a>
     </div>
-    <StageTimetable entries={item.timetable} />
+    <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
     {similar.length > 0 && <div className="recommendations"><h3>{t.similar}</h3>{similar.map(({ festival, shared }) => <Link href={`/festivals/${festival.slug}/`} key={festival.slug}><strong>{festival.name}</strong><span>{t.shared(shared)}</span></Link>)}</div>}
   </section>;
 }

@@ -57,7 +57,7 @@ export type TimetableDay = { date: string; stages: TimetableStage[] };
 
 const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
-export function findTimetableConflicts(entries: TimetableEntry[]): TimetableConflict[] {
+export function findTimetableConflicts(entries: readonly TimetableEntry[]): TimetableConflict[] {
   const slots = new Map<string, Set<string>>();
   for (const entry of entries.filter(({ status }) => status === "scheduled")) {
     const key = `${entry.date}\u0000${entry.stage.toLocaleLowerCase()}\u0000${entry.start}`;
