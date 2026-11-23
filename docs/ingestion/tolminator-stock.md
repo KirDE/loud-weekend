@@ -2,7 +2,7 @@
 
 `observeTolminatorStock` is a pure, **unregistered** stock observer. It is not a
 production source, scheduled collector or automatic publication path. An explicit manual audit command is available below. Existing source
-configuration is unchanged. The migration stores the reviewed product assertions in PostgreSQL; no production writes are performed by preview.
+configuration is unchanged. No seed, catalogue migration or production writes are performed by preview. The parser derives observations from the seller response; audit mode stores them via existing ingestion tables.
 
 ## Reviewed evidence
 
@@ -32,9 +32,11 @@ live verification. This historical failure remains in the audit; the new success
 - Basket action URL is compared as inert text ONLY; never followed or returned
   as the user-facing tickets destination. Return the ordinary product page.
 - Seller Event ends July 31, whereas festival ABC says August 1. Vendor dates
-  are used only as a strict product identity and NEVER returned as festival
+  corroborate the seller edition/heading and NEVER returned as festival
   dates. No price/fee or lineup change is returned either.
-- Changed future product, tariff or layout needs review, not broad fallback.
+- Changing price/date observations are never filled from defaults. Missing,
+  contradictory or structurally changed evidence requires review, not fallback.
+  A different product path or future edition requires separate source review.
 
 ## Bounded read-only transport (unregistered)
 

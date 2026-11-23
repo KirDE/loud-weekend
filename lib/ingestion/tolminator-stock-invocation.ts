@@ -2,7 +2,6 @@ import type { PrismaClient } from "@prisma/client";
 import { readCatalog } from "../catalog/repository.ts";
 import { collectTolminatorCandidate } from "./tolminator-stock-candidate.ts";
 import { TOLMINATOR_PRODUCT } from "./adapters/tolminator-stock.ts";
-import { readReviewedStockProduct } from "./reviewed-stock-products.ts";
 import { evaluateCandidate } from "./policy.ts";
 import { createIngestionRun, finishIngestionRun, ingestionQueries, persistAttempt } from "./repository.ts";
 
@@ -16,7 +15,6 @@ export async function recordTolminatorStockAttempt(db: PrismaClient, options: {
   const current = catalog.festivals.find(f => f.slug === "tolminator");
   if (!current || current.editionYear !== 2027 || current.officialUrl !== "https://tolminator.com/")
     throw new Error("Current reviewed Tolminator 2027 target required");
-  const product = await readReviewedStockProduct(db, TOLMINATOR_PRODUCT, current.editionYear);
   const run = await createIngestionRun(db, { trigger: "MANUAL", sourceCommit: options.sourceCommit, totalSources: 1 });
   const startedAt = new Date();
   // Catch ONLY collection errors, never a DB failure and then fabricate a
@@ -25,7 +23,7 @@ export async function recordTolminatorStockAttempt(db: PrismaClient, options: {
   let error: string | undefined;
   let httpStatus: number | undefined;
   try {
-    candidate = await collectTolminatorCandidate({ ...options, product });
+    candidate = await collectTolminatorCandidate(options);
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "";
     const http = /^Tolminator HTTP (\d{3})$/.exec(message);

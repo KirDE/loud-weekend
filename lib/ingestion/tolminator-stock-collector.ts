@@ -1,4 +1,4 @@
-import { observeTolminatorStock, TOLMINATOR_PRODUCT, type ReviewedStockProduct } from "./adapters/tolminator-stock.ts";
+import { observeTolminatorStock, TOLMINATOR_PRODUCT } from "./adapters/tolminator-stock.ts";
 
 const maxBytes = 2_000_000;
 
@@ -7,9 +7,8 @@ const maxBytes = 2_000_000;
  * deadline covering both headers and decompressed body. No DB/health mutation.
  * A rejected response never becomes an empty/available observation. */
 export async function collectTolminatorStock(options: {
-  product: ReviewedStockProduct; fetchImpl?: typeof fetch; timeoutMs?: number;
+  fetchImpl?: typeof fetch; timeoutMs?: number;
 }) {
-  if (!options.product) throw new Error("Reviewed ticket product required");
   const timeoutMs = options.timeoutMs ?? 20_000;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 20_000)
     throw new Error("Invalid Tolminator deadline");
@@ -54,7 +53,7 @@ export async function collectTolminatorStock(options: {
     if (!size) throw new Error("Empty Tolminator document");
     const html = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
     const observedAt = new Date().toISOString();
-    const observation = observeTolminatorStock(html, response.url, 2027, observedAt, options.product);
+    const observation = observeTolminatorStock(html, response.url, 2027, observedAt);
     if (observation.warning || observation.status !== "available" || observation.ticketsUrl !== TOLMINATOR_PRODUCT)
       throw new Error(observation.warning ?? "Tolminator ordinary stock not verified");
     // Only minimized source evidence escapes; no HTML, cookie or seller dates.

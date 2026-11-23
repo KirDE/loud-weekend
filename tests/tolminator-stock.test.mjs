@@ -1,11 +1,10 @@
-import { reviewedStockProduct } from "./fixtures/ticket-status/tolminator-product.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { observeTolminatorStock, TOLMINATOR_PRODUCT } from "../lib/ingestion/adapters/tolminator-stock.ts";
 const fixture = readFileSync(new URL("./fixtures/ticket-status/tolminator-ordinary.html", import.meta.url), "utf8");
 const at = "2026-11-22T17:01:23Z";
-const observe = (html = fixture, url = TOLMINATOR_PRODUCT, year = 2027, time = at) => observeTolminatorStock(html, url, year, time, reviewedStockProduct);
+const observe = (html = fixture, url = TOLMINATOR_PRODUCT, year = 2027, time = at) => observeTolminatorStock(html, url, year, time);
 const metadata = (change) => fixture.replace(/(<script[^>]*>)([^]*?)(<\/script>)/, (_, a, json, c) => {
   const document = JSON.parse(json); change(document['@graph'][0], document); return a + JSON.stringify(document) + c;
 });
@@ -16,6 +15,15 @@ test("Tolminator exact ordinary stock observation never projects seller dates or
   assert.equal(result.warning, undefined);
   assert.deepEqual(Object.keys(result).sort(), ['excerpt', 'status', 'ticketsUrl']);
 });
+test("Tolminator takes a changed price from corroborating source fields, not a seeded product snapshot", () => {
+  const html = fixture.replaceAll("210 EUR", "225 EUR").replaceAll('"210"', '"225"').replace("210,00", "225,00");
+  const result = observe(html);
+  assert.equal(result.status, "available");
+  assert.match(result.excerpt, /225 EUR/);
+  assert.doesNotMatch(result.excerpt, /210 EUR/);
+  assert.equal(observe(html.replace("225,00", "210,00")).status, undefined);
+});
+
 for (const [name, html] of [
   ['price/link without stock', metadata(e => delete e.offers.offers[0].availability)],
   ['sold out', metadata(e => e.offers.offers[0].availability = 'Sold out')],
@@ -35,7 +43,9 @@ for (const [name, html] of [
   ['multiple offers', metadata(e => e.offers.offers.push(e.offers.offers[0]))],
   ['duplicate Event', metadata((e,d) => d['@graph'].push(e))],
   ['cancelled Event', metadata(e => e.eventStatus = 'https://schema.org/EventCancelled')],
-  ['changed dates', metadata(e => e.endDate = '2027-08-01T00:00:00+02:00')],
+  ['seller end outside edition', metadata(e => e.endDate = '2028-08-01T00:00:00+02:00')],
+  ['reversed seller dates', metadata(e => e.endDate = '2027-07-27T00:00:00+02:00')],
+  ['seller date disagrees with headline', metadata(e => e.startDate = '2027-07-29T00:00:00+02:00')],
   ['hidden identity', fixture.replace('<h1 ', '<h1 hidden ')],
   ['hidden ancestor', fixture.replace('<body>', '<body><section hidden>').replace('</body>', '</section></body>')],
   ['CSS hidden buy', fixture.replace('class="description-buy-link"', 'style="display:none" class="description-buy-link"')],

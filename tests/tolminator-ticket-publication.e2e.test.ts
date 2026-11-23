@@ -1,5 +1,3 @@
-import { readReviewedStockProduct } from "../lib/ingestion/reviewed-stock-products.ts";
-import { TOLMINATOR_PRODUCT as reviewedProductUrl } from "../lib/ingestion/adapters/tolminator-stock.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -21,11 +19,12 @@ import type { IngestionResult } from "../lib/ingestion/types.ts";
 const fixture = readFileSync(new URL("./fixtures/ticket-status/tolminator-ordinary.html", import.meta.url), "utf8")
   .replace("2026-07-23T00:00:00+02:00", "2020-01-01T00:00:00Z")
   .replace('2027-07-31T00:00:00+02:00"}', '2099-01-01T00:00:00Z"}');
-const fetchImpl: typeof fetch = async () => {
-  const response = new Response(fixture, { headers: { "content-type": "text/html" } });
+const sellerResponse = (html: string): typeof fetch => async () => {
+  const response = new Response(html, { headers: { "content-type": "text/html" } });
   Object.defineProperty(response, "url", { value: TOLMINATOR_PRODUCT });
   return response;
 };
+const fetchImpl = sellerResponse(fixture);
 test("Tolminator real producer → durable proof → canonical read, replay, tamper/stale rollback, official dates preserved", async () => {
   requireLocalDisposableDatabase(process.env.DATABASE_URL);
   const db = createPrismaClient(); let festivalId: string | undefined;
@@ -46,7 +45,7 @@ test("Tolminator real producer → durable proof → canonical read, replay, tam
     festivalId = edition.festivalId;
     const before = await read();
     const jobs = await db.catalogPlaylistRefresh.count();
-    const candidate = await collectTolminatorCandidate({ fetchImpl, product: await readReviewedStockProduct(db, reviewedProductUrl, 2027) });
+    const candidate = await collectTolminatorCandidate({ fetchImpl });
     assert.deepEqual(Object.keys(candidate).sort(), ["schemaVersion","festivalSlug","sourceUrl","fetchedAt","observedEditionYears","warnings","ticketStatus","ticketsUrl","evidence"].sort());
     const value = evaluateCandidate(before, candidate);
     assert.equal(value.publishable, true, JSON.stringify(value.reviewReasons));
@@ -76,6 +75,18 @@ test("Tolminator real producer → durable proof → canonical read, replay, tam
     assert.equal(unsafe.consecutiveFailures, 2);
     assert.deepEqual(await snapshot(), preInvocation);
     assert.deepEqual(await db.ingestionSourceState.findUnique({ where: { festivalSlug: "tolminator" } }), primaryHealth);
+    const changedPrice = fixture.replaceAll("210 EUR", "225 EUR").replaceAll('"210"', '"225"').replace("210,00", "225,00");
+    const changed = await recordTolminatorStockAttempt(db, { sourceCommit: "abcdef1234567", fetchImpl: sellerResponse(changedPrice) });
+    assert.equal(changed.status, "PUBLISHABLE");
+    const latest = await ingestionQueries.latestResult(db, "tolminator", TOLMINATOR_PRODUCT);
+    assert.equal(latest?.id, changed.attemptId);
+    assert.equal(latest?.candidate?.evidence.length, 2);
+    assert.ok(latest.candidate.evidence.every(proof => /225 EUR/.test(proof.excerpt ?? "")));
+    const missing = await recordTolminatorStockAttempt(db, { sourceCommit: "abcdef1234567",
+      fetchImpl: sellerResponse(changedPrice.replace('"availability": "In stock"', '"availability": "Unknown"')) });
+    assert.equal(missing.status, "FAILED");
+    assert.equal((await ingestionQueries.latestResult(db, "tolminator", TOLMINATOR_PRODUCT))?.candidate, null);
+    assert.deepEqual(await snapshot(), preInvocation);
     const count = await db.ingestionRun.count();
     let fetched = false;
     await assert.rejects(recordTolminatorStockAttempt(db, { sourceCommit: "not-a-commit", fetchImpl: async () => { fetched = true; throw Error(); } }), /commit/);
