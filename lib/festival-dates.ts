@@ -33,7 +33,7 @@ export function festivalOverlapsMonth(item: Dates, month: number, year?: number)
   return first + offset <= last;
 }
 
-export function availableFestivalMonths(items: Dates[]): number[] {
+export function availableFestivalMonths(items: readonly Dates[]): number[] {
   return Array.from({ length: 12 }, (_, index) => index + 1).filter((month) =>
     items.some((item) => festivalOverlapsMonth(item, month)),
   );

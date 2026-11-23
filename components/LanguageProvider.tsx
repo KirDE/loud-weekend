@@ -389,6 +389,15 @@ const translations = {
     noLineupOverlap: "No announced lineup overlap yet",
     noDiscoveryMatches:
       "Try a wider distance, another origin, or remove a genre filter. Your comparison selections are preserved.",
+    browseCatalogue: "Browse",
+    browseCountries: "Countries",
+    browseMonths: "Months",
+    browseSeasons: "Seasons",
+    browseArchive: "Archive and future editions",
+    browseArtists: "Artists",
+    browseArtistSearch: "Find an artist",
+    browseNoArtists: "No artists found.",
+    browseMoreArtists: "Show more artists",
   },
   de: {
     sourceDeprecated: "Quelle veraltet (deprecated)",
@@ -546,6 +555,15 @@ const translations = {
       "Wähle eine größere Entfernung oder einen anderen Ausgangspun" +
       "kt oder entferne den Genre-Filter. Deine Vergleichsauswahl b" +
       "leibt erhalten.",
+    browseCatalogue: "Entdecken",
+    browseCountries: "Länder",
+    browseMonths: "Monate",
+    browseSeasons: "Saisons",
+    browseArchive: "Archiv und künftige Ausgaben",
+    browseArtists: "Künstler",
+    browseArtistSearch: "Künstler finden",
+    browseNoArtists: "Keine Künstler gefunden.",
+    browseMoreArtists: "Weitere Künstler anzeigen",
   },
   ru: {
     sourceDeprecated: "Источник устарел (deprecated)",
@@ -698,6 +716,15 @@ const translations = {
       "Увеличьте расстояние, выберите другую точку отсчёта или убер" +
       "ите фильтр по жанру. Выбранные для сравнения фестивали сохра" +
       "нятся.",
+    browseCatalogue: "Каталог",
+    browseCountries: "Страны",
+    browseMonths: "Месяцы",
+    browseSeasons: "Сезоны",
+    browseArchive: "Архив и будущие выпуски",
+    browseArtists: "Исполнители",
+    browseArtistSearch: "Найти исполнителя",
+    browseNoArtists: "Исполнители не найдены.",
+    browseMoreArtists: "Показать больше исполнителей",
   },
 } as const;
 

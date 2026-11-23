@@ -1,12 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useLanguage, type Language } from "./LanguageProvider";
 import { useTheme } from "./ThemeProvider";
 import { AccountMenu } from "./AccountMenu";
 
 export function SiteHeader() {
   const { t } = useLanguage();
+  const pathname = usePathname() ?? "";
+  const browseSection =
+    /^\/(?:en\/|de\/|ru\/)?(?:countries|months|editions|archive|artists)(?:\/|$)/.test(pathname);
+  const browseCurrent = /^\/browse\/?$/.test(pathname)
+    ? "page"
+    : browseSection
+      ? "location"
+      : undefined;
   return (
     <header className="siteHeader">
       <Link className="brand" href="/">
@@ -17,6 +26,9 @@ export function SiteHeader() {
         <Link href="/">{t("festivals")}</Link>
         <Link href="/planner/">{t("myPlan")}</Link>
         <Link href="/notifications/">{t("notifications")}</Link>
+        <Link href="/browse/" aria-current={browseCurrent}>
+          {t("browseCatalogue")}
+        </Link>
         <a href="https://github.com/KirDE/loud-weekend">{t("aboutData")}</a>
       </nav>
       <AccountMenu />

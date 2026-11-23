@@ -1,3 +1,4 @@
+import { hasArchiveRecords } from "@/lib/catalog/browse";
 import { availableFestivalMonths } from "@/lib/festival-dates";
 import type { MetadataRoute } from "next";
 import { supportedLanguages } from "@/lib/catalog/public";
@@ -61,11 +62,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.6,
     })),
     {
-      url: `${SITE_ORIGIN}/archive/`,
+      url: `${SITE_ORIGIN}/browse/`,
       lastModified: CATALOG_UPDATED_AT,
-      changeFrequency: "monthly",
-      priority: 0.5,
+      changeFrequency: "weekly",
+      priority: 0.6,
     },
+    ...(hasArchiveRecords(editions)
+      ? [
+          {
+            url: `${SITE_ORIGIN}/archive/`,
+            lastModified: CATALOG_UPDATED_AT,
+            changeFrequency: "monthly" as const,
+            priority: 0.5,
+          },
+        ]
+      : []),
     {
       url: `${SITE_ORIGIN}/submit/`,
       lastModified: CATALOG_UPDATED_AT,
