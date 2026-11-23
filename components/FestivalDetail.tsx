@@ -6,6 +6,7 @@ import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import { PlanningTools } from "./PlanningTools";
+import { PlaylistCoverageLabel } from "./PlaylistCoverageLabel";
 import type { PlaylistStatus } from "@/lib/domain/festival";
 import { ticketPresentation } from "@/lib/tickets";
 import { festivalSetlistHistoryUrl } from "@/lib/setlist-history";
@@ -117,13 +118,9 @@ export function FestivalDetail({
         )}
         {playlistUrl ? (
           <a href={playlistUrl} target="_blank" rel="noreferrer">
-            <small>
-              {t("listen")}
-              {playlist
-                ? ` · ${playlist.artists} ${t("artists")} · ${playlist.tracks} ${t("tracks")}`
-                : ""}
-            </small>
+            <small>{t("listen")}</small>
             <strong>{t("spotifyPlaylist")}</strong>
+            <PlaylistCoverageLabel coverage={playlist?.coverage?.spotify} />
           </a>
         ) : (
           <div className="disabled">
@@ -133,14 +130,9 @@ export function FestivalDetail({
         )}
         {playlist?.youtubeMusicUrl ? (
           <a href={playlist.youtubeMusicUrl} target="_blank" rel="noreferrer">
-            <small>
-              {t("listen")}
-              {playlist.youtubeMusicArtists !== undefined &&
-              playlist.youtubeMusicTracks !== undefined
-                ? ` · ${playlist.youtubeMusicArtists} ${t("artists")} · ${playlist.youtubeMusicTracks} ${t("tracks")}`
-                : ""}
-            </small>
+            <small>{t("listen")}</small>
             <strong>{t("youtubeMusicPlaylist")}</strong>
+            <PlaylistCoverageLabel coverage={playlist.coverage?.youtubeMusic} />
           </a>
         ) : null}
         {setlistUrl ? (
