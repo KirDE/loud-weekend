@@ -197,9 +197,9 @@ export function parseGraspopRailShuttle(
       .some((cell) => /one-way (?:inbound|outbound) transfer$/.test(plain(timetable(cell).text()))),
   );
   if (tables.length !== 1) return;
-  const inbound = new Set<string>();
-  const outbound = new Set<string>();
-  let direction: "inbound" | "outbound" | undefined;
+  const inbound = new Map<string, number>();
+  const outbound = new Map<string, number>();
+  let section: { direction: "inbound" | "outbound"; date: number } | undefined;
   let dateCount = 0;
   let badSection = false;
   tables.find("tr").each((_, row) => {
@@ -208,7 +208,7 @@ export function parseGraspopRailShuttle(
       .map((_, el) => plain(timetable(el).text()))
       .get();
     if (cells.length === 1) {
-      direction = undefined;
+      section = undefined;
       const match =
         /^(\w+) - (\d{2})\/(\d{2})\/(20\d{2}) - one-way (inbound|outbound) transfer$/.exec(
           cells[0],
@@ -227,20 +227,30 @@ export function parseGraspopRailShuttle(
         return;
       }
       dateCount++;
-      if (kind === "inbound" || weekday === "Monday") direction = kind as "inbound" | "outbound";
+      if (kind === "inbound" || weekday === "Monday") {
+        section = { direction: kind === "inbound" ? "inbound" : "outbound", date: date.getTime() };
+      }
       return;
     }
     if (cells.length !== 4 || !/^\d{1,2}h\d{2}$/.test(cells[1])) return;
-    if (direction === "inbound" && cells[2] === "GMM Dessel") inbound.add(cells[0]);
-    if (direction === "outbound" && cells[0] === "GMM busparking") outbound.add(cells[2]);
+    if (section?.direction === "inbound" && cells[2] === "GMM Dessel") {
+      inbound.set(cells[0], Math.max(section.date, inbound.get(cells[0]) ?? -Infinity));
+    }
+    if (section?.direction === "outbound" && cells[0] === "GMM busparking") {
+      outbound.set(cells[2], Math.min(section.date, outbound.get(cells[2]) ?? Infinity));
+    }
   });
   if (badSection || dateCount === 0) return;
-  const stations = railStations.filter(
-    (station) =>
+  const stations = railStations.filter((station) => {
+    const arrival = inbound.get(station.inbound);
+    const departure = outbound.get(station.outbound);
+    return (
       listed.includes(station.organizer) &&
-      inbound.has(station.inbound) &&
-      outbound.has(station.outbound),
-  );
+      arrival !== undefined &&
+      departure !== undefined &&
+      arrival < departure
+    );
+  });
   if (!stations.length) return;
   const names = stations.map((station) => station.label).join(", ");
   return {

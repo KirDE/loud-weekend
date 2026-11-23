@@ -73,6 +73,8 @@ test("rail shuttles require linked edition-specific proof in both directions", (
   assert.doesNotMatch(reduced.description.en, /Brussels-Midi/);
   assert.equal(parse(timetable.replace("21/06/2027", "21/06/2028")), undefined);
   assert.equal(parse(timetable.replace("21/06/2027", "20/06/2027")), undefined);
+  assert.equal(parse(timetable.replace("21/06/2027", "14/06/2027")), undefined);
+  assert.equal(parse(timetable.replace("16/06/2027", "23/06/2027")), undefined);
   assert.equal(
     parse(timetable, organizer.replace(operatorUrl, "https://elsewhere.example/")),
     undefined,
