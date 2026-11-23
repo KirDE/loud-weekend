@@ -507,7 +507,9 @@ TIME ZONE 'UTC')) FOR UPDATE
           (e) => e.field === "arrival" && e.adapter === ARRIVAL_ADAPTER,
         ) ?? [];
       const guidanceSource = registeredArrivalSource(i.source);
-      if (d.action === "apply" && guidanceSource && !d.arrival)
+      // An evidence-backed source-only repair must remain available after an import failure.
+      // It cannot also publish unrelated facts or approve a guidance candidate.
+      if (d.action === "apply" && guidanceSource && !d.arrival && (!d.source || d.facts))
         throw new ImportAgentError("invalid");
       if (d.arrival) {
         const expectedUrls = candidateArrival?.facts.flatMap((fact) =>
