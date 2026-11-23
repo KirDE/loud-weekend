@@ -6,9 +6,10 @@ const offlineSelect = {
   festival: { select: { slug: true, name: true } },
   startDate: true,
   endDate: true,
-  timetable: { select: {
-    date: true, stage: true, start: true, artistName: true, timeZone: true, status: true,
-  } },
+  timetable: {
+    where: { timeZone: { not: null }, sourceUrl: { not: null }, observedAt: { not: null } },
+    select: { date: true, stage: true, start: true, artistName: true, timeZone: true, status: true },
+  },
 } satisfies Prisma.FestivalEditionSelect;
 
 type OfflineEdition = Prisma.FestivalEditionGetPayload<{ select: typeof offlineSelect }>;
@@ -23,11 +24,11 @@ export function projectOfflineCatalog(rows: readonly OfflineEdition[]) {
     name: row.festival.name,
     startDate: dateOnly(row.startDate),
     endDate: dateOnly(row.endDate),
-    timetable: row.timetable.map((entry) => ({
+    timetable: row.timetable.flatMap((entry) => entry.timeZone ? [{
       date: dateOnly(entry.date)!, stage: entry.stage, start: entry.start,
-      artist: entry.artistName, timeZone: entry.timeZone ?? "UTC",
+      artist: entry.artistName, timeZone: entry.timeZone,
       status: entry.status === "CANCELLED" ? "cancelled" : "scheduled",
-    })).sort((a, b) => compare(JSON.stringify(a), JSON.stringify(b))),
+    }] : []).sort((a, b) => compare(JSON.stringify(a), JSON.stringify(b))),
   })).sort((a, b) => compare(a.slug, b.slug));
   return {
     schemaVersion: 1,

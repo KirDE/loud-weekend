@@ -12,7 +12,7 @@ function edition(slug = "sample") {
     startDate: new Date("2027-06-04"), endDate: null,
     sourceUpdatedAt: new Date("2026-01-01"),
     timetable: [{ date: new Date("2027-06-04"), stage: "Main", start: "20:00",
-      artistName: "Artist", timeZone: null, status: "ANNOUNCED",
+      artistName: "Artist", timeZone: "Europe/Berlin", status: "ANNOUNCED",
       sourceUrl: "https://private.invalid", observedAt: new Date(), id: "internal" }],
   };
 }
@@ -38,7 +38,7 @@ test("safe existing projection, stable bytes and strong ETag; row order and meta
   assert.equal(payload.timetableStatus, "published");
   assert.deepEqual(Object.keys(payload.festivals[0]), ["slug", "name", "startDate", "endDate", "timetable"]);
   assert.deepEqual(payload.festivals[0].timetable[0], {
-    date: "2027-06-04", stage: "Main", start: "20:00", artist: "Artist", timeZone: "UTC", status: "scheduled",
+    date: "2027-06-04", stage: "Main", start: "20:00", artist: "Artist", timeZone: "Europe/Berlin", status: "scheduled",
   });
   assert.equal(payload.festivals[0].endDate, null);
   assert.doesNotMatch(body, /private|sourceUpdatedAt|observedAt|internal/);
@@ -96,6 +96,9 @@ test("DB query selects only current 2027 public fields; missing/failed DB fails 
   await readOfflineCatalog(database);
   assert.deepEqual(query.where, { year: 2027, recordState: "CURRENT" });
   assert.deepEqual(Object.keys(query.select), ["festival", "startDate", "endDate", "timetable"]);
+  assert.deepEqual(query.select.timetable.where, {
+    timeZone: { not: null }, sourceUrl: { not: null }, observedAt: { not: null },
+  });
   for (const findMany of [async () => [], async () => { throw new Error("secret connection error"); }]) {
     const response = await serveOfflineCatalog(request("*"), () => readOfflineCatalog({ festivalEdition: { findMany } }));
     assert.equal(response.status, 503);
