@@ -2,6 +2,8 @@ import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
 
+import { observeRemainingTicket, remainingTicketUrl } from "./remaining-ticket-stock.ts";
+
 export const TICKET_SUPPLEMENT = "official-ticket-supplement-v1";
 type TicketState = NonNullable<FestivalCandidate["ticketStatus"]>;
 export type TicketObservation = {
@@ -15,6 +17,8 @@ export type TicketObservation = {
 export function ticketSupplementUrl(source: FestivalSource): string | undefined {
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review"))
     return;
+  const remaining = remainingTicketUrl(source);
+  if (remaining) return remaining;
   let url: URL;
   try {
     url = new URL(source.url);
@@ -164,6 +168,7 @@ export function observeTicketSupplement(
       return fail("invalid public weekend product JSON");
     }
   }
+  if (remainingTicketUrl(source)) return observeRemainingTicket(html, source, dates);
   const $ = load(html);
   const declaredEvents: Array<{
     name?: unknown;
