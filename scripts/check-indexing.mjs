@@ -143,6 +143,7 @@ export async function checkIndexing(origin = site) {
   checkCrawlAccess("/sitemap.xml");
   const xml = await get(origin, "/sitemap.xml", ["application/xml", "text/xml"], 50 * 1024 ** 2);
   const entries = inspectSitemap(xml);
+  for (const path of entries.keys()) checkCrawlAccess(path);
   // Check all members of a representative localized cluster plus the canonical
   // path for each catalogue route class; do not crawl the entire site.
   const examples = [...entries.keys()].sort();
@@ -162,7 +163,6 @@ export async function checkIndexing(origin = site) {
   }
   for (const path of sample) {
     assert.ok(entries.has(path), `sample not listed: ${path}`);
-    checkCrawlAccess(path);
     const html = await get(origin, path, ["text/html"], 12 * 1024 ** 2);
     const $ = load(html);
     const lang = /^\/(en|de|ru)\//.exec(path)?.[1];
