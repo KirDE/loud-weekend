@@ -106,7 +106,11 @@ function catalogFestival(row) {
     typeof row.slug === "string" && /^[a-z0-9-]+$/.test(row.slug) && catalogText(row.name) &&
     (row.startDate === null || catalogDate(row.startDate)) &&
     (row.endDate === null || catalogDate(row.endDate)) &&
-    Array.isArray(row.timetable) && row.timetable.every(catalogPerformance);
+    (row.startDate === null || row.endDate === null || row.startDate <= row.endDate) &&
+    Array.isArray(row.timetable) && row.timetable.every((performance) =>
+      catalogPerformance(performance) &&
+      (row.startDate === null || row.startDate <= performance.date) &&
+      (row.endDate === null || performance.date <= row.endDate));
 }
 
 function validCatalog(body) {
