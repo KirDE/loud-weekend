@@ -368,3 +368,75 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
 
 
 });
+
+test("account export is a private download scoped to the current session", async () => {
+  const client = new Client();
+  const path = "/api/auth/export";
+  const denied = await client.json(path, "POST");
+  assert.equal(denied.status, 401);
+  assert.match(denied.headers.get("cache-control"), /no-store/);
+  const registration = await client.json("/api/auth/register", "POST", {
+    email: "synthetic-export@example.test", password: "synthetic disposable password",
+  });
+  assert.equal(registration.status, 201);
+  const { user } = await registration.json();
+  const other = await db.user.create({ data: { email: "other-export@example.test" } });
+  const saved = await db.syncDocument.create({
+    data: { userId: user.id, kind: "FAVORITES", payload: { favoriteArtists: ["Synthetic Band"] } },
+  });
+  await db.syncDocument.create({
+    data: { userId: other.id, kind: "FAVORITES", payload: { privateMarker: "OTHER_ACCOUNT_ONLY" } },
+  });
+  await db.shareLink.create({ data: { userId: user.id, documentId: saved.id, slug: "EXCLUDED_SHARE_SLUG" } });
+  await db.spotifyConnection.create({
+    data: { userId: user.id, spotifyUserId: "synthetic-spotify-user", encryptedRefreshToken: "EXCLUDED_PROVIDER_TOKEN" },
+  });
+  await db.notificationPreference.create({
+    data: { userId: user.id, eventType: "ARTIST_ADDED", channel: "WEB_PUSH" },
+  });
+  await db.notificationSubscription.create({
+    data: { userId: user.id, channel: "WEB_PUSH", endpoint: "EXCLUDED_PUSH_ENDPOINT", metadata: { key: "EXCLUDED_PUSH_SECRET" } },
+  });
+  const event = await db.notificationEvent.create({
+    data: { dedupeKey: "synthetic-export", festivalId: "synthetic-fest", type: "ARTIST_ADDED", title: "Added", message: "Synthetic announcement", occurredAt: new Date() },
+  });
+  await db.notificationDelivery.create({
+    data: {
+      userId: user.id, eventId: event.id, channel: "WEB_PUSH", frequency: "IMMEDIATE",
+      status: "FAILED", lastError: "EXCLUDED_PROVIDER_ERROR", claimToken: "EXCLUDED_CLAIM_TOKEN",
+    },
+  });
+  await db.passkey.create({
+    data: {
+      userId: user.id, id: "EXCLUDED_PASSKEY_ID", userHandle: "EXCLUDED_USER_HANDLE",
+      publicKey: Buffer.from("EXCLUDED_PUBLIC_KEY"), transports: ["internal"], deviceType: "singleDevice",
+    },
+  });
+  await db.emailVerificationToken.create({
+    data: { userId: user.id, tokenHash: "EXCLUDED_VERIFICATION_HASH", expiresAt: new Date(Date.now() + 60_000) },
+  });
+  const crossSite = await client.request(path, { method: "POST", headers: { origin: "https://untrusted.example.test" } });
+  assert.equal(crossSite.status, 403);
+  assert.match(crossSite.headers.get("cache-control"), /no-store/);
+
+  const response = await client.json(path + "?userId=" + other.id, "POST");
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-disposition"), 'attachment; filename="loud-weekend-account-data.json"');
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  const raw = await response.text();
+  const { version, account } = JSON.parse(raw);
+  assert.equal(version, 1);
+  assert.equal(account.id, user.id);
+  assert.equal(account.email, user.email);
+  assert.deepEqual(account.documents.map(({ kind, payload }) => [kind, payload]), [["FAVORITES", saved.payload]]);
+  assert.equal(account.spotify.spotifyUserId, "synthetic-spotify-user");
+  assert.equal(account.passkeys[0].deviceType, "singleDevice");
+  assert.equal(account.shareLinks[0].document.kind, "FAVORITES");
+  assert.equal(account.notificationPreferences[0].eventType, "ARTIST_ADDED");
+  assert.equal(account.notificationSubscriptions[0].channel, "WEB_PUSH");
+  assert.equal(account.notificationDeliveries[0].status, "FAILED");
+  assert.doesNotMatch(raw, /EXCLUDED_|OTHER_ACCOUNT_ONLY|other-export|passwordHash|tokenHash|publicKey/);
+  assert.equal((await client.json("/api/auth/logout", "POST")).status, 204);
+  assert.equal((await client.json(path, "POST")).status, 401);
+});

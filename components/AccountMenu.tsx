@@ -8,6 +8,12 @@ import { authErrorMessage } from "@/lib/auth-error-copy";
 type User = { id: string; email: string };
 type Mode = "login" | "register";
 
+const exportLabel = {
+  en: "Download account data (JSON)",
+  de: "Kontodaten herunterladen (JSON)",
+  ru: "Скачать данные аккаунта (JSON)",
+} as const;
+
 const copy = {
   en: { account: "Account", signIn: "Sign in", register: "Create account", email: "Email", password: "Password", passkeySignIn: "Sign in with passkey", passkeyRegister: "Create account with passkey", passkeyHint: "Passkeys use your fingerprint, face, screen lock, or security key.", passwordDivider: "or use a password", emailRequired: "Enter a valid email first.", cancelled: "Passkey request was cancelled.", logout: "Sign out", close: "Close", loading: "Please wait…", local: "No account? Your plan stays on this device.", failed: "Something went wrong. Please try again." },
   de: { account: "Konto", signIn: "Anmelden", register: "Konto erstellen", email: "E-Mail", password: "Passwort", passkeySignIn: "Mit Passkey anmelden", passkeyRegister: "Konto mit Passkey erstellen", passkeyHint: "Passkeys verwenden Fingerabdruck, Gesichtserkennung, Gerätesperre oder Sicherheitsschlüssel.", passwordDivider: "oder Passwort verwenden", emailRequired: "Bitte zuerst eine gültige E-Mail eingeben.", cancelled: "Passkey-Anfrage wurde abgebrochen.", logout: "Abmelden", close: "Schließen", loading: "Bitte warten…", local: "Ohne Konto bleibt dein Plan auf diesem Gerät.", failed: "Etwas ist schiefgegangen. Bitte erneut versuchen." },
@@ -96,6 +102,9 @@ export function AccountMenu() {
         <strong>{user.email}</strong>
         {error && <p role="alert">{error}</p>}
         <button type="button" disabled={busy} onClick={logout}>{busy ? t.loading : t.logout}</button>
+        <form action="/api/auth/export" method="post">
+          <button type="submit" disabled={busy}>{exportLabel[language]}</button>
+        </form>
       </> : <>
         <div className="accountTabs" role="tablist">
           <button type="button" role="tab" aria-selected={mode === "login"} onClick={() => { setMode("login"); setError(""); }}>{t.signIn}</button>
