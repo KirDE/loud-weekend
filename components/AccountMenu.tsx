@@ -84,9 +84,13 @@ export function AccountMenu() {
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error(t.failed);
-      setUser(null); setMode("login"); setOpen(false);
-    } catch { setError(t.failed); }
-    finally { setBusy(false); }
+      // Drop all rendered account state and requests from the old session.
+      // Device choices are restored from local storage on the same page.
+      window.location.reload();
+    } catch {
+      setError(t.failed);
+      setBusy(false);
+    }
   }
 
   return <div className="accountMenu">

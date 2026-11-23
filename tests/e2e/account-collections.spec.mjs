@@ -168,3 +168,43 @@ test("sync waits for the initial account revision before saving", async ({ page 
  expect(writes).toBe(4);
  expect(docs.collections.revision).toBe(5);
 });
+
+test("signing out removes the private account view but keeps device choices", async ({ page }) => {
+ const date = "2026-11-17T22:00:00.000Z";
+ let signedIn = true;
+ await page.route("**/api/auth/me**", route => route.fulfill({ json: {
+   user: signedIn ? { id: userId, email: "browser-collections@example.test" } : null,
+ } }));
+ await page.route("**/api/auth/logout**", route => {
+   signedIn = false;
+   return route.fulfill({ json: { ok: true } });
+ });
+ await page.route("**/api/sync/**", route => {
+   const kind = new URL(route.request().url()).pathname.split("/").filter(Boolean).at(-1);
+   const document = signedIn && kind === "collections" ? {
+     id: "private-collection", userId, kind: documentKinds.collections, revision: 1, updatedAt: date,
+     payload: { schemaVersion: 1, playlistFestivals: [], spotify: { syncedAt: date, playlists: [{
+       id: "private", name: "Synthetic private playlist", url: "https://open.spotify.com/playlist/private",
+       image: null, owner: "Synthetic provider", trackCount: 1,
+     }] } },
+   } : null;
+   return route.fulfill({ json: { document } });
+ });
+ await page.goto("/en/planner/");
+ const panel = page.locator(".accountSync");
+ await expect(panel.getByRole("link", { name: "Synthetic private playlist" })).toBeVisible();
+ const choice = page.locator(".playlistFestivalGrid input").first();
+ await choice.check();
+ const selection = () => page.evaluate(() =>
+   JSON.parse(localStorage.getItem("festival-radar-planner-v1"))?.playlistFestivals,
+ );
+ await expect.poll(selection).toHaveLength(1);
+ const saved = await selection();
+
+ await page.locator(".accountButton").click();
+ await page.getByRole("button", { name: "Sign out", exact: true }).click();
+ await expect(panel.getByText("Sign in from the Account menu to enable cross-device sync.")).toBeVisible();
+ await expect(panel.getByRole("link", { name: "Synthetic private playlist" })).toHaveCount(0);
+ await expect(choice).toBeChecked();
+ expect(await selection()).toEqual(saved);
+});
