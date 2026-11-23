@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 
 const storageKey = "festival-radar-planner-v1";
 const legacyFilters = { query: "Synthetic", country: "DE", month: "06", announcedOnly: true, ticketsOnly: false };
-const activeFilters = { ...legacyFilters, dateFrom: "", dateTo: "", weekendOnly: false, maxDays: "all", ticketsOnly: true, genre: "doom metal", origin: "cologne", maxDistance: "500" };
+const activeFilters = { ...legacyFilters, dateFrom: "", dateTo: "", weekendOnly: false, maxDays: "all", sort: "date", ticketsOnly: true, genre: "doom metal", origin: "cologne", maxDistance: "500" };
 
 async function expectFilters(page, filters) {
   await expect(page.locator(".search")).toHaveAttribute("data-ready", "true");

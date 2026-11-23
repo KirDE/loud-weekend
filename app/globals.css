@@ -1458,3 +1458,7 @@ a:focus-visible, select:focus-visible, summary:focus-visible {
 .discoveryDates p { font-size: 13px; margin: 6px 0; }
 .discoveryDates .dateShareFallback { display: block; margin-top: 6px; }
 .discoveryDates [role="status"] { margin-inline-start: 6px; }
+
+.discoveryOrder { display: flex; justify-content: flex-end; margin-block: 12px 0; }
+.discoveryOrder label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.discoveryOrder select { max-width: 100%; }

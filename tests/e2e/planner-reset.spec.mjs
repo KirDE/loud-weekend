@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 const key = "festival-radar-planner-v1";
-const saved = { favoriteFestivals: ["synthetic-fest"], favoriteArtists: ["sample-artist"], attendance: { "synthetic-fest": "going" }, playlistFestivals: ["synthetic-fest"], savedFilters: { query: "saved-query", country: "DE", month: "06", announcedOnly: true, ticketsOnly: true, genre: "metal", origin: "prague", maxDistance: "500", dateFrom: "2027-06-01", dateTo: "2027-06-30", weekendOnly: true, maxDays: "4" } };
-const empty = { favoriteFestivals: [], favoriteArtists: [], attendance: {}, playlistFestivals: [], savedFilters: { query: "", country: "all", month: "all", announcedOnly: false, ticketsOnly: false, genre: "all", origin: "berlin", maxDistance: "all", dateFrom: "", dateTo: "", weekendOnly: false, maxDays: "all" } };
+const saved = { favoriteFestivals: ["synthetic-fest"], favoriteArtists: ["sample-artist"], attendance: { "synthetic-fest": "going" }, playlistFestivals: ["synthetic-fest"], savedFilters: { query: "saved-query", country: "DE", month: "06", announcedOnly: true, ticketsOnly: true, genre: "metal", origin: "prague", maxDistance: "500", dateFrom: "2027-06-01", dateTo: "2027-06-30", weekendOnly: true, maxDays: "4", sort: "distance" } };
+const empty = { favoriteFestivals: [], favoriteArtists: [], attendance: {}, playlistFestivals: [], savedFilters: { query: "", country: "all", month: "all", announcedOnly: false, ticketsOnly: false, genre: "all", origin: "berlin", maxDistance: "all", dateFrom: "", dateTo: "", weekendOnly: false, maxDays: "all", sort: "date" } };
 const copy = {
   en: { clear: "Clear local data", title: "Reset this browser's plan?", cancel: "Cancel", reset: "Reset local plan", backup: "Download plan backup (.json)", undo: "Undo local reset", sync: "Sync now" },
   de: { clear: "Lokale Daten löschen", title: "Plan in diesem Browser zurücksetzen?", cancel: "Abbrechen", reset: "Lokalen Plan zurücksetzen", backup: "Plansicherung herunterladen (.json)", undo: "Lokales Zurücksetzen rückgängig machen", sync: "Jetzt synchronisieren" },
