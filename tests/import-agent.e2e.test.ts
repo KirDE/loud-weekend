@@ -19,17 +19,11 @@ import {
   resumeAgentIssue,
 } from "../lib/ingestion/agent-issues.ts";
 import { GET, POST } from "../app/api/ingestion/agent/route.ts";
-import {
-  createIngestionRun,
-  persistAttempt,
-} from "../lib/ingestion/repository.ts";
+import { createIngestionRun, persistAttempt } from "../lib/ingestion/repository.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 process.env.IMPORT_AGENT_SECRET = "test-only-agent-secret-".repeat(3);
 let sourceId: string;
-const evidence = (
-  field: string,
-  url = "https://festival.example.test/2027",
-) => ({
+const evidence = (field: string, url = "https://festival.example.test/2027") => ({
   field,
   url,
   checkedAt: new Date().toISOString(),
@@ -42,10 +36,8 @@ const checked = {
   evidence: [evidence("city")],
   facts: { city: "Verified City" },
 };
-const resolveCase = (
-  claim: Awaited<ReturnType<typeof claimAgentIssue>>,
-  decision: unknown,
-) => resolveAgentIssue(db, { ...claim, decision });
+const resolveCase = (claim: Awaited<ReturnType<typeof claimAgentIssue>>, decision: unknown) =>
+  resolveAgentIssue(db, { ...claim, decision });
 test.beforeEach(async () => {
   await db.festivalSource.deleteMany({
     where: { festivalSlug: "synthetic-fest" },
@@ -90,10 +82,7 @@ test("leases prevent duplicate agents; wrong capabilities cannot release or reso
   const c = await claim();
   assert.equal((await listAgentIssues(db)).ready, 0);
   await assert.rejects(claimAgentIssue(db, sourceId, c.issueId), /busy/);
-  await assert.rejects(
-    resolveCase({ ...c, leaseToken: randomUUID() }, checked),
-    /busy/,
-  );
+  await assert.rejects(resolveCase({ ...c, leaseToken: randomUUID() }, checked), /busy/);
   await assert.rejects(releaseAgentIssue(db, c.issueId, randomUUID()), /busy/);
   await releaseAgentIssue(db, c.issueId, c.leaseToken);
   assert.equal((await listAgentIssues(db)).ready, 1);
@@ -106,11 +95,8 @@ test("concurrent claimers have one winner; expired/replaced capabilities cannot 
     claimAgentIssue(db, sourceId, issue.issueId),
   ]);
   const winners = results.filter(
-    (
-      r,
-    ): r is PromiseFulfilledResult<
-      Awaited<ReturnType<typeof claimAgentIssue>>
-    > => r.status === "fulfilled",
+    (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof claimAgentIssue>>> =>
+      r.status === "fulfilled",
   );
   assert.equal(winners.length, 1);
   const first = winners[0].value;
@@ -131,8 +117,7 @@ test("stale snapshot and active importer reject writes; release permits a fresh 
   });
   await assert.rejects(resolveCase(c, checked), /stale/);
   assert.equal(
-    (await db.festival.findUniqueOrThrow({ where: { slug: "synthetic-fest" } }))
-      .city,
+    (await db.festival.findUniqueOrThrow({ where: { slug: "synthetic-fest" } })).city,
     "Concurrent change",
   );
   await releaseAgentIssue(db, c.issueId, c.leaseToken);
@@ -153,8 +138,7 @@ test("verified resolution commits audit/provenance once, replays safely and enqu
   const receipt = await resolveCase(c, checked);
   assert.ok(receipt.publicationId);
   assert.equal(
-    (await db.festival.findUniqueOrThrow({ where: { slug: "synthetic-fest" } }))
-      .city,
+    (await db.festival.findUniqueOrThrow({ where: { slug: "synthetic-fest" } })).city,
     "Verified City",
   );
   assert.equal(await db.catalogPlaylistRefresh.count(), queueBefore);
@@ -196,13 +180,9 @@ test("billing promotion is atomic and keeps artist identity, completeness and pr
     include: { lineup: { include: { artist: true } } },
   });
   assert.equal(edition.completeness, "PARTIAL");
+  assert.equal(edition.lineup.find((l) => l.artist.name === "Sample Artist")?.billing, "LINEUP");
   assert.equal(
-    edition.lineup.find((l) => l.artist.name === "Sample Artist")?.billing,
-    "LINEUP",
-  );
-  assert.equal(
-    edition.lineup.find((l) => l.artist.name === "Verified New Headliner")
-      ?.billing,
+    edition.lineup.find((l) => l.artist.name === "Verified New Headliner")?.billing,
     "HEADLINER",
   );
   assert.equal(
@@ -238,8 +218,7 @@ test("wrong edition, untrusted evidence and cross-billing duplicates roll back c
     /billing/,
   );
   assert.equal(
-    (await db.festival.findUniqueOrThrow({ where: { slug: "synthetic-fest" } }))
-      .city,
+    (await db.festival.findUniqueOrThrow({ where: { slug: "synthetic-fest" } })).city,
     "Sample City",
   );
 });
@@ -251,10 +230,7 @@ test("retry backs off; genuine questions are deduplicated without hiding new iss
   });
   assert.ok(r.retryAt);
   assert.equal((await listAgentIssues(db)).ready, 0);
-  assert.equal(
-    (await listAgentIssues(db, new Date(Date.now() + 61 * 60000))).ready,
-    1,
-  );
+  assert.equal((await listAgentIssues(db, new Date(Date.now() + 61 * 60000))).ready, 1);
   await db.operationalState.update({
     where: { key: c.key },
     data: { payload: {} },
@@ -265,10 +241,7 @@ test("retry backs off; genuine questions are deduplicated without hiding new iss
     reason: "Two official venues disagree without a dated correction",
     question: "Which confirmed venue did the organizer communicate to you?",
   });
-  assert.equal(
-    (await listAgentIssues(db, new Date(Date.now() + 20 * 86400000))).ready,
-    0,
-  );
+  assert.equal((await listAgentIssues(db, new Date(Date.now() + 20 * 86400000))).ready, 0);
   await resumeAgentIssue(
     db,
     sourceId,
@@ -495,17 +468,9 @@ test("HTTP boundary rejects wrong auth, malformed bodies and oversized streams b
   const headers = {
     authorization: "Bearer " + process.env.IMPORT_AGENT_SECRET,
   };
+  assert.equal((await POST(new Request(url, { method: "POST", headers, body: "{" }))).status, 400);
   assert.equal(
-    (await POST(new Request(url, { method: "POST", headers, body: "{" })))
-      .status,
-    400,
-  );
-  assert.equal(
-    (
-      await POST(
-        new Request(url, { method: "POST", headers, body: "x".repeat(65537) }),
-      )
-    ).status,
+    (await POST(new Request(url, { method: "POST", headers, body: "x".repeat(65537) }))).status,
     413,
   );
   const signal = await GET(new Request(url + "?mode=signal", { headers }));
@@ -547,285 +512,772 @@ test("HTTP boundary rejects wrong auth, malformed bodies and oversized streams b
   assert.equal((await resolved.json()).status, "resolved");
 });
 
-test('correction atomically creates deduplicated parser repair; leased completion/retry receipt is fenced', async () => {
- const { listParserRepairs, claimParserRepair, finishParserRepair } = await import('../lib/ingestion/parser-repairs.ts');
- const i=await inspectSource(db,sourceId);const c=await claimAgentIssue(db,sourceId,i!.issueId);
- const receipt=await resolveCase(c,checked);
- assert.ok(typeof receipt.parserRepairId === "string");
- const repairId = receipt.parserRepairId;
- assert.equal((await resolveCase(c,checked)).parserRepairId,receipt.parserRepairId);
- const list=await listParserRepairs(db);assert.ok(list.issues.some((j:any)=>j.repairId===receipt.parserRepairId));
- const claim=await claimParserRepair(db,repairId);
- await assert.rejects(claimParserRepair(db,repairId),/busy/);
- await assert.rejects(finishParserRepair(db,repairId,randomUUID(),{status:'retry',reason:'Synthetic stale worker retry'}),/busy/);
- const result={status:'completed' as const,reason:'Fixture reproduces corrected extraction and release verified',prUrl:'https://github.com/KirDE/loud-weekend/pull/999',commit:'a'.repeat(40)};
- assert.equal((await finishParserRepair(db,repairId,claim.leaseToken,result)).status,'completed');
- assert.equal((await finishParserRepair(db,repairId,claim.leaseToken,result)).status,'completed');
- assert.ok(!(await listParserRepairs(db)).issues.some((j:any)=>j.repairId===receipt.parserRepairId));
-});
+test(
+  "correction atomically creates deduplicated parser repair; le" +
+    "ased completion/retry receipt is fenced",
+  async () => {
+    const { listParserRepairs, claimParserRepair, finishParserRepair } =
+      await import("../lib/ingestion/parser-repairs.ts");
+    const i = await inspectSource(db, sourceId);
+    const c = await claimAgentIssue(db, sourceId, i!.issueId);
+    const receipt = await resolveCase(c, checked);
+    assert.ok(typeof receipt.parserRepairId === "string");
+    const repairId = receipt.parserRepairId;
+    assert.equal((await resolveCase(c, checked)).parserRepairId, receipt.parserRepairId);
+    const list = await listParserRepairs(db);
+    assert.ok(list.issues.some((j: any) => j.repairId === receipt.parserRepairId));
+    const claim = await claimParserRepair(db, repairId);
+    await assert.rejects(claimParserRepair(db, repairId), /busy/);
+    await assert.rejects(
+      finishParserRepair(db, repairId, randomUUID(), {
+        status: "retry",
+        reason: "Synthetic stale worker retry",
+      }),
+      /busy/,
+    );
+    const result = {
+      status: "completed" as const,
+      reason: "Fixture reproduces corrected extraction and release verified",
+      prUrl: "https://github.com/KirDE/loud-weekend/pull/999",
+      commit: "a".repeat(40),
+    };
+    assert.equal(
+      (await finishParserRepair(db, repairId, claim.leaseToken, result)).status,
+      "completed",
+    );
+    assert.equal(
+      (await finishParserRepair(db, repairId, claim.leaseToken, result)).status,
+      "completed",
+    );
+    assert.ok(
+      !(await listParserRepairs(db)).issues.some((j: any) => j.repairId === receipt.parserRepairId),
+    );
+  },
+);
 
-test('repair capability activates only its registered deployed adapter, preserves backoff/catalogue/provider state', async () => {
- const {enqueueParserRepair,claimParserRepair,configureParserRepair}=await import('../lib/ingestion/parser-repairs.ts');
- const fixture={...catalogSeed,festivals:catalogSeed.festivals.map(f=>({...f,slug:'bloodstock'})),editions:catalogSeed.editions.map(e=>({...e,slug:'bloodstock'}))};
- await seedCatalog(db,fixture);
- const festival=await db.festival.findUniqueOrThrow({where:{slug:'bloodstock'}});
- const edition=await db.festivalEdition.findFirstOrThrow({where:{festivalId:festival.id,recordState:'CURRENT'}});
- const next=new Date(Date.now()+604800000),failed=new Date(Date.now()-86400000);
- const s=await db.festivalSource.create({data:{festivalSlug:'bloodstock',festivalId:festival.id,editionId:edition.id,editionYear:2027,
-   url:'https://festival.example.test/',strategies:['json_ld_event','html_fallback'],parserKey:'json_ld_event+html_fallback',refreshPolicy:'daily',cadenceSeconds:86400,
-   nextRunAt:next,consecutiveFailures:3,failureStartedAt:failed,lastError:'Preserve original failure'}});
- try {
-   const repairId=await enqueueParserRepair(db,{sourceId:s.id,festivalSlug:'bloodstock',year:2027,issueId:'test-activation',parserKey:s.parserKey,sourceUrl:s.url});
-   const claim=await claimParserRepair(db,repairId);
-   const input={repairId,leaseToken:claim.leaseToken as string,expectedParserKey:s.parserKey!,followLinkPattern:'^/events/boa-2027/stages/?$'};
-   const beforeEdition=await db.festivalEdition.findUnique({where:{id:edition.id},include:{lineup:true,playlists:true}});
-   const beforeProvider=await db.catalogPlaylistRefresh.count();
-   await assert.rejects(configureParserRepair(db,{...input,leaseToken:randomUUID()}),/busy/);
-   await assert.rejects(configureParserRepair(db,{...input,expectedParserKey:'manual_review'}),/stale/);
-   await assert.rejects(configureParserRepair(db,{...input,followLinkPattern:'unanchored.*'}),/invalid/);
-   await db.festivalSource.update({where:{id:s.id},data:{url:'https://changed.example.test/'}});
-   await assert.rejects(configureParserRepair(db,input),/stale/);
-   await db.festivalSource.update({where:{id:s.id},data:{url:s.url}});
-   await db.festivalSource.update({where:{id:s.id},data:{leaseOwner:'importer',leaseExpiresAt:new Date(Date.now()+60000)}});
-   await assert.rejects(configureParserRepair(db,input),/busy/);
-   await db.festivalSource.update({where:{id:s.id},data:{leaseOwner:null,leaseExpiresAt:null}});
-   // The bearer-protected route exercises the same fenced transaction.
-   const request=()=>new Request('https://radar.example.test/api/ingestion/agent/',{method:'POST',headers:{authorization:'Bearer '+process.env.IMPORT_AGENT_SECRET,'content-type':'application/json'},body:JSON.stringify({operation:'repair_configure',...input})});
-   assert.equal((await POST(request())).status,200);
-   assert.equal((await POST(request())).status,200); // idempotent under the held capability
-   const after=await db.festivalSource.findUniqueOrThrow({where:{id:s.id}});
-   assert.equal(after.parserKey,'official_markup:bloodstock');assert.deepEqual(after.strategies,['official_markup']);
-   assert.equal(after.followLinkPattern,input.followLinkPattern);assert.equal(after.nextRunAt!.toISOString(),next.toISOString());
-   assert.equal(after.consecutiveFailures,3);assert.equal(after.failureStartedAt!.toISOString(),failed.toISOString());assert.equal(after.lastError,s.lastError);
-   assert.deepEqual(await db.festivalEdition.findUnique({where:{id:edition.id},include:{lineup:true,playlists:true}}),beforeEdition);
-   assert.equal(await db.catalogPlaylistRefresh.count(),beforeProvider);
-   assert.equal(await db.adminAuditEntry.count({where:{action:'ingestion.parser.configured',resourceKey:'bloodstock',metadata:{path:['repairId'],equals:repairId}}}),1);
-   await db.operationalState.update({where:{key:'parser-repair-'+repairId},data:{leaseExpiresAt:new Date(0)}});
-   await assert.rejects(configureParserRepair(db,input),/busy/);
-   const unknown=await enqueueParserRepair(db,{sourceId,festivalSlug:'synthetic-fest',year:2027,issueId:'test-unregistered',parserKey:'manual_review',sourceUrl:(await db.festivalSource.findUniqueOrThrow({where:{id:sourceId}})).url});
-   const unregistered=await claimParserRepair(db,unknown);
-   await assert.rejects(configureParserRepair(db,{repairId:unknown,leaseToken:unregistered.leaseToken as string,expectedParserKey:'manual_review',followLinkPattern:null}),/invalid/);
- } finally {await db.festivalSource.delete({where:{id:s.id}});await db.festival.delete({where:{id:festival.id}});}
-});
+test(
+  "repair capability activates only its registered deployed ada" +
+    "pter, preserves backoff/catalogue/provider state",
+  async () => {
+    const { enqueueParserRepair, claimParserRepair, configureParserRepair } =
+      await import("../lib/ingestion/parser-repairs.ts");
+    const fixture = {
+      ...catalogSeed,
+      festivals: catalogSeed.festivals.map((f) => ({ ...f, slug: "bloodstock" })),
+      editions: catalogSeed.editions.map((e) => ({ ...e, slug: "bloodstock" })),
+    };
+    await seedCatalog(db, fixture);
+    const festival = await db.festival.findUniqueOrThrow({ where: { slug: "bloodstock" } });
+    const edition = await db.festivalEdition.findFirstOrThrow({
+      where: { festivalId: festival.id, recordState: "CURRENT" },
+    });
+    const next = new Date(Date.now() + 604800000),
+      failed = new Date(Date.now() - 86400000);
+    const s = await db.festivalSource.create({
+      data: {
+        festivalSlug: "bloodstock",
+        festivalId: festival.id,
+        editionId: edition.id,
+        editionYear: 2027,
+        url: "https://festival.example.test/",
+        strategies: ["json_ld_event", "html_fallback"],
+        parserKey: "json_ld_event+html_fallback",
+        refreshPolicy: "daily",
+        cadenceSeconds: 86400,
+        nextRunAt: next,
+        consecutiveFailures: 3,
+        failureStartedAt: failed,
+        lastError: "Preserve original failure",
+      },
+    });
+    try {
+      const repairId = await enqueueParserRepair(db, {
+        sourceId: s.id,
+        festivalSlug: "bloodstock",
+        year: 2027,
+        issueId: "test-activation",
+        parserKey: s.parserKey,
+        sourceUrl: s.url,
+      });
+      const claim = await claimParserRepair(db, repairId);
+      const input = {
+        repairId,
+        leaseToken: claim.leaseToken as string,
+        expectedParserKey: s.parserKey!,
+        followLinkPattern: "^/events/boa-2027/stages/?$",
+      };
+      const beforeEdition = await db.festivalEdition.findUnique({
+        where: { id: edition.id },
+        include: { lineup: true, playlists: true },
+      });
+      const beforeProvider = await db.catalogPlaylistRefresh.count();
+      await assert.rejects(
+        configureParserRepair(db, { ...input, leaseToken: randomUUID() }),
+        /busy/,
+      );
+      await assert.rejects(
+        configureParserRepair(db, { ...input, expectedParserKey: "manual_review" }),
+        /stale/,
+      );
+      await assert.rejects(
+        configureParserRepair(db, { ...input, followLinkPattern: "unanchored.*" }),
+        /invalid/,
+      );
+      await db.festivalSource.update({
+        where: { id: s.id },
+        data: { url: "https://changed.example.test/" },
+      });
+      await assert.rejects(configureParserRepair(db, input), /stale/);
+      await db.festivalSource.update({ where: { id: s.id }, data: { url: s.url } });
+      await db.festivalSource.update({
+        where: { id: s.id },
+        data: { leaseOwner: "importer", leaseExpiresAt: new Date(Date.now() + 60000) },
+      });
+      await assert.rejects(configureParserRepair(db, input), /busy/);
+      await db.festivalSource.update({
+        where: { id: s.id },
+        data: { leaseOwner: null, leaseExpiresAt: null },
+      });
+      // The bearer-protected route exercises the same fenced transaction.
+      const request = () =>
+        new Request("https://radar.example.test/api/ingestion/agent/", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer " + process.env.IMPORT_AGENT_SECRET,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ operation: "repair_configure", ...input }),
+        });
+      assert.equal((await POST(request())).status, 200);
+      assert.equal((await POST(request())).status, 200); // idempotent under the held capability
+      const after = await db.festivalSource.findUniqueOrThrow({ where: { id: s.id } });
+      assert.equal(after.parserKey, "official_markup:bloodstock");
+      assert.deepEqual(after.strategies, ["official_markup"]);
+      assert.equal(after.followLinkPattern, input.followLinkPattern);
+      assert.equal(after.nextRunAt!.toISOString(), next.toISOString());
+      assert.equal(after.consecutiveFailures, 3);
+      assert.equal(after.failureStartedAt!.toISOString(), failed.toISOString());
+      assert.equal(after.lastError, s.lastError);
+      assert.deepEqual(
+        await db.festivalEdition.findUnique({
+          where: { id: edition.id },
+          include: { lineup: true, playlists: true },
+        }),
+        beforeEdition,
+      );
+      assert.equal(await db.catalogPlaylistRefresh.count(), beforeProvider);
+      assert.equal(
+        await db.adminAuditEntry.count({
+          where: {
+            action: "ingestion.parser.configured",
+            resourceKey: "bloodstock",
+            metadata: { path: ["repairId"], equals: repairId },
+          },
+        }),
+        1,
+      );
+      await db.operationalState.update({
+        where: { key: "parser-repair-" + repairId },
+        data: { leaseExpiresAt: new Date(0) },
+      });
+      await assert.rejects(configureParserRepair(db, input), /busy/);
+      const unknown = await enqueueParserRepair(db, {
+        sourceId,
+        festivalSlug: "synthetic-fest",
+        year: 2027,
+        issueId: "test-unregistered",
+        parserKey: "manual_review",
+        sourceUrl: (await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } })).url,
+      });
+      const unregistered = await claimParserRepair(db, unknown);
+      await assert.rejects(
+        configureParserRepair(db, {
+          repairId: unknown,
+          leaseToken: unregistered.leaseToken as string,
+          expectedParserKey: "manual_review",
+          followLinkPattern: null,
+        }),
+        /invalid/,
+      );
+    } finally {
+      await db.festivalSource.delete({ where: { id: s.id } });
+      await db.festival.delete({ where: { id: festival.id } });
+    }
+  },
+);
 
 test("repair-owned protected configuration is fenced, audited, idempotent and provider-free", async () => {
-  const { enqueueParserRepair, claimParserRepair } = await import("../lib/ingestion/parser-repairs.ts");
+  const { enqueueParserRepair, claimParserRepair } =
+    await import("../lib/ingestion/parser-repairs.ts");
   const s = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
-  const id = await enqueueParserRepair(db, { sourceId, festivalSlug: s.festivalSlug, year: s.editionYear, issueId: "b".repeat(64), parserKey: s.parserKey, sourceUrl: s.url });
+  const id = await enqueueParserRepair(db, {
+    sourceId,
+    festivalSlug: s.festivalSlug,
+    year: s.editionYear,
+    issueId: "b".repeat(64),
+    parserKey: s.parserKey,
+    sourceUrl: s.url,
+  });
   const c = await claimParserRepair(db, id);
   const commit = "c".repeat(40);
   process.env.DEPLOYED_COMMIT = commit;
   const url = "https://festival.example.test/current-essentials";
-  const decision = { action: "apply", reason: "Reviewed exact deployed source discovery repair", source: { url, strategies: ["json_ld_event"], refreshPolicy: "weekly" }, evidence: [evidence("source", url)] };
-  const body = { operation: "repair_retarget", repairId: id, leaseToken: c.leaseToken, decision, commit };
-  const request = (value: unknown, authorized = true) => POST(new Request("http://localhost/api/ingestion/agent/", { method: "POST", headers: { "content-type": "application/json", ...(authorized ? { authorization: "Bearer " + process.env.IMPORT_AGENT_SECRET } : {}) }, body: JSON.stringify(value) }));
+  const decision = {
+    action: "apply",
+    reason: "Reviewed exact deployed source discovery repair",
+    source: { url, strategies: ["json_ld_event"], refreshPolicy: "weekly" },
+    evidence: [evidence("source", url)],
+  };
+  const body = {
+    operation: "repair_retarget",
+    repairId: id,
+    leaseToken: c.leaseToken,
+    decision,
+    commit,
+  };
+  const request = (value: unknown, authorized = true) =>
+    POST(
+      new Request("http://localhost/api/ingestion/agent/", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(authorized ? { authorization: "Bearer " + process.env.IMPORT_AGENT_SECRET } : {}),
+        },
+        body: JSON.stringify(value),
+      }),
+    );
   assert.equal((await request(body, false)).status, 401);
   assert.equal((await request({ ...body, leaseToken: randomUUID() })).status, 409);
   assert.equal((await request({ ...body, commit: "d".repeat(40) })).status, 400);
-  assert.equal((await request({ ...body, decision: { ...decision, facts: { city: "Not permitted" } } })).status, 400);
-  assert.equal((await request({ ...body, decision: { ...decision, source: { ...decision.source, strategies: ["official_markup"] } } })).status, 503);
-  assert.equal((await request({ ...body, decision: { ...decision, source: { ...decision.source, url: "https://evil.example.test/" } } })).status, 400);
-  await db.festivalSource.update({ where: { id: sourceId }, data: { consecutiveFailures: 1, nextRunAt: new Date(Date.now() + 604800000) } });
+  assert.equal(
+    (await request({ ...body, decision: { ...decision, facts: { city: "Not permitted" } } }))
+      .status,
+    400,
+  );
+  assert.equal(
+    (
+      await request({
+        ...body,
+        decision: { ...decision, source: { ...decision.source, strategies: ["official_markup"] } },
+      })
+    ).status,
+    503,
+  );
+  assert.equal(
+    (
+      await request({
+        ...body,
+        decision: {
+          ...decision,
+          source: { ...decision.source, url: "https://evil.example.test/" },
+        },
+      })
+    ).status,
+    400,
+  );
+  await db.festivalSource.update({
+    where: { id: sourceId },
+    data: { consecutiveFailures: 1, nextRunAt: new Date(Date.now() + 604800000) },
+  });
   assert.equal((await request(body)).status, 409);
-  await db.festivalSource.update({ where: { id: sourceId }, data: { consecutiveFailures: 0, leaseOwner: randomUUID(), leaseExpiresAt: new Date(Date.now() + 60000) } });
+  await db.festivalSource.update({
+    where: { id: sourceId },
+    data: {
+      consecutiveFailures: 0,
+      leaseOwner: randomUUID(),
+      leaseExpiresAt: new Date(Date.now() + 60000),
+    },
+  });
   assert.equal((await request(body)).status, 409);
-  await db.festivalSource.update({ where: { id: sourceId }, data: { leaseOwner: null, leaseExpiresAt: null, parserKey: "html_fallback", strategies: ["html_fallback"] } });
+  await db.festivalSource.update({
+    where: { id: sourceId },
+    data: {
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      parserKey: "html_fallback",
+      strategies: ["html_fallback"],
+    },
+  });
   assert.equal((await request(body)).status, 409);
-  await db.festivalSource.update({ where: { id: sourceId }, data: { parserKey: s.parserKey, strategies: s.strategies } });
+  await db.festivalSource.update({
+    where: { id: sourceId },
+    data: { parserKey: s.parserKey, strategies: s.strategies },
+  });
   await db.festivalSource.update({ where: { id: sourceId }, data: { deprecatedAt: new Date() } });
   assert.equal((await request(body)).status, 409);
   await db.festivalSource.update({ where: { id: sourceId }, data: { deprecatedAt: null } });
-  await db.festivalEdition.update({ where: { id: s.editionId! }, data: { recordState: "ARCHIVED" } });
+  await db.festivalEdition.update({
+    where: { id: s.editionId! },
+    data: { recordState: "ARCHIVED" },
+  });
   assert.equal((await request(body)).status, 409);
-  await db.festivalEdition.update({ where: { id: s.editionId! }, data: { recordState: "CURRENT" } });
+  await db.festivalEdition.update({
+    where: { id: s.editionId! },
+    data: { recordState: "CURRENT" },
+  });
   const queues = await db.catalogPlaylistRefresh.count();
   const current = await db.festivalEdition.findUniqueOrThrow({ where: { id: s.editionId! } });
   assert.equal((await request(body)).status, 200);
   assert.equal((await request(body)).status, 200);
   const after = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
-  assert.equal(after.url, url); assert.equal(after.parserKey, "json_ld_event");
-  assert.equal(after.refreshPolicy, "weekly"); assert.equal(after.consecutiveFailures, 0);
+  assert.equal(after.url, url);
+  assert.equal(after.parserKey, "json_ld_event");
+  assert.equal(after.refreshPolicy, "weekly");
+  assert.equal(after.consecutiveFailures, 0);
   assert.equal(await db.catalogPlaylistRefresh.count(), queues);
-  assert.deepEqual(await db.festivalEdition.findUniqueOrThrow({ where: { id: s.editionId! } }), current);
-  assert.equal(await db.adminAuditEntry.count({ where: { action: "ingestion.parser.source_configured", metadata: { path: ["repairId"], equals: id } } }), 1);
-  await db.operationalState.update({ where: { key: "parser-repair-" + id }, data: { leaseExpiresAt: new Date(0) } });
+  assert.deepEqual(
+    await db.festivalEdition.findUniqueOrThrow({ where: { id: s.editionId! } }),
+    current,
+  );
+  assert.equal(
+    await db.adminAuditEntry.count({
+      where: {
+        action: "ingestion.parser.source_configured",
+        metadata: { path: ["repairId"], equals: id },
+      },
+    }),
+    1,
+  );
+  await db.operationalState.update({
+    where: { key: "parser-repair-" + id },
+    data: { leaseExpiresAt: new Date(0) },
+  });
   assert.equal((await request(body)).status, 409);
 });
 
-for (const repairSlug of ['firenze-rocks', 'leyendas-del-rock']) test(`${repairSlug} adapter activation preserves backoff/catalogue/provider state`, async () => {
- const {enqueueParserRepair,claimParserRepair,configureParserRepair}=await import('../lib/ingestion/parser-repairs.ts');
- const fixture={...catalogSeed,festivals:catalogSeed.festivals.map(f=>({...f,slug:repairSlug})),editions:catalogSeed.editions.map(e=>({...e,slug:repairSlug}))};
- await seedCatalog(db,fixture);
- const festival=await db.festival.findUniqueOrThrow({where:{slug:repairSlug}});
- const edition=await db.festivalEdition.findFirstOrThrow({where:{festivalId:festival.id,recordState:'CURRENT'}});
- const next=new Date(Date.now()+604800000),failed=new Date(Date.now()-86400000);
- const s=await db.festivalSource.create({data:{festivalSlug:repairSlug,festivalId:festival.id,editionId:edition.id,editionYear:2027,
-   url:'https://festival.example.test/',strategies:['manual_review'],parserKey:'manual_review',refreshPolicy:'daily',cadenceSeconds:86400,
-   nextRunAt:next,consecutiveFailures:3,failureStartedAt:failed,lastError:'Preserve original failure'}});
- try {
-   const repairId=await enqueueParserRepair(db,{sourceId:s.id,festivalSlug:repairSlug,year:2027,issueId:'test-activation',parserKey:s.parserKey,sourceUrl:s.url});
-   const claim=await claimParserRepair(db,repairId);
-   const input={repairId,leaseToken:claim.leaseToken as string,expectedParserKey:s.parserKey!,followLinkPattern:null};
-   const beforeEdition=await db.festivalEdition.findUnique({where:{id:edition.id},include:{lineup:true,playlists:true}});
-   const beforeProvider=await db.catalogPlaylistRefresh.count();
-   await assert.rejects(configureParserRepair(db,{...input,leaseToken:randomUUID()}),/busy/);
-   await assert.rejects(configureParserRepair(db,{...input,expectedParserKey:'html_fallback'}),/stale/);
-   await assert.rejects(configureParserRepair(db,{...input,followLinkPattern:'unanchored.*'}),/invalid/);
-   await db.festivalSource.update({where:{id:s.id},data:{url:'https://changed.example.test/'}});
-   await assert.rejects(configureParserRepair(db,input),/stale/);
-   await db.festivalSource.update({where:{id:s.id},data:{url:s.url}});
-   await db.festivalSource.update({where:{id:s.id},data:{leaseOwner:'importer',leaseExpiresAt:new Date(Date.now()+60000)}});
-   await assert.rejects(configureParserRepair(db,input),/busy/);
-   await db.festivalSource.update({where:{id:s.id},data:{leaseOwner:null,leaseExpiresAt:null}});
-   // The bearer-protected route exercises the same fenced transaction.
-   const request=()=>new Request('https://radar.example.test/api/ingestion/agent/',{method:'POST',headers:{authorization:'Bearer '+process.env.IMPORT_AGENT_SECRET,'content-type':'application/json'},body:JSON.stringify({operation:'repair_configure',...input})});
-   assert.equal((await POST(request())).status,200);
-   assert.equal((await POST(request())).status,200); // idempotent under the held capability
-   const after=await db.festivalSource.findUniqueOrThrow({where:{id:s.id}});
-   assert.equal(after.parserKey,'official_markup:'+repairSlug);assert.deepEqual(after.strategies,['official_markup']);
-   assert.equal(after.followLinkPattern,input.followLinkPattern);assert.equal(after.nextRunAt!.toISOString(),next.toISOString());
-   assert.equal(after.consecutiveFailures,3);assert.equal(after.failureStartedAt!.toISOString(),failed.toISOString());assert.equal(after.lastError,s.lastError);
-   assert.deepEqual(await db.festivalEdition.findUnique({where:{id:edition.id},include:{lineup:true,playlists:true}}),beforeEdition);
-   assert.equal(await db.catalogPlaylistRefresh.count(),beforeProvider);
-   assert.equal(await db.adminAuditEntry.count({where:{action:'ingestion.parser.configured',resourceKey:repairSlug,metadata:{path:['repairId'],equals:repairId}}}),1);
-   await db.operationalState.update({where:{key:'parser-repair-'+repairId},data:{leaseExpiresAt:new Date(0)}});
-   await assert.rejects(configureParserRepair(db,input),/busy/);
-   const unknown=await enqueueParserRepair(db,{sourceId,festivalSlug:'synthetic-fest',year:2027,issueId:'test-unregistered',parserKey:'manual_review',sourceUrl:(await db.festivalSource.findUniqueOrThrow({where:{id:sourceId}})).url});
-   const unregistered=await claimParserRepair(db,unknown);
-   await assert.rejects(configureParserRepair(db,{repairId:unknown,leaseToken:unregistered.leaseToken as string,expectedParserKey:'manual_review',followLinkPattern:null}),/invalid/);
- } finally {await db.festivalSource.delete({where:{id:s.id}});await db.festival.delete({where:{id:festival.id}});}
-});
+for (const repairSlug of ["firenze-rocks", "leyendas-del-rock"])
+  test(`${repairSlug} adapter activation preserves backoff/catalogue/provider state`, async () => {
+    const { enqueueParserRepair, claimParserRepair, configureParserRepair } =
+      await import("../lib/ingestion/parser-repairs.ts");
+    const fixture = {
+      ...catalogSeed,
+      festivals: catalogSeed.festivals.map((f) => ({ ...f, slug: repairSlug })),
+      editions: catalogSeed.editions.map((e) => ({ ...e, slug: repairSlug })),
+    };
+    await seedCatalog(db, fixture);
+    const festival = await db.festival.findUniqueOrThrow({ where: { slug: repairSlug } });
+    const edition = await db.festivalEdition.findFirstOrThrow({
+      where: { festivalId: festival.id, recordState: "CURRENT" },
+    });
+    const next = new Date(Date.now() + 604800000),
+      failed = new Date(Date.now() - 86400000);
+    const s = await db.festivalSource.create({
+      data: {
+        festivalSlug: repairSlug,
+        festivalId: festival.id,
+        editionId: edition.id,
+        editionYear: 2027,
+        url: "https://festival.example.test/",
+        strategies: ["manual_review"],
+        parserKey: "manual_review",
+        refreshPolicy: "daily",
+        cadenceSeconds: 86400,
+        nextRunAt: next,
+        consecutiveFailures: 3,
+        failureStartedAt: failed,
+        lastError: "Preserve original failure",
+      },
+    });
+    try {
+      const repairId = await enqueueParserRepair(db, {
+        sourceId: s.id,
+        festivalSlug: repairSlug,
+        year: 2027,
+        issueId: "test-activation",
+        parserKey: s.parserKey,
+        sourceUrl: s.url,
+      });
+      const claim = await claimParserRepair(db, repairId);
+      const input = {
+        repairId,
+        leaseToken: claim.leaseToken as string,
+        expectedParserKey: s.parserKey!,
+        followLinkPattern: null,
+      };
+      const beforeEdition = await db.festivalEdition.findUnique({
+        where: { id: edition.id },
+        include: { lineup: true, playlists: true },
+      });
+      const beforeProvider = await db.catalogPlaylistRefresh.count();
+      await assert.rejects(
+        configureParserRepair(db, { ...input, leaseToken: randomUUID() }),
+        /busy/,
+      );
+      await assert.rejects(
+        configureParserRepair(db, { ...input, expectedParserKey: "html_fallback" }),
+        /stale/,
+      );
+      await assert.rejects(
+        configureParserRepair(db, { ...input, followLinkPattern: "unanchored.*" }),
+        /invalid/,
+      );
+      await db.festivalSource.update({
+        where: { id: s.id },
+        data: { url: "https://changed.example.test/" },
+      });
+      await assert.rejects(configureParserRepair(db, input), /stale/);
+      await db.festivalSource.update({ where: { id: s.id }, data: { url: s.url } });
+      await db.festivalSource.update({
+        where: { id: s.id },
+        data: { leaseOwner: "importer", leaseExpiresAt: new Date(Date.now() + 60000) },
+      });
+      await assert.rejects(configureParserRepair(db, input), /busy/);
+      await db.festivalSource.update({
+        where: { id: s.id },
+        data: { leaseOwner: null, leaseExpiresAt: null },
+      });
+      // The bearer-protected route exercises the same fenced transaction.
+      const request = () =>
+        new Request("https://radar.example.test/api/ingestion/agent/", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer " + process.env.IMPORT_AGENT_SECRET,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ operation: "repair_configure", ...input }),
+        });
+      assert.equal((await POST(request())).status, 200);
+      assert.equal((await POST(request())).status, 200); // idempotent under the held capability
+      const after = await db.festivalSource.findUniqueOrThrow({ where: { id: s.id } });
+      assert.equal(after.parserKey, "official_markup:" + repairSlug);
+      assert.deepEqual(after.strategies, ["official_markup"]);
+      assert.equal(after.followLinkPattern, input.followLinkPattern);
+      assert.equal(after.nextRunAt!.toISOString(), next.toISOString());
+      assert.equal(after.consecutiveFailures, 3);
+      assert.equal(after.failureStartedAt!.toISOString(), failed.toISOString());
+      assert.equal(after.lastError, s.lastError);
+      assert.deepEqual(
+        await db.festivalEdition.findUnique({
+          where: { id: edition.id },
+          include: { lineup: true, playlists: true },
+        }),
+        beforeEdition,
+      );
+      assert.equal(await db.catalogPlaylistRefresh.count(), beforeProvider);
+      assert.equal(
+        await db.adminAuditEntry.count({
+          where: {
+            action: "ingestion.parser.configured",
+            resourceKey: repairSlug,
+            metadata: { path: ["repairId"], equals: repairId },
+          },
+        }),
+        1,
+      );
+      await db.operationalState.update({
+        where: { key: "parser-repair-" + repairId },
+        data: { leaseExpiresAt: new Date(0) },
+      });
+      await assert.rejects(configureParserRepair(db, input), /busy/);
+      const unknown = await enqueueParserRepair(db, {
+        sourceId,
+        festivalSlug: "synthetic-fest",
+        year: 2027,
+        issueId: "test-unregistered",
+        parserKey: "manual_review",
+        sourceUrl: (await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } })).url,
+      });
+      const unregistered = await claimParserRepair(db, unknown);
+      await assert.rejects(
+        configureParserRepair(db, {
+          repairId: unknown,
+          leaseToken: unregistered.leaseToken as string,
+          expectedParserKey: "manual_review",
+          followLinkPattern: null,
+        }),
+        /invalid/,
+      );
+    } finally {
+      await db.festivalSource.delete({ where: { id: s.id } });
+      await db.festival.delete({ where: { id: festival.id } });
+    }
+  });
 
 // Exercise the complete extractor -> persisted attempt -> protected inbox chain,
 // not just the archive recognizer that was already covered by PR301/PR319.
 for (const [slug, url, fixture] of [
   ["full-force", "https://full-force.de/", "full-force-archive-home.html"],
   ["mad-cool", "https://madcoolfestival.es/", "mad-cool-archive-home.html"],
-]) test(`${slug} reviewed archive stays quiet; changed announcements and failures still wake agents`, async () => {
-  await db.festivalSource.update({ where: { id: sourceId }, data: { enabled: false } });
-  await seedCatalog(db, { ...catalogSeed,
-    festivals: catalogSeed.festivals.map(f => ({ ...f, slug, officialUrl: url })),
-    editions: catalogSeed.editions.map(e => ({ ...e, slug })),
-  });
-  const festival = await db.festival.findUniqueOrThrow({ where: { slug } });
-  const edition = await db.festivalEdition.findFirstOrThrow({ where: { festivalId: festival.id, recordState: "CURRENT" } });
-  const source = await db.festivalSource.create({ data: {
-    festivalSlug: slug, festivalId: festival.id, editionId: edition.id, editionYear: 2027,
-    url, strategies: ["manual_review"], parserKey: "manual_review", enabled: true,
-    refreshPolicy: "weekly", cadenceSeconds: 604800, nextRunAt: new Date(Date.now() + 604800000),
-  } });
-  try {
-    const original = await inspectSource(db, source.id); assert.ok(original);
-    const html = await readFile(new URL(`./fixtures/official-markup/${fixture}`, import.meta.url), "utf8");
-    const catalog = { ...catalogSeed.festivals[0], slug, editionYear: 2027, city: festival.city ?? undefined,
-      status: "partial" as const, ticketStatus: "unknown" as const,
-      lineup: ["Verified Support"], headliners: ["Verified Headline"] };
-    const configuration = { festivalSlug: slug, url, editionYear: 2027,
-      strategies: ["manual_review" as const], enabled: true, refreshPolicy: "weekly" as const };
-    const baseline = fingerprint({ source, edition,
-      provider: await db.catalogPlaylistRefresh.findMany({ where: { festivalSlug: slug } }) });
-    const persist = async (document: string) => {
-      const now = new Date();
-      const candidate = extractFestivalCandidate(document, configuration, now.toISOString());
-      const run = await createIngestionRun(db, { trigger: "TEST", sourceCommit: "noop-gates-test", totalSources: 1 });
-      return persistAttempt(db, { runId: run.id, festivalSlug: slug, requestedUrl: url,
-        finalUrl: url, httpStatus: 200, durationMs: 1, startedAt: now, endedAt: now,
-        result: evaluateCandidate(catalog, candidate) });
-    };
-    for (let probe = 0; probe < 2; probe++) {
-      assert.equal((await persist(html)).status, "UNCHANGED");
+])
+  test(`${slug} reviewed archive stays quiet; changed announcements and failures still wake agents`, async () => {
+    await db.festivalSource.update({ where: { id: sourceId }, data: { enabled: false } });
+    await seedCatalog(db, {
+      ...catalogSeed,
+      festivals: catalogSeed.festivals.map((f) => ({ ...f, slug, officialUrl: url })),
+      editions: catalogSeed.editions.map((e) => ({ ...e, slug })),
+    });
+    const festival = await db.festival.findUniqueOrThrow({ where: { slug } });
+    const edition = await db.festivalEdition.findFirstOrThrow({
+      where: { festivalId: festival.id, recordState: "CURRENT" },
+    });
+    const source = await db.festivalSource.create({
+      data: {
+        festivalSlug: slug,
+        festivalId: festival.id,
+        editionId: edition.id,
+        editionYear: 2027,
+        url,
+        strategies: ["manual_review"],
+        parserKey: "manual_review",
+        enabled: true,
+        refreshPolicy: "weekly",
+        cadenceSeconds: 604800,
+        nextRunAt: new Date(Date.now() + 604800000),
+      },
+    });
+    try {
+      const original = await inspectSource(db, source.id);
+      assert.ok(original);
+      const html = await readFile(
+        new URL(`./fixtures/official-markup/${fixture}`, import.meta.url),
+        "utf8",
+      );
+      const catalog = {
+        ...catalogSeed.festivals[0],
+        slug,
+        editionYear: 2027,
+        city: festival.city ?? undefined,
+        status: "partial" as const,
+        ticketStatus: "unknown" as const,
+        lineup: ["Verified Support"],
+        headliners: ["Verified Headline"],
+      };
+      const configuration = {
+        festivalSlug: slug,
+        url,
+        editionYear: 2027,
+        strategies: ["manual_review" as const],
+        enabled: true,
+        refreshPolicy: "weekly" as const,
+      };
+      const baseline = fingerprint({
+        source,
+        edition,
+        provider: await db.catalogPlaylistRefresh.findMany({ where: { festivalSlug: slug } }),
+      });
+      const persist = async (document: string) => {
+        const now = new Date();
+        const candidate = extractFestivalCandidate(document, configuration, now.toISOString());
+        const run = await createIngestionRun(db, {
+          trigger: "TEST",
+          sourceCommit: "noop-gates-test",
+          totalSources: 1,
+        });
+        return persistAttempt(db, {
+          runId: run.id,
+          festivalSlug: slug,
+          requestedUrl: url,
+          finalUrl: url,
+          httpStatus: 200,
+          durationMs: 1,
+          startedAt: now,
+          endedAt: now,
+          result: evaluateCandidate(catalog, candidate),
+        });
+      };
+      for (let probe = 0; probe < 2; probe++) {
+        assert.equal((await persist(html)).status, "UNCHANGED");
+        assert.equal(await inspectSource(db, source.id), null);
+        assert.equal((await listAgentIssues(db, new Date(Date.now() + 14 * 86400000))).ready, 0);
+      }
+      await assert.rejects(claimAgentIssue(db, source.id, original.issueId), /stale/);
+      const signal = await GET(
+        new Request("https://radar.example.test/api/ingestion/agent/?mode=signal", {
+          headers: { authorization: "Bearer " + process.env.IMPORT_AGENT_SECRET },
+        }),
+      );
+      assert.equal(signal.status, 200);
+      assert.equal((await signal.json()).ready, 0);
+      assert.equal(
+        await db.operationalState.count({ where: { key: { startsWith: "parser-repair-" } } }),
+        0,
+      );
+      assert.equal(
+        fingerprint({
+          source: await db.festivalSource.findUniqueOrThrow({ where: { id: source.id } }),
+          edition: await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } }),
+          provider: await db.catalogPlaylistRefresh.findMany({ where: { festivalSlug: slug } }),
+        }),
+        baseline,
+      );
+      assert.equal(
+        (await persist(html + `<h2>${slug} 2027 new artists announced</h2>`)).status,
+        "REVIEW",
+      );
+      const changed = await inspectSource(db, source.id);
+      assert.ok(changed);
+      assert.equal((await listAgentIssues(db)).ready, 1);
+      const held = await claimAgentIssue(db, source.id, changed.issueId);
+      const receipt = await resolveCase(held, {
+        action: "dismiss",
+        reason: "Reviewed genuinely changed announcement requires parser support",
+      });
+      assert.ok(receipt.parserRepairId);
+      // Recovery to the recognized archive is quiet even with older review receipts.
+      await persist(html);
       assert.equal(await inspectSource(db, source.id), null);
-      assert.equal((await listAgentIssues(db, new Date(Date.now() + 14 * 86400000))).ready, 0);
+      await db.festivalSource.update({
+        where: { id: source.id },
+        data: { consecutiveFailures: 1 },
+      });
+      assert.equal((await inspectSource(db, source.id))?.kind, "failure");
+    } finally {
+      await db.festivalSource.delete({ where: { id: source.id } });
     }
-    await assert.rejects(claimAgentIssue(db, source.id, original.issueId), /stale/);
-    const signal = await GET(new Request("https://radar.example.test/api/ingestion/agent/?mode=signal", {
-      headers: { authorization: "Bearer " + process.env.IMPORT_AGENT_SECRET },
-    }));
-    assert.equal(signal.status, 200); assert.equal((await signal.json()).ready, 0);
-    assert.equal(await db.operationalState.count({ where: { key: { startsWith: "parser-repair-" } } }), 0);
-    assert.equal(fingerprint({ source: await db.festivalSource.findUniqueOrThrow({ where: { id: source.id } }),
-      edition: await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } }),
-      provider: await db.catalogPlaylistRefresh.findMany({ where: { festivalSlug: slug } }) }), baseline);
-    assert.equal((await persist(html + `<h2>${slug} 2027 new artists announced</h2>`)).status, "REVIEW");
-    const changed = await inspectSource(db, source.id); assert.ok(changed);
-    assert.equal((await listAgentIssues(db)).ready, 1);
-    const held = await claimAgentIssue(db, source.id, changed.issueId);
-    const receipt = await resolveCase(held, { action: "dismiss", reason: "Reviewed genuinely changed announcement requires parser support" });
-    assert.ok(receipt.parserRepairId);
-    // Recovery to the recognized archive is quiet even with older review receipts.
-    await persist(html); assert.equal(await inspectSource(db, source.id), null);
-    await db.festivalSource.update({ where: { id: source.id }, data: { consecutiveFailures: 1 } });
-    assert.equal((await inspectSource(db, source.id))?.kind, "failure");
-  } finally { await db.festivalSource.delete({ where: { id: source.id } }); }
-});
+  });
 
-async function persistManualCandidate(candidate: Partial<FestivalCandidate>, httpStatus = 200, reviewReasons: string[] = []) {
+async function persistManualCandidate(
+  candidate: Partial<FestivalCandidate>,
+  httpStatus = 200,
+  reviewReasons: string[] = [],
+) {
   const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
   const now = new Date();
-  const run = await createIngestionRun(db, { trigger: "TEST", sourceCommit: "noop-gates-test", totalSources: 1 });
-  return persistAttempt(db, { runId: run.id, festivalSlug: source.festivalSlug, requestedUrl: source.url,
-    httpStatus, durationMs: 1, startedAt: now, endedAt: now,
-    result: { schemaVersion: 1, festivalSlug: source.festivalSlug, sourceUrl: source.url, fetchedAt: now.toISOString(),
-      publishable: false, changes: [], reviewReasons,
-      candidate: { schemaVersion: 1, festivalSlug: source.festivalSlug, sourceUrl: source.url,
-        fetchedAt: now.toISOString(), evidence: [], warnings: [], observedEditionYears: [], ...candidate } } });
+  const run = await createIngestionRun(db, {
+    trigger: "TEST",
+    sourceCommit: "noop-gates-test",
+    totalSources: 1,
+  });
+  return persistAttempt(db, {
+    runId: run.id,
+    festivalSlug: source.festivalSlug,
+    requestedUrl: source.url,
+    httpStatus,
+    durationMs: 1,
+    startedAt: now,
+    endedAt: now,
+    result: {
+      schemaVersion: 1,
+      festivalSlug: source.festivalSlug,
+      sourceUrl: source.url,
+      fetchedAt: now.toISOString(),
+      publishable: false,
+      changes: [],
+      reviewReasons,
+      candidate: {
+        schemaVersion: 1,
+        festivalSlug: source.festivalSlug,
+        sourceUrl: source.url,
+        fetchedAt: now.toISOString(),
+        evidence: [],
+        warnings: [],
+        observedEditionYears: [],
+        ...candidate,
+      },
+    },
+  });
 }
 
-test("empty candidate without a successful HTTP probe is reviewable but no-op apply/dismiss creates no repair", async () => {
-  for (const action of ["apply", "dismiss"] as const) {
-    await persistManualCandidate({}, 503);
-    const c = await claim();
-    const receipt = await resolveCase(c, { action, reason: "Independently checked no changes and no extraction error", ...(action === "apply" ? { evidence: [evidence("source")] } : {}) });
-    assert.equal(receipt.parserRepairId, null); assert.equal(receipt.publicationId, null);
-    const audit = await db.adminAuditEntry.findFirstOrThrow({ where: { action: "ingestion.agent." + action, metadata: { path: ["issueId"], equals: c.issueId } }, orderBy: { createdAt: "desc" } });
-    assert.equal((audit.afterValue as any).parserRepairId, null);
-    await db.operationalState.update({ where: { key: c.key }, data: { payload: {} } });
-  }
-  assert.equal(await db.operationalState.count({ where: { key: { startsWith: "parser-repair-" } } }), 0);
-});
+test(
+  "empty candidate without a successful HTTP probe is reviewabl" +
+    "e but no-op apply/dismiss creates no repair",
+  async () => {
+    for (const action of ["apply", "dismiss"] as const) {
+      await persistManualCandidate({}, 503);
+      const c = await claim();
+      const receipt = await resolveCase(c, {
+        action,
+        reason: "Independently checked no changes and no extraction error",
+        ...(action === "apply" ? { evidence: [evidence("source")] } : {}),
+      });
+      assert.equal(receipt.parserRepairId, null);
+      assert.equal(receipt.publicationId, null);
+      const audit = await db.adminAuditEntry.findFirstOrThrow({
+        where: {
+          action: "ingestion.agent." + action,
+          metadata: { path: ["issueId"], equals: c.issueId },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.equal((audit.afterValue as any).parserRepairId, null);
+      await db.operationalState.update({ where: { key: c.key }, data: { payload: {} } });
+    }
+    assert.equal(
+      await db.operationalState.count({ where: { key: { startsWith: "parser-repair-" } } }),
+      0,
+    );
+  },
+);
 
 test("identical supplied facts/source are audited without publication, reconfiguration or repair", async () => {
   const c = await claim();
   const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
-  const edition = await db.festivalEdition.findUniqueOrThrow({ where: { id: c.current.editionId! } });
+  const edition = await db.festivalEdition.findUniqueOrThrow({
+    where: { id: c.current.editionId! },
+  });
   const receipt = await resolveCase(c, {
-    action: "apply", reason: "Verified already-identical catalog and source configuration",
+    action: "apply",
+    reason: "Verified already-identical catalog and source configuration",
     facts: { city: c.current.city! },
-    source: { url: source.url, strategies: ["manual_review"], refreshPolicy: "weekly", manualReviewReason: source.manualReviewReason! },
+    source: {
+      url: source.url,
+      strategies: ["manual_review"],
+      refreshPolicy: "weekly",
+      manualReviewReason: source.manualReviewReason!,
+    },
     evidence: [evidence("city"), evidence("source", source.url)],
   });
-  assert.equal(receipt.parserRepairId, null); assert.equal(receipt.publicationId, null);
+  assert.equal(receipt.parserRepairId, null);
+  assert.equal(receipt.publicationId, null);
   assert.ok(receipt.retryAt); // uncertain manual sources retain their weekly review
   assert.deepEqual(await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } }), source);
-  assert.deepEqual(await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } }), edition);
+  assert.deepEqual(
+    await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } }),
+    edition,
+  );
 });
 
 test("unchanged supplied facts do not suppress actual correction feedback", async () => {
-  await persistManualCandidate({ observedEditionYears: [2026] }, 200, ["Wrong edition requires review"]);
+  await persistManualCandidate({ observedEditionYears: [2026] }, 200, [
+    "Wrong edition requires review",
+  ]);
   const c = await claim();
-  const receipt = await resolveCase(c, { action: "apply", reason: "Reviewed wrong-edition candidate, retaining verified city",
-    facts: { city: c.current.city! }, evidence: [evidence("city")] });
-  assert.ok(receipt.parserRepairId); assert.equal(receipt.publicationId, null);
+  const receipt = await resolveCase(c, {
+    action: "apply",
+    reason: "Reviewed wrong-edition candidate, retaining verified city",
+    facts: { city: c.current.city! },
+    evidence: [evidence("city")],
+  });
+  assert.ok(receipt.parserRepairId);
+  assert.equal(receipt.publicationId, null);
 });
 
 for (const [name, candidate] of [
   ["unknown/manual markup", { warnings: ["Manual review only: new image-only announcement"] }],
   ["current facts", { city: "New City" }],
   ["edition markers", { observedEditionYears: [2027] }],
-  ["new evidence", { evidence: [{ field: "city", sourceUrl: "https://festival.example.test/", observedAt: new Date().toISOString(), excerpt: "New official venue" }] }],
-] as const) test(`${name} is not mistaken for the recognized empty archive`, async () => {
-  await persistManualCandidate(candidate as Partial<FestivalCandidate>);
-  assert.ok(await inspectSource(db, sourceId));
-  assert.equal((await listAgentIssues(db)).ready, 1);
-});
+  [
+    "new evidence",
+    {
+      evidence: [
+        {
+          field: "city",
+          sourceUrl: "https://festival.example.test/",
+          observedAt: new Date().toISOString(),
+          excerpt: "New official venue",
+        },
+      ],
+    },
+  ],
+] as const)
+  test(`${name} is not mistaken for the recognized empty archive`, async () => {
+    await persistManualCandidate(candidate as Partial<FestivalCandidate>);
+    assert.ok(await inspectSource(db, sourceId));
+    assert.equal((await listAgentIssues(db)).ready, 1);
+  });
 
 test("missing attempts and stale successful archives under a new configuration still require review", async () => {
   assert.ok(await inspectSource(db, sourceId));
   await persistManualCandidate({});
   assert.equal(await inspectSource(db, sourceId), null);
-  await db.festivalSource.update({ where: { id: sourceId }, data: { configurationBackfilledAt: new Date(Date.now() + 1000) } });
-  const changed = await inspectSource(db, sourceId); assert.ok(changed);
-  assert.equal(changed.candidate, null); assert.equal(changed.attempt, null);
+  await db.festivalSource.update({
+    where: { id: sourceId },
+    data: { configurationBackfilledAt: new Date(Date.now() + 1000) },
+  });
+  const changed = await inspectSource(db, sourceId);
+  assert.ok(changed);
+  assert.equal(changed.candidate, null);
+  assert.equal(changed.attempt, null);
   assert.equal((await listAgentIssues(db)).ready, 1);
 });
 
@@ -833,10 +1285,19 @@ test("identical supplied source cannot pretend to repair a failed probe or bypas
   await db.festivalSource.update({ where: { id: sourceId }, data: { consecutiveFailures: 1 } });
   const c = await claim();
   const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
-  const receipt = await resolveCase(c, { action: "apply", reason: "Retain identical source after transient network failure",
-    source: { url: source.url, strategies: ["manual_review"], refreshPolicy: "weekly", manualReviewReason: source.manualReviewReason! },
-    evidence: [evidence("source", source.url)] });
-  assert.equal(receipt.status, "retry"); assert.ok(receipt.retryAt);
+  const receipt = await resolveCase(c, {
+    action: "apply",
+    reason: "Retain identical source after transient network failure",
+    source: {
+      url: source.url,
+      strategies: ["manual_review"],
+      refreshPolicy: "weekly",
+      manualReviewReason: source.manualReviewReason!,
+    },
+    evidence: [evidence("source", source.url)],
+  });
+  assert.equal(receipt.status, "retry");
+  assert.ok(receipt.retryAt);
   assert.equal(receipt.parserRepairId, null);
   assert.deepEqual(await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } }), source);
 });

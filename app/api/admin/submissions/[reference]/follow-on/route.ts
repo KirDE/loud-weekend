@@ -4,7 +4,10 @@ import { db } from "@/lib/db";
 import { rejectUntrustedOrigin } from "@/lib/request-origin";
 import { followOnAction, reviewFollowOnEdition } from "@/lib/submission-follow-on-edition";
 
-export async function POST(request: Request, { params }: { params: Promise<{ reference: string }> }) {
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ reference: string }> },
+) {
   const originError = rejectUntrustedOrigin(request);
   if (originError) return originError;
   const editor = await currentAdmin();
