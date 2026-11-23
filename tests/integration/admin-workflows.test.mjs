@@ -17,6 +17,7 @@ const requests = [];
 const ticketsUrl = "https://tickets.example.test/integration";
 let primaryFails = false;
 let primaryOffersWithoutEdition = false;
+let primaryHasDatedFallback = false;
 let observedTicketsUrl = ticketsUrl;
 const replacementTicketsUrl = "https://tickets.example.test/replacement";
 let originalStartDate = "2027-07-28";
@@ -34,7 +35,8 @@ const sourceServer = createServer((request, response) => {
   const availability = request.url === "/primary" ? ' ,"availability":"https://schema.org/SoldOut"' : "";
   response.setHeader("content-type", "text/html");
   if (request.url === "/primary" && primaryOffersWithoutEdition) {
-    response.end(`<script type="application/ld+json">{"@type":"MusicEvent","name":"Wacken Open Air","location":{"address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${observedTicketsUrl}","availability":"https://schema.org/InStock"}}</script>`);
+    const fallback = primaryHasDatedFallback ? `<meta property="event:start_time" content="${startDate}">` : "";
+    response.end(`${fallback}<script type="application/ld+json">{"@type":"MusicEvent","name":"Wacken Open Air","location":{"address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${observedTicketsUrl}","availability":"https://schema.org/InStock"}}</script>`);
     return;
   }
   response.end(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicEvent","name":"Wacken Open Air","startDate":"${startDate}","endDate":"2027-07-31","location":{"@type":"Place","address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${observedTicketsUrl}"${availability}}}</script>`);
@@ -300,6 +302,14 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal(await db.adminChange.count({ where: { parserRunId: stockRun.id, field: "ticketsUrl" } }), 0);
   assert.ok(stockLog.log.some(({ reviewReasons }) => reviewReasons?.includes("Ticket URL could not be verified for the selected edition.")));
   assert.equal((await db.festivalEdition.findUniqueOrThrow({ where: { id: configuredSource.editionId } })).ticketsUrl, ticketsUrl);
+
+  // A separate parser can date the page without dating the offer it did not extract.
+  primaryHasDatedFallback = true;
+  const mixedOffer = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(mixedOffer.status, 201);
+  const mixedRun = await mixedOffer.json();
+  assert.equal(mixedRun.queued, 0);
+  assert.equal(mixedRun.status, "PARTIAL");
 
   // The same link is eligible once the official event establishes the selected year.
   primaryOffersWithoutEdition = false;
