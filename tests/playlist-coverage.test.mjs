@@ -58,7 +58,10 @@ test("published unmatched reasons are aggregate, generation-bound and account fo
       artist: "Duplicate",
       count: 0,
       tracks: [],
-      choice_log: [{ skip: "duplicate_uri", matched: "Do not publish" }],
+      choice_log: [
+        { skip: "no_spotify_match" },
+        { skip: "duplicate_uri", matched: "Do not publish" },
+      ],
       errors: [],
     },
     {

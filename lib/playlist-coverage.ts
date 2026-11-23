@@ -63,7 +63,7 @@ function spotifyUnmatchedReason(
     skips.some((skip) => !spotifyDuplicateReasons.has(skip) && !spotifyRejectionReasons.has(skip))
   )
     return undefined;
-  return skips.length && skips.every((skip) => spotifyDuplicateReasons.has(skip))
+  return skips.some((skip) => spotifyDuplicateReasons.has(skip))
     ? "duplicateTrack"
     : "noEligibleTrack";
 }
