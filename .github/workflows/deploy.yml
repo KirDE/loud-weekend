@@ -86,7 +86,9 @@ jobs:
           SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
           SETLIST_API_KEY: ${{ secrets.SETLIST_API_KEY }}
         run: |
-          for name in DATABASE_URL AUTH_SECRET APP_URL ADMIN_EMAILS INTERNAL_API_SECRET ANALYTICS_OPERATOR_TOKEN ANALYTICS_RETENTION_TOKEN SPOTIFY_CLIENT_ID SPOTIFY_CLIENT_SECRET SPOTIFY_REFRESH_TOKEN SETLIST_API_KEY; do
+          for name in DATABASE_URL AUTH_SECRET APP_URL ADMIN_EMAILS INTERNAL_API_SECRET \
+          ANALYTICS_OPERATOR_TOKEN ANALYTICS_RETENTION_TOKEN SPOTIFY_CLIENT_ID \
+          SPOTIFY_CLIENT_SECRET SPOTIFY_REFRESH_TOKEN SETLIST_API_KEY; do
             test -n "${!name}" || { echo "Missing required production secret: $name" >&2; exit 1; }
           done
           umask 077
@@ -109,16 +111,20 @@ jobs:
             test -z "$EMAIL_WEBHOOK_URL" || printf 'EMAIL_WEBHOOK_URL=%q\n' "$EMAIL_WEBHOOK_URL"
             test -z "$TELEGRAM_BOT_TOKEN" || printf 'TELEGRAM_BOT_TOKEN=%q\n' "$TELEGRAM_BOT_TOKEN"
             test -z "$WEB_PUSH_WEBHOOK_URL" || printf 'WEB_PUSH_WEBHOOK_URL=%q\n' "$WEB_PUSH_WEBHOOK_URL"
-            test -z "$NEXT_PUBLIC_WEB_PUSH_VAPID_KEY" || printf 'NEXT_PUBLIC_WEB_PUSH_VAPID_KEY=%q\n' "$NEXT_PUBLIC_WEB_PUSH_VAPID_KEY"
+            test -z "$NEXT_PUBLIC_WEB_PUSH_VAPID_KEY" || printf \
+            'NEXT_PUBLIC_WEB_PUSH_VAPID_KEY=%q\n' "$NEXT_PUBLIC_WEB_PUSH_VAPID_KEY"
             printf 'SPOTIFY_REFRESH_TOKEN=%q\n' "$SPOTIFY_REFRESH_TOKEN"
             printf 'SETLIST_API_KEY=%q\n' "$SETLIST_API_KEY"
-            printf 'NOTIFICATION_SCHEDULER_STATE_FILE=%q\n' '/opt/festival-radar/shared/notification-scheduler-state.json'
+            printf 'NOTIFICATION_SCHEDULER_STATE_FILE=%q\n' \
+            '/opt/festival-radar/shared/notification-scheduler-state.json'
             printf 'DEPLOYED_COMMIT=%q\n' "$GITHUB_SHA"
           } > production.env
       - name: Upload and activate release
         run: |
           ssh production sudo -n /usr/local/libexec/festival-radar/upgrade-deployment-assets "$GITHUB_SHA"
-          ssh production 'test "$(id -un)" = festival-radar-deploy && sudo -n /usr/local/libexec/festival-radar/activate-release 0000000000000000000000000000000000000000 2>&1 | grep -Fq "missing regular deployment input"'
+          ssh production 'test "$(id -un)" = festival-radar-deploy && sudo -n \
+          /usr/local/libexec/festival-radar/activate-release \
+          0000000000000000000000000000000000000000 2>&1 | grep -Fq "missing regular deployment input"'
           scp release.tar.gz "production:/var/lib/festival-radar-deploy/incoming/$GITHUB_SHA.tar.gz"
           scp production.env "production:/var/lib/festival-radar-deploy/incoming/$GITHUB_SHA.env"
           ssh production sudo -n /usr/local/libexec/festival-radar/activate-release "$GITHUB_SHA"
@@ -136,8 +142,10 @@ jobs:
               && grep --quiet 'application/json' <(curl --silent --head https://loudweekend.eu/api/auth/me/) \
               && curl --fail --silent --show-error --max-time 20 https://loudweekend.eu/ | grep --quiet 'Loud Weekend' \
               && curl --fail --silent --show-error --max-time 20 https://loudweekend.eu/planner/ >/dev/null \
-              && curl --fail --silent --show-error --max-time 20 https://loudweekend.eu/festivals/wacken-open-air/ >/dev/null \
-              && curl --fail --silent --show-error --max-time 20 https://loudweekend.eu/artists/architects/ >/dev/null; then
+              && curl --fail --silent --show-error --max-time 20 \
+              https://loudweekend.eu/festivals/wacken-open-air/ >/dev/null \
+              && curl --fail --silent --show-error --max-time 20 \
+              https://loudweekend.eu/artists/architects/ >/dev/null; then
               exit 0
             fi
             sleep 5

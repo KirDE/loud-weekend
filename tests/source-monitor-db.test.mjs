@@ -9,7 +9,8 @@ test("source monitor has no file fallback or raw source error output", async () 
   assert.doesNotMatch(script, /data\/festivals|data\/festival-sources|officialUrl/);
   assert.doesNotMatch(script, /error\.message|source\.url\}/);
   const result = spawnSync(process.execPath, ["scripts/check-festival-sources.mjs"], {
-    env: { ...process.env, DATABASE_URL: "" }, encoding: "utf8",
+    env: { ...process.env, DATABASE_URL: "" },
+    encoding: "utf8",
   });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Database-backed source monitor unavailable/);
