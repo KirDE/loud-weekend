@@ -10,9 +10,24 @@ export function isFrequencySource(source: FestivalSource): boolean {
   try { const url = new URL(source.url); return source.festivalSlug === "frequency" && url.origin === origin && !url.username && !url.password && !url.search && !url.hash && ["/", "/tickets/", "/tickets"].includes(url.pathname); } catch { return false; }
 }
 
+function stripInertMarkup($: ReturnType<typeof load>) {
+  $("script, style, template, noscript, [hidden], [inert], [aria-hidden='true']").remove();
+  $("[style]").each((_, element) => {
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();
+  });
+}
+
 export function frequencyTicketLink(html: string): boolean {
-  return [...html.matchAll(/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>/gi)].some((match) => {
-    try { const url = new URL(match[1], origin); return url.origin === origin && /^\/tickets\/?$/.test(url.pathname) && !url.search && !url.hash; } catch { return false; }
+  const $ = load(html);
+  stripInertMarkup($);
+  return $("a[href]").toArray().some(anchor => {
+    const link = $(anchor);
+    if (link.closest("[disabled], [aria-disabled='true']").length) return false;
+    try {
+      const url = new URL(link.attr("href") ?? "", origin);
+      return url.origin === origin && !url.username && !url.password
+        && /^\/tickets\/?$/.test(url.pathname) && !url.search && !url.hash;
+    } catch { return false; }
   });
 }
 
@@ -49,10 +64,8 @@ export function extractFrequencyCandidate(input: string, source: FestivalSource,
   // Scope stock to one visible ordinary admission product, never stale
   // hydration payload, duplicate markup, VIP, parking or sold-out accessories.
   const $ = load(tickets);
-  $("script, style, template, noscript, nav, footer, [hidden], [inert], [aria-hidden='true']").remove();
-  $("[style]").each((_, element) => {
-    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();
-  });
+  stripInertMarkup($);
+  $("nav, footer").remove();
   $("br").replaceWith(" ");
   const standard = $("li.ticket__excerpt").filter((_, element) =>
     text($(element).find("h2[itemprop='name']").text()) === source.editionYear + " - Festivalpass");

@@ -108,3 +108,18 @@ test('disabled or contradictory standard purchase controls cannot be published a
   assert.equal(r.publishable,false);assert(!r.changes.some(change=>change.field==='ticketStatus'));
  }
 });
+
+test('inert and hidden homepage anchors do not authorize a ticket fetch', async () => {
+  const home = (await fixture('home')).replaceAll(root+'tickets/', 'https://untrusted.invalid/tickets/');
+  const anchor = '<a href="' + root + 'tickets/">Tickets</a>';
+  for (const markup of ['<!--' + anchor + '-->', '<template>' + anchor + '</template>',
+    '<section hidden>' + anchor + '</section>', '<section style="display:none">' + anchor + '</section>']) {
+    const calls = [];
+    const fetched = await fetchSource(source, {maxAttempts: 1, fetchImpl: async url => {
+      calls.push(url);
+      return new Response(url === root ? home + markup : await fixture('tickets'));
+    }});
+    assert.deepEqual(calls, [root]);
+    assert.equal(parse(await fetched.response.text()).ticketStatus, undefined);
+  }
+});
