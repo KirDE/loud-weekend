@@ -5,7 +5,8 @@ import { Prisma } from "@prisma/client";
 
 export async function GET(request: Request) {
   const token = new URL(request.url).searchParams.get("token");
-  if (!token || token.length < 20 || token.length > 200) return error("Invalid verification token.");
+  if (!token || token.length < 20 || token.length > 200)
+    return error("Invalid verification token.");
   const verified = await db.$transaction(async (tx) => {
     const [consumed] = await tx.$queryRaw<Array<{ userId: string }>>(Prisma.sql`
       DELETE FROM "EmailVerificationToken"
