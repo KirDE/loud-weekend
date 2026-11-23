@@ -65,6 +65,9 @@ export function FestivalExplorer({
     [queryParams, discoveryLineups],
   );
   const [draft, setDraft] = useState<{ key: string; patch: Partial<DiscoveryPreferences> }>();
+  // Leaving a shared URL discards its temporary edits. Browser history
+  // restores the URL's own snapshot, not edits that were never in that URL.
+  if (draft && draft.key !== linkKey) setDraft(undefined);
   const activeFilters = shared
     ? { ...shared.filters, ...(draft?.key === linkKey ? draft.patch : {}) }
     : planner.savedFilters;

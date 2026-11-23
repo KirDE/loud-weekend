@@ -86,6 +86,22 @@ for (const [locale, t] of Object.entries(labels)) {
           ),
         )
         .toBe("Synthetic Alpine");
+
+      // A second linked snapshot must not leave the first one's abandoned
+      // local edits waiting to reappear on Back.
+      await recipient.evaluate(() => {
+        const secondLink = new URL(location.href);
+        secondLink.searchParams.set("q", "Synthetic South");
+        history.pushState(null, "", secondLink);
+      });
+      await expect(recipientSearch).toHaveValue("Synthetic South");
+      await recipient.goBack();
+      await expect(recipientSearch).toHaveValue("Synthetic Fest");
+      await recipient.goForward();
+      await expect(recipientSearch).toHaveValue("Synthetic South");
+      await recipient.goBack();
+      await expect(recipientSearch).toHaveValue("Synthetic Fest");
+
       await recipient.locator(".clearFilters").click();
       await expect(recipient).toHaveURL(`/${locale}/`);
       await expect(recipientSearch).toHaveValue("Synthetic Alpine");
