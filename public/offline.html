@@ -19,7 +19,8 @@
 <script type="module">
   const worker = navigator.serviceWorker?.controller?.scriptURL;
   const base = worker ? new URL(".", worker).pathname : location.pathname.replace(/offline\.html$/, "");
-  const { fetchOfflineTrip, offlineTripCopy, offlineTripKey, listOfflineTrips, readOfflineTrip, saveOfflineTrip, offlinePageCopy, showOfflineCatalog } = await import(`${base}offline-trips.mjs`);
+  // A previous worker may still serve the unversioned module from its cache.
+  const { fetchOfflineTrip, offlineTripCopy, offlineTripKey, listOfflineTrips, readOfflineTrip, saveOfflineTrip, offlinePageCopy, showOfflineCatalog } = await import(`${base}offline-trips.mjs?shell=8`);
   const language = (() => {
     const routeLocale = location.pathname.slice(base.length).split("/")[0];
     if (routeLocale === "en" || routeLocale === "de" || routeLocale === "ru") return routeLocale;

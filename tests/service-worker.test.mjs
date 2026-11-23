@@ -75,7 +75,10 @@ test("asset eviction keeps the installed trip shell, module and public catalogue
   online = false;
   const navigation = await dispatch(listeners, { method: "GET", url: "https://festivals.test/festivals/a", mode: "navigate" });
   assert.equal(await navigation.text(), "/offline.html");
-  const module = await dispatch(listeners, new Request("https://festivals.test/offline-trips.mjs"));
+  const shell = await readFile(new URL("../public/offline.html", import.meta.url), "utf8");
+  const moduleUrl = shell.match(/offline-trips\.mjs\?shell=\d+/)?.[0];
+  assert.ok(moduleUrl, "New HTML must bypass the previous worker's unversioned module cache");
+  const module = await dispatch(listeners, new Request(`https://festivals.test/${moduleUrl}`));
   assert.equal(await module.text(), "/offline-trips.mjs");
   assert.deepEqual(await (await dispatch(listeners)).json(), payload());
 });

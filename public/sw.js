@@ -4,6 +4,7 @@ const CACHE_SCOPE = BASE ? `:${encodeURIComponent(BASE)}` : "";
 const CACHE_VERSION = `festival-radar-public-v8${CACHE_SCOPE}`;
 const CATALOG = `${BASE}/api/offline/catalog`;
 const TRIP_MODULE = `${BASE}/offline-trips.mjs`;
+const TRIP_SHELL_QUERY = "?shell=8";
 const MAX_ENTRIES = 80;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const OFFLINE_PAGE = `${BASE}/offline.html`;
@@ -164,7 +165,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (!sameOrigin(url) || (BASE && !url.pathname.startsWith(BASE + "/"))) return;
   const localPath = url.pathname.slice(BASE.length);
-  if (url.pathname === TRIP_MODULE && !url.search) {
+  if (url.pathname === TRIP_MODULE && (!url.search || url.search === TRIP_SHELL_QUERY)) {
     event.respondWith(caches.open(CACHE_VERSION).then((cache) => cache.match(TRIP_MODULE))
       .catch(() => undefined).then((cached) => cached ?? fetch(request)));
     return;
