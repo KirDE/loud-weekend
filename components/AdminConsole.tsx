@@ -1,5 +1,5 @@
 "use client";
-
+import { AdminBiographyReview } from "./AdminBiographyReview";
 import { AdminSocialLinkReview } from "./AdminSocialLinkReview";
 import { useEffect, useMemo, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
@@ -21,6 +21,8 @@ type EditableArtist = {
   slug: string;
   name: string;
   officialUrl?: string;
+  biography?: string;
+  verifiedOfficialSite: boolean;
   socialCandidates: string[];
 };
 type Operator = { email: string; role: "USER" | "EDITOR" | "ADMIN" };
@@ -477,6 +479,14 @@ export function AdminConsole({
                     >
                       Save artist draft
                     </button>
+                    {selectedArtist.verifiedOfficialSite && (
+                      <AdminBiographyReview
+                        biography={selectedArtist.biography}
+                        onSave={(proof) =>
+                          save("artist", selectedArtist.slug, { biography: proof })
+                        }
+                      />
+                    )}
                     {selectedArtist.socialCandidates.length > 0 && (
                       <AdminSocialLinkReview
                         key={selectedArtist.slug}

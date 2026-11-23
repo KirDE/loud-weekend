@@ -117,7 +117,35 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   await page.getByRole("button", { name: "Save artist draft" }).click();
   await expect(page.getByRole("status")).toContainText("persisted and queued");
 
-  await page.getByLabel("Official evidence URL").fill(site + "social/");
+  const biography = page.getByRole("form", { name: "Review an artist biography" });
+  for (const [language, heading] of [
+    ["de", "Künstlerbiografie prüfen"],
+    ["ru", "Проверка биографии артиста"],
+    ["en", "Review an artist biography"],
+  ]) {
+    await page.locator(".adminLanguage select").selectOption(language);
+    await expect(page.getByRole("form", { name: heading })).toBeVisible();
+  }
+  await biography.getByLabel("Biography summary").fill("Sample Artist blends two guitar styles.");
+  await biography.getByLabel("Official evidence URL").fill(site + "biography/");
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.status() === 201 &&
+        response.request().method() === "POST" &&
+        response.request().postData()?.includes('"biography"'),
+    ),
+    biography.getByRole("button", { name: "Queue biography for review" }).click(),
+  ]);
+  expect((await db.artist.findUniqueOrThrow({ where: { id: sampledArtist.id } })).biography).toBe(
+    sampledArtist.biography,
+  );
+
+  await page
+    .locator("form")
+    .filter({ has: page.getByRole("button", { name: "Queue social profile for review" }) })
+    .getByLabel("Official evidence URL")
+    .fill(site + "social/");
   const queuedSocial = page.waitForResponse(
     (response) =>
       response.status() === 201 &&
@@ -184,10 +212,18 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   await expect(cityChange).toBeVisible();
   await cityChange.getByRole("button", { name: "Approve change" }).click();
   await expect(cityChange).toContainText("approved");
+  const biographyChange = page
+    .locator("article.reviewCard")
+    .filter({ hasText: "Sample Artist blends two guitar styles." });
+  await biographyChange.getByRole("button", { name: "Approve change" }).click();
+  await expect(biographyChange).toContainText("approved");
+  const publicArtist = await page.request.get("/artists/sample-artist/");
+  expect(publicArtist.ok()).toBe(true);
+  expect(await publicArtist.text()).toContain("Sample Artist blends two guitar styles.");
 
   await page.reload();
   await page.getByRole("button", { name: "Audit history" }).click();
-  await expect(page.getByText("CHANGE_APPROVED")).toBeVisible();
+  await expect(page.getByText("CHANGE_APPROVED").first()).toBeVisible();
   await expect(page.getByText("DRAFT_SAVED").first()).toBeVisible();
 
   await db.adminParserRun.create({
@@ -209,7 +245,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   await expect(page.getByLabel("synthetic-fest parser log")).toContainText("fixture");
 
   const snapshot = await (await page.request.get("/api/admin")).json();
-  expect(snapshot.drafts).toHaveLength(6);
+  expect(snapshot.drafts).toHaveLength(7);
   expect(snapshot.resources.find((item) => item.resourceKind === "FESTIVAL")?.values.city).toBe(
     "Sample E2E City",
   );
