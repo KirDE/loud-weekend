@@ -6,6 +6,7 @@ import { stageArrivalFixture } from "../support/arrival-fixture.mjs";
 import { arrivalSourceUrls } from "../../lib/ingestion/adapters/arrival-guidance.ts";
 import {
   claimAgentIssue,
+  inspectSource,
   releaseAgentIssue,
   resolveAgentIssue,
 } from "../../lib/ingestion/agent-issues.ts";
@@ -261,6 +262,49 @@ test("Graspop arrival comes from the reviewed organizer observation", async ({ p
     expect(
       await db.ingestionCandidate.findUnique({ where: { id: fresh.candidate.id } }),
     ).toMatchObject({ reviewState: "PUBLISHED", catalogueVersion: result.publicationId });
+    await db.festivalSource.update({
+      where: { id: revised.sourceId },
+      data: { consecutiveFailures: 1 },
+    });
+    const failed = await inspectSource(db, revised.sourceId);
+    expect(failed?.kind).toBe("failure");
+    const repair = {
+      ...(await claimAgentIssue(db, revised.sourceId, failed.issueId)),
+      decision: {
+        action: "apply",
+        reason: "Repair refresh policy for the registered organizer source",
+        source: { url: essentials, strategies: ["manual_review"], refreshPolicy: "daily" },
+        evidence: [
+          {
+            field: "source",
+            url: essentials,
+            checkedAt: new Date().toISOString(),
+            contentHash: "a".repeat(64),
+            excerpt: "Reviewed organizer guidance changes between weekly polls",
+          },
+        ],
+      },
+    };
+    await expect(
+      resolveAgentIssue(db, {
+        ...repair,
+        decision: {
+          ...repair.decision,
+          facts: { city: "Unsupported city" },
+          evidence: [
+            ...repair.decision.evidence,
+            { ...repair.decision.evidence[0], field: "city" },
+          ],
+        },
+      }),
+    ).rejects.toThrow("invalid");
+    const repaired = await resolveAgentIssue(db, repair);
+    expect(repaired.publicationId).toBeNull();
+    expect(await db.festivalSource.findUnique({ where: { id: revised.sourceId } })).toMatchObject({
+      refreshPolicy: "daily",
+      parserKey: "manual_review",
+    });
+    expect(await resolveAgentIssue(db, repair)).toEqual(repaired);
     await page.goto("/en/festivals/graspop/");
     const panel = page.getByRole("region", { name: headings.en });
     await expect(panel.locator("dd")).toHaveCount(2);
