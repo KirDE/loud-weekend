@@ -129,6 +129,9 @@ async function applyFestivalChanges(db: Database, input: {
     if (problem) throw new Error(problem);
   }
 
+  // A delayed observation can still update an unchanged field without
+  // making the edition's most recent source observation appear older.
+  const sourceUpdatedAt = input.observedAt > edition.sourceUpdatedAt ? input.observedAt : edition.sourceUpdatedAt;
   const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
   for (const change of input.changes) {
@@ -153,7 +156,7 @@ async function applyFestivalChanges(db: Database, input: {
         current = isoDate(edition[change.field]);
         if (input.strictBefore && !same(current, change.before) && !same(current, change.after)) throw new Error(`Stale ${change.field} value for ${input.festivalSlug}`);
         if (!same(current, change.after)) {
-          await db.festivalEdition.update({ where: { id: edition.id }, data: { [change.field]: dateOnly(change.after), sourceUpdatedAt: input.observedAt } });
+          await db.festivalEdition.update({ where: { id: edition.id }, data: { [change.field]: dateOnly(change.after), sourceUpdatedAt } });
           changed = true;
         }
         break;
@@ -163,7 +166,7 @@ async function applyFestivalChanges(db: Database, input: {
         if (input.strictBefore && !same(current, change.before) && !same(current, change.after)) throw new Error(`Stale ticketsUrl value for ${input.festivalSlug}`);
         if (!same(current, change.after)) {
           if (change.after !== undefined && change.after !== null && typeof change.after !== "string") throw new Error("Invalid ticketsUrl");
-          await db.festivalEdition.update({ where: { id: edition.id }, data: { ticketsUrl: change.after as string | null | undefined, sourceUpdatedAt: input.observedAt } });
+          await db.festivalEdition.update({ where: { id: edition.id }, data: { ticketsUrl: change.after as string | null | undefined, sourceUpdatedAt } });
           changed = true;
         }
         break;
@@ -172,7 +175,7 @@ async function applyFestivalChanges(db: Database, input: {
         current = edition.completeness.toLocaleLowerCase();
         if (input.festivalSlug !== "download" || change.before !== "tba" || change.after !== "partial") throw new Error("Invalid completeness promotion");
         if (input.strictBefore && current !== change.before && current !== change.after) throw new Error("Stale completeness");
-        if (current !== change.after) { await db.festivalEdition.update({where:{id:edition.id},data:{completeness:"PARTIAL",sourceUpdatedAt:input.observedAt}}); changed = true; }
+        if (current !== change.after) { await db.festivalEdition.update({where:{id:edition.id},data:{completeness:"PARTIAL",sourceUpdatedAt}}); changed = true; }
         break;
       }
       case "status": {
@@ -180,7 +183,7 @@ async function applyFestivalChanges(db: Database, input: {
         const next = festivalStatuses[String(change.after).toLocaleLowerCase() as keyof typeof festivalStatuses];
         if (!next) throw new Error(`Invalid festival status: ${String(change.after)}`);
         if (input.strictBefore && !same(current, change.before) && !same(current, change.after)) throw new Error(`Stale status value for ${input.festivalSlug}`);
-        if (edition.status !== next) { await db.festivalEdition.update({ where: { id: edition.id }, data: { status: next, sourceUpdatedAt: input.observedAt } }); changed = true; }
+        if (edition.status !== next) { await db.festivalEdition.update({ where: { id: edition.id }, data: { status: next, sourceUpdatedAt } }); changed = true; }
         break;
       }
       case "ticketStatus": {
@@ -188,7 +191,7 @@ async function applyFestivalChanges(db: Database, input: {
         const next = ticketStatuses[String(change.after).toLocaleLowerCase() as keyof typeof ticketStatuses];
         if (!next) throw new Error(`Invalid ticket status: ${String(change.after)}`);
         if (input.strictBefore && !same(current, change.before) && !same(current, change.after)) throw new Error(`Stale ticketStatus value for ${input.festivalSlug}`);
-        if (edition.ticketStatus !== next) { await db.festivalEdition.update({ where: { id: edition.id }, data: { ticketStatus: next, sourceUpdatedAt: input.observedAt } }); changed = true; }
+        if (edition.ticketStatus !== next) { await db.festivalEdition.update({ where: { id: edition.id }, data: { ticketStatus: next, sourceUpdatedAt } }); changed = true; }
         break;
       }
       case "lineup":

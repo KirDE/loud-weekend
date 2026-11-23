@@ -146,6 +146,42 @@ test("publication cannot replace the timestamp of a persisted observation", asyn
   assert.equal((await db.ingestionCandidate.findUniqueOrThrow({ where: { attemptId: attempt.id } })).reviewState, "PENDING");
 });
 
+test("a delayed ticket observation does not backdate the edition", async () => {
+  const before = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+  });
+  const newerTime = "2026-09-02T09:00:00.000Z";
+  const fetchedAt = "2026-09-02T08:00:00.000Z";
+  const ticketStatus = before.ticketStatus === "AVAILABLE" ? "sold_out" : "available";
+  const fixture = result("Unused");
+  const value: IngestionResult = {
+    ...fixture,
+    fetchedAt,
+    changes: [{ kind: "ticket_status_changed", field: "ticketStatus",
+      before: before.ticketStatus.toLowerCase(), after: ticketStatus, reviewRequired: false }],
+    candidate: {
+      ...fixture.candidate, fetchedAt, lineup: [], ticketStatus,
+      evidence: [{ field: "ticketStatus", sourceUrl: fixture.sourceUrl, observedAt: fetchedAt }],
+    },
+  };
+  const attempt = await persist(value);
+  await db.festivalEdition.update({
+    where: { id: before.id }, data: { sourceUpdatedAt: new Date(newerTime) },
+  });
+  try {
+    const publication = await publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix });
+    assert.deepEqual(publication?.fields, ["ticketStatus"]);
+    const after = await db.festivalEdition.findUniqueOrThrow({ where: { id: before.id } });
+    assert.equal(after.ticketStatus.toLowerCase(), ticketStatus);
+    assert.equal(after.sourceUpdatedAt.toISOString(), newerTime);
+  } finally {
+    await db.festivalEdition.update({
+      where: { id: before.id },
+      data: { ticketStatus: before.ticketStatus, sourceUpdatedAt: before.sourceUpdatedAt },
+    });
+  }
+});
+
 test("commits catalog rows, candidate state, audit snapshot and playlist request together", async () => {
   const artist = `Catalog Transaction ${suffix}`;
   const value = result(artist);
