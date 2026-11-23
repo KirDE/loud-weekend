@@ -177,12 +177,18 @@ export function extractJsonLdCandidate(
   for (const [field, value] of Object.entries(fields)) {
     if (value === undefined) continue;
     Object.assign(candidate, { [field]: value });
+    const evidenceField = field as FieldEvidence["field"];
     candidate.evidence.push({
-      field: field as FieldEvidence["field"],
+      field: evidenceField,
       sourceUrl: source.url,
       observedAt: fetchedAt,
       excerpt: selected.excerpt,
     });
+    // Keep the parsed values for diagnostics but do not treat document order
+    // as proof that this Event belongs to the selected festival edition.
+    if (matching.length > 1 && evidenceField !== "timetable") {
+      (candidate.fieldEditionYears ??= {})[evidenceField] = [];
+    }
   }
 
   const eventStatus = text(selected.event.eventStatus)?.toLowerCase();
