@@ -1,27 +1,23 @@
 # Editorial festival overviews
 
-Store reviewed import records in `catalog-data/overviews/`. Each record names
-a canonical festival, edition, place and organizer host, and includes public
-official source URLs, the review date, and concise original EN, DE and RU copy.
-Verify all three translations against the organizer's published evidence for
-that edition.
+The overview adapters extract edition-specific facts from the Alcatraz stages page,
+Hellfest's edition announcement and Wacken's event terms. They turn only the
+recognized facts into concise EN, DE and RU copy. Missing or ambiguous evidence
+does not create or update an overview.
 
-After deploying the schema migration, preview a reviewed JSON file against the
-destination database:
+After the schema migration, preview the organizer observation against the target database:
 
 ```sh
-npm run overviews:import -- --input=/path/to/reviewed-overview.json
+npm run overviews:import -- --festival=<slug> --edition=<year>
 ```
 
-Add `--apply` only to publish the reviewed record. The command refuses missing
-or archived editions, inconsistent identity or non-organizer source URLs,
-and cannot overwrite a newer review. Reapplying the same file updates the
-same row, without touching catalogue freshness, dates, tickets, or lineups.
-The public festival pages show only the matching database row. There is no
-runtime seed or fallback to JSON. To withdraw copy, remove only the reviewed
-overview row for the exact edition; the public panel is then omitted.
+Review the edition, evidence URLs and localized copy. Add
+`--apply=<preview fingerprint>` only to publish that reviewed observation.
+Apply fetches the official page again and refuses changed facts. Persistence also
+rejects missing or archived editions, mismatched identity, non-organizer source
+URLs and older review dates. Reapplying the same observation updates only the
+dedicated overview row, not catalogue freshness, dates, tickets or lineups.
 
-Do not treat stage descriptions as a timetable, ticket information as stock,
-or a previous edition's description as evidence for a later edition. If the
-edition, venue, or format changes, recheck the record rather than carrying its
-copy forward.
+The public panel reads only the matching PostgreSQL overview. If an already
+reviewed overview is no longer valid, withdraw its exact edition row through
+the approved maintenance path; a failed fetch does not delete reviewed data.
