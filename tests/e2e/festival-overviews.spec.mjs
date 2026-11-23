@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
 import { collectReviewedOverview } from "../../lib/ingestion/overview-collector.ts";
@@ -9,7 +10,7 @@ const db = createPrismaClient();
 const slug = "hellfest";
 const year = 2027;
 const source = overviewOrganizer(slug, year);
-const actorLabel = "overview-import:e2e-fixture";
+const actorLabel = `overview-import:e2e-${randomUUID()}`;
 const auditWhere = { action: "FESTIVAL_OVERVIEW_PUBLICATION", resourceKey: slug, actorLabel };
 const detailPath = (language) => `/${language}/festivals/${slug}/`;
 
@@ -55,7 +56,6 @@ test.beforeAll(async () => {
   festivalId = festival.id;
 });
 test.afterAll(async () => {
-  await db.adminAuditEntry.deleteMany({ where: auditWhere });
   if (festivalId) await db.festival.delete({ where: { id: festivalId } });
   await db.$disconnect();
 });
