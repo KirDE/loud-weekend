@@ -74,6 +74,15 @@ test("explicit mobile trip download keeps only public proof and works offline", 
     await expect.poll(async () => JSON.parse(await saved()).trip.timetable[0].status).toBe("cancelled");
 
     const lastGood = await saved();
+    await page.route(`**${api}`, route => route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(body) + " ".repeat(192 * 1024),
+    }));
+    await update.click();
+    await expect(trip.getByRole("status")).toContainText("Reisedetails nicht verfügbar");
+    expect(await saved()).toBe(lastGood);
+    await page.unroute(`**${api}`);
+
     await page.evaluate(() => {
       const setItem = Storage.prototype.setItem;
       Storage.prototype.setItem = function (key, value) {
