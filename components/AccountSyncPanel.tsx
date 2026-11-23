@@ -16,6 +16,18 @@ const favoritesPayload = z.object({
 const plansPayload = z.object({
   attendance: z.record(z.string(), z.enum(["going", "maybe", "not-going"])).optional(),
 });
+const savedFiltersPayload = z.object({
+  savedFilters: z.object({
+    query: z.string(),
+    country: z.string(),
+    announcedOnly: z.boolean(),
+    month: z.string(),
+    ticketsOnly: z.boolean(),
+    genre: z.string(),
+    origin: z.string(),
+    maxDistance: z.string(),
+  }).partial(),
+});
 const labels = {
   en: { title: "Account sync", local: "Your local plan remains available while signed out.", migrate: "Merge this device into my account", replace: "Use account data on this device", sync: "Sync now", syncing: "Syncing…", current: "Everything is synchronized.", resolved: "Conflict resolved. Sync again to send other local changes.", conflict: "A newer version exists on another device. Nothing was overwritten.", keepLocal: "Keep this device", keepRemote: "Use other device", share: "Create public plan link", expiry: "Link expiry", copy: "Copy link", copied: "Copied", expired: "Expired links return Not Found.", spotify: "Spotify", connect: "Connect or reconnect Spotify", import: "Import playlists", last: "Last successful import", imported: "Saved imported playlists", empty: "No imported playlists yet.", tracks: "tracks", failed: "Sync failed. Reconnect and try again.", login: "Sign in from the Account menu to enable cross-device sync." },
   de: { title: "Konto-Synchronisierung", local: "Dein lokaler Plan bleibt ohne Anmeldung verfügbar.", migrate: "Dieses Gerät mit meinem Konto zusammenführen", replace: "Kontodaten auf diesem Gerät verwenden", sync: "Jetzt synchronisieren", syncing: "Synchronisiere…", current: "Alles ist synchronisiert.", resolved: "Konflikt gelöst. Synchronisiere erneut, um weitere lokale Änderungen zu übertragen.", conflict: "Auf einem anderen Gerät gibt es eine neuere Version. Nichts wurde überschrieben.", keepLocal: "Dieses Gerät behalten", keepRemote: "Anderes Gerät verwenden", share: "Öffentlichen Plan-Link erstellen", expiry: "Link-Ablauf", copy: "Link kopieren", copied: "Kopiert", expired: "Abgelaufene Links zeigen „Nicht gefunden“.", spotify: "Spotify", connect: "Spotify verbinden oder neu verbinden", import: "Playlists importieren", last: "Letzter erfolgreicher Import", imported: "Gespeicherte importierte Playlists", empty: "Noch keine Playlists importiert.", tracks: "Titel", failed: "Synchronisierung fehlgeschlagen. Neu verbinden und erneut versuchen.", login: "Im Konto-Menü anmelden, um geräteübergreifend zu synchronisieren." },
@@ -55,10 +67,7 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
     if (kind === "collections" && document) readCollections(document.payload);
     if (kind === "favorites" && document && !favoritesPayload.safeParse(document.payload).success) throw new Error(t.failed);
     if (kind === "plans" && document && !plansPayload.safeParse(document.payload).success) throw new Error(t.failed);
-    if (kind === "saved-filters" && document) {
-      const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
-      if (!filters || typeof filters !== "object" || Array.isArray(filters)) throw new Error(t.failed);
-    }
+    if (kind === "saved-filters" && document && !savedFiltersPayload.safeParse(document.payload).success) throw new Error(t.failed);
     return document;
   }
 

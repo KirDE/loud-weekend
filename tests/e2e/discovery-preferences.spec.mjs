@@ -87,7 +87,10 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
     await expect.poll(() => secondPage.evaluate(key => JSON.parse(localStorage.getItem(key)).savedFilters, storageKey)).toEqual(activeFilters);
     await secondPage.unroute(filtersRoute);
 
-    for (const response of [{ status: 503 }, { json: {} }, invalidPayload]) {
+    const invalidFields = { json: { document: {
+      ...previous, payload: { savedFilters: { ...activeFilters, origin: 42, ticketsOnly: "true" } },
+    } } };
+    for (const response of [{ status: 503 }, { json: {} }, invalidPayload, invalidFields]) {
       await secondPage.route(filtersRoute, route => route.fulfill(response));
       await pull.click();
       await expect(secondPage.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
