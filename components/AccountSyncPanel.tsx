@@ -132,7 +132,7 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
         const content=mode==="merge"&&next[kind]?mergePayload(kind,next[kind]!.payload,local[kind]):local[kind];
         next[kind]=await put(kind,content,next[kind]?.revision??0,mode==="merge");
       }
-      if(mode==="merge")planner.merge(plannerFrom(next));
+      if(mode==="merge")planner.merge(plannerFrom(next), planner);
       setStatus(t.current);
     }catch(reason){if(!(reason instanceof Error&&reason.message==="conflict"))setStatus(reason instanceof Error?reason.message:t.failed);}
     finally{setBusy(false);}

@@ -28,7 +28,7 @@ const Context = createContext<
       setSavedFilters: (value: DiscoveryPreferences) => void;
       updateSavedFilters: (patch: Partial<DiscoveryPreferences>) => void;
       replaceFields: (value: Partial<PlannerState>, expected: PlannerState) => void;
-      merge: (value: Partial<PlannerState>) => void;
+      merge: (value: Partial<PlannerState>, expected?: PlannerState) => void;
       clear: () => void;
     })
   | null
@@ -93,13 +93,18 @@ export function LocalPlannerProvider({
         if (keys.some((key) => !Object.is(current[key], expected[key]))) return current;
         return { ...current, ...fields };
       }),
-      merge: (next: Partial<PlannerState>) => setState((current) => ({
-        favoriteFestivals: Array.from(new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])])),
-        favoriteArtists: Array.from(new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])])),
-        attendance: { ...(next.attendance || {}), ...current.attendance },
-        playlistFestivals: Array.from(new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])])),
-        savedFilters: readDiscoveryPreferences({ ...current.savedFilters, ...next.savedFilters }),
-      })),
+      merge: (next: Partial<PlannerState>, expected?: PlannerState) => setState((current) => {
+        // A completed account merge must not restore values edited while it was in flight.
+        const preserved = <K extends keyof PlannerState>(key: K, merged: PlannerState[K]) =>
+          expected && !Object.is(current[key], expected[key]) ? current[key] : merged;
+        return {
+          favoriteFestivals: preserved("favoriteFestivals", Array.from(new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])]))),
+          favoriteArtists: preserved("favoriteArtists", Array.from(new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])]))),
+          attendance: preserved("attendance", { ...(next.attendance || {}), ...current.attendance }),
+          playlistFestivals: preserved("playlistFestivals", Array.from(new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]))),
+          savedFilters: preserved("savedFilters", readDiscoveryPreferences({ ...current.savedFilters, ...next.savedFilters })),
+        };
+      }),
       clear: () => setState(emptyPlannerState),
     }),
     [ready, state],
