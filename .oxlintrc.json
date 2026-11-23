@@ -1,16 +1,17 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "categories": { "correctness": "error" },
-  "rules": {
-    "unicorn/prefer-string-starts-ends-with": "off",
-    "unicorn/no-useless-fallback-in-spread": "off",
-    "unicorn/no-useless-spread": "off"
+  "categories": {
+    "correctness": "error"
   },
   "ignorePatterns": [
     "node_modules/**",
     ".next/**",
     "out/**",
-    "tests/fixtures/**",
     "public/vendor/**"
-  ]
+  ],
+  "rules": {
+    "unicorn/prefer-string-starts-ends-with": "error",
+    "unicorn/no-useless-fallback-in-spread": "error",
+    "unicorn/no-useless-spread": "error"
+  }
 }

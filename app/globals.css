@@ -332,6 +332,9 @@
 }
 
 .planList small,
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .planList span {
   color: var(--muted);
 }
@@ -363,6 +366,9 @@
   min-width: 0;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .playlistFestivalGrid label span {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -413,6 +419,9 @@
 }
 
 .artistChips a,
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .artistChips span {
   padding: 7px 10px;
   background: var(--soft);
@@ -420,6 +429,9 @@
   font-weight: 700;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .playlistActions .primaryButton.
+*/
 .primaryButton {
   display: inline-block;
   padding: 12px 16px;
@@ -446,6 +458,9 @@
   letter-spacing: -0.05em;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .plannerSection details p.
+*/
 .viewHeading p {
   max-width: 390px;
   color: var(--muted);
@@ -457,6 +472,9 @@
   gap: 14px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationPage button:disabled.
+*/
 .monthNav button {
   width: 42px;
   height: 42px;
@@ -495,6 +513,9 @@
   color: var(--solid);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .calendarGrid span {
   display: flex;
   flex-direction: column;
@@ -505,6 +526,9 @@
   color: var(--muted);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .plannerSection details p.
+*/
 .calendarGrid > p {
   padding: 20px;
   background: var(--paper);
@@ -572,6 +596,9 @@
   display: none;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .mapMarker summary span {
   position: absolute;
   top: 42px;
@@ -579,6 +606,9 @@
   font-size: 10px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .planList article > div.
+*/
 .mapMarker > div {
   position: absolute;
   left: 24px;
@@ -657,6 +687,9 @@
   }
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationForm > *.
+*/
 * {
   box-sizing: border-box;
 }
@@ -672,6 +705,9 @@ body {
   font-family: "DM Sans", sans-serif;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .localActions a.
+*/
 a {
   color: inherit;
   text-decoration: none;
@@ -756,6 +792,9 @@ nav a:is(:hover, :focus-visible) {
 }
 
 .accountButton,
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationPage button:disabled.
+*/
 .accountPopover button {
   border: 1px solid var(--ink);
   background: var(--paper);
@@ -910,6 +949,9 @@ main {
   font-style: normal;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .plannerSection details p.
+*/
 .hero > p {
   max-width: 650px;
   font-size: 20px;
@@ -986,6 +1028,9 @@ main {
   width: auto;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .filterBar .search.
+*/
 .search {
   background: var(--surface);
   display: flex;
@@ -999,6 +1044,9 @@ main {
   flex: 1;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationPage button:disabled.
+*/
 .search button {
   flex: 0 0 auto;
   display: grid;
@@ -1016,10 +1064,16 @@ main {
   outline-offset: 2px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .search button span {
   font-size: 19px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .search span {
   font-size: 25px;
 }
@@ -1058,6 +1112,9 @@ main {
   clip-path: inset(50%);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .toggle span {
   width: 38px;
   height: 22px;
@@ -1119,6 +1176,9 @@ main {
   background: rgb(255 255 255 / 9%);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .festivalCard > a {
   display: flex;
   flex: 1;
@@ -1197,11 +1257,17 @@ main {
   background: var(--soft);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .comparisonTable a {
   font-weight: 800;
   text-decoration: underline;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationPage button:disabled.
+*/
 .compareTray button {
   border: 0;
   background: var(--soft);
@@ -1245,6 +1311,9 @@ main {
   object-fit: contain;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .festivalLogo span {
   font-family: "Archivo Black", sans-serif;
   font-size: 20px;
@@ -1257,6 +1326,9 @@ main {
   flex: 0 0 auto;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .toggle input:checked + span.
+*/
 .festivalLogo.large span {
   font-size: 40px;
 }
@@ -1315,6 +1387,9 @@ main {
   margin-top: 20px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .artists span {
   padding: 5px 8px;
   background: var(--soft);
@@ -1394,7 +1469,13 @@ main {
   border-left: 1px solid var(--line);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .actionGrid > a,
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .planList article > div.
+*/
 .actionGrid > div {
   flex: 1 1 200px;
   min-width: 0;
@@ -1413,6 +1494,9 @@ main {
   color: var(--solid);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div small.
+*/
 .actionGrid small {
   color: var(--muted);
   text-transform: uppercase;
@@ -1444,6 +1528,9 @@ main {
   margin: 8px 0 0;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .sectionHeading > span {
   font-size: 12px;
   text-transform: uppercase;
@@ -1463,6 +1550,9 @@ main {
   gap: 10px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .headlinerGrid a {
   min-height: 130px;
   padding: 22px;
@@ -1481,6 +1571,9 @@ main {
   background: var(--orange);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .headlinerGrid span {
   font:
     11px "DM Sans",
@@ -1495,6 +1588,9 @@ main {
   border-top: 1px solid var(--line);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .lineupGrid a {
   padding: 15px;
   border-right: 1px solid var(--line);
@@ -1527,10 +1623,16 @@ main {
   font-size: 13px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .plannerSection details p.
+*/
 .sourceNote p {
   color: var(--muted);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .sourceNote a {
   text-decoration: underline;
   font-weight: 700;
@@ -1551,7 +1653,13 @@ main {
   padding: 22px 0;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .planningActions a,
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .planningActions > span {
   padding: 13px 16px;
   border: 1px solid var(--ink);
@@ -1573,6 +1681,9 @@ main {
   font-size: 13px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .timetable span {
   color: var(--muted);
 }
@@ -1589,6 +1700,9 @@ main {
   align-items: flex-start;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .planList article > div.
+*/
 .timetableHeader > div {
   display: grid;
   gap: 5px;
@@ -1646,6 +1760,9 @@ main {
   text-decoration: line-through;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .hero h1 em.
+*/
 .timetableStage em {
   color: #9b2f1d;
   font-size: 10px;
@@ -1660,6 +1777,9 @@ main {
   border-top: 1px solid var(--line);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .actionGrid > a:is(:hover, :focus-visible).
+*/
 .timetablePublished footer a {
   font-weight: 800;
   text-decoration: underline;
@@ -1681,18 +1801,27 @@ main {
 }
 
 .recommendations h3,
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .recommendations a {
   margin: 0;
   padding: 18px;
   border-right: 1px solid var(--line);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .recommendations a {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .recommendations span {
   font-size: 11px;
   color: var(--muted);
@@ -1710,6 +1839,9 @@ main {
   font-size: clamp(45px, 7vw, 90px);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .plannerSection details p.
+*/
 .artistHero p {
   color: var(--muted);
 }
@@ -1772,6 +1904,9 @@ main {
   padding: 20px 0;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .artistActions a {
   padding: 12px 16px;
   border: 1px solid var(--ink);
@@ -1800,6 +1935,9 @@ main {
   letter-spacing: -0.05em;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .plannerSection details p.
+*/
 .directoryPage > p {
   max-width: 720px;
   line-height: 1.6;
@@ -1849,6 +1987,9 @@ main {
   min-height: 120px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationPage button:disabled.
+*/
 .submissionForm button {
   width: max-content;
   max-width: 100%;
@@ -1877,6 +2018,9 @@ main {
   border-top: 1px solid var(--line);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .plannerSection details p.
+*/
 .artistMetadata p {
   max-width: 720px;
   line-height: 1.6;
@@ -1897,6 +2041,9 @@ main {
   font-weight: 800;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .artistSources a,
 .artistSources code {
   display: block;
@@ -1912,6 +2059,9 @@ main {
   margin-bottom: 14px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .appearances > a {
   display: grid;
   grid-template-columns: 50px 1fr 1fr 30px;
@@ -1928,7 +2078,13 @@ main {
   background: var(--surface);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .appearances span,
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .hero h1 em.
+*/
 .appearances em {
   color: var(--muted);
   font-size: 13px;
@@ -2054,6 +2210,9 @@ main {
     font-size: 45px;
   }
 
+  /* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .siteHeader nav a:last-child.
+*/
   .actionGrid > a,
   .actionGrid > div {
     flex-basis: 100%;
@@ -2078,6 +2237,9 @@ main {
   }
 
   .recommendations h3,
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .siteHeader nav a:last-child.
+*/
   .recommendations a {
     min-width: 0;
     border-right: 0;
@@ -2085,6 +2247,9 @@ main {
     overflow-wrap: anywhere;
   }
 
+  /* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .siteHeader nav a:last-child.
+*/
   .recommendations a:last-child {
     border-bottom: 0;
   }
@@ -2112,6 +2277,9 @@ main {
     flex-wrap: wrap;
   }
 
+  /* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .siteHeader nav a:last-child.
+*/
   .appearances > a {
     grid-template-columns: 40px 1fr 25px;
   }
@@ -2128,6 +2296,9 @@ main {
     gap: 12px;
   }
 
+  /* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .resultMeta span:last-child.
+*/
   .siteFooter > span {
     display: block;
     margin: 0;
@@ -2137,6 +2308,9 @@ main {
     margin-top: 0;
   }
 
+  /* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .resultMeta span:last-child.
+*/
   .languagePicker span {
     margin: 0;
   }
@@ -2170,12 +2344,18 @@ main {
   margin: 8px 0;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .plannerSection details p.
+*/
 .adminNav p {
   color: #aaa79f;
   font-size: 13px;
   margin: 0 0 30px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationPage button:disabled.
+*/
 .adminNav button {
   border: 0;
   background: transparent;
@@ -2202,6 +2382,9 @@ main {
   padding: 1px 7px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .adminNav > a {
   margin-top: auto;
   color: #aaa79f;
@@ -2224,6 +2407,9 @@ main {
   margin-bottom: 24px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .planningSection .sectionHeading h2.
+*/
 .adminHeader h2 {
   font:
     46px "Archivo Black",
@@ -2251,6 +2437,9 @@ main {
   color: var(--solid);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationPage button:disabled.
+*/
 .adminNotice button {
   border: 0;
   background: transparent;
@@ -2265,6 +2454,9 @@ main {
   margin-bottom: 15px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .plannerSection details p.
+*/
 .adminToolbar p {
   font-size: 13px;
   color: var(--muted);
@@ -2305,6 +2497,9 @@ main {
   align-items: center;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div small.
+*/
 .reviewMeta small {
   color: var(--muted);
 }
@@ -2339,6 +2534,9 @@ main {
   margin: 17px 0;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .reviewCard h3 span {
   color: var(--muted);
 }
@@ -2349,6 +2547,9 @@ main {
   border: 1px solid var(--line);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .planList article > div.
+*/
 .diff > div {
   padding: 13px;
 }
@@ -2358,6 +2559,9 @@ main {
   background: var(--surface);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div small.
+*/
 .diff small,
 .adminPanel label {
   font-size: 10px;
@@ -2367,6 +2571,9 @@ main {
   color: var(--muted);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .plannerSection details p.
+*/
 .diff p {
   margin: 7px 0;
   font-size: 14px;
@@ -2379,6 +2586,9 @@ main {
   margin-top: 14px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationPage button:disabled.
+*/
 .adminMain button {
   border: 1px solid var(--ink);
   background: var(--solid);
@@ -2426,6 +2636,9 @@ main {
   gap: 12px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .plannerSection details p.
+*/
 .adminPanel p {
   color: var(--muted);
   font-size: 13px;
@@ -2499,10 +2712,16 @@ main {
 }
 
 .auditTable time,
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .auditTable span {
   color: var(--muted);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .plannerSection details p.
+*/
 .auditTable p {
   margin: 4px 0;
 }
@@ -2599,6 +2818,9 @@ main {
 
 /* stylelint-disable no-duplicate-selectors -- Intentional later cascade override. */
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationPage button:disabled.
+*/
 .adminNav button {
   min-width: 0;
   white-space: normal;
@@ -2619,6 +2841,9 @@ main {
 
 /* stylelint-enable no-duplicate-selectors */
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div small.
+*/
 .adminRole small {
   font-weight: 500;
   text-transform: none;
@@ -2633,6 +2858,9 @@ main {
 
 /* stylelint-enable no-duplicate-selectors */
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div small.
+*/
 .reviewMeta small,
 .reviewCard :is(p, a, h3),
 .adminPanel :is(p, a, h3),
@@ -2705,6 +2933,9 @@ main {
   margin: 12px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .channelRow > span:first-child.
+*/
 .adminLanguage span {
   font-size: 11px;
   font-weight: 800;
@@ -2739,6 +2970,9 @@ main {
   gap: 10px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationPage button:disabled.
+*/
 .accountSync button,
 .accountSync input {
   border: 1px solid var(--ink);
@@ -2749,6 +2983,9 @@ main {
   background: var(--surface);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationPage button:disabled.
+*/
 .accountSync button {
   cursor: pointer;
 }
@@ -2765,6 +3002,9 @@ main {
   border-left: 5px solid var(--orange);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .planList article > div.
+*/
 .syncConflict div {
   display: flex;
   gap: 8px;
@@ -2778,6 +3018,9 @@ main {
   margin-top: 24px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .planList article > div.
+*/
 .syncGrid > div {
   display: grid;
   align-content: start;
@@ -2801,6 +3044,9 @@ main {
   align-items: center;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 .shareResult a {
   overflow-wrap: anywhere;
 }
@@ -2996,8 +3242,14 @@ main {
   color: var(--solid);
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .notificationPage button:disabled.
+*/
 button:focus-visible,
 .outlineButton:focus-visible,
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .playlistActions .primaryButton:disabled.
+*/
 .primaryButton:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 3px;
@@ -3026,6 +3278,9 @@ summary:is(:hover, :focus-visible),
 .recommendations a:is(:hover, :focus-visible),
 .calendarGrid > a:is(:hover, :focus-visible),
 .mapMarker > div a:is(:hover, :focus-visible),
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a:is(:hover, :focus-visible).
+*/
 .artistChips a:is(:hover, :focus-visible) {
   background: var(--acid);
   color: var(--solid);
@@ -3047,11 +3302,20 @@ summary:is(:hover, :focus-visible),
   color: var(--solid) !important;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker summary.
+*/
 summary {
   cursor: pointer;
 }
 
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a.
+*/
 a:focus-visible,
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier select:not(:disabled):is(:hover, :focus-visible).
+*/
 select:focus-visible,
 summary:focus-visible {
   outline: 2px solid var(--ink);
@@ -3112,6 +3376,9 @@ summary:focus-visible {
 }
 
 .festivalCard:is(:hover, :focus-within),
+/* stylelint-disable-next-line no-descending-specificity
+   -- Preserve component cascade against earlier .mapMarker > div a:is(:hover, :focus-visible).
+*/
 .actionGrid > a:is(:hover, :focus-visible) {
   --muted: #55564d;
 }

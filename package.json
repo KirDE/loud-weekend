@@ -46,12 +46,13 @@
     "test:persistence-db": "node --import tsx --test tests/catalog-persistence.e2e.test.ts",
     "pretest:persistence-db": "node scripts/prepare-test-db.mjs",
     "artists:add-alias": "node scripts/add-artist-aliases.mjs",
-    "lint": "npm run lint:js && npm run lint:css && npm run lint:lines",
+    "lint": "npm run lint:js && npm run lint:css && npm run lint:format && npm run lint:lines",
     "lint:js": "oxlint --deny-warnings",
     "lint:css": "stylelint \"**/*.css\" --max-warnings 0",
     "csslint": "npm run lint:css",
     "lint:lines": "node scripts/check-line-length.mjs",
-    "format": "prettier --write \"**/*.{js,mjs,cjs,ts,tsx,css}\""
+    "format": "prettier --write \"**/*.{js,mjs,cjs,ts,tsx,jsx,mts,cts,css}\"",
+    "lint:format": "prettier --check \"**/*.{js,mjs,cjs,ts,tsx,jsx,mts,cts,css}\""
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",

@@ -22,11 +22,11 @@ const sourceExtensions = new Set([
 ]);
 
 export function isSourceFile(filename) {
-  // Fixtures/vendor payloads are data, not maintained source. Applied SQL migrations are immutable.
+  // Payload formats are not source; executable fixtures remain covered. Applied SQL migrations are immutable.
   return (
     (sourceExtensions.has(path.extname(filename)) ||
       (filename.startsWith("scripts/") && path.extname(filename) === "")) &&
-    !/^(?:tests\/fixtures|public\/vendor|node_modules|\.next|out)\//.test(filename)
+    !/^(?:public\/vendor|node_modules|\.next|out)\//.test(filename)
   );
 }
 

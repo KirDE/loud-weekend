@@ -1099,7 +1099,7 @@ export async function publishAgentFestivalResolution(
       changedFields.push("completeness");
     }
   }
-  for (const field of [...new Set(changedFields)]) {
+  for (const field of new Set(changedFields)) {
     const evidence = input.evidence.find(
       (e) => e.field === field || (field === "completeness" && e.field === "status"),
     );

@@ -22,13 +22,16 @@ test("all maintained source is covered; data and immutable migration history are
     "lib/a.cts",
     "scripts/deploy/start-db-due",
     "scripts/a.py",
+    "tests/fixtures/fileless-provider.py",
+    "tests/fixtures/youtube-db-provider.py",
+    "tests/fixtures/page.js",
     "scripts/a.sh",
     ".github/workflows/quality.yml",
   ]) {
     assert.equal(isSourceFile(name), true, name);
   }
   for (const name of [
-    "tests/fixtures/page.js",
+    "tests/fixtures/page.html",
     "public/vendor/a.js",
     "package-lock.json",
     "prisma/migrations/a.sql",
@@ -50,7 +53,7 @@ test("checker detects old tracked and new untracked violations without a baselin
       checkRepository(root)
         .map(({ filename }) => filename)
         .sort(),
-      ["new.py", "old.ts"],
+      ["new.py", "old.ts", "tests/fixtures/page.js"],
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

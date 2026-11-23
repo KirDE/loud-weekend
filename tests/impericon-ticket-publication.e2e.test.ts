@@ -20,6 +20,8 @@ ticketProducerPublication({
     ]);
     // Keep the requested current source but supply a stale edition. No live GETs.
     if (archived)
+      // Snapshot required: this loop deletes and re-inserts Map keys; live iteration would revisit additions.
+      // oxlint-disable-next-line unicorn/no-useless-spread
       for (const [url, body] of [...pages]) {
         pages.delete(url);
         pages.set(url.replaceAll("2027", "2026"), body.replaceAll("2027", "2026"));

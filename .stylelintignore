@@ -2,4 +2,3 @@ node_modules/**
 .next/**
 out/**
 public/vendor/**
-tests/fixtures/**
