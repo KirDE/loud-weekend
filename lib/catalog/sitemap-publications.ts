@@ -16,6 +16,8 @@ export async function readSitemapPublications(
 ) {
   // These are public field identifiers, not audit values or source checks.
   // A festival name is shared by all its editions, even across year boundaries.
+  // Agent conflict resolutions publish provenance rendered on the edition dossier,
+  // even when their changed fields are not otherwise displayed there.
   const rows = await db.$queryRaw<
     (Record<keyof SitemapPublication, Date | null> & { slug: string; year: number })[]
   >`
@@ -31,7 +33,11 @@ export async function readSitemapPublications(
       ]) AS directory,
       MAX("createdAt") FILTER (WHERE fields && ARRAY[
         'startDate', 'endDate', 'status', 'completeness', 'lineup', 'headliners', 'recordState'
-      ]) AS edition,
+      ] OR (
+        source = 'ADMIN'
+        AND evidence->>'reviewPolicy' = 'openclaw-import-conflicts-v1'
+        AND cardinality(fields) > 0
+      )) AS edition,
       MAX("createdAt") FILTER (WHERE fields && ARRAY[
         'startDate', 'endDate', 'status', 'recordState', 'lineup', 'headliners'
       ]) AS listing,

@@ -9,7 +9,10 @@ import { seedCatalog } from "./support/seed-catalog.ts";
 import { DatabaseCatalogRepository, readCatalog } from "../lib/catalog/repository.ts";
 import { catalogSeed, festival } from "./support/catalog.ts";
 import { createIngestionRun, persistAttempt } from "../lib/ingestion/repository.ts";
-import { publishAdminFestivalChange } from "../lib/catalog/publication.ts";
+import {
+  publishAdminFestivalChange,
+  publishAgentFestivalResolution,
+} from "../lib/catalog/publication.ts";
 import type { IngestionResult } from "../lib/ingestion/types.ts";
 import sitemap from "../app/sitemap.ts";
 
@@ -349,6 +352,37 @@ test("public freshness separates edition-bound checks, publication and source fa
     });
     await db.festivalEdition.update({ where: { id: current.id }, data: { snapshotAt: ago(-72) } });
     assert.deepEqual(await sitemapDates(), dates, "future evidence may not change the sitemap");
+
+    const provenanceUrl = "https://official.example.test/ticket-update";
+    const reviewedTicket = await db.$transaction((tx) =>
+      publishAgentFestivalResolution(tx, {
+        editionId: current.id,
+        festivalSlug: slug,
+        sourceId: `${slug}-reviewed-ticket`,
+        reason: "Review the corrected official ticket link",
+        facts: { ticketsUrl: "https://tickets.example.test/updated" },
+        evidence: [
+          {
+            field: "ticketsUrl",
+            url: provenanceUrl,
+            excerpt: "Official ticket link has changed",
+            contentHash: "a".repeat(64),
+            checkedAt: validAt.toISOString(),
+          },
+        ],
+        observedAt: validAt,
+      }),
+    );
+    assert.ok(
+      await db.editionProvenance.findFirst({
+        where: { editionId: current.id, url: provenanceUrl, checkedAt: validAt },
+      }),
+    );
+    assert.ok(reviewedTicket);
+    const updatedDates = await sitemapDates();
+    assert.equal(updatedDates[`/festivals/${slug}/2027/`], reviewedTicket.createdAt.toISOString());
+    assert.equal(updatedDates["/editions/2027/"], undefined);
+    assert.equal(updatedDates[`/festivals/${slug}/2026/`], archivePublished.toISOString());
   } finally {
     // Publication receipts are append-only; the unique fixture slug isolates reruns.
     await db.ingestionSourceState.deleteMany({ where: { festivalSlug: slug } });
