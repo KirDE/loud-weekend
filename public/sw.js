@@ -4,7 +4,7 @@ const CACHE_SCOPE = BASE ? `:${encodeURIComponent(BASE)}` : "";
 const CACHE_VERSION = `festival-radar-public-v10${CACHE_SCOPE}`;
 const CATALOG = `${BASE}/api/offline/catalog`;
 const TRIP_MODULE = `${BASE}/offline-trips.mjs`;
-const TRIP_SHELL_QUERY = "?shell=8";
+const TRIP_SHELL_QUERY = "?shell=10";
 const MAX_ENTRIES = 80;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const OFFLINE_PAGE = `${BASE}/offline.html`;
