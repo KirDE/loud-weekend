@@ -4,11 +4,13 @@ const copy={
  de:{import:"Playlists importieren",sync:"Jetzt synchronisieren",remote:"Kontodaten auf diesem Gerät verwenden",merge:"Dieses Gerät mit meinem Konto zusammenführen",last:"Letzter erfolgreicher Import",saved:"Gespeicherte importierte Playlists",conflict:"Auf einem anderen Gerät gibt es eine neuere Version. Nichts wurde überschrieben.",keep:"Dieses Gerät behalten"},
  ru:{import:"Импортировать плейлисты",sync:"Синхронизировать",remote:"Использовать данные аккаунта на устройстве",merge:"Объединить данные устройства с аккаунтом",last:"Последний успешный импорт",saved:"Сохранённые импортированные плейлисты",conflict:"На другом устройстве есть более новая версия. Ничего не перезаписано.",keep:"Оставить данные устройства"}
 };
+const documentKinds={favorites:"FAVORITES",collections:"COLLECTIONS","saved-filters":"SAVED_FILTERS",plans:"FESTIVAL_PLANS"};
+const userId="synthetic-user";
 for(const [locale,t] of Object.entries(copy))test(locale+" imported Spotify collections survive ordinary/merge sync, reload, second device and conflict UI",async({page,context})=>{
  const imported={syncedAt:"2026-11-17T22:00:00.000Z",playlists:[{id:"abc",name:"Synthetic retained playlist",url:"https://open.spotify.com/playlist/abc",image:null,owner:"Synthetic provider",trackCount:3}]};
- const docs={collections:{id:"collection",revision:1,updatedAt:imported.syncedAt,payload:{schemaVersion:1,playlistFestivals:["graspop"],spotify:null}}};
+ const docs={collections:{id:"collection",userId,kind:documentKinds.collections,revision:1,updatedAt:imported.syncedAt,payload:{schemaVersion:1,playlistFestivals:["graspop"],spotify:null}}};
  let failImport=false,conflictNext=false,importRevisionConflict=false;
- await context.route("**/api/auth/me**",route=>route.fulfill({json:{user:{id:"synthetic-user",email:"browser-collections@example.test",emailVerified:true,role:"USER"}}}));
+ await context.route("**/api/auth/me**",route=>route.fulfill({json:{user:{id:userId,email:"browser-collections@example.test",emailVerified:true,role:"USER"}}}));
  await context.route("**/api/sync/**",async route=>{
   const req=route.request(),kind=new URL(req.url()).pathname.split("/").filter(Boolean).at(-1);
   if(req.method()==="GET")return route.fulfill({json:{document:docs[kind]??null}});
@@ -16,7 +18,7 @@ for(const [locale,t] of Object.entries(copy))test(locale+" imported Spotify coll
   if(kind==="collections"&&conflictNext){conflictNext=false;docs[kind]={...previous,revision:previous.revision+1,payload:{...previous.payload,playlistFestivals:["reading"]}};return route.fulfill({status:409,json:{error:"conflict"}});}
   if((previous?.revision??0)!==body.revision)return route.fulfill({status:409,json:{error:"conflict"}});
   const payload=kind==="collections"?{schemaVersion:1,playlistFestivals:body.payload.playlistFestivals,spotify:previous?.payload.spotify??null}:body.payload;
-  docs[kind]={id:kind,revision:(previous?.revision??0)+1,updatedAt:imported.syncedAt,payload};
+  docs[kind]={id:previous?.id??kind,userId,kind:documentKinds[kind],revision:(previous?.revision??0)+1,updatedAt:imported.syncedAt,payload};
   return route.fulfill({json:{document:docs[kind]}});
  });
  await context.route("**/api/spotify/sync**",async route=>{
