@@ -17,6 +17,8 @@ const requests = [];
 const ticketsUrl = "https://tickets.example.test/integration";
 let primaryFails = false;
 let primaryOffersWithoutEdition = false;
+let observedTicketsUrl = ticketsUrl;
+const replacementTicketsUrl = "https://tickets.example.test/replacement";
 let originalStartDate = "2027-07-28";
 let datesChanged = false;
 const correctedStartDate = "2027-07-29";
@@ -32,10 +34,10 @@ const sourceServer = createServer((request, response) => {
   const availability = request.url === "/primary" ? ' ,"availability":"https://schema.org/SoldOut"' : "";
   response.setHeader("content-type", "text/html");
   if (request.url === "/primary" && primaryOffersWithoutEdition) {
-    response.end(`<script type="application/ld+json">{"@type":"MusicEvent","name":"Wacken Open Air","location":{"address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${ticketsUrl}","availability":"https://schema.org/InStock"}}</script>`);
+    response.end(`<script type="application/ld+json">{"@type":"MusicEvent","name":"Wacken Open Air","location":{"address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${observedTicketsUrl}","availability":"https://schema.org/InStock"}}</script>`);
     return;
   }
-  response.end(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicEvent","name":"Wacken Open Air","startDate":"${startDate}","endDate":"2027-07-31","location":{"@type":"Place","address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${ticketsUrl}"${availability}}}</script>`);
+  response.end(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicEvent","name":"Wacken Open Air","startDate":"${startDate}","endDate":"2027-07-31","location":{"@type":"Place","address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${observedTicketsUrl}"${availability}}}</script>`);
 });
 
 class Client {
@@ -285,6 +287,7 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   await db.festivalSource.update({ where: { id: configuredSource.id }, data: { enabled: true } });
   // A current source configuration cannot establish the year of a dateless offer.
   primaryOffersWithoutEdition = true;
+  observedTicketsUrl = replacementTicketsUrl;
   const unscopedStock = await admin.json(`${refreshPath}?year=2027`, "POST");
   assert.equal(unscopedStock.status, 201);
   const stockRun = await unscopedStock.json();
@@ -294,7 +297,21 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.ok(stockLog.log.some(({ reviewReasons }) => reviewReasons?.includes("Ticket availability could not be verified for the selected edition.")));
   assert.equal(await db.adminChange.count({ where: { parserRunId: stockRun.id, field: "ticketStatus" } }), 0);
   assert.equal(await publicAvailability(), "https://schema.org/SoldOut");
+  assert.equal(await db.adminChange.count({ where: { parserRunId: stockRun.id, field: "ticketsUrl" } }), 0);
+  assert.ok(stockLog.log.some(({ reviewReasons }) => reviewReasons?.includes("Ticket URL could not be verified for the selected edition.")));
+  assert.equal((await db.festivalEdition.findUniqueOrThrow({ where: { id: configuredSource.editionId } })).ticketsUrl, ticketsUrl);
+
+  // The same link is eligible once the official event establishes the selected year.
   primaryOffersWithoutEdition = false;
+  const scopedLink = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(scopedLink.status, 201);
+  const linkRun = await scopedLink.json();
+  assert.equal(linkRun.queued, 1);
+  const linkChange = await db.adminChange.findFirstOrThrow({ where: { parserRunId: linkRun.id, field: "ticketsUrl" } });
+  assert.equal(linkChange.afterValue, replacementTicketsUrl);
+  assert.equal((await admin.json(`/api/admin/changes/${linkChange.id}`, "POST", { decision: "approve" })).status, 200);
+  assert.equal((await db.festivalEdition.findUniqueOrThrow({ where: { id: configuredSource.editionId } })).ticketsUrl, replacementTicketsUrl);
+
   primaryFails = true;
   assert.equal((await admin.json(refreshPath, "POST")).status, 502);
   const failedRun = await db.adminParserRun.findFirstOrThrow({ orderBy: { startedAt: "desc" } });
