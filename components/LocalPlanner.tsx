@@ -1,4 +1,5 @@
 "use client";
+import { sendProductEvent } from "@/lib/product-events";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
 import { parsePlannerState, serializePlannerState } from "@/lib/planner-storage";
@@ -115,14 +116,18 @@ export function useLocalPlanner() {
 }
 export function FavoriteButton({ kind, value }: { kind: "festival" | "artist"; value: string }) {
   const p = useLocalPlanner();
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const selected = (kind === "festival" ? p.favoriteFestivals : p.favoriteArtists).includes(value);
   return (
     <button
       className={`favoriteButton${selected ? " selected" : ""}`}
       type="button"
       aria-pressed={selected}
-      onClick={() => (kind === "festival" ? p.toggleFestival(value) : p.toggleArtist(value))}
+      onClick={() => {
+        if (kind === "festival" && !selected) sendProductEvent("SAVE", language);
+        if (kind === "festival") p.toggleFestival(value);
+        else p.toggleArtist(value);
+      }}
     >
       {t(selected ? "saved" : "save")}
     </button>

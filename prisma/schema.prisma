@@ -894,6 +894,26 @@ model AnalyticsDaily {
   @@index([day])
 }
 
+enum ProductEvent {
+  SEARCH_SUBMIT
+  FILTER_USED
+  COMPARE
+  SAVE
+  TICKET_OUTBOUND
+  PLAYLIST_START
+  PLAYLIST_SUCCESS
+  NOTIFICATIONS_OPT_IN
+}
+
+model ProductEventDaily {
+  day    DateTime     @db.Date
+  event  ProductEvent
+  locale String       @db.VarChar(2)
+  count  Int          @default(0)
+
+  @@id([day, event, locale])
+}
+
 // Durable provider progress; catalogue identities require reviewed publication.
 model OperationalState {
   key            String @id

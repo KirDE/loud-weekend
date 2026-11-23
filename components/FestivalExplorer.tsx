@@ -1,5 +1,6 @@
 "use client";
 
+import { sendProductEvent } from "@/lib/product-events";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
@@ -36,7 +37,7 @@ const origins: Record<string, { label: string; coordinates: Coordinates }> = {
 };
 
 export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
-  const { locale, t } = useLanguage();
+  const { language, locale, t } = useLanguage();
   const planner = useLocalPlanner();
   const [query, setQuery] = useState(planner.savedFilters.query);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -103,7 +104,8 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
   );
   const compared = festivals.filter((item) => selected.includes(item.slug));
   const overlap = lineupOverlap(compared);
-  const toggleSelected = (item: Festival) =>
+  const toggleSelected = (item: Festival) => {
+    if (!selected.includes(item.slug) && selected.length < 3) sendProductEvent("COMPARE", language);
     setSelected((current) => {
       if (current.includes(item.slug)) {
         const next = current.filter((value) => value !== item.slug);
@@ -118,6 +120,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
       setComparisonStatus(t("comparisonSelected", { festival: item.name, count: next.length }));
       return next;
     });
+  };
   useEffect(() => {
     if (planner.ready && !filtersReady) {
       setQuery(planner.savedFilters.query);
@@ -156,6 +159,15 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
             aria-label={t("filterSearch")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" &&
+                !event.repeat &&
+                !event.nativeEvent.isComposing &&
+                query.trim()
+              )
+                sendProductEvent("SEARCH_SUBMIT", language);
+            }}
             placeholder={t("search")}
           />
           {query && (
@@ -174,7 +186,10 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         <select
           aria-label={t("countries")}
           value={country}
-          onChange={(event) => setCountry(event.target.value)}
+          onChange={(event) => {
+            setCountry(event.target.value);
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           <option value="all">{t("allCountries")}</option>
           {countries.map((value) => (
@@ -186,7 +201,10 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         <select
           aria-label={t("filterMonth")}
           value={month}
-          onChange={(event) => setMonth(event.target.value)}
+          onChange={(event) => {
+            setMonth(event.target.value);
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           <option value="all">{t("allMonths")}</option>
           {months.map((value) => (
@@ -200,7 +218,10 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         <select
           aria-label={t("filterGenre")}
           value={genre}
-          onChange={(event) => setGenre(event.target.value)}
+          onChange={(event) => {
+            setGenre(event.target.value);
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           <option value="all">{t("allGenres")}</option>
           {genres.map((value) => (
@@ -212,7 +233,10 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         <select
           aria-label={t("filterOrigin")}
           value={origin}
-          onChange={(event) => setOrigin(event.target.value)}
+          onChange={(event) => {
+            setOrigin(event.target.value);
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           {Object.entries(origins).map(([value, item]) => (
             <option key={value} value={value}>
@@ -223,7 +247,10 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         <select
           aria-label={t("filterDistance")}
           value={maxDistance}
-          onChange={(event) => setMaxDistance(event.target.value)}
+          onChange={(event) => {
+            setMaxDistance(event.target.value);
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           <option value="all">{t("anyDistance")}</option>
           {[100, 250, 500, 1000, 2000].map((value) => (
@@ -245,7 +272,10 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
             <input
               type="checkbox"
               checked={announcedOnly}
-              onChange={(event) => setAnnouncedOnly(event.target.checked)}
+              onChange={(event) => {
+                setAnnouncedOnly(event.target.checked);
+                sendProductEvent("FILTER_USED", language);
+              }}
             />
             <span />
             {t("lineupAnnounced")}
@@ -254,7 +284,10 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
             <input
               type="checkbox"
               checked={ticketsOnly}
-              onChange={(event) => setTicketsOnly(event.target.checked)}
+              onChange={(event) => {
+                setTicketsOnly(event.target.checked);
+                sendProductEvent("FILTER_USED", language);
+              }}
             />
             <span aria-hidden="true" />
             {t("officialTicketsOnly")}
