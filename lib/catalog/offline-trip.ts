@@ -2,16 +2,28 @@ import { parseOfflineTrip } from "../../public/offline-trips.mjs";
 
 export async function readPublishedOfflineTrip(slug: string, year: number) {
   const { db } = await import("../db.ts");
-  const edition = await db.festivalEdition.findFirst({
-    where: { festival: { slug }, year, recordState: { in: ["CURRENT", "ARCHIVED"] } },
-    select: {
-      festival: { select: { name: true, city: true, country: true } },
-      startDate: true,
-      endDate: true,
-      sourceUpdatedAt: true,
-      timetable: {
-        // Older rows without explicit schedule evidence must not inherit a default time zone or checked time.
-        where: { timeZone: { not: null }, sourceUrl: { not: null }, observedAt: { not: null } },
+  const snapshot = await db.$transaction(
+    async (tx) => {
+      const edition = await tx.festivalEdition.findFirst({
+        where: { festival: { slug }, year, recordState: { in: ["CURRENT", "ARCHIVED"] } },
+        select: {
+          id: true,
+          festival: { select: { name: true, city: true, country: true } },
+          startDate: true,
+          endDate: true,
+          sourceUpdatedAt: true,
+        },
+      });
+      if (!edition) return null;
+      const timetable = await tx.timetablePerformance.findMany({
+        where: {
+          editionId: edition.id,
+          date: { gte: edition.startDate ?? undefined, lte: edition.endDate ?? undefined },
+          // Older rows without explicit evidence cannot inherit a default zone or checked time.
+          timeZone: { not: null },
+          sourceUrl: { not: null },
+          observedAt: { not: null },
+        },
         take: 801,
         orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }],
         select: {
@@ -23,18 +35,17 @@ export async function readPublishedOfflineTrip(slug: string, year: number) {
           status: true,
           observedAt: true,
         },
-      },
+      });
+      return { edition, timetable };
     },
-  });
-  if (!edition) return null;
+    { isolationLevel: "RepeatableRead" },
+  );
+  if (!snapshot) return null;
+  const { edition, timetable } = snapshot;
   const { name, city, country } = edition.festival;
   const date = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
   const startDate = date(edition.startDate);
   const endDate = date(edition.endDate);
-  const timetable = edition.timetable.filter((entry) => {
-    const day = date(entry.date);
-    return day && (!startDate || day >= startDate) && (!endDate || day <= endDate);
-  });
   const trip = parseOfflineTrip({
     version: 1,
     slug,

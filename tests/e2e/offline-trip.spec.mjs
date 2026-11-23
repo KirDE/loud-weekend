@@ -93,10 +93,34 @@ test("explicit mobile trip download keeps only public proof and works offline", 
       data: { startDate: new Date("2027-06-18"), endDate: new Date("2027-06-20") },
     });
     try {
+      const fixtureRows = {
+        editionId: target.id,
+        start: entry.start,
+        stage: "Offline bounds fixture",
+        timeZone: entry.timeZone,
+        observedAt: new Date(entry.observedAt),
+        sourceUrl: entry.sourceUrl,
+      };
+      await db.timetablePerformance.createMany({
+        data: [
+          ...Array.from({ length: 801 }, (_, i) => ({
+            ...fixtureRows,
+            date: new Date(entry.date),
+            artistName: `Stale artist ${i}`,
+          })),
+          { ...fixtureRows, date: new Date("2027-06-18"), artistName: "In-range artist" },
+        ],
+      });
       const moved = await request.get(api);
       expect(moved.status()).toBe(200);
-      expect(await moved.json()).toMatchObject({ startDate: "2027-06-18", timetable: [] });
+      expect(await moved.json()).toMatchObject({
+        startDate: "2027-06-18",
+        timetable: [{ artist: "In-range artist" }],
+      });
     } finally {
+      await db.timetablePerformance.deleteMany({
+        where: { editionId: target.id, stage: "Offline bounds fixture" },
+      });
       await db.festivalEdition.update({
         where: { id: target.id },
         data: { startDate: target.startDate, endDate: target.endDate },
