@@ -3486,3 +3486,8 @@ summary:focus-visible {
   justify-content: flex-end;
   margin-block: 12px 0;
 }
+
+.artistMatchSummary {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}

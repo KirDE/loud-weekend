@@ -4,7 +4,14 @@ import { getCatalog } from "./catalog/repository";
 import type { SupportedLanguage } from "./catalog/public";
 
 // Share one request-scoped catalogue snapshot between metadata and visible stats.
-export const getHomeCatalog = cache(getCatalog);
+export const getHomeCatalog = cache(async () => {
+  const catalogue = await getCatalog();
+  const inLineups = new Set(Object.values(catalogue.discoveryLineups.artistSlugsByFestival).flat());
+  const matchingArtists = catalogue.artists
+    .filter(({ slug }) => inLineups.has(slug))
+    .map(({ slug, name }) => ({ slug, name }));
+  return { ...catalogue, matchingArtists };
+});
 
 export function homeMetadata(language: SupportedLanguage, count: number): Metadata {
   const title = "Loud Weekend 2027";
