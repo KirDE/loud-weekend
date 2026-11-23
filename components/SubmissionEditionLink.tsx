@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import type { SubmissionEditionLink as LinkedEdition } from "@/lib/submission-edition-link";
+import { SubmissionFollowOnEdition, type FollowOnDraft } from "./SubmissionFollowOnEdition";
 import { useLanguage } from "./LanguageProvider";
 
 const labels = {
@@ -17,11 +18,13 @@ const labels = {
     failed: "Не удалось связать выпуск. Проверьте официальный сайт и год проведения." },
 };
 
-export function SubmissionEditionLink({ reference, year, editions, initialLink }: {
+export function SubmissionEditionLink({ reference, year, editions, currentEditions, initialLink, initialDraft }: {
   reference: string;
   year: number;
   editions: { slug: string; name: string; year: number }[];
+  currentEditions: { slug: string; name: string; year: number }[];
   initialLink?: LinkedEdition | null;
+  initialDraft?: FollowOnDraft;
 }) {
   const { language } = useLanguage();
   const copy = labels[language];
@@ -49,8 +52,8 @@ export function SubmissionEditionLink({ reference, year, editions, initialLink }
   }
 
   if (link) return <p>{copy.linked}: <Link href={`/festivals/${link.slug}/${link.year}/`}>{link.slug} · {link.year}</Link></p>;
-  if (!options.length) return <p>{copy.missing}</p>;
-  return <form onSubmit={submit}>
+  return <>
+    {!options.length ? <p>{copy.missing}</p> : <form onSubmit={submit}>
     <label>{copy.select}
       <select name="slug" defaultValue="" required>
         <option value="" disabled>{copy.choose}</option>
@@ -59,5 +62,7 @@ export function SubmissionEditionLink({ reference, year, editions, initialLink }
     </label>
     <button type="submit" disabled={busy}>{copy.link}</button>
     {failed && <p role="alert">{copy.failed}</p>}
-  </form>;
+    </form>}
+    <SubmissionFollowOnEdition reference={reference} year={year} options={currentEditions} initialDraft={initialDraft} onLink={setLink} />
+  </>;
 }
