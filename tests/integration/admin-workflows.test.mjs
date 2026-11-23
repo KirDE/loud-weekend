@@ -16,6 +16,7 @@ const sourceOrigin = "http://127.0.0.1:3250";
 const requests = [];
 const ticketsUrl = "https://tickets.example.test/integration";
 let primaryFails = false;
+let primaryOffersWithoutEdition = false;
 let originalStartDate = "2027-07-28";
 let datesChanged = false;
 const correctedStartDate = "2027-07-29";
@@ -30,6 +31,10 @@ const sourceServer = createServer((request, response) => {
   const startDate = request.url === "/dates" && datesChanged ? correctedStartDate : originalStartDate;
   const availability = request.url === "/primary" ? ' ,"availability":"https://schema.org/SoldOut"' : "";
   response.setHeader("content-type", "text/html");
+  if (request.url === "/primary" && primaryOffersWithoutEdition) {
+    response.end(`<script type="application/ld+json">{"@type":"MusicEvent","name":"Wacken Open Air","location":{"address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${ticketsUrl}","availability":"https://schema.org/InStock"}}</script>`);
+    return;
+  }
   response.end(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicEvent","name":"Wacken Open Air","startDate":"${startDate}","endDate":"2027-07-31","location":{"@type":"Place","address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${ticketsUrl}"${availability}}}</script>`);
 });
 
@@ -278,6 +283,18 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal((await admin.json(refreshPath, "POST")).status, 409);
   assert.equal(await db.adminParserRun.count(), beforeDisabledRuns);
   await db.festivalSource.update({ where: { id: configuredSource.id }, data: { enabled: true } });
+  // A current source configuration cannot establish the year of a dateless offer.
+  primaryOffersWithoutEdition = true;
+  const unscopedStock = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(unscopedStock.status, 201);
+  const stockRun = await unscopedStock.json();
+  assert.equal(stockRun.queued, 0);
+  assert.equal(stockRun.status, "PARTIAL");
+  const stockLog = await (await admin.json(`/api/admin/parser-runs/${stockRun.id}/log`)).json();
+  assert.ok(stockLog.log.some(({ reviewReasons }) => reviewReasons?.includes("Ticket availability could not be verified for the selected edition.")));
+  assert.equal(await db.adminChange.count({ where: { parserRunId: stockRun.id, field: "ticketStatus" } }), 0);
+  assert.equal(await publicAvailability(), "https://schema.org/SoldOut");
+  primaryOffersWithoutEdition = false;
   primaryFails = true;
   assert.equal((await admin.json(refreshPath, "POST")).status, 502);
   const failedRun = await db.adminParserRun.findFirstOrThrow({ orderBy: { startedAt: "desc" } });

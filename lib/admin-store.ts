@@ -194,12 +194,18 @@ async function refreshSource(refreshId: string, sourceId: string, editionId: str
     if (!candidate.evidence.length) throw new Error("Official source provided no supported evidence");
     if (candidate.observedEditionYears.some((year) => year !== active.editionYear))
       throw new Error("Official source returned another edition");
+    const editionObserved = candidate.observedEditionYears.includes(active.editionYear);
+    const reviewReasons = [...result.reviewReasons];
     const fields = ["startDate", "endDate", "city", "headliners", "lineup", "ticketsUrl", "ticketStatus", "status"] as const;
     const proposals = fields.flatMap((field) => {
       const differences = result.changes.filter((item) => item.field === field);
       const evidence = candidate.evidence.filter((item) => item.field === field);
       if (!differences.length || !evidence.length) return [];
-      if ((field === "lineup" || field === "headliners") && !candidate.observedEditionYears.includes(active.editionYear)) return [];
+      if (field === "ticketStatus" && !editionObserved) {
+        reviewReasons.push("Ticket availability could not be verified for the selected edition.");
+        return [];
+      }
+      if ((field === "lineup" || field === "headliners") && !editionObserved) return [];
       const afterValue = field === "lineup" || field === "headliners"
         ? [...festival[field].filter((name) => !differences.some((diff) => diff.before === name)),
             ...differences.flatMap((diff) => diff.after === undefined ? [] : [diff.after])]
@@ -239,11 +245,11 @@ async function refreshSource(refreshId: string, sourceId: string, editionId: str
         queued++;
       }
       const updated = await tx.adminParserRun.update({ where: { id: run.id }, data: {
-        status: result.reviewReasons.length ? AdminRunStatus.PARTIAL : AdminRunStatus.SUCCEEDED,
+        status: reviewReasons.length ? AdminRunStatus.PARTIAL : AdminRunStatus.SUCCEEDED,
         finishedAt, durationMs: finishedAt.getTime() - run.startedAt.getTime(), extracted: candidate.evidence.length,
         message: `${queued} change(s) queued`, log: json([
           { at: run.startedAt.toISOString(), message: "Fetch started" },
-          { at: finishedAt.toISOString(), message: "Parse completed", reviewReasons: result.reviewReasons, queued },
+          { at: finishedAt.toISOString(), message: "Parse completed", reviewReasons, queued },
         ]),
       } });
       await tx.adminAuditEntry.create({ data: {
