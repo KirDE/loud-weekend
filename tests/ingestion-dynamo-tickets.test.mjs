@@ -74,3 +74,13 @@ test('no eligible current source article is explicit missing evidence, not a suc
  assert.equal(c.ticketStatus,undefined);assert.ok(c.warnings.some(w=>w.includes('inventory requires review')));
  const r=evaluateCandidate(current,c);assert.equal(r.publishable,false);assert(!r.changes.some(change=>change.field==='ticketStatus'));
 });
+
+test("contradictory duplicate inventory rows cannot establish ordinary stock", async () => {
+ const candidateWithConflict = await candidate(mock(({ storefront }) => {
+  const items = storefront.categories[0].categories[0].items;
+  items.push(...items.filter(item => item.is_sold_out === false)
+    .map(item => ({ ...item, is_sold_out: true, max_quantity: 0 })));
+ }));
+ assert.deepEqual(ticketFacts(candidateWithConflict), [undefined, undefined]);
+ assert.ok(candidateWithConflict.warnings.some(warning => warning.includes("inventory requires review")));
+});

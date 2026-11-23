@@ -82,6 +82,7 @@ export function extractDynamoTickets(html: string, startDate: string, endDate: s
         !Array.isArray(doc.products) || !Array.isArray(doc.items)) continue;
       const available = doc.products.some(p => p.eventUrl === doc.eventUrl && /^https:\/\/shopping-api\.paylogic\.com\/products\/[a-f0-9]{32}$/.test(p.url) && p.type === "entrance" &&
         /^(?:(?:EARLY BIRD|ADVANCE|REGULAR|INNER CIRCLE) )?WEEKEND TICKET$/.test(p.name) && p.separate === true && p.membership === false && Date.parse(p.start) <= now && Date.parse(p.end) > now &&
+        doc.items.filter(i => i.product === p.url).length === 1 &&
         doc.items.some(i => i.product === p.url && i.soldOut === false && (i.max === null || (Number.isInteger(i.max) && i.max > 0)) && Array.isArray(i.combo) && !i.combo.length));
       if (available) return {ticketsUrl: doc.url, ticketStatus: "available", ticketsExcerpt: `Official ${date[4]} purchase announcement corroborated by current published shop and selectable adult weekend admission at ${doc.generated}; closed loyalty/future tiers are not festival sellout. ${doc.shopUrl}`};
     }
