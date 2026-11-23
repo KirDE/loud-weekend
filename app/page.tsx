@@ -1,3 +1,4 @@
+import { publicSeasonEditions, seasonYears } from "@/lib/catalog/seasons";
 import { HomeContent } from "@/components/HomeContent";
 import { getHomeCatalog, homeMetadata } from "@/lib/home-metadata";
 
@@ -9,6 +10,6 @@ export async function generateMetadata() {
 }
 
 export default async function Home() {
-  const { festivals } = await getHomeCatalog();
-  return <HomeContent festivals={festivals} />;
+  const { festivals, editions } = await getHomeCatalog();
+  return <HomeContent festivals={festivals} years={seasonYears(publicSeasonEditions(editions))} />;
 }

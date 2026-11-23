@@ -1,3 +1,4 @@
+import { publicSeasonEditions, seasonYears } from "@/lib/catalog/seasons";
 import { notFound } from "next/navigation";
 import { HomeContent } from "@/components/HomeContent";
 import { supportedLanguages } from "@/lib/catalog/public";
@@ -25,6 +26,6 @@ export async function generateMetadata({ params }: { params: Promise<{ lang: str
 export default async function LocalizedHome({ params }: { params: Promise<{ lang: string }> }) {
   const lang = (await params).lang;
   if (!supportedLanguages.some((value) => value === lang)) notFound();
-  const { festivals } = await getHomeCatalog();
-  return <HomeContent festivals={festivals} />;
+  const { festivals, editions } = await getHomeCatalog();
+  return <HomeContent festivals={festivals} years={seasonYears(publicSeasonEditions(editions))} />;
 }

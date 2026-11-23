@@ -1,11 +1,18 @@
 "use client";
 
 import type { Festival } from "@/lib/domain/festival";
+import { SeasonNavigation } from "./SeasonNavigation";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { useLanguage } from "./LanguageProvider";
 import { hasAnnouncedLineup } from "@/lib/festival-lineup";
 
-export function HomeContent({ festivals }: { festivals: Festival[] }) {
+export function HomeContent({
+  festivals,
+  years,
+}: {
+  festivals: Festival[];
+  years: readonly number[];
+}) {
   const { t } = useLanguage();
   const announced = festivals.filter(hasAnnouncedLineup).length;
   const countries = new Set(festivals.map((item) => item.countryCode)).size;
@@ -30,6 +37,7 @@ export function HomeContent({ festivals }: { festivals: Festival[] }) {
             <strong>{countries}</strong> {t("countries")}
           </span>
         </div>
+        <SeasonNavigation years={years} />
       </section>
       <FestivalExplorer festivals={festivals} />
     </>

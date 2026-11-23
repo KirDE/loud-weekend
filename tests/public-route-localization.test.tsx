@@ -65,16 +65,20 @@ const expected = {
 for (const language of ["de", "ru"] as const) {
   test("public archive, edition, share, country and month pages render in " + language, () => {
     const t = expected[language];
-    const archive = render(language, <ArchiveContent archived={[archived]} future={[tracking]} />);
+    const archive = render(
+      language,
+      <ArchiveContent archived={[archived]} future={[tracking]} years={[2028, 2027, 2026]} />,
+    );
     assert.ok(archive.includes(t.archive) && archive.includes(t.future));
     assert.ok(
       !archive.includes("Archived and future records") && !archive.includes("Open edition"),
     );
-    assert.ok(
-      archive.includes('href="/editions/2027"') || archive.includes('href="/editions/2027/"'),
-    );
+    assert.match(archive, new RegExp(`href="/${language}/editions/2027/?"`));
 
-    const year = render(language, <EditionYearContent year={2027} items={[current]} />);
+    const year = render(
+      language,
+      <EditionYearContent year={2027} items={[current]} years={[2028, 2027, 2026]} />,
+    );
     assert.ok(year.includes(t.edition) && !year.includes("provenance-aware"));
     const detail = render(language, <FestivalEditionContent item={current} />);
     assert.ok(detail.includes(t.detail) && detail.includes(t.status));
