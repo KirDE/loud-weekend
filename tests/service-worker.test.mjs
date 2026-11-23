@@ -306,6 +306,7 @@ test("unsafe network responses are never saved and HTTP errors do not become sta
 test("an invalid public-looking catalogue cannot replace or revalidate a good offline copy", async () => {
   const invalid = [
     { ...payload(), dataVersion: "different-edition" },
+    { ...payload(), editionYear: 2029 },
     { ...payload(), privateNote: "not part of the public projection" },
     { ...payload(), festivals: [{ ...payload().festivals[0], timetable: null }] },
     { ...payload(), festivals: [{ ...payload().festivals[0], timetable: [{ artist: "Incomplete" }] }] },
@@ -416,4 +417,12 @@ test("redirected catalogue responses are rejected even with public headers", asy
   const { listeners } = await loadWorker({ cachesImpl: caches, fetchImpl: async () => response });
   assert.equal((await dispatch(listeners)).status, 502);
   assert.equal(await cache.match(CATALOG_URL), undefined);
+});
+
+test("public catalogue accepts a new season with a matching data version", async () => {
+  const { cache, caches } = memoryCache();
+  const body = { ...payload(), editionYear: 2029, dataVersion: "festivals-2029-v1" };
+  const { listeners } = await loadWorker({ cachesImpl: caches, fetchImpl: async () => catalogReply(revisionB, { body }) });
+  assert.deepEqual(await (await dispatch(listeners)).json(), body);
+  assert.deepEqual(await (await cache.match(CATALOG_URL)).json(), body);
 });
