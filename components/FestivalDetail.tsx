@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
+import { FestivalCamping } from "./FestivalCamping";
 import { useLanguage } from "./LanguageProvider";
 import { PlanningTools } from "./PlanningTools";
 import type { PlaylistStatus } from "@/lib/domain/festival";
@@ -198,6 +199,7 @@ export function FestivalDetail({
         )}
       </section>
       <PlanningTools item={item} festivals={festivals} />
+      <FestivalCamping festival={item} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
         <p>{t("catalogUpdated", { date: prettyDate(item.updatedAt.slice(0, 10)) })}</p>
