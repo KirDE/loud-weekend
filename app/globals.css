@@ -548,7 +548,7 @@
   inset: 9% 15% 8% 18%;
   display: grid;
   place-items: center;
-  color: #9a9a85;
+  color: #62634f;
   font:
     clamp(60px, 13vw, 170px) "Archivo Black",
     sans-serif;
@@ -576,8 +576,8 @@
   transform: translate(-50%, -50%);
   z-index: 2;
 }
-
-.mapMarker summary {
+/* stylelint-disable-next-line no-descending-specificity -- Map buttons do not share notification styles. */
+.mapMarker > button {
   list-style: none;
   display: grid;
   place-items: center;
@@ -586,24 +586,39 @@
   border: 3px solid white;
   border-radius: 50%;
   background: var(--orange);
-  color: white;
+  color: var(--solid);
   font-weight: 900;
   cursor: pointer;
   box-shadow: 0 3px 12px #0005;
 }
-
-.mapMarker summary::-webkit-details-marker {
-  display: none;
-}
-
-/* stylelint-disable-next-line no-descending-specificity
-   -- Preserve component cascade against earlier .channelRow > span:first-child.
-*/
-.mapMarker summary span {
+/* stylelint-disable-next-line no-descending-specificity -- Map labels are not channel labels. */
+.mapMarker > button span {
   position: absolute;
   top: 42px;
   color: var(--ink);
   font-size: 10px;
+  padding-inline: 0.2em;
+  background: var(--paper);
+  border-radius: 0.2em;
+}
+
+.mapMarker[data-open="true"] {
+  z-index: 3;
+}
+
+.mapTextList {
+  margin-block: 1rem;
+}
+
+.mapTextList summary {
+  cursor: pointer;
+  width: fit-content;
+  min-height: 44px;
+  padding-block: 0.6rem;
+}
+
+.mapTextList a {
+  text-decoration: underline;
 }
 
 /* stylelint-disable-next-line no-descending-specificity
@@ -3410,3 +3425,12 @@ summary:focus-visible {
 .plannerReset [role="status"] {
   max-width: 28rem;
 }
+
+/* stylelint-disable no-descending-specificity -- Keep an explicit focus ring on map controls. */
+.mapMarker > button:focus-visible,
+.mapTextList summary:focus-visible,
+.mapTextList a:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+/* stylelint-enable no-descending-specificity */
