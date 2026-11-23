@@ -144,29 +144,32 @@ export function AccountSyncPanel({
     setBusyState(value);
     onBusyChange?.(value);
   }
+  async function readDocument(kind: Kind) {
+    const response = await fetch("/api/sync/" + kind, { cache: "no-store" });
+    if (!response.ok) throw new Error(t.failed);
+    const { document } = (await response.json()) as { document?: Document | null };
+    if (
+      document !== null &&
+      (!document ||
+        typeof document.id !== "string" ||
+        !Number.isInteger(document.revision) ||
+        document.revision < 0 ||
+        document.payload === undefined)
+    ) {
+      throw new Error(t.failed);
+    }
+    if (kind === "collections" && document) readCollections(document.payload);
+    if (kind === "saved-filters" && document) {
+      const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
+      if (!filters || typeof filters !== "object" || Array.isArray(filters))
+        throw new Error(t.failed);
+    }
+    return document;
+  }
+
   async function readDocuments() {
     const entries = await Promise.all(
-      kinds.map(async (kind) => {
-        const response = await fetch("/api/sync/" + kind, { cache: "no-store" });
-        if (!response.ok) throw new Error(t.failed);
-        const { document } = (await response.json()) as { document?: Document | null };
-        if (
-          document !== null &&
-          (!document ||
-            typeof document.id !== "string" ||
-            !Number.isInteger(document.revision) ||
-            document.revision < 0 ||
-            document.payload === undefined)
-        )
-          throw new Error(t.failed);
-        if (kind === "collections" && document) readCollections(document.payload);
-        if (kind === "saved-filters" && document) {
-          const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
-          if (!filters || typeof filters !== "object" || Array.isArray(filters))
-            throw new Error(t.failed);
-        }
-        return [kind, document] as const;
-      }),
+      kinds.map(async (kind) => [kind, await readDocument(kind)] as const),
     );
     return Object.fromEntries(entries.filter(([, document]) => document)) as Partial<
       Record<Kind, Document>
@@ -201,17 +204,16 @@ export function AccountSyncPanel({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ payload, revision }),
     });
-    const body = await response.json();
     if (response.status === 409) {
-      const latest = await fetch(`/api/sync/${kind}`, { cache: "no-store" }).then((value) =>
-        value.json(),
-      );
-      setConflict({ kind, local: payload, remote: latest.document });
+      const latest = await readDocument(kind);
+      if (!latest) throw new Error(t.failed);
+      setConflict({ kind, local: payload, remote: latest });
       throw new Error("conflict");
     }
     if (!response.ok) throw new Error(t.failed);
-    setDocs((current) => ({ ...current, [kind]: body.document }));
-    return body.document as Document;
+    const { document } = (await response.json()) as { document: Document };
+    setDocs((current) => ({ ...current, [kind]: document }));
+    return document;
   }
   async function synchronize(mode: "merge" | "remote" | "normal" = "normal") {
     setBusy(true);
@@ -313,11 +315,8 @@ export function AccountSyncPanel({
         body: JSON.stringify({ revision: saved.revision }),
       });
       if (response.status === 409) {
-        const latest = await fetch("/api/sync/collections", { cache: "no-store" });
-        if (!latest.ok) throw new Error(t.failed);
-        const document = (await latest.json()).document;
+        const document = await readDocument("collections");
         if (!document) throw new Error(t.failed);
-        readCollections(document.payload);
         setConflict({ kind: "collections", local: selection, remote: document });
         setStatus(t.conflict);
         return;

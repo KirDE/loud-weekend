@@ -139,6 +139,27 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
     const invalidPayload = {
       json: { document: { ...previous, payload: { savedFilters: "invalid" } } },
     };
+    // A 409 followed by a malformed read must not offer a destructive choice.
+    await secondPage.route(filtersRoute, (route) =>
+      route.request().method() === "GET" ? route.fulfill(invalidPayload) : route.continue(),
+    );
+    await secondPage.getByRole("button", { name: "Sync now", exact: true }).click();
+    await expect(secondPage.getByText("Sync failed. Reconnect and try again.")).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(
+      secondPage.getByRole("button", { name: "Use other device", exact: true }),
+    ).toHaveCount(0);
+    await expect
+      .poll(() =>
+        secondPage.evaluate(
+          (key) => JSON.parse(localStorage.getItem(key)).savedFilters,
+          storageKey,
+        ),
+      )
+      .toEqual(activeFilters);
+    await secondPage.unroute(filtersRoute);
+
     for (const response of [{ status: 503 }, { json: {} }, invalidPayload]) {
       await secondPage.route(filtersRoute, (route) => route.fulfill(response));
       await pull.click();
