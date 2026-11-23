@@ -356,17 +356,21 @@ async function applyFestivalChanges(
       case "headliners": {
         const billing =
           change.field === "headliners" ? LineupBilling.HEADLINER : LineupBilling.LINEUP;
-        changed =
-          Array.isArray(change.after) ||
-          (typeof change.after === "string" && /\r?\n|,/.test(change.after))
-            ? await replaceLineup(
-                db,
-                edition.id,
-                billing,
-                stringList(change.after, change.field),
-                ensureArtist,
-              )
-            : await addLineupArtist(db, edition.id, billing, String(change.after), ensureArtist);
+        const after = change.after;
+        if (Array.isArray(after)) {
+          changed = await replaceLineup(
+            db,
+            edition.id,
+            billing,
+            stringList(after, change.field),
+            ensureArtist,
+          );
+        } else {
+          if (typeof after !== "string" || !after.trim())
+            throw new Error("Invalid automatic lineup addition");
+          // One ingestion diff represents one artist, even when the billing contains punctuation.
+          changed = await addLineupArtist(db, edition.id, billing, after.trim(), ensureArtist);
+        }
         break;
       }
       default:
@@ -528,11 +532,20 @@ export async function publishIngestionResult(
       if (!same(expected, persisted))
         throw new Error("Persisted ingestion diff does not match publication request");
       const expectedYear = stored.observedEditionYears[0] ?? candidate.sourceYear ?? undefined;
-      if (
-        !expectedYear &&
-        input.result.changes.some(({ field }) => field === "lineup" || field === "headliners")
-      )
+      const artistChanges = input.result.changes.filter(
+        ({ field }) => field === "lineup" || field === "headliners",
+      );
+      if (artistChanges.length && !expectedYear)
         throw new Error("Cannot publish a lineup without one verified edition year");
+      if (
+        artistChanges.some(
+          ({ kind, field, after }) =>
+            kind !== (field === "headliners" ? "headliner_added" : "artist_added") ||
+            typeof after !== "string" ||
+            !after.trim(),
+        )
+      )
+        throw new Error("Invalid automatic lineup addition");
       // Secondary ticket observations are publishable only with the same exact
       // source, edition, value and durable evidence that passed the producer.
       // Do not extend the separate Impericon/I-Days publication paths here (#497).

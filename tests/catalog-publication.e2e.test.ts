@@ -1281,10 +1281,12 @@ test(
       const before = await counts();
       await assert.rejects(
         publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
-        new RegExp(
-          "Graspop publication requires|Candidate edition 2026 does not match catalogue edition 2027|" +
-            "publication scope does not match",
-        ),
+        drift === "removal"
+          ? /Invalid automatic lineup addition/
+          : new RegExp(
+              "Graspop publication requires|Candidate edition 2026 does not match catalogue edition 2027|" +
+                "publication scope does not match",
+            ),
       );
       assert.deepEqual(await counts(), before);
       assert.equal(
@@ -1924,7 +1926,9 @@ test("Provinssi provenance drift rolls back catalogue, completeness and provider
     const before = await counts();
     await assert.rejects(
       publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
-      /Provinssi publication requires|Candidate edition 2026|publication scope does not match/,
+      drift === "removal"
+        ? /Invalid automatic lineup addition/
+        : /Provinssi publication requires|Candidate edition 2026|publication scope does not match/,
     );
     assert.deepEqual(await counts(), before);
   }
@@ -3046,5 +3050,56 @@ test("a parser proposal compares festival facts using their canonical whitespace
       throw rollback;
     }),
     (error) => error === rollback,
+  );
+});
+
+test("an automatic lineup addition preserves comma billing as one canonical artist", async () => {
+  const first = `Existing support ${suffix}`;
+  const compound = `One Act, One Billing ${suffix}`;
+  for (const name of [first, compound, ...compound.split(",").map((part) => part.trim())]) {
+    createdArtists.push(name.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+  }
+  const previous = result(first);
+  const previousAttempt = await persist(previous);
+  await publishIngestionResult(db, {
+    attemptId: previousAttempt.id,
+    result: previous,
+    sourceCommit: suffix,
+  });
+
+  const value = result(compound);
+  const attempt = await persist(value);
+  const publish = () =>
+    publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix });
+  const publication = await publish();
+  assert.ok(publication);
+  assert.equal((await publish())?.id, publication.id);
+  const visible = (await readCatalog({ database: db })).festivals.find(
+    (festival) => festival.slug === value.festivalSlug,
+  )!;
+  assert.deepEqual(visible.lineup.slice(-2), [first, compound]);
+  assert.equal(
+    await db.artist.count({
+      where: { name: { in: compound.split(",").map((part) => part.trim()) } },
+    }),
+    0,
+  );
+});
+
+test("a persisted automatic roster change without an artist value cannot publish", async () => {
+  const value = result("Synthetic missing artist");
+  delete value.changes[0].after;
+  const attempt = await persist(value);
+  await assert.rejects(
+    publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
+    /Invalid automatic lineup addition/,
+  );
+  const candidate = await db.ingestionCandidate.findUniqueOrThrow({
+    where: { attemptId: attempt.id },
+  });
+  assert.equal(candidate.reviewState, "PENDING");
+  assert.equal(
+    await db.catalogPublication.count({ where: { sourceId: `ingestion:${candidate.id}` } }),
+    0,
   );
 });
