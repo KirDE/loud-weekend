@@ -42,7 +42,7 @@ for (const locale of ['en', 'de', 'ru']) {
     await expect(page.locator('.search input')).toHaveValue('');
     for (let i = 0; i < 5; i++) await expect(selects.nth(i)).toHaveValue(i === 3 ? 'berlin' : 'all');
     for (const checkbox of await page.locator('.filterBar input[type=checkbox]').all()) await expect(checkbox).not.toBeChecked();
-    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('festival-radar-planner-v1')).savedFilters)).toEqual({ query: '', country: 'all', month: 'all', announcedOnly: false, ticketsOnly: false, genre: "all", origin: "berlin", maxDistance: "all" });
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('festival-radar-planner-v1')).savedFilters)).toEqual({ query: '', country: 'all', month: 'all', announcedOnly: false, ticketsOnly: false, genre: "all", origin: "berlin", maxDistance: "all", dateFrom: "", dateTo: "", weekendOnly: false, maxDays: "all" });
     const state = await page.evaluate(() => JSON.parse(localStorage.getItem('festival-radar-planner-v1')));
     for (const key of Object.keys(preserved)) expect(state[key]).toEqual(preserved[key]);
     await page.reload();

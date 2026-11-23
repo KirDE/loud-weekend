@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
@@ -12,6 +13,8 @@ import { distanceKm, festivalGenres, festivalMatchesDiscoveryFilters } from "@/l
 import { availableFestivalMonths, festivalOverlapsMonth, formatFestivalDateRange } from "@/lib/festival-dates";
 import { announcedArtists, hasAnnouncedLineup, lineupPreviewArtists } from "@/lib/festival-lineup";
 
+import { datesFromQuery, hasDiscoveryDates, matchesDiscoveryDates, removeDateQuery, type DiscoveryDates } from "@/lib/discovery-dates";
+import { DiscoveryDateFilters } from "./DiscoveryDateFilters";
 import { defaultDiscoveryPreferences, discoveryDistances, discoveryOrigins as origins, type DiscoveryPreferences } from "@/lib/discovery-preferences";
 
 export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
@@ -19,6 +22,10 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
   const planner = useLocalPlanner();
   const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance } = planner.savedFilters;
   const filtersReady = planner.ready;
+  const queryParams = useSearchParams();
+  const linkedDates = useMemo(() => queryParams ? datesFromQuery(queryParams) : null, [queryParams]);
+  const dateFilters = linkedDates ?? planner.savedFilters;
+  const dateFiltersActive = hasDiscoveryDates(dateFilters);
   const updateFilters = planner.updateSavedFilters;
   const searchRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<string[]>([]);
@@ -40,8 +47,8 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
   const originCoordinates = origins[origin].coordinates;
   const visible = useMemo(() => festivals.filter((item) => {
     const haystack = [item.name, item.country, item.city, ...item.headliners, ...item.lineup].join(" ").toLowerCase();
-    return haystack.includes(query.toLowerCase()) && (country === "all" || item.countryCode === country) && (!announcedOnly || hasAnnouncedLineup(item)) && (month === "all" || festivalOverlapsMonth(item, Number(month))) && (!ticketsOnly || hasAvailableTickets(item)) && festivalMatchesDiscoveryFilters(item, { genre: genre === "all" ? undefined : genre, origin: originCoordinates, maxDistanceKm: maxDistance === "all" ? undefined : Number(maxDistance) });
-  }).sort((a, b) => (a.startDate || "9999").localeCompare(b.startDate || "9999")), [festivals, query, country, announcedOnly, month, ticketsOnly, genre, originCoordinates, maxDistance]);
+    return haystack.includes(query.toLowerCase()) && (country === "all" || item.countryCode === country) && (!announcedOnly || hasAnnouncedLineup(item)) && (month === "all" || festivalOverlapsMonth(item, Number(month))) && (!ticketsOnly || hasAvailableTickets(item)) && matchesDiscoveryDates(item, dateFilters) && festivalMatchesDiscoveryFilters(item, { genre: genre === "all" ? undefined : genre, origin: originCoordinates, maxDistanceKm: maxDistance === "all" ? undefined : Number(maxDistance) });
+  }).sort((a, b) => (a.startDate || "9999").localeCompare(b.startDate || "9999")), [festivals, query, country, announcedOnly, month, ticketsOnly, genre, originCoordinates, maxDistance, dateFilters]);
   const compared = festivals.filter((item) => selected.includes(item.slug));
   const overlap = lineupOverlap(compared);
   const toggleSelected = (item: Festival) => setSelected((current) => {
@@ -58,7 +65,19 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
     setComparisonStatus(t("comparisonSelected", { festival: item.name, count: next.length }));
     return next;
   });
+  const clearLinkedDates = () => {
+    const url = new URL(window.location.href);
+    removeDateQuery(url);
+    window.history.replaceState(null, "", url);
+  };
+
+  const updateDates = (patch: Partial<DiscoveryDates>) => {
+    updateFilters({ ...linkedDates, ...patch });
+    if (linkedDates) clearLinkedDates();
+  };
+
   const clearFilters = () => {
+    if (linkedDates) clearLinkedDates();
     planner.setSavedFilters(defaultDiscoveryPreferences);
     searchRef.current?.focus();
   };
@@ -72,6 +91,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
       <select aria-label={t("filterOrigin")} value={origin} onChange={(event) => updateFilters({ origin: event.target.value as DiscoveryPreferences["origin"] })}>{Object.entries(origins).map(([value, item]) => <option key={value} value={value}>{t("fromOrigin", { origin: item.label })}</option>)}</select>
       <select aria-label={t("filterDistance")} value={maxDistance} onChange={(event) => updateFilters({ maxDistance: event.target.value })}><option value="all">{t("anyDistance")}</option>{discoveryDistances.map((value) => <option key={value} value={value}>{t("withinDistance", { distance: Number(value).toLocaleString(locale) })}</option>)}</select>
       <button type="button" className="outlineButton clearFilters" onClick={clearFilters} disabled={!filtersReady}>{t("clearAllFilters")}</button>
+      <DiscoveryDateFilters filters={dateFilters} onChange={updateDates} />
       <div className="filterToggles">
         <label className="toggle"><input type="checkbox" checked={announcedOnly} onChange={(event) => updateFilters({ announcedOnly: event.target.checked })} /><span/>{t("lineupAnnounced")}</label>
         <label className="toggle"><input type="checkbox" checked={ticketsOnly} onChange={(event) => updateFilters({ ticketsOnly: event.target.checked })} /><span aria-hidden="true"/>{t("officialTicketsOnly")}</label>
@@ -79,7 +99,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
     </div>
     <p className="srOnly" role="status" aria-live="polite" aria-atomic="true">{comparisonStatus}</p>
     {compared.length > 0 && <div className="compareTray"><div className="compareHeading"><strong>{t("compare")} ({compared.length}/3)</strong>{compared.map((item) => <button aria-label={t("removeFestivalComparison", { festival: item.name })} onClick={() => toggleSelected(item)} key={item.slug}>{item.name} <span aria-hidden="true">×</span></button>)}</div>{compared.length < 2 ? <p className="compareHint">{t("comparisonInstructions")}</p> : <div className="comparisonScroll" tabIndex={0}><table className="comparisonTable"><thead><tr><th scope="col">{t("planningDetail")}</th>{compared.map((item) => <th scope="col" key={item.slug}><Link href={`/festivals/${item.slug}/`}>{item.name}</Link></th>)}</tr></thead><tbody><tr><th scope="row">{t("dates")}</th>{compared.map((item) => <td key={item.slug}>{formatFestivalDateRange(item, locale, t("datesTba"))}</td>)}</tr><tr><th scope="row">{t("locationDistance", { origin: origins[origin].label })}</th>{compared.map((item) => <td key={item.slug}>{item.city || item.country}{item.coordinates ? ` · ${distanceKm(originCoordinates, item.coordinates).toLocaleString(locale)} km` : ` · ${t("distanceUnavailable")}`}</td>)}</tr><tr><th scope="row">{t("tickets")}</th>{compared.map((item) => <td key={item.slug}>{item.ticketsUrl ? <a href={item.ticketsUrl} rel="noreferrer" target="_blank">{t("officialTickets")}</a> : item.ticketStatus === "unavailable" ? t("unavailable") : t("availabilityNotConfirmed")}</td>)}</tr><tr><th scope="row">{t("lineupOverlap")}</th><td colSpan={compared.length}>{overlap.length ? <><strong>{t("sharedActs", { count: overlap.length })}</strong><br/>{overlap.join(", ")}</> : t("noLineupOverlap")}</td></tr></tbody></table></div>}</div>}
-    <div className="resultMeta"><span>{visible.length} {t("festivals")}</span><span>{t("lastReview")}</span></div>
+    <div className="resultMeta"><span aria-live="polite">{visible.length} {t("festivals")}</span><span>{t("lastReview")}</span></div>
     <div className="festivalGrid">{visible.map((item) => { const isSelected = selected.includes(item.slug); const previewArtists = lineupPreviewArtists(item); const artistCount = announcedArtists(item).length; return <article className="festivalCard" key={item.slug}><button type="button" className={`compareButton ${isSelected ? "active" : ""}`} aria-pressed={isSelected} aria-label={t("compareFestival", { festival: item.name })} onClick={() => toggleSelected(item)} disabled={!isSelected && selected.length >= 3}><span aria-hidden="true">{isSelected ? "✓ " : "+ "}</span>{t("compare")}</button><Link href={`/festivals/${item.slug}/`}>
       <div className="cardTop"><FestivalLogo slug={item.slug} name={item.name}/><span className={`status ${item.status}`}>{t(item.status === "tba" ? "tba" : item.status)}</span></div>
       {item.sourceDeprecated && <span className="status deprecated">{t("sourceDeprecated")}</span>}
@@ -89,6 +109,6 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
       <div className="artists">{previewArtists.length ? previewArtists.slice(0, 4).map((artist) => <span key={artist}>{artist}</span>) : <span className="muted">{t("lineupNotAnnounced")}</span>}</div>
       <div className="cardFoot"><span>{artistCount ? `${artistCount} ${t("announcedActs")}` : t("followUpdates")}</span><b>{t("explore")} →</b></div>
     </Link></article>; })}</div>
-    {!visible.length && <div className="empty"><strong>{t("noMatches")}</strong><p>{t("noDiscoveryMatches")}</p></div>}
+    {!visible.length && <div className="empty"><strong>{t("noMatches")}</strong><p>{t(dateFiltersActive ? "noDateMatches" : "noDiscoveryMatches")}</p></div>}
   </section>;
 }

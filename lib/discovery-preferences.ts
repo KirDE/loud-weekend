@@ -1,3 +1,4 @@
+import { defaultDiscoveryDates, readDiscoveryDates, type DiscoveryDates } from "./discovery-dates.ts";
 import type { Coordinates } from "./festival-discovery.ts";
 
 export const discoveryOrigins = {
@@ -10,7 +11,7 @@ export const discoveryOrigins = {
 
 export const discoveryDistances = ["100", "250", "500", "1000", "2000"] as const;
 
-export type DiscoveryPreferences = {
+export type DiscoveryPreferences = DiscoveryDates & {
   query: string;
   country: string;
   announcedOnly: boolean;
@@ -22,6 +23,7 @@ export type DiscoveryPreferences = {
 };
 
 export const defaultDiscoveryPreferences: DiscoveryPreferences = {
+  ...defaultDiscoveryDates,
   query: "",
   country: "all",
   announcedOnly: false,
@@ -35,6 +37,7 @@ export const defaultDiscoveryPreferences: DiscoveryPreferences = {
 export function readDiscoveryPreferences(value: unknown): DiscoveryPreferences {
   const fields = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
   return {
+    ...readDiscoveryDates(fields),
     query: typeof fields.query === "string" ? fields.query : defaultDiscoveryPreferences.query,
     country: typeof fields.country === "string" && /^[A-Z]{2}$/.test(fields.country) ? fields.country : defaultDiscoveryPreferences.country,
     announcedOnly: fields.announcedOnly === true,
