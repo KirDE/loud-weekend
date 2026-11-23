@@ -172,9 +172,9 @@ test("sync waits for the initial account revision before saving", async ({ page 
 test("signing out removes the private account view but keeps device choices", async ({ page }) => {
  const date = "2026-11-17T22:00:00.000Z";
  let signedIn = true;
- await page.route("**/api/auth/me**", route => route.fulfill({ json: {
-   user: signedIn ? { id: userId, email: "browser-collections@example.test" } : null,
- } }));
+ await page.route("**/api/auth/me**", route => route.fulfill(signedIn
+   ? { json: { user: { id: userId, email: "browser-collections@example.test" } } }
+   : { status: 401 }));
  await page.route("**/api/auth/logout**", route => {
    signedIn = false;
    return route.fulfill({ json: { ok: true } });
@@ -250,4 +250,39 @@ test("a failed account baseline can be retried without starting any writes", asy
  await sync.click();
  await expect(panel.getByText("Everything is synchronized.")).toBeVisible();
  expect(writes).toEqual([["favorites", 0], ["collections", 4], ["saved-filters", 0], ["plans", 0]]);
+});
+
+test("session lookup errors are retryable and never start account sync", async ({ page }) => {
+ let reply = { status: 503 };
+ const syncRequests = [];
+ await page.route("**/api/auth/me**", route => route.fulfill(reply));
+ await page.route("**/api/sync/**", route => {
+   syncRequests.push(route.request().method());
+   return route.fulfill({ json: { document: null } });
+ });
+ await page.goto("/en/planner/");
+ const panel = page.locator(".accountSync");
+ const retry = panel.getByRole("button", { name: "Retry account sync setup" });
+ const login = panel.getByText("Sign in from the Account menu to enable cross-device sync.");
+ await expect(retry).toBeVisible({ timeout: 4000 });
+ await expect(login).toHaveCount(0);
+ expect(syncRequests).toEqual([]);
+
+ reply = { json: { user: { id: "", email: "browser-collections@example.test" } } };
+ const malformed = page.waitForResponse(response => response.url().includes("/api/auth/me"));
+ await retry.click();
+ await malformed;
+ await expect(retry).toBeVisible();
+ expect(syncRequests).toEqual([]);
+
+ reply = { status: 401 };
+ await retry.click();
+ await expect(login).toBeVisible();
+ await expect(retry).toHaveCount(0);
+ expect(syncRequests).toEqual([]);
+
+ reply = { json: { user: { id: userId, email: "browser-collections@example.test" } } };
+ await page.evaluate(() => window.dispatchEvent(new Event("loud-weekend-authenticated")));
+ await expect(panel.getByRole("button", { name: copy.en.sync, exact: true })).toBeEnabled();
+ expect(syncRequests).toEqual(["GET", "GET", "GET", "GET"]);
 });

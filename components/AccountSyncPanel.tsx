@@ -108,23 +108,36 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
   const [loadAttempt, setLoadAttempt] = useState(0);
   const loading = baseline === "loading";
   const actionsDisabled = busy || baseline !== "ready" || disabled;
+  function retryBaseline() {
+    setBaseline("loading");
+    setLoadAttempt(attempt => attempt + 1);
+  }
   useEffect(() => {
     let latest = 0;
     async function load() {
       const request = ++latest;
       setBaseline("loading");
       setStatus("");
+      setUser(null);
+      setDocs({});
+      setConflict(null);
+      setShareUrl("");
       try {
         const me = await fetch("/api/auth/me", { cache: "no-store" });
-        const account = me.ok ? (await me.json()).user : null;
         if (request !== latest) return;
-        setUser(account);
-        setDocs({});
-        if (account) {
-          const documents = await readDocuments(account.id);
-          if (request !== latest) return;
-          setDocs(documents);
+        if (me.status === 401) {
+          setBaseline("ready");
+          return;
         }
+        if (!me.ok) throw new Error(t.failed);
+        const { user: account } = await me.json();
+        if (request !== latest) return;
+        if (!account || typeof account.id !== "string" || !account.id.trim() ||
+          typeof account.email !== "string" || !account.email.trim()) throw new Error(t.failed);
+        setUser(account);
+        const documents = await readDocuments(account.id);
+        if (request !== latest) return;
+        setDocs(documents);
         setBaseline("ready");
       } catch {
         if (request === latest) {
@@ -235,9 +248,13 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
   }
   const imported=readCollections(docs.collections?.payload).spotify;
 
-  if (!user) return <section className="plannerSection accountSync"><h2>{t.title}</h2><p>{t.local}</p><strong>{t.login}</strong></section>;
-  return <section className="plannerSection accountSync" aria-busy={busy || loading}><div className="sectionHeading"><div><div className="eyebrow">{user.email}</div><h2>{t.title}</h2></div><span aria-live="polite">{busy || loading ? t.syncing : status}</span></div><div className="syncActions">{baseline === "failed" && <button disabled={busy || disabled} onClick={() => {
-    setBaseline("loading");
-    setLoadAttempt(attempt => attempt + 1);
-  }}>{t.retry}</button>}<button disabled={actionsDisabled} onClick={() => synchronize("merge")}>{t.migrate}</button><button disabled={actionsDisabled} onClick={() => synchronize("remote")}>{t.replace}</button><button disabled={actionsDisabled} onClick={() => synchronize()}>{t.sync}</button></div>{conflict && <div className="syncConflict" role="alert"><strong>{t.conflict}</strong><div><button disabled={actionsDisabled} onClick={() => resolve(true)}>{t.keepLocal}</button><button disabled={actionsDisabled} onClick={() => resolve(false)}>{t.keepRemote}</button></div></div>}<div className="syncGrid"><div><h3>{t.share}</h3><label>{t.expiry}<input type="date" value={expiry} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setExpiry(event.target.value)} /></label><button disabled={actionsDisabled} onClick={share}>{t.share}</button>{shareUrl && <div className="shareResult"><a href={shareUrl}>{shareUrl}</a><button onClick={async () => { await navigator.clipboard.writeText(shareUrl); setStatus(t.copied); }}>{t.copy}</button></div>}<small>{t.expired}</small></div><div><h3>{t.spotify}</h3><a className="outlineButton" href="/api/spotify/connect">{t.connect}</a><button disabled={actionsDisabled} onClick={spotifySync}>{t.import}</button>{imported ? <div className="importedCollections"><p>{t.last}: <time dateTime={imported.syncedAt}>{new Intl.DateTimeFormat(locale, {dateStyle:"medium",timeStyle:"short"}).format(new Date(imported.syncedAt))}</time></p><h4>{t.imported}</h4><ul>{imported.playlists.map(playlist=><li key={playlist.id}><a href={playlist.url} target="_blank" rel="noopener noreferrer">{playlist.name}</a><span> · {playlist.trackCount} {t.tracks}</span></li>)}</ul></div> : <p>{t.empty}</p>}</div></div></section>;
+  if (!user) return (
+    <section className="plannerSection accountSync" aria-busy={loading}>
+      <h2>{t.title}</h2>
+      <p>{t.local}</p>
+      {baseline === "ready" ? <strong>{t.login}</strong> : <span aria-live="polite">{loading ? t.syncing : status}</span>}
+      {baseline === "failed" && <button disabled={disabled} onClick={retryBaseline}>{t.retry}</button>}
+    </section>
+  );
+  return <section className="plannerSection accountSync" aria-busy={busy || loading}><div className="sectionHeading"><div><div className="eyebrow">{user.email}</div><h2>{t.title}</h2></div><span aria-live="polite">{busy || loading ? t.syncing : status}</span></div><div className="syncActions">{baseline === "failed" && <button disabled={busy || disabled} onClick={retryBaseline}>{t.retry}</button>}<button disabled={actionsDisabled} onClick={() => synchronize("merge")}>{t.migrate}</button><button disabled={actionsDisabled} onClick={() => synchronize("remote")}>{t.replace}</button><button disabled={actionsDisabled} onClick={() => synchronize()}>{t.sync}</button></div>{conflict && <div className="syncConflict" role="alert"><strong>{t.conflict}</strong><div><button disabled={actionsDisabled} onClick={() => resolve(true)}>{t.keepLocal}</button><button disabled={actionsDisabled} onClick={() => resolve(false)}>{t.keepRemote}</button></div></div>}<div className="syncGrid"><div><h3>{t.share}</h3><label>{t.expiry}<input type="date" value={expiry} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setExpiry(event.target.value)} /></label><button disabled={actionsDisabled} onClick={share}>{t.share}</button>{shareUrl && <div className="shareResult"><a href={shareUrl}>{shareUrl}</a><button onClick={async () => { await navigator.clipboard.writeText(shareUrl); setStatus(t.copied); }}>{t.copy}</button></div>}<small>{t.expired}</small></div><div><h3>{t.spotify}</h3><a className="outlineButton" href="/api/spotify/connect">{t.connect}</a><button disabled={actionsDisabled} onClick={spotifySync}>{t.import}</button>{imported ? <div className="importedCollections"><p>{t.last}: <time dateTime={imported.syncedAt}>{new Intl.DateTimeFormat(locale, {dateStyle:"medium",timeStyle:"short"}).format(new Date(imported.syncedAt))}</time></p><h4>{t.imported}</h4><ul>{imported.playlists.map(playlist=><li key={playlist.id}><a href={playlist.url} target="_blank" rel="noopener noreferrer">{playlist.name}</a><span> · {playlist.trackCount} {t.tracks}</span></li>)}</ul></div> : <p>{t.empty}</p>}</div></div></section>;
 }
