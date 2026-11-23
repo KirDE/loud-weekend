@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { z } from "zod";
 import { readDiscoveryPreferences } from "@/lib/discovery-preferences";
 import { readCollections, mergeCollections } from "@/lib/collections";
 import { useLanguage } from "./LanguageProvider";
@@ -8,6 +9,13 @@ type Kind = "favorites" | "collections" | "saved-filters" | "plans";
 type Document = { id: string; payload: unknown; revision: number; updatedAt: string };
 type Conflict = { kind: Kind; local: unknown; remote: Document };
 const kinds: Kind[] = ["favorites", "collections", "saved-filters", "plans"];
+const favoritesPayload = z.object({
+  favoriteFestivals: z.array(z.string()).optional(),
+  favoriteArtists: z.array(z.string()).optional(),
+});
+const plansPayload = z.object({
+  attendance: z.record(z.string(), z.enum(["going", "maybe", "not-going"])).optional(),
+});
 const labels = {
   en: {
     title: "Account sync",
@@ -101,13 +109,15 @@ function payloads(p: ReturnType<typeof useLocalPlanner>): Record<Kind, unknown> 
   };
 }
 function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
-  const value = (kind: Kind) => (documents[kind]?.payload || {}) as Partial<PlannerState>;
+  const favorites = documents.favorites?.payload as z.infer<typeof favoritesPayload> | undefined;
+  const plans = documents.plans?.payload as z.infer<typeof plansPayload> | undefined;
+  const filters = documents["saved-filters"]?.payload as { savedFilters?: unknown } | undefined;
   return {
-    ...emptyPlannerState,
-    ...value("favorites"),
+    favoriteFestivals: favorites?.favoriteFestivals ?? emptyPlannerState.favoriteFestivals,
+    favoriteArtists: favorites?.favoriteArtists ?? emptyPlannerState.favoriteArtists,
+    attendance: plans?.attendance ?? emptyPlannerState.attendance,
     playlistFestivals: readCollections(documents.collections?.payload).playlistFestivals,
-    savedFilters: readDiscoveryPreferences(value("saved-filters").savedFilters),
-    ...value("plans"),
+    savedFilters: readDiscoveryPreferences(filters?.savedFilters),
   };
 }
 function mergePayload(kind: Kind, remote: unknown, local: unknown) {
@@ -159,6 +169,10 @@ export function AccountSyncPanel({
       throw new Error(t.failed);
     }
     if (kind === "collections" && document) readCollections(document.payload);
+    if (kind === "favorites" && document && !favoritesPayload.safeParse(document.payload).success)
+      throw new Error(t.failed);
+    if (kind === "plans" && document && !plansPayload.safeParse(document.payload).success)
+      throw new Error(t.failed);
     if (kind === "saved-filters" && document) {
       const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
       if (!filters || typeof filters !== "object" || Array.isArray(filters))
