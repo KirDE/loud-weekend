@@ -49,6 +49,7 @@ const dateOnly = (value: unknown) =>
 const isoDate = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 const same = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+const trimFact = (value: unknown) => (typeof value === "string" ? value.trim() : value);
 const normalizeTicketLink = (value: unknown) =>
   typeof value === "string" ? value.trim() || null : value;
 
@@ -254,12 +255,13 @@ async function applyFestivalChanges(
       case "name":
       case "country":
       case "officialUrl": {
-        current = festival[change.field];
-        const next = typeof change.after === "string" ? change.after.trim() : change.after;
-        if (input.strictBefore && !same(current, change.before) && !same(current, next))
+        current = trimFact(festival[change.field]);
+        const before = trimFact(change.before);
+        const next = trimFact(change.after);
+        if (typeof next !== "string" || !next) throw new Error(`Invalid ${change.field}`);
+        if (input.strictBefore && !same(current, before) && !same(current, next))
           throw new Error(`Stale ${change.field} value for ${input.festivalSlug}`);
         if (!same(current, next)) {
-          if (typeof next !== "string" || !next) throw new Error(`Invalid ${change.field}`);
           await db.festival.update({ where: { id: festival.id }, data: { [change.field]: next } });
           changed = true;
         }
