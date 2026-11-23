@@ -8,24 +8,29 @@ try {
       festival: { type: "string" },
       edition: { type: "string" },
       apply: { type: "string" },
+      actor: { type: "string" },
       "rail-shuttle": { type: "boolean" },
     },
   });
-  if (!values.festival || !values.edition || !process.env.DATABASE_URL) {
+  if (
+    !values.festival ||
+    !values.edition ||
+    !process.env.DATABASE_URL ||
+    (values.apply && !values.actor?.trim())
+  ) {
     throw new Error(
-      "DATABASE_URL, --festival=<slug> and --edition=YYYY required; --apply=<preview fingerprint> writes",
+      "Use DATABASE_URL, --festival=<slug> and --edition=YYYY; apply also requires --actor=<label>",
     );
   }
-  const result = await collectReviewedArrival(
-    db,
-    values.festival,
-    Number(values.edition),
-    {
-      approval: values.apply,
-      railShuttle: values["rail-shuttle"],
-    },
+  console.log(
+    JSON.stringify(
+      await collectReviewedArrival(db, values.festival, Number(values.edition), {
+        approval: values.apply,
+        actorLabel: values.actor,
+        railShuttle: values["rail-shuttle"],
+      }),
+    ),
   );
-  console.log(JSON.stringify(result));
 } finally {
   await db.$disconnect();
 }

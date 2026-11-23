@@ -38,16 +38,22 @@ export async function readArrivalFacts(
       },
     },
     select: {
-      kind: true, descriptionEn: true, descriptionDe: true, descriptionRu: true,
-      sourceUrl: true, checkedOn: true,
+      kind: true,
+      descriptionEn: true,
+      descriptionDe: true,
+      descriptionRu: true,
+      sourceUrl: true,
+      checkedOn: true,
     },
     orderBy: { kind: "asc" },
   });
 
-  return rows.filter(row => arrivalSourceHost(row.sourceUrl) === organizerHost).map(row => ({
-    kind: row.kind,
-    description: { en: row.descriptionEn, de: row.descriptionDe, ru: row.descriptionRu },
-    sourceUrl: row.sourceUrl,
-    checkedOn: row.checkedOn.toISOString().slice(0, 10),
-  }));
+  return rows
+    .filter((row) => arrivalSourceHost(row.sourceUrl) === organizerHost)
+    .map((row) => ({
+      kind: row.kind,
+      description: { en: row.descriptionEn, de: row.descriptionDe, ru: row.descriptionRu },
+      sourceUrl: row.sourceUrl,
+      checkedOn: row.checkedOn.toISOString().slice(0, 10),
+    }));
 }

@@ -44,27 +44,27 @@ from track_policy import (
     setlist_track_sort_key,
 )
 
-SETLIST_API_KEY = os.environ.get('SETLIST_API_KEY')
-REPORT_DIR = Path('outputs/festival_playlists')
-WORKER_STDIO = os.environ.get('FESTIVAL_WORKER_STDIO') == '1'
+SETLIST_API_KEY = os.environ.get("SETLIST_API_KEY")
+REPORT_DIR = Path("outputs/festival_playlists")
+WORKER_STDIO = os.environ.get("FESTIVAL_WORKER_STDIO") == "1"
 if not WORKER_STDIO:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-CACHE_DIR = Path('tmp/festival_playlists_cache')
+CACHE_DIR = Path("tmp/festival_playlists_cache")
 if not WORKER_STDIO:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-SETLIST_CACHE_FILE = CACHE_DIR / 'setlist_cache.json'
-CACHE_ONLY_SETLIST = os.environ.get('FESTIVAL_SETLIST_CACHE_ONLY') == '1'
-REPORT_ONLY = os.environ.get('FESTIVAL_REPORT_ONLY') == '1'
+SETLIST_CACHE_FILE = CACHE_DIR / "setlist_cache.json"
+CACHE_ONLY_SETLIST = os.environ.get("FESTIVAL_SETLIST_CACHE_ONLY") == "1"
+REPORT_ONLY = os.environ.get("FESTIVAL_REPORT_ONLY") == "1"
 
 SETLIST_HEADERS = {
-    'Accept': 'application/json',
-    'User-Agent': 'Clawdbie-Festival-Playlists/1.1',
+    "Accept": "application/json",
+    "User-Agent": "Clawdbie-Festival-Playlists/1.1",
 }
 if SETLIST_API_KEY:
-    SETLIST_HEADERS['x-api-key'] = SETLIST_API_KEY
+    SETLIST_HEADERS["x-api-key"] = SETLIST_API_KEY
 RATE_LIMIT_SECONDS = 1.05
 SETLIST_RETRY_CODES = {429, 500, 502, 503, 504}
-MAX_RETRY_AFTER_SECONDS = float(os.environ.get('FESTIVAL_MAX_RETRY_AFTER_SECONDS', '60'))
+MAX_RETRY_AFTER_SECONDS = float(os.environ.get("FESTIVAL_MAX_RETRY_AFTER_SECONDS", "60"))
 _last_setlist_call = 0.0
 
 FOLLOWERS_CACHE = {}
@@ -72,10 +72,16 @@ ARTIST_SEARCH_CACHE = {}
 MBID_CACHE = {}
 SETLIST_CACHE = {}
 TRACK_SEARCH_CACHE = {}
-PERSISTENT_SETLIST_CACHE = json.loads(SETLIST_CACHE_FILE.read_text(encoding='utf-8')) if not WORKER_STDIO and SETLIST_CACHE_FILE.exists() else {}
+PERSISTENT_SETLIST_CACHE = (
+    json.loads(SETLIST_CACHE_FILE.read_text(encoding="utf-8"))
+    if not WORKER_STDIO and SETLIST_CACHE_FILE.exists()
+    else {}
+)
 PERSISTENT_MBID_CACHE = {}
 RECENT_SETLIST_DAYS = 365
-GRASPOP_DAYS = ('thursday', 'friday', 'saturday', 'sunday')
+GRASPOP_DAYS = ("thursday", "friday", "saturday", "sunday")
+
+
 @dataclass
 class Festival:
     key: str
@@ -94,16 +100,16 @@ class Festival:
 
 def load_report_mbid_cache(report_dir: Path) -> dict[str, str]:
     cache = {}
-    for path in report_dir.glob('*.json'):
+    for path in report_dir.glob("*.json"):
         try:
-            report = json.loads(path.read_text(encoding='utf-8')).get('report', [])
+            report = json.loads(path.read_text(encoding="utf-8")).get("report", [])
         except (OSError, json.JSONDecodeError):
             continue
         for entry in report:
-            mbid = entry.get('mbid')
+            mbid = entry.get("mbid")
             if not mbid:
                 continue
-            for key in (entry.get('query_artist'), entry.get('artist')):
+            for key in (entry.get("query_artist"), entry.get("artist")):
                 if key and key not in cache:
                     cache[key] = mbid
     return cache
@@ -125,7 +131,7 @@ def sl_get(url, params=None, retries=4):
         response = requests.get(url, headers=SETLIST_HEADERS, params=params, timeout=30)
         _last_setlist_call = time.time()
         if response.status_code in SETLIST_RETRY_CODES and attempt < retries:
-            wait = retry_wait_seconds(response, max(5, 2 ** attempt))
+            wait = retry_wait_seconds(response, max(5, 2**attempt))
             time.sleep(max(wait, RATE_LIMIT_SECONDS))
             attempt += 1
             continue
@@ -135,11 +141,13 @@ def sl_get(url, params=None, retries=4):
 
 def require_setlist_api_key():
     if not SETLIST_API_KEY:
-        raise RuntimeError('SETLIST_API_KEY is required to fetch live setlist.fm data before regenerating festival playlists')
+        raise RuntimeError(
+            "SETLIST_API_KEY is required to fetch live setlist.fm data before regenerating festival playlists"
+        )
 
 
 def retry_wait_seconds(response, fallback: float) -> float:
-    retry_after = response.headers.get('Retry-After')
+    retry_after = response.headers.get("Retry-After")
     try:
         wait = float(retry_after) if retry_after else fallback
     except ValueError:
@@ -148,8 +156,8 @@ def retry_wait_seconds(response, fallback: float) -> float:
 
 
 def selected_artist_keys() -> set[str]:
-    selected = os.environ.get('FESTIVAL_ARTISTS', '')
-    return {simplify_name(item.strip()) for item in selected.split(',') if item.strip()}
+    selected = os.environ.get("FESTIVAL_ARTISTS", "")
+    return {simplify_name(item.strip()) for item in selected.split(",") if item.strip()}
 
 
 def artist_matches_selected(name: str, query_name: str, selected_keys: set[str]) -> bool:
@@ -157,17 +165,19 @@ def artist_matches_selected(name: str, query_name: str, selected_keys: set[str])
 
 
 def _spotify_request(method, url, *, params=None, payload=None, retries=6):
-    if method != 'GET':
-        raise RuntimeError('Playlist discovery is read-only')
+    if method != "GET":
+        raise RuntimeError("Playlist discovery is read-only")
     for attempt in range(retries + 1):
         headers = auth_headers()
         if payload is not None:
-            headers = {**headers, 'Content-Type': 'application/json'}
+            headers = {**headers, "Content-Type": "application/json"}
         try:
-            response = requests.request(method, url, headers=headers, params=params, json=payload, timeout=30)
+            response = requests.request(
+                method, url, headers=headers, params=params, json=payload, timeout=30
+            )
         except requests.exceptions.RequestException:
             if attempt < retries:
-                time.sleep(max(5, 2 ** attempt))
+                time.sleep(max(5, 2**attempt))
                 continue
             raise
         if response.status_code == 401 and attempt < retries:
@@ -175,7 +185,7 @@ def _spotify_request(method, url, *, params=None, payload=None, retries=6):
             continue
         if response.status_code in {500, 502, 503, 504, 429}:
             if attempt < retries:
-                wait = retry_wait_seconds(response, max(10, 2 ** attempt))
+                wait = retry_wait_seconds(response, max(10, 2**attempt))
                 time.sleep(wait)
                 continue
             else:
@@ -189,13 +199,8 @@ def _spotify_request(method, url, *, params=None, payload=None, retries=6):
 
 
 def spotify_get(url, params=None):
-    response = _spotify_request('GET', url, params=params)
+    response = _spotify_request("GET", url, params=params)
     return response.json()
-
-
-
-
-
 
 
 def should_exclude(name: str, festival: Festival) -> bool:
@@ -207,7 +212,7 @@ def should_exclude(name: str, festival: Festival) -> bool:
 
 
 def fetch_graspop():
-    html = requests.get('https://www.graspop.be/en/line-up/a-z', timeout=30).text
+    html = requests.get("https://www.graspop.be/en/line-up/a-z", timeout=30).text
     matches = re.findall(r'<a[^>]*href="/en/bands/[^"]+"[^>]*>(.*?)</a>', html, flags=re.I | re.S)
     artists = []
     for match in matches:
@@ -221,22 +226,26 @@ def fetch_graspop():
 def fetch_graspop_headliners() -> list[str]:
     headliners = []
     for day in GRASPOP_DAYS:
-        html = requests.get(f'https://www.graspop.be/en/line-up/{day}/stages', timeout=30).text
+        html = requests.get(f"https://www.graspop.be/en/line-up/{day}/stages", timeout=30).text
         stage_artists = {}
-        for stage in ('South Stage', 'North Stage'):
-            match = re.search(rf'<section[^>]+id="{re.escape(stage)}".*?</section>', html, flags=re.I | re.S)
+        for stage in ("South Stage", "North Stage"):
+            match = re.search(
+                rf'<section[^>]+id="{re.escape(stage)}".*?</section>', html, flags=re.I | re.S
+            )
             if not match:
                 continue
             names = [
                 clean_name(artist)
-                for artist in re.findall(r'<h3 class="artist__name">(.*?)</h3>', match.group(0), flags=re.I | re.S)
+                for artist in re.findall(
+                    r'<h3 class="artist__name">(.*?)</h3>', match.group(0), flags=re.I | re.S
+                )
             ]
             stage_artists[stage] = [name for name in names if name]
 
         # Main-stage closers first, then the directly preceding main-stage acts.
         # This mirrors how GMM announces the top-of-day acts and avoids the A-Z page order.
         for idx in (-1, -2):
-            for stage in ('South Stage', 'North Stage'):
+            for stage in ("South Stage", "North Stage"):
                 names = stage_artists.get(stage, [])
                 if len(names) >= abs(idx):
                     name = names[idx]
@@ -246,46 +255,67 @@ def fetch_graspop_headliners() -> list[str]:
 
 
 def fetch_rock_im_park():
-    html = requests.get('https://www.rock-im-park.com/en/lineup', timeout=30).text
+    html = requests.get("https://www.rock-im-park.com/en/lineup", timeout=30).text
     items = re.findall(r'role="listitem" class="li ([^"]+)">(.*?)</span></span>', html, re.I | re.S)
     artists = []
     headliners = []
     for cls, frag in items:
         title_match = re.search(r'title="([^"]+)"', frag)
-        span_match = re.search(r'<span title>([^<]+)</span>', frag)
-        name = title_match.group(1) if title_match else (span_match.group(1) if span_match else None)
+        span_match = re.search(r"<span title>([^<]+)</span>", frag)
+        name = (
+            title_match.group(1) if title_match else (span_match.group(1) if span_match else None)
+        )
         if not name:
             continue
         name = clean_name(name)
         if name not in artists:
             artists.append(name)
-            if cls == 'first-in-line':
+            if cls == "first-in-line":
                 headliners.append(name)
     if not artists:
-        raise RuntimeError('Live lineup unavailable; no historical catalogue fallback')
+        raise RuntimeError("Live lineup unavailable; no historical catalogue fallback")
     return artists, headliners[:8]
 
 
 def fetch_wacken():
-    data = requests.get('https://www.wacken.com/fileadmin/Json/bandlist-concert.json', timeout=30).json()
+    data = requests.get(
+        "https://www.wacken.com/fileadmin/Json/bandlist-concert.json", timeout=30
+    ).json()
     artists = []
     for item in data:
-        name = clean_name(item['artist']['title'])
-        name = re.sub(r'^Out\s+Of\s+The\s+Cage\s+-\s+', '', name, flags=re.I)
+        name = clean_name(item["artist"]["title"])
+        name = re.sub(r"^Out\s+Of\s+The\s+Cage\s+-\s+", "", name, flags=re.I)
         if name and name not in artists:
             artists.append(name)
     manual_headliners = [
-        'Sabaton', 'Def Leppard', 'Powerwolf', 'Judas Priest',
-        'In Flames', 'Savatage', 'Arch Enemy', 'Lamb of God', 'Sepultura',
+        "Sabaton",
+        "Def Leppard",
+        "Powerwolf",
+        "Judas Priest",
+        "In Flames",
+        "Savatage",
+        "Arch Enemy",
+        "Lamb of God",
+        "Sepultura",
     ]
     return artists, manual_headliners
 
 
 def fetch_summer_breeze():
-    home = requests.get('https://www.summer-breeze.de/', timeout=30).text
-    head_block = re.search(r'lineup-links__bandlist--headliners.*?</ul>', home, re.S)
-    headliners = [clean_name(x) for x in re.findall(r'<a href="https://www\.summer-breeze\.de/de/bands/[^"]+/">\s*([^<]+)\s*', head_block.group(0))] if head_block else []
-    bands_html = requests.get('https://www.summer-breeze.de/de/bands/', timeout=30).text
+    home = requests.get("https://www.summer-breeze.de/", timeout=30).text
+    head_block = re.search(r"lineup-links__bandlist--headliners.*?</ul>", home, re.S)
+    headliners = (
+        [
+            clean_name(x)
+            for x in re.findall(
+                r'<a href="https://www\.summer-breeze\.de/de/bands/[^"]+/">\s*([^<]+)\s*',
+                head_block.group(0),
+            )
+        ]
+        if head_block
+        else []
+    )
+    bands_html = requests.get("https://www.summer-breeze.de/de/bands/", timeout=30).text
     artists = []
     for match in re.findall(r'<h3 class="teaser__title">(.*?)</h3>', bands_html, re.S):
         name = clean_name(match)
@@ -295,13 +325,43 @@ def fetch_summer_breeze():
 
 
 def fetch_impericon():
-    headliners = ['Rise Against', 'Architects', 'BABYMETAL', 'Landmvrks', 'Black Veil Brides', 'We Came As Romans']
+    headliners = [
+        "Rise Against",
+        "Architects",
+        "BABYMETAL",
+        "Landmvrks",
+        "Black Veil Brides",
+        "We Came As Romans",
+    ]
     artists = [
-        'Rise Against', 'Architects', 'BABYMETAL', 'Landmvrks', 'Black Veil Brides', 'We Came As Romans',
-        'Bloodywood', 'Catch Your Breath', 'Future Palace', 'Boundaries', 'Get The Shot', 'Nevertel',
-        'The Pretty Wild', 'Distant', 'Gutalax', 'TSS', 'Mehnersmoos', 'Lionheart', 'The Menzingers',
-        'Sleep Theory', 'Dying Wish', '100 Kilo Herz', 'I Killed The Prom Queen', 'The Browning',
-        'Montreal', 'Siamese', 'Mental Cruelty', 'Cabal'
+        "Rise Against",
+        "Architects",
+        "BABYMETAL",
+        "Landmvrks",
+        "Black Veil Brides",
+        "We Came As Romans",
+        "Bloodywood",
+        "Catch Your Breath",
+        "Future Palace",
+        "Boundaries",
+        "Get The Shot",
+        "Nevertel",
+        "The Pretty Wild",
+        "Distant",
+        "Gutalax",
+        "TSS",
+        "Mehnersmoos",
+        "Lionheart",
+        "The Menzingers",
+        "Sleep Theory",
+        "Dying Wish",
+        "100 Kilo Herz",
+        "I Killed The Prom Queen",
+        "The Browning",
+        "Montreal",
+        "Siamese",
+        "Mental Cruelty",
+        "Cabal",
     ]
     return artists, headliners
 
@@ -315,14 +375,17 @@ def search_artist_mbid(name):
     if CACHE_ONLY_SETLIST:
         MBID_CACHE[name] = None
         return None
-    data = sl_get('https://api.setlist.fm/rest/1.0/search/artists', params={'artistName': name, 'p': 1, 'sort': 'relevance'})
-    artists = data.get('artist') or []
+    data = sl_get(
+        "https://api.setlist.fm/rest/1.0/search/artists",
+        params={"artistName": name, "p": 1, "sort": "relevance"},
+    )
+    artists = data.get("artist") or []
     if isinstance(artists, dict):
         artists = [artists]
     mbid = None
     best_score = 0.0
     for artist in artists[:5]:
-        candidate = artist.get('name') or ''
+        candidate = artist.get("name") or ""
         query_tokens = simplify_name(name).split()
         candidate_tokens = simplify_name(candidate).split()
         if len(query_tokens) == 1 and query_tokens != candidate_tokens:
@@ -332,7 +395,7 @@ def search_artist_mbid(name):
             score += 1.0
         if score > best_score:
             best_score = score
-            mbid = artist.get('mbid')
+            mbid = artist.get("mbid")
     if best_score < 0.45:
         mbid = None
     MBID_CACHE[name] = mbid
@@ -350,15 +413,15 @@ def recent_setlists(mbid):
         SETLIST_CACHE[mbid] = []
         return []
     try:
-        data = sl_get(f'https://api.setlist.fm/rest/1.0/artist/{mbid}/setlists', params={'p': 1})
+        data = sl_get(f"https://api.setlist.fm/rest/1.0/artist/{mbid}/setlists", params={"p": 1})
     except requests.exceptions.HTTPError as exc:
-        response = getattr(exc, 'response', None)
+        response = getattr(exc, "response", None)
         if response is not None and response.status_code == 404:
             SETLIST_CACHE[mbid] = []
             PERSISTENT_SETLIST_CACHE[mbid] = []
             return []
         raise
-    setlists = data.get('setlist') or []
+    setlists = data.get("setlist") or []
     if isinstance(setlists, dict):
         setlists = [setlists]
     result = setlists[:8]
@@ -371,7 +434,7 @@ def parse_setlist_date(raw: str) -> datetime | None:
     if not raw:
         return None
     try:
-        return datetime.strptime(raw, '%d-%m-%Y')
+        return datetime.strptime(raw, "%d-%m-%Y")
     except ValueError:
         return None
 
@@ -380,31 +443,21 @@ def extract_recent_songs(setlists):
     cutoff = datetime.utcnow() - timedelta(days=RECENT_SETLIST_DAYS)
     counts = {}
     for setlist in setlists:
-        when = parse_setlist_date(setlist.get('eventDate', ''))
+        when = parse_setlist_date(setlist.get("eventDate", ""))
         if when and when < cutoff:
             continue
-        sets = setlist.get('sets', {}).get('set') or []
+        sets = setlist.get("sets", {}).get("set") or []
         if isinstance(sets, dict):
             sets = [sets]
         for subset in sets:
-            songs = subset.get('song') or []
+            songs = subset.get("song") or []
             if isinstance(songs, dict):
                 songs = [songs]
             for song in songs:
-                name = (song.get('name') or '').strip()
+                name = (song.get("name") or "").strip()
                 if name:
                     counts[name] = counts.get(name, 0) + 1
     return counts
-
-
-
-
-
-
-
-
-
-
 
 
 def spotify_search_track(artist, track, lineup_artist: str | None = None):
@@ -418,9 +471,12 @@ def spotify_search_track(artist, track, lineup_artist: str | None = None):
     items = []
     seen_item_ids = set()
     for search_artist in search_artists:
-        data = spotify_get('https://api.spotify.com/v1/search', {'q': f'track:{track} artist:{search_artist}', 'type': 'track', 'limit': 8})
-        for item in data.get('tracks', {}).get('items', []):
-            item_id = item.get('id')
+        data = spotify_get(
+            "https://api.spotify.com/v1/search",
+            {"q": f"track:{track} artist:{search_artist}", "type": "track", "limit": 8},
+        )
+        for item in data.get("tracks", {}).get("items", []):
+            item_id = item.get("id")
             if item_id and item_id in seen_item_ids:
                 continue
             if item_id:
@@ -433,20 +489,24 @@ def spotify_search_track(artist, track, lineup_artist: str | None = None):
         skip_reason = should_skip_track_for_artist(artist, item, lineup_artist)
         if skip_reason:
             continue
-        artist_names = [a['name'] for a in item.get('artists', [])]
-        match_score = max(token_overlap(artist, candidate) for candidate in artist_names) if artist_names else 0.0
+        artist_names = [a["name"] for a in item.get("artists", [])]
+        match_score = (
+            max(token_overlap(artist, candidate) for candidate in artist_names)
+            if artist_names
+            else 0.0
+        )
         if simplify_name(artist) in [simplify_name(candidate) for candidate in artist_names]:
             match_score += 1.0
         if live_repertoire_primary_match(lineup_artist or artist, item):
             match_score += 1.0
-        title_key = canonical_track_key(item.get('name', ''))
-        title_score = 1.0 if title_key == target_key else token_overlap(track, item.get('name', ''))
+        title_key = canonical_track_key(item.get("name", ""))
+        title_score = 1.0 if title_key == target_key else token_overlap(track, item.get("name", ""))
         candidate_tuple = (
             match_score,
             title_score,
             not is_feat_track(item),
             -track_version_penalty(item),
-            item.get('popularity', 0),
+            item.get("popularity", 0),
         )
         if best_tuple is None or candidate_tuple > best_tuple:
             best_tuple = candidate_tuple
@@ -458,10 +518,10 @@ def spotify_search_track(artist, track, lineup_artist: str | None = None):
 
 
 def spotify_get_artist_by_id(artist_id: str):
-    cache_key = f'id:{artist_id}'
+    cache_key = f"id:{artist_id}"
     if cache_key in ARTIST_SEARCH_CACHE:
         return ARTIST_SEARCH_CACHE[cache_key]
-    artist = spotify_get(f'https://api.spotify.com/v1/artists/{artist_id}')
+    artist = spotify_get(f"https://api.spotify.com/v1/artists/{artist_id}")
     ARTIST_SEARCH_CACHE[cache_key] = artist
     return artist
 
@@ -469,12 +529,14 @@ def spotify_get_artist_by_id(artist_id: str):
 def spotify_search_artist(name):
     if name in ARTIST_SEARCH_CACHE:
         return ARTIST_SEARCH_CACHE[name]
-    data = spotify_get('https://api.spotify.com/v1/search', {'q': name, 'type': 'artist', 'limit': 5})
-    items = data.get('artists', {}).get('items', [])
+    data = spotify_get(
+        "https://api.spotify.com/v1/search", {"q": name, "type": "artist", "limit": 5}
+    )
+    items = data.get("artists", {}).get("items", [])
     best = None
     best_score = 0.0
     for item in items:
-        candidate = item.get('name', '')
+        candidate = item.get("name", "")
         score = token_overlap(name, candidate)
         if simplify_name(name) == simplify_name(candidate):
             score += 1.0
@@ -491,15 +553,19 @@ def spotify_top_tracks(name, limit=8, artist_id: str | None = None):
     artist = spotify_get_artist_by_id(artist_id) if artist_id else spotify_search_artist(name)
     if not artist:
         return None, []
-    data = spotify_get(f"https://api.spotify.com/v1/artists/{artist['id']}/top-tracks", {'market': 'DE'})
-    tracks = [track for track in data.get('tracks', []) if not is_short_or_non_song(track)]
-    tracks.sort(key=lambda t: (
-        is_feat_track(t),
-        track_version_penalty(t),
-        -t.get('popularity', 0),
-        -int(simplify_name(t['artists'][0]['name']) == simplify_name(name)),
-        t.get('name', ''),
-    ))
+    data = spotify_get(
+        f"https://api.spotify.com/v1/artists/{artist['id']}/top-tracks", {"market": "DE"}
+    )
+    tracks = [track for track in data.get("tracks", []) if not is_short_or_non_song(track)]
+    tracks.sort(
+        key=lambda t: (
+            is_feat_track(t),
+            track_version_penalty(t),
+            -t.get("popularity", 0),
+            -int(simplify_name(t["artists"][0]["name"]) == simplify_name(name)),
+            t.get("name", ""),
+        )
+    )
     return artist, tracks[:limit]
 
 
@@ -507,38 +573,59 @@ def get_followers(artist_name, artist_id: str | None = None):
     cache_key = artist_id or artist_name
     if cache_key in FOLLOWERS_CACHE:
         return FOLLOWERS_CACHE[cache_key]
-    artist = spotify_get_artist_by_id(artist_id) if artist_id else spotify_search_artist(artist_name)
-    followers = (artist or {}).get('followers', {}).get('total', 0)
+    artist = (
+        spotify_get_artist_by_id(artist_id) if artist_id else spotify_search_artist(artist_name)
+    )
+    followers = (artist or {}).get("followers", {}).get("total", 0)
     FOLLOWERS_CACHE[cache_key] = followers
     return followers
-    followers = (artist or {}).get('followers', {}).get('total', 0)
+    followers = (artist or {}).get("followers", {}).get("total", 0)
     FOLLOWERS_CACHE[artist_name] = followers
     return followers
 
 
 def explain_track_choice(track: dict, source: str, artist: str, trigger: str) -> dict:
     return {
-        'name': track['name'],
-        'artist': track['artists'][0]['name'],
-        'duration_ms': track.get('duration_ms'),
-        'popularity': track.get('popularity'),
-        'source': source,
-        'trigger': trigger,
-        'version_penalty': track_version_penalty(track),
+        "name": track["name"],
+        "artist": track["artists"][0]["name"],
+        "duration_ms": track.get("duration_ms"),
+        "popularity": track.get("popularity"),
+        "source": source,
+        "trigger": trigger,
+        "version_penalty": track_version_penalty(track),
     }
 
 
-
-def build_playlist(festival: Festival, user_id: str, *, persist_report=True, discovery_checkpoint=None, discovery_budget=None):
+def build_playlist(
+    festival: Festival,
+    user_id: str,
+    *,
+    persist_report=True,
+    discovery_checkpoint=None,
+    discovery_budget=None,
+):
     import time
+
     started = time.monotonic()
-    if discovery_budget is not None and (persist_report or not REPORT_ONLY or discovery_budget <= 0):
+    if discovery_budget is not None and (
+        persist_report or not REPORT_ONLY or discovery_budget <= 0
+    ):
         raise ValueError("Discovery checkpoints require bounded report-only mode")
     progress = discovery_checkpoint or {}
+
     def expired():
         return discovery_budget is not None and time.monotonic() - started >= discovery_budget
+
     def checkpoint():
-        return {"discoveryCheckpoint": {"followers": followers, "report": report, "uris": playlist_uris, "songKeys": sorted(seen_song_keys)}}
+        return {
+            "discoveryCheckpoint": {
+                "followers": followers,
+                "report": report,
+                "uris": playlist_uris,
+                "songKeys": sorted(seen_song_keys),
+            }
+        }
+
     artists_raw, headliners = festival.lineup_fn()
     aliases = festival.aliases or {}
     spotify_artist_ids = festival.spotify_artist_ids or {}
@@ -547,11 +634,13 @@ def build_playlist(festival: Festival, user_id: str, *, persist_report=True, dis
     selected_keys = selected_artist_keys()
     if selected_keys:
         if not REPORT_ONLY:
-            raise RuntimeError('FESTIVAL_ARTISTS can only be used with FESTIVAL_REPORT_ONLY=1')
-        artists = [a for a in artists if artist_matches_selected(a, aliases.get(a, a), selected_keys)]
+            raise RuntimeError("FESTIVAL_ARTISTS can only be used with FESTIVAL_REPORT_ONLY=1")
+        artists = [
+            a for a in artists if artist_matches_selected(a, aliases.get(a, a), selected_keys)
+        ]
     if not artists:
-        raise RuntimeError(f'{festival.key}: lineup is empty; refusing to overwrite playlist')
-    fast_sort = os.environ.get('FESTIVAL_FAST_SORT') == '1'
+        raise RuntimeError(f"{festival.key}: lineup is empty; refusing to overwrite playlist")
+    fast_sort = os.environ.get("FESTIVAL_FAST_SORT") == "1"
     followers = dict(progress.get("followers", {}))
     report = list(progress.get("report", []))
     playlist_uris = list(progress.get("uris", []))
@@ -563,7 +652,11 @@ def build_playlist(festival: Festival, user_id: str, *, persist_report=True, dis
             if expired():
                 return checkpoint()
             query = aliases.get(artist, artist)
-            followers[artist] = 0 if artist in repertoire_profiles else get_followers(query, spotify_artist_ids.get(artist))
+            followers[artist] = (
+                0
+                if artist in repertoire_profiles
+                else get_followers(query, spotify_artist_ids.get(artist))
+            )
     ordered_artists = [a for a in headliners if a in artists]
     rest = [a for a in artists if a not in ordered_artists]
     if not fast_sort:
@@ -572,9 +665,9 @@ def build_playlist(festival: Festival, user_id: str, *, persist_report=True, dis
 
     seen_uris = set(playlist_uris)
     completed = [row["artist"] for row in report]
-    if completed != ordered_artists[:len(completed)]:
+    if completed != ordered_artists[: len(completed)]:
         raise ValueError("Invalid discovery checkpoint prefix")
-    for artist in ordered_artists[len(completed):]:
+    for artist in ordered_artists[len(completed) :]:
         if expired():
             return checkpoint()
         query_artist = aliases.get(artist, artist)
@@ -582,28 +675,34 @@ def build_playlist(festival: Festival, user_id: str, *, persist_report=True, dis
         spotify_artist_id = spotify_artist_ids.get(artist)
         forced_mbid = (festival.mbids or {}).get(artist)
         selected = []
-        source = 'spotify-fallback'
+        source = "spotify-fallback"
         mbid = forced_mbid
         errors = []
         choice_log = []
         profile = repertoire_profiles.get(artist)
         if profile is not None:
             validate_profile(profile)
-            setlist_artist = profile['setlistArtist']
-            source = 'spotify-repertoire'
+            setlist_artist = profile["setlistArtist"]
+            source = "spotify-repertoire"
             song_counts = {}
             try:
                 mbid = forced_mbid or search_artist_mbid(setlist_artist)
                 if mbid:
                     song_counts = extract_recent_songs(recent_setlists(mbid))
             except Exception:
-                errors.append('repertoire setlist unavailable; reviewed releases used')
+                errors.append("repertoire setlist unavailable; reviewed releases used")
             selected, choice_log = select_repertoire_tracks(
-                profile, song_counts, spotify_get, canonical_track_key,
-                is_short_or_non_song, track_version_penalty, seen_uris, seen_song_keys,
+                profile,
+                song_counts,
+                spotify_get,
+                canonical_track_key,
+                is_short_or_non_song,
+                track_version_penalty,
+                seen_uris,
+                seen_song_keys,
             )
             if not selected:
-                raise RuntimeError('Reviewed repertoire produced no eligible tracks')
+                raise RuntimeError("Reviewed repertoire produced no eligible tracks")
         else:
             try:
                 if not mbid:
@@ -611,179 +710,274 @@ def build_playlist(festival: Festival, user_id: str, *, persist_report=True, dis
                 if mbid:
                     recent_song_counts = extract_recent_songs(recent_setlists(mbid))
                     if recent_song_counts:
-                        source = 'setlist.fm'
+                        source = "setlist.fm"
                         matched_tracks = []
-                        for song, play_count in sorted(recent_song_counts.items(), key=lambda item: (-item[1], item[0].lower())):
+                        for song, play_count in sorted(
+                            recent_song_counts.items(), key=lambda item: (-item[1], item[0].lower())
+                        ):
                             track = spotify_search_track(setlist_artist, song, artist)
                             if not track:
-                                choice_log.append({'source': 'setlist.fm', 'trigger': song, 'skip': 'no_spotify_match'})
+                                choice_log.append(
+                                    {
+                                        "source": "setlist.fm",
+                                        "trigger": song,
+                                        "skip": "no_spotify_match",
+                                    }
+                                )
                                 continue
                             skip_reason = should_skip_track_for_artist(query_artist, track, artist)
                             if skip_reason:
-                                choice_log.append({'source': 'setlist.fm', 'trigger': song, 'skip': skip_reason, 'matched': track['name']})
+                                choice_log.append(
+                                    {
+                                        "source": "setlist.fm",
+                                        "trigger": song,
+                                        "skip": skip_reason,
+                                        "matched": track["name"],
+                                    }
+                                )
                                 continue
-                            matched_tracks.append((track.get('popularity', 0), play_count, song, track))
+                            matched_tracks.append(
+                                (track.get("popularity", 0), play_count, song, track)
+                            )
                         matched_tracks.sort(key=setlist_track_sort_key)
                         for _, play_count, song, track in matched_tracks:
-                            song_key = canonical_track_key(track['name'])
+                            song_key = canonical_track_key(track["name"])
                             if song_key in seen_song_keys:
-                                choice_log.append({'source': 'setlist.fm', 'trigger': song, 'skip': 'duplicate_song_key', 'matched': track['name']})
+                                choice_log.append(
+                                    {
+                                        "source": "setlist.fm",
+                                        "trigger": song,
+                                        "skip": "duplicate_song_key",
+                                        "matched": track["name"],
+                                    }
+                                )
                                 continue
-                            if track['uri'] in seen_uris:
-                                choice_log.append({'source': 'setlist.fm', 'trigger': song, 'skip': 'duplicate_uri', 'matched': track['name']})
+                            if track["uri"] in seen_uris:
+                                choice_log.append(
+                                    {
+                                        "source": "setlist.fm",
+                                        "trigger": song,
+                                        "skip": "duplicate_uri",
+                                        "matched": track["name"],
+                                    }
+                                )
                                 continue
-                            seen_uris.add(track['uri'])
+                            seen_uris.add(track["uri"])
                             seen_song_keys.add(song_key)
                             selected.append(track)
-                            info = explain_track_choice(track, 'setlist.fm', artist, song)
-                            info['recent_setlist_plays'] = play_count
+                            info = explain_track_choice(track, "setlist.fm", artist, song)
+                            info["recent_setlist_plays"] = play_count
                             choice_log.append(info)
                             if len(selected) >= 5:
                                 break
             except Exception as exc:
-                errors.append(f'setlist lookup failed: {exc}')
+                errors.append(f"setlist lookup failed: {exc}")
 
             if len(selected) < 5:
                 fallback_names = list(dict.fromkeys([query_artist, artist]))
                 for fallback_name in fallback_names:
                     try:
-                        _, tracks = spotify_top_tracks(fallback_name, 10, artist_id=spotify_artist_id)
+                        _, tracks = spotify_top_tracks(
+                            fallback_name, 10, artist_id=spotify_artist_id
+                        )
                         for track in tracks:
-                            artist_names = [a['name'] for a in track.get('artists', [])]
-                            if max(token_overlap(query_artist, candidate) for candidate in artist_names) < 0.45:
-                                choice_log.append({'source': 'spotify-fallback', 'trigger': fallback_name, 'skip': 'artist_mismatch', 'matched': track['name']})
+                            artist_names = [a["name"] for a in track.get("artists", [])]
+                            if (
+                                max(
+                                    token_overlap(query_artist, candidate)
+                                    for candidate in artist_names
+                                )
+                                < 0.45
+                            ):
+                                choice_log.append(
+                                    {
+                                        "source": "spotify-fallback",
+                                        "trigger": fallback_name,
+                                        "skip": "artist_mismatch",
+                                        "matched": track["name"],
+                                    }
+                                )
                                 continue
                             skip_reason = should_skip_track_for_artist(query_artist, track, artist)
                             if skip_reason:
-                                choice_log.append({'source': 'spotify-fallback', 'trigger': fallback_name, 'skip': skip_reason, 'matched': track['name']})
+                                choice_log.append(
+                                    {
+                                        "source": "spotify-fallback",
+                                        "trigger": fallback_name,
+                                        "skip": skip_reason,
+                                        "matched": track["name"],
+                                    }
+                                )
                                 continue
-                            song_key = canonical_track_key(track['name'])
+                            song_key = canonical_track_key(track["name"])
                             if song_key in seen_song_keys:
-                                choice_log.append({'source': 'spotify-fallback', 'trigger': fallback_name, 'skip': 'duplicate_song_key', 'matched': track['name']})
+                                choice_log.append(
+                                    {
+                                        "source": "spotify-fallback",
+                                        "trigger": fallback_name,
+                                        "skip": "duplicate_song_key",
+                                        "matched": track["name"],
+                                    }
+                                )
                                 continue
-                            if track['uri'] in seen_uris:
-                                choice_log.append({'source': 'spotify-fallback', 'trigger': fallback_name, 'skip': 'duplicate_uri', 'matched': track['name']})
+                            if track["uri"] in seen_uris:
+                                choice_log.append(
+                                    {
+                                        "source": "spotify-fallback",
+                                        "trigger": fallback_name,
+                                        "skip": "duplicate_uri",
+                                        "matched": track["name"],
+                                    }
+                                )
                                 continue
-                            seen_uris.add(track['uri'])
+                            seen_uris.add(track["uri"])
                             seen_song_keys.add(song_key)
                             selected.append(track)
-                            choice_log.append(explain_track_choice(track, 'spotify-fallback', artist, fallback_name))
+                            choice_log.append(
+                                explain_track_choice(
+                                    track, "spotify-fallback", artist, fallback_name
+                                )
+                            )
                             if len(selected) >= 5:
                                 break
                     except Exception as exc:
-                        errors.append(f'spotify fallback failed for {fallback_name}: {exc}')
+                        errors.append(f"spotify fallback failed for {fallback_name}: {exc}")
                     if len(selected) >= 5:
                         break
         final_tracks = selected[:5]
-        playlist_uris.extend(track['uri'] for track in final_tracks)
-        report.append({
-            'artist': artist,
-            'query_artist': query_artist,
-            'followers': None if profile else followers.get(artist, 0),
-            **({'repertoire_profile': profile['key']} if profile else {}),
-            'source': source,
-            'count': len(final_tracks),
-            'headliner': artist in headliners,
-            'tracks': [f"{track['artists'][0]['name']} - {track['name']}" for track in final_tracks],
-            'mbid': mbid,
-            'errors': errors,
-            'choice_log': choice_log,
-        })
-        print(f'[{festival.key}] {artist}: {len(final_tracks)} tracks')
+        playlist_uris.extend(track["uri"] for track in final_tracks)
+        report.append(
+            {
+                "artist": artist,
+                "query_artist": query_artist,
+                "followers": None if profile else followers.get(artist, 0),
+                **({"repertoire_profile": profile["key"]} if profile else {}),
+                "source": source,
+                "count": len(final_tracks),
+                "headliner": artist in headliners,
+                "tracks": [
+                    f"{track['artists'][0]['name']} - {track['name']}" for track in final_tracks
+                ],
+                "mbid": mbid,
+                "errors": errors,
+                "choice_log": choice_log,
+            }
+        )
+        print(f"[{festival.key}] {artist}: {len(final_tracks)} tracks")
 
     # Discovery never writes to a provider; apply is owned by the fenced worker.
-    playlist_id = festival.existing_playlist_id or f'{festival.key}-report-only'
-    playlist_url = f'https://open.spotify.com/playlist/{playlist_id}' if festival.existing_playlist_id else ''
+    playlist_id = festival.existing_playlist_id or f"{festival.key}-report-only"
+    playlist_url = (
+        f"https://open.spotify.com/playlist/{playlist_id}" if festival.existing_playlist_id else ""
+    )
 
     output = {
-        'slug': festival.key,
-        'edition_year': festival.edition_year,
-        'festival': festival.display_name,
-        'playlist_name': festival.playlist_name,
-        'playlist_id': playlist_id,
-        'playlist_url': playlist_url,
-        'track_count': len(playlist_uris),
-        'track_uris': playlist_uris,
-        'artists_count': len(ordered_artists),
-        'headliners': headliners,
-        'report': report,
+        "slug": festival.key,
+        "edition_year": festival.edition_year,
+        "festival": festival.display_name,
+        "playlist_name": festival.playlist_name,
+        "playlist_id": playlist_id,
+        "playlist_url": playlist_url,
+        "track_count": len(playlist_uris),
+        "track_uris": playlist_uris,
+        "artists_count": len(ordered_artists),
+        "headliners": headliners,
+        "report": report,
     }
     if not persist_report:
         return output
-    report_path = REPORT_DIR / f'{festival.key}.json'
+    report_path = REPORT_DIR / f"{festival.key}.json"
     if REPORT_ONLY and not playlist_uris and report_path.exists():
-        existing = json.loads(report_path.read_text(encoding='utf-8'))
-        if existing.get('track_count', 0) > 0:
-            raise RuntimeError(f'refusing to overwrite non-empty report with zero tracks: {report_path}')
+        existing = json.loads(report_path.read_text(encoding="utf-8"))
+        if existing.get("track_count", 0) > 0:
+            raise RuntimeError(
+                f"refusing to overwrite non-empty report with zero tracks: {report_path}"
+            )
     if REPORT_ONLY and selected_keys and report_path.exists():
-        existing = json.loads(report_path.read_text(encoding='utf-8'))
-        updated = {simplify_name(entry['artist']): entry for entry in report}
+        existing = json.loads(report_path.read_text(encoding="utf-8"))
+        updated = {simplify_name(entry["artist"]): entry for entry in report}
         merged_report = []
         seen = set()
-        for entry in existing.get('report', []):
-            key = simplify_name(entry.get('artist', ''))
+        for entry in existing.get("report", []):
+            key = simplify_name(entry.get("artist", ""))
             if key in updated:
                 merged_report.append(updated[key])
                 seen.add(key)
             else:
                 merged_report.append(entry)
         for entry in report:
-            key = simplify_name(entry['artist'])
+            key = simplify_name(entry["artist"])
             if key not in seen:
                 merged_report.append(entry)
-        existing['report'] = merged_report
-        existing['track_count'] = sum(entry.get('count', len(entry.get('tracks', []))) for entry in merged_report)
-        existing['artists_count'] = len(merged_report)
+        existing["report"] = merged_report
+        existing["track_count"] = sum(
+            entry.get("count", len(entry.get("tracks", []))) for entry in merged_report
+        )
+        existing["artists_count"] = len(merged_report)
         output = existing
-    report_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding='utf-8')
-    SETLIST_CACHE_FILE.write_text(json.dumps(PERSISTENT_SETLIST_CACHE, ensure_ascii=False), encoding='utf-8')
-    print(json.dumps({
-        'festival': festival.key,
-        'playlist_url': output['playlist_url'],
-        'track_count': output['track_count'],
-        'artists_count': output['artists_count'],
-    }))
+    report_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+    SETLIST_CACHE_FILE.write_text(
+        json.dumps(PERSISTENT_SETLIST_CACHE, ensure_ascii=False), encoding="utf-8"
+    )
+    print(
+        json.dumps(
+            {
+                "festival": festival.key,
+                "playlist_url": output["playlist_url"],
+                "track_count": output["track_count"],
+                "artists_count": output["artists_count"],
+            }
+        )
+    )
 
 
 def load_canonical_festivals(path: Path | None = None) -> tuple[int, list[Festival], list[dict]]:
-    path = path or Path(os.environ.get('FESTIVAL_CATALOG', 'tmp/festival-playlist-catalog.json'))
-    catalog = json.loads(path.read_text(encoding='utf-8'))
+    path = path or Path(os.environ.get("FESTIVAL_CATALOG", "tmp/festival-playlist-catalog.json"))
+    catalog = json.loads(path.read_text(encoding="utf-8"))
     return parse_canonical_festivals(catalog)
 
 
 def parse_canonical_festivals(catalog):
-    season = int(catalog['season'])
-    expected = int(os.environ.get('FESTIVAL_SEASON', season))
+    season = int(catalog["season"])
+    expected = int(os.environ.get("FESTIVAL_SEASON", season))
     if expected != season:
-        raise RuntimeError(f'edition mismatch: requested {expected}, canonical catalog is {season}; no playlists mutated')
+        raise RuntimeError(
+            f"edition mismatch: requested {expected}, canonical catalog is {season}; no playlists mutated"
+        )
     festivals, skipped = [], []
     seen_slugs = set()
-    for entry in catalog['festivals']:
-        slug = entry['slug']
+    for entry in catalog["festivals"]:
+        slug = entry["slug"]
         if slug in seen_slugs:
-            raise RuntimeError(f'duplicate festival slug in canonical catalog: {slug}')
+            raise RuntimeError(f"duplicate festival slug in canonical catalog: {slug}")
         seen_slugs.add(slug)
-        if int(entry.get('editionYear') or 0) != season:
-            raise RuntimeError(f'edition mismatch for {slug}: {entry.get("editionYear")} != {season}; no playlists mutated')
-        artists = list(dict.fromkeys([*entry.get('headliners', []), *entry.get('artists', [])]))
+        if int(entry.get("editionYear") or 0) != season:
+            raise RuntimeError(
+                f"edition mismatch for {slug}: {entry.get('editionYear')} != {season}; no playlists mutated"
+            )
+        artists = list(dict.fromkeys([*entry.get("headliners", []), *entry.get("artists", [])]))
         eligible = [artist for artist in artists if artist and not looks_like_tribute(artist)]
         if not eligible:
-            skipped.append({'slug': slug, 'edition_year': season, 'reason': 'empty_lineup'})
+            skipped.append({"slug": slug, "edition_year": season, "reason": "empty_lineup"})
             continue
-        headliners = [artist for artist in entry.get('headliners', []) if artist in eligible]
-        profiles = entry.get('spotifyRepertoireProfiles', {})
+        headliners = [artist for artist in entry.get("headliners", []) if artist in eligible]
+        profiles = entry.get("spotifyRepertoireProfiles", {})
         if not isinstance(profiles, dict) or any(name not in eligible for name in profiles):
-            raise ValueError('Repertoire profile must name one eligible lineup act')
+            raise ValueError("Repertoire profile must name one eligible lineup act")
         for profile in profiles.values():
             validate_profile(profile)
 
-        festivals.append(Festival(
-            key=slug, display_name=f'{entry["name"]} {season}',
-            playlist_name=f'{entry["name"]} {season}: Festival Crash Course',
-            description=f'Current {season} lineup from Loud Weekend.',
-            lineup_fn=lambda artists=eligible, headliners=headliners: (artists, headliners),
-            edition_year=season,
-            spotify_repertoire_profiles=profiles,
-            existing_playlist_id=(entry.get('playlistUrl') or '').rstrip('/').split('/')[-1] or None,
-        ))
+        festivals.append(
+            Festival(
+                key=slug,
+                display_name=f"{entry['name']} {season}",
+                playlist_name=f"{entry['name']} {season}: Festival Crash Course",
+                description=f"Current {season} lineup from Loud Weekend.",
+                lineup_fn=lambda artists=eligible, headliners=headliners: (artists, headliners),
+                edition_year=season,
+                spotify_repertoire_profiles=profiles,
+                existing_playlist_id=(entry.get("playlistUrl") or "").rstrip("/").split("/")[-1]
+                or None,
+            )
+        )
     return season, festivals, skipped

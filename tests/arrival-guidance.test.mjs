@@ -9,10 +9,7 @@ import {
 } from "../lib/ingestion/adapters/arrival-guidance.ts";
 
 const read = (name) =>
-  readFileSync(
-    new URL(`./fixtures/arrival/${name}.html`, import.meta.url),
-    "utf8",
-  );
+  readFileSync(new URL(`./fixtures/arrival/${name}.html`, import.meta.url), "utf8");
 const essentials = read("graspop-essentials"),
   news = read("graspop-announcement"),
   wacken = read("wacken");
@@ -28,20 +25,10 @@ test("Graspop observations reflect changes to the organizer venue and shuttle de
   assert.doesNotMatch(result[1].description.en, /Eindhoven/);
 });
 test("Graspop withholds stale, hidden and unconfirmed shuttle evidence", () => {
+  assert.equal(parseGraspopArrival(essentials.replace("2027", "2026"), news, 2027), undefined);
+  assert.equal(parseGraspopArrival(essentials, news.replace("<p>", "<p hidden>"), 2027), undefined);
   assert.equal(
-    parseGraspopArrival(essentials.replace("2027", "2026"), news, 2027),
-    undefined,
-  );
-  assert.equal(
-    parseGraspopArrival(essentials, news.replace("<p>", "<p hidden>"), 2027),
-    undefined,
-  );
-  assert.equal(
-    parseGraspopArrival(
-      essentials,
-      news.replace("paid shuttle", "free shuttle"),
-      2027,
-    ),
+    parseGraspopArrival(essentials, news.replace("paid shuttle", "free shuttle"), 2027),
     undefined,
   );
 });
@@ -76,34 +63,24 @@ test("rail shuttles require linked edition-specific proof in both directions", (
     <tr><td>Monday - 21/06/2027 - one-way outbound transfer</td></tr>
     <tr><td>GMM busparking</td><td>12h00</td><td>Station Brussels South (Gare du Midi)</td><td>13h00</td></tr>
     <tr><td>GMM busparking</td><td>12h00</td><td>Eindhoven Railway station</td><td>13h00</td></tr></table>`;
-  const parse = (html, list = organizer) =>
-    parseGraspopRailShuttle(list, html, 2027);
+  const parse = (html, list = organizer) => parseGraspopRailShuttle(list, html, 2027);
   const complete = parse(timetable);
   assert.match(complete.description.en, /Brussels-Midi, Eindhoven Centraal/);
   assert.equal(complete.supportingSourceUrl, operatorUrl);
   const reduced = parse(
-    timetable.replace(
-      "Station Brussels South (Gare du Midi)",
-      "Unverified station",
-    ),
+    timetable.replace("Station Brussels South (Gare du Midi)", "Unverified station"),
   );
   assert.doesNotMatch(reduced.description.en, /Brussels-Midi/);
   assert.equal(parse(timetable.replace("21/06/2027", "21/06/2028")), undefined);
   assert.equal(parse(timetable.replace("21/06/2027", "20/06/2027")), undefined);
   assert.equal(
-    parse(
-      timetable,
-      organizer.replace(operatorUrl, "https://elsewhere.example/"),
-    ),
+    parse(timetable, organizer.replace(operatorUrl, "https://elsewhere.example/")),
     undefined,
   );
   assert.equal(
     parse(
       timetable,
-      organizer.replace(
-        "A separate ticket is required",
-        "No separate ticket is required",
-      ),
+      organizer.replace("A separate ticket is required", "No separate ticket is required"),
     ),
     undefined,
   );

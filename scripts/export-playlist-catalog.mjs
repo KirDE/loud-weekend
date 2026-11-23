@@ -5,11 +5,17 @@ import { db } from "../lib/db.ts";
 import { spotifyRepertoiresForArtists } from "../lib/catalog/spotify-repertoire.ts";
 
 const snapshot = await readCatalog();
-const festivals = snapshot.festivals.map((festival) => ({ ...festival, playlistUrl: snapshot.playlists[festival.slug]?.spotifyUrl }));
+const festivals = snapshot.festivals.map((festival) => ({
+  ...festival,
+  playlistUrl: snapshot.playlists[festival.slug]?.spotifyUrl,
+}));
 
 const output = process.argv[2] || "tmp/festival-playlist-catalog.json";
-const years = [...new Set(festivals.map((festival) => festival.editionYear).filter(Number.isInteger))];
-if (years.length !== 1) throw new Error(`canonical catalog contains mixed editions: ${years.join(", ")}`);
+const years = [
+  ...new Set(festivals.map((festival) => festival.editionYear).filter(Number.isInteger)),
+];
+if (years.length !== 1)
+  throw new Error(`canonical catalog contains mixed editions: ${years.join(", ")}`);
 
 const catalog = {
   generatedAt: new Date().toISOString(),
@@ -26,7 +32,10 @@ const catalog = {
 };
 for (const festival of catalog.festivals) {
   const names = new Set(festival.artists);
-  festival.spotifyRepertoireProfiles = await spotifyRepertoiresForArtists(db, snapshot.artists.filter(a => names.has(a.name)));
+  festival.spotifyRepertoireProfiles = await spotifyRepertoiresForArtists(
+    db,
+    snapshot.artists.filter((a) => names.has(a.name)),
+  );
 }
 await mkdir(path.dirname(output), { recursive: true });
 await writeFile(output, `${JSON.stringify(catalog, null, 2)}\n`);
