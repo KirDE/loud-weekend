@@ -10,11 +10,11 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review")) return;
   let url: URL; try { url = new URL(source.url); } catch { return; }
   if (url.protocol !== "https:" || url.username || url.password || url.port || url.search || url.hash) return;
+  if (source.festivalSlug === "download" && url.hostname === "downloadfestival.co.uk" && url.pathname === "/")
+    return "https://downloadfestival.co.uk/tickets/";
   if (["rock-am-ring", "rock-im-park"].includes(source.festivalSlug) &&
     url.hostname === `www.${source.festivalSlug}.com` && url.pathname === "/")
     return `https://www.${source.festivalSlug}.com/en/tickets`;
-  if (source.festivalSlug === "download" && url.hostname === "downloadfestival.co.uk" && url.pathname === "/")
-    return "https://downloadfestival.co.uk/tickets/";
   if (source.festivalSlug === "wacken-open-air" && url.hostname === "www.wacken.com" && url.pathname === "/")
     return `https://www.wacken.com/de/tickets-shop/ticket-uebersicht-${source.editionYear}/`;
 }
