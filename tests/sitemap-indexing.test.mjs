@@ -67,6 +67,7 @@ test("the HTTP smoke check distinguishes crawler noindex from image preview rest
       otherPaths.map((path) => `<url><loc>${site}${path}</loc></url>`).join(""),
   );
   const entries = inspectSitemap(xml);
+  let robotsHeader;
   let robotsMeta = '<meta name="robots" content="index, max-image-preview:none">';
   const server = createServer((request, response) => {
     const path = request.url;
@@ -77,6 +78,7 @@ test("the HTTP smoke check distinguishes crawler noindex from image preview rest
     } else if (path === "/sitemap.xml") {
       response.writeHead(200, { "content-type": "application/xml" }).end(xml);
     } else if (entries.has(path)) {
+      if (path === "/de/" && robotsHeader) response.setHeader("X-Robots-Tag", robotsHeader);
       const lang = /^\/(en|de|ru)\//.exec(path)?.[1] ?? "en";
       const links = [...entries.get(path)]
         .map(
@@ -101,6 +103,26 @@ test("the HTTP smoke check distinguishes crawler noindex from image preview rest
   const origin = `http://127.0.0.1:${server.address().port}`;
   await t.test("allows pages that only suppress the image preview", async () => {
     assert.deepEqual(await checkIndexing(origin), { entries: 18, sampled: 18 });
+  });
+  await t.test("allows response headers that only suppress image previews", async () => {
+    for (const header of [
+      "max-image-preview: none",
+      "Googlebot: MAX-IMAGE-PREVIEW:none, nofollow",
+    ]) {
+      robotsHeader = header;
+      assert.deepEqual(await checkIndexing(origin), { entries: 18, sampled: 18 });
+    }
+  });
+  await t.test("rejects bare and crawler-scoped HTTP indexing blocks", async () => {
+    for (const header of [
+      "NOINDEX",
+      "googlebot: None",
+      ["max-image-preview:none", "bingbot: noindex, nofollow"],
+    ]) {
+      robotsHeader = header;
+      await assert.rejects(checkIndexing(origin), /X-Robots-Tag disallows indexing/);
+    }
+    robotsHeader = undefined;
   });
   await t.test("rejects mixed-case crawler names and directives", async () => {
     for (const name of ["Robots", "GoogleBot", "BingBot"]) {
