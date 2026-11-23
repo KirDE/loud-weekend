@@ -4,7 +4,7 @@ import type { Language } from "@/components/LanguageProvider";
 import { FestivalDetail } from "@/components/FestivalDetail";
 import { supportedLanguages } from "@/lib/catalog/public";
 import { getCatalog } from "@/lib/catalog/repository";
-import { festivalMusicEvent } from "@/lib/seo";
+import { festivalMusicEvent, localizedAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 export const dynamicParams = true;
@@ -22,12 +22,7 @@ export async function generateMetadata({
     title: festival.name,
     alternates: {
       canonical: `/${lang}/festivals/${festival.slug}/`,
-      languages: {
-        "x-default": `/festivals/${festival.slug}/`,
-        en: `/en/festivals/${festival.slug}/`,
-        de: `/de/festivals/${festival.slug}/`,
-        ru: `/ru/festivals/${festival.slug}/`,
-      },
+      languages: localizedAlternates(`/festivals/${festival.slug}/`),
     },
   };
 }

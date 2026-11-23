@@ -1,10 +1,20 @@
 import type { Festival } from "@/lib/domain/festival";
 
+import { supportedLanguages } from "./catalog/public";
+
 export const SITE_ORIGIN = "https://loudweekend.eu";
 
 export function canonicalPath(path: string) {
   const normalized = path.startsWith("/") ? path : `/${path}`;
   return normalized.endsWith("/") ? normalized : `${normalized}/`;
+}
+
+export function localizedAlternates(path: string): Record<string, string> {
+  const canonical = canonicalPath(path);
+  return Object.fromEntries([
+    ["x-default", canonical],
+    ...supportedLanguages.map((lang) => [lang, `/${lang}${canonical}`]),
+  ]);
 }
 
 export function festivalMusicEvent(item: Festival) {

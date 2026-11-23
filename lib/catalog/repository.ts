@@ -21,10 +21,15 @@ const dateOnly = (value: Date | null) => value?.toISOString().slice(0, 10);
 const instant = (value: Date | null) => value?.toISOString();
 const lower = <T extends string>(value: T) => value.toLocaleLowerCase() as Lowercase<T>;
 
-export class DatabaseCatalogRepository implements CatalogRepository {
-  private readonly client: PrismaClient;
+type CatalogReader = Pick<
+  PrismaClient,
+  "festivalEdition" | "artist" | "catalogPublication" | "$queryRaw"
+>;
 
-  constructor(client: PrismaClient) {
+export class DatabaseCatalogRepository implements CatalogRepository {
+  private readonly client: CatalogReader;
+
+  constructor(client: CatalogReader) {
     this.client = client;
   }
 

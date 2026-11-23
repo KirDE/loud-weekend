@@ -316,19 +316,39 @@ test("public freshness separates edition-bound checks, publication and source fa
     assert.equal(dates["/"], published);
     assert.equal(dates["/de/"], published);
     assert.equal(dates[`/festivals/${slug}/`], published);
-    assert.equal(dates[`/festivals/${slug}/2027/`], undefined);
-    assert.equal(dates[`/festivals/${slug}/2026/`], archived.snapshotAt?.toISOString());
+    // A city change is visible on the current festival, country/month cards
+    // and the appearing artist's page, but not on the edition dossier or listing.
     for (const path of [
-      "/submit/",
-      "/archive/",
-      "/editions/2027/",
+      `/de/festivals/${slug}/`,
       "/artists/sample-artist/",
+      "/ru/artists/sample-artist/",
       "/countries/de/",
       "/months/06/",
     ]) {
+      assert.equal(dates[path], published, path);
+    }
+    assert.equal(dates[`/festivals/${slug}/2027/`], undefined);
+    assert.equal(dates[`/festivals/${slug}/2026/`], archivePublished.toISOString());
+    for (const path of ["/archive/", "/editions/2026/"])
+      assert.equal(dates[path], archivePublished.toISOString(), path);
+    for (const path of ["/submit/", "/editions/2027/"]) {
       assert.ok(path in dates);
       assert.equal(dates[path], undefined);
     }
+    assert.ok(!("/months/12/" in dates));
+    await db.catalogPublication.create({
+      data: {
+        source: "ADMIN",
+        sourceId: `${slug}-future`,
+        festivalSlug: slug,
+        editionYear: current.year,
+        actorLabel: "private-actor-fixture",
+        fields: ["name"],
+        createdAt: ago(-72),
+      },
+    });
+    await db.festivalEdition.update({ where: { id: current.id }, data: { snapshotAt: ago(-72) } });
+    assert.deepEqual(await sitemapDates(), dates, "future evidence may not change the sitemap");
   } finally {
     // Publication receipts are append-only; the unique fixture slug isolates reruns.
     await db.ingestionSourceState.deleteMany({ where: { festivalSlug: slug } });

@@ -14,7 +14,10 @@ type SourceCheck = {
   stale: boolean;
 };
 
-export async function readFreshnessEvidence(db: PrismaClient, now: Date) {
+export async function readFreshnessEvidence(
+  db: Pick<PrismaClient, "catalogPublication" | "$queryRaw">,
+  now: Date,
+) {
   const [publications, checks] = await Promise.all([
     db.catalogPublication.groupBy({
       by: ["festivalSlug", "editionYear"],

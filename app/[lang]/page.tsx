@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
+import type { Language } from "@/components/LanguageProvider";
 import { HomeContent } from "@/components/HomeContent";
 import { supportedLanguages } from "@/lib/catalog/public";
 import { getHomeCatalog, homeMetadata } from "@/lib/home-metadata";
+import { localizedAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
-import type { Language } from "@/components/LanguageProvider";
 export const dynamicParams = false;
 export function generateStaticParams() {
   return supportedLanguages.map((lang) => ({ lang }));
@@ -18,7 +19,7 @@ export async function generateMetadata({ params }: { params: Promise<{ lang: str
     manifest: `/${lang}/manifest.webmanifest`,
     alternates: {
       canonical: `/${lang}/`,
-      languages: { "x-default": "/", en: "/en/", de: "/de/", ru: "/ru/" },
+      languages: localizedAlternates("/"),
     },
   };
 }

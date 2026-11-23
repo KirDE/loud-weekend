@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { FestivalDetail } from "@/components/FestivalDetail";
 import { getCatalog } from "@/lib/catalog/repository";
-import { canonicalPath, festivalMusicEvent } from "@/lib/seo";
+import { canonicalPath, festivalMusicEvent, localizedAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 export const dynamicParams = true;
@@ -19,7 +19,10 @@ export async function generateMetadata({
     ? {
         title: festival.name,
         description: `${festival.name} 2027: dates, lineup, tickets, playlist and setlists.`,
-        alternates: { canonical: canonicalPath(`/festivals/${festival.slug}`) },
+        alternates: {
+          canonical: canonicalPath(`/festivals/${festival.slug}`),
+          languages: localizedAlternates(`/festivals/${festival.slug}/`),
+        },
       }
     : {};
 }
