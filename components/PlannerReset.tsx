@@ -1,5 +1,6 @@
 "use client";
 import { useId, useRef, useState } from "react";
+import { maxPlaylistArtistPreferences } from "@/lib/playlist-selection";
 import { useLanguage } from "./LanguageProvider";
 import { useLocalPlanner, type PlannerState } from "./LocalPlanner";
 
@@ -139,7 +140,13 @@ export function PlannerReset({
             type="button"
             disabled={disabled}
             onClick={() => {
-              planner.merge(backup);
+              const current = planner.playlistExcludedArtists;
+              const saved = backup.playlistExcludedArtists;
+              const playlistExcludedArtists =
+                current && saved
+                  ? [...new Set([...current, ...saved])].slice(0, maxPlaylistArtistPreferences)
+                  : (current ?? saved);
+              planner.merge({ ...backup, playlistExcludedArtists });
               setBackup(null);
             }}
           >

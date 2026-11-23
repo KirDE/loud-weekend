@@ -115,3 +115,33 @@ for (const [
     );
   });
 }
+
+test("undo restores pre-reset exclusions without discarding new choices", async ({ page }) => {
+  await page.addInitScript(() => {
+    const key = "festival-radar-planner-v1";
+    if (!localStorage.getItem(key))
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          playlistFestivals: ["synthetic-fest", "synthetic-west"],
+          playlistExcludedArtists: ["sample-artist"],
+        }),
+      );
+  });
+  await page.goto("/en/planner/");
+  await page.getByRole("button", { name: "Clear local data" }).click();
+  await page.getByRole("button", { name: "Reset local plan" }).click();
+  await page.getByRole("checkbox", { name: "Synthetic Fest", exact: true }).check();
+  await page.getByText("Choose artists", { exact: true }).click();
+  const picker = page.locator(".playlistArtistPicker");
+  await picker.getByRole("checkbox", { name: "Second Artist", exact: true }).uncheck();
+  await page.getByRole("button", { name: "Undo local reset" }).click();
+  await expect(picker.getByRole("checkbox", { name: "Sample Artist" })).not.toBeChecked();
+  await expect(picker.getByRole("checkbox", { name: "Second Artist" })).not.toBeChecked();
+  await expect(picker.getByRole("checkbox", { name: third })).toBeChecked();
+  await page.getByText("Fallback: export deduplicated artist list", { exact: true }).click();
+  await expect(page.getByRole("link", { name: "Download artist list" })).toHaveAttribute(
+    "href",
+    "data:text/plain;charset=utf-8,Third%20Playlist%20Artist",
+  );
+});
