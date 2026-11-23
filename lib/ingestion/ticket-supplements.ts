@@ -1,7 +1,7 @@
-import { RESURRECTION_PRODUCTS, RESURRECTION_PURCHASE } from "./resurrection-ticket-stock.ts";
-import { remainingTicketUrl, observeRemainingTicket } from "./remaining-ticket-stock.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
+import { RESURRECTION_PRODUCTS, RESURRECTION_PURCHASE } from "./resurrection-ticket-stock.ts";
+import { remainingTicketUrl, observeRemainingTicket } from "./remaining-ticket-stock.ts";
 
 export const TICKET_SUPPLEMENT = "official-ticket-supplement-v1";
 type TicketState = NonNullable<FestivalCandidate["ticketStatus"]>;
@@ -39,8 +39,6 @@ export function isTicketSupplementUrl(source: FestivalSource, actual: string): b
 export function observeTicketSupplement(html: string, source: FestivalSource, url: string, dates?: Pick<FestivalCandidate, "startDate" | "endDate">): TicketObservation {
   const fail = (reason: string): TicketObservation => ({ excerpt: "", warning: `Official ${source.festivalSlug} ticket source requires review: ${reason}` });
   if (!isTicketSupplementUrl(source, url) || html.length > 2_000_000) return fail("source identity or size changed");
-  const remaining = observeRemainingTicket(html, source, url);
-  if (remaining) return remaining;
   if (source.festivalSlug === "full-rewind") {
     const year = source.editionYear;
     try {
@@ -74,6 +72,8 @@ export function observeTicketSupplement(html: string, source: FestivalSource, ur
         excerpt: title + "; " + start + "–" + end + "; official Shopify standard weekend variant available=" + product.available };
     } catch { return fail("invalid public weekend product JSON"); }
   }
+  const remaining = observeRemainingTicket(html, source, url);
+  if (remaining) return remaining;
   const $ = load(html);
   const declaredEvents: Array<{ name?: unknown; startDate?: unknown; endDate?: unknown; eventStatus?: unknown }> = [];
   if (source.festivalSlug === "download") $("script[type='application/ld+json']").each((_, element) => {
