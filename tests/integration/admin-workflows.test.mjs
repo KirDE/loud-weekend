@@ -17,6 +17,9 @@ const requests = [];
 const ticketsUrl = "https://tickets.example.test/integration";
 let primaryFails = false;
 let primaryOffersWithoutEdition = false;
+let primaryHasDatedFallback = false;
+let observedTicketsUrl = ticketsUrl;
+const replacementTicketsUrl = "https://tickets.example.test/replacement";
 let originalStartDate = "2027-07-28";
 let datesChanged = false;
 const correctedStartDate = "2027-07-29";
@@ -39,7 +42,7 @@ const sourceServer = createServer((request, response) => {
     location: { "@type": "Place", address: { addressLocality: "Wacken Preview" } },
     offers: {
       "@type": "Offer",
-      url: ticketsUrl,
+      url: observedTicketsUrl,
       ...(request.url === "/primary" && { availability: "https://schema.org/SoldOut" }),
     },
   };
@@ -49,7 +52,11 @@ const sourceServer = createServer((request, response) => {
     event.offers.availability = "https://schema.org/InStock";
   }
   response.setHeader("content-type", "text/html");
-  response.end(`<script type="application/ld+json">${JSON.stringify(event)}</script>`);
+  const fallback =
+    request.url === "/primary" && primaryOffersWithoutEdition && primaryHasDatedFallback
+      ? `<meta property="event:start_time" content="${startDate}">`
+      : "";
+  response.end(`${fallback}<script type="application/ld+json">${JSON.stringify(event)}</script>`);
 });
 
 class Client {
@@ -661,6 +668,7 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   await db.festivalSource.update({ where: { id: configuredSource.id }, data: { enabled: true } });
   // A current source configuration cannot establish the year of a dateless offer.
   primaryOffersWithoutEdition = true;
+  observedTicketsUrl = replacementTicketsUrl;
   const unscopedStock = await admin.json(`${refreshPath}?year=2027`, "POST");
   assert.equal(unscopedStock.status, 201);
   const stockRun = await unscopedStock.json();
@@ -679,7 +687,50 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     0,
   );
   assert.equal(await publicAvailability(), "https://schema.org/SoldOut");
+  assert.equal(
+    await db.adminChange.count({ where: { parserRunId: stockRun.id, field: "ticketsUrl" } }),
+    0,
+  );
+  assert.ok(
+    stockLog.log.some(({ reviewReasons }) =>
+      reviewReasons?.includes("Ticket URL could not be verified for the selected edition."),
+    ),
+  );
+  assert.equal(
+    (await db.festivalEdition.findUniqueOrThrow({ where: { id: configuredSource.editionId } }))
+      .ticketsUrl,
+    ticketsUrl,
+  );
+
+  // A separate parser can date the page without dating the offer it did not extract.
+  primaryHasDatedFallback = true;
+  const mixedOffer = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(mixedOffer.status, 201);
+  const mixedRun = await mixedOffer.json();
+  assert.equal(mixedRun.queued, 0);
+  assert.equal(mixedRun.status, "PARTIAL");
+
+  // The same link is eligible once the official event establishes the selected year.
   primaryOffersWithoutEdition = false;
+  const scopedLink = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(scopedLink.status, 201);
+  const linkRun = await scopedLink.json();
+  assert.equal(linkRun.queued, 1);
+  const linkChange = await db.adminChange.findFirstOrThrow({
+    where: { parserRunId: linkRun.id, field: "ticketsUrl" },
+  });
+  assert.equal(linkChange.afterValue, replacementTicketsUrl);
+  assert.equal(
+    (await admin.json(`/api/admin/changes/${linkChange.id}`, "POST", { decision: "approve" }))
+      .status,
+    200,
+  );
+  assert.equal(
+    (await db.festivalEdition.findUniqueOrThrow({ where: { id: configuredSource.editionId } }))
+      .ticketsUrl,
+    replacementTicketsUrl,
+  );
+
   primaryFails = true;
   assert.equal((await admin.json(refreshPath, "POST")).status, 502);
   const failedRun = await db.adminParserRun.findFirstOrThrow({ orderBy: { startedAt: "desc" } });
