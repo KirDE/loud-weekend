@@ -15,9 +15,9 @@ export function accessStatus(role: UserRole | null, allowed: readonly UserRole[]
   return roleAllowed(role, allowed) ? 200 : 403;
 }
 
-export async function requireAdminActor(allowed: readonly UserRole[] = ADMIN_ROLES): Promise<
-  { response: Response; actor: null } | { response: null; actor: AdminActor }
-> {
+export async function requireAdminActor(
+  allowed: readonly UserRole[] = ADMIN_ROLES,
+): Promise<{ response: Response; actor: null } | { response: null; actor: AdminActor }> {
   const actor = await currentUser();
   const status = accessStatus(actor?.role ?? null, allowed);
   if (status === 401) return { response: error("Authentication required.", 401), actor: null };

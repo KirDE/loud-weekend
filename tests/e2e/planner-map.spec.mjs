@@ -6,7 +6,9 @@ async function expectNoDocumentOverflow(page) {
     documentWidth: document.documentElement.scrollWidth,
     bodyWidth: document.body.scrollWidth,
   }));
-  expect(Math.max(geometry.documentWidth, geometry.bodyWidth)).toBeLessThanOrEqual(geometry.viewportWidth);
+  expect(Math.max(geometry.documentWidth, geometry.bodyWidth)).toBeLessThanOrEqual(
+    geometry.viewportWidth,
+  );
 }
 
 async function edgeMarkerIndexes(markers) {
@@ -76,7 +78,12 @@ test("desktop map positioning and links remain operable", async ({ page }) => {
   await marker.click();
   const panel = marker.locator("xpath=../div");
   await expect(panel).toBeVisible();
-  await expect(panel.getByRole("link", { name: /Synthetic Alpine/ })).toHaveAttribute("href", "/festivals/synthetic-alpine/");
-  expect(await marker.locator("xpath=..").evaluate((element) => getComputedStyle(element).transform)).not.toBe("none");
+  await expect(panel.getByRole("link", { name: /Synthetic Alpine/ })).toHaveAttribute(
+    "href",
+    "/festivals/synthetic-alpine/",
+  );
+  expect(
+    await marker.locator("xpath=..").evaluate((element) => getComputedStyle(element).transform),
+  ).not.toBe("none");
   await expectNoDocumentOverflow(page);
 });

@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { serveFestivalLogo } from "../lib/catalog/logo-serving.ts";
 import { logoFixture } from "./support/logo-fixtures.ts";
 const png = await logoFixture();
 const jpeg = await logoFixture("image/jpeg");
-async function fixture(row = png) { return row; }
+async function fixture(row = png) {
+  return row;
+}
 function request(tag?: string, method = "GET") {
-  return new Request("http://localhost/api/logos/test.png", { method, headers: tag ? { "If-None-Match": tag } : {} });
+  return new Request("http://localhost/api/logos/test.png", {
+    method,
+    headers: tag ? { "If-None-Match": tag } : {},
+  });
 }
 
 test("PNG/JPEG use actual stored MIME, exact bytes, ETag and revalidation cache policy", async () => {
@@ -29,7 +33,13 @@ test("PNG/JPEG use actual stored MIME, exact bytes, ETag and revalidation cache 
 
 test("If-None-Match handles strong, weak, lists and wildcard with bodyless 304", async () => {
   const logo = await fixture();
-  for (const tag of [logo.etag, `W/${logo.etag}`, `"other", W/${logo.etag}`, "*", `  ${logo.etag}  `]) {
+  for (const tag of [
+    logo.etag,
+    `W/${logo.etag}`,
+    `"other", W/${logo.etag}`,
+    "*",
+    `  ${logo.etag}  `,
+  ]) {
     const response = await serveFestivalLogo(request(tag), png.file, async () => logo);
     assert.equal(response.status, 304, tag);
     assert.equal(await response.text(), "");
@@ -47,8 +57,19 @@ test("If-None-Match handles strong, weak, lists and wildcard with bodyless 304",
 });
 
 test("invalid filenames never query DB; missing bindings return uncached 404 even for wildcard", async () => {
-  for (const filename of ["../2000trees.png", "2000trees.png/extra", "%2e%2e", "2000trees.jpg", png.sha256, "2000trees.png?x", "2000trees.png\u0000", "2000trees.PNG"]) {
-    const response = await serveFestivalLogo(request("*"), filename, async () => { throw new Error("must not query"); });
+  for (const filename of [
+    "../2000trees.png",
+    "2000trees.png/extra",
+    "%2e%2e",
+    "2000trees.jpg",
+    png.sha256,
+    "2000trees.png?x",
+    "2000trees.png\u0000",
+    "2000trees.PNG",
+  ]) {
+    const response = await serveFestivalLogo(request("*"), filename, async () => {
+      throw new Error("must not query");
+    });
     assert.equal(response.status, 404);
     assert.equal(response.headers.get("cache-control"), "no-store");
   }
@@ -75,12 +96,22 @@ test("corrupt bindings and DB failures return generic uncached 503 before condit
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.equal(response.headers.get("etag"), null);
   }
-  const failed = await serveFestivalLogo(request(), png.file, async () => { throw new Error("private DB details"); });
+  const failed = await serveFestivalLogo(request(), png.file, async () => {
+    throw new Error("private DB details");
+  });
   assert.equal(failed.status, 503);
   assert.equal(await failed.text(), "");
 });
 
 test("valid DB logo updates and new festival slugs do not require an inventory deploy", async () => {
   const logo = await fixture(jpeg);
-  assert.equal((await serveFestivalLogo(request(), "new-festival.png", async slug => { assert.equal(slug, "new-festival"); return logo; })).status, 200);
+  assert.equal(
+    (
+      await serveFestivalLogo(request(), "new-festival.png", async (slug) => {
+        assert.equal(slug, "new-festival");
+        return logo;
+      })
+    ).status,
+    200,
+  );
 });
