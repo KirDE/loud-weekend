@@ -39,8 +39,9 @@ test("the discovery map follows the card filters and uses no third-party map req
   await expect(page.locator(".festivalLocationCanvas")).toHaveCount(0);
   const countryFilter = page.locator("select").filter({ has: page.locator('option[value="AT"]') });
   await countryFilter.selectOption("AT");
-  await page.getByRole("button", { name: "Show festival map" }).click();
+  await page.getByRole("button", { name: "Show festival map" }).press("Enter");
   const map = page.getByRole("group", { name: "Map of Europe with festival locations" });
+  await expect(map).toBeFocused();
   const marker = map.getByRole("button", { name: /Synthetic Alpine.*Approximate location/ });
   await expect(marker).toBeVisible();
   await expect(page.locator(".festivalGrid article")).toHaveCount(1);

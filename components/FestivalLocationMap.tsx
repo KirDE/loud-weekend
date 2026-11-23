@@ -190,8 +190,6 @@ function FestivalMapViewport({ festivals, t }: { festivals: Festival[]; t: MapLa
   if (!points.length) return <p role="status">{t.empty}</p>;
   return (
     <div
-      role="group"
-      aria-label={t.mapLabel}
       onKeyDown={(event) => {
         if (event.key === "Escape" && open) {
           event.preventDefault();
@@ -326,6 +324,10 @@ export function FestivalLocationMap({
   const { language, locale } = useLanguage();
   const t = festivalMapLabels[language];
   const [enabled, setEnabled] = useState(!optIn);
+  const mapGroup = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (optIn && enabled) mapGroup.current?.focus();
+  }, [optIn, enabled]);
   const groups = useMemo(() => {
     const names = new Intl.DisplayNames([locale], { type: "region", fallback: "none" });
     const countries = new Map<string, { name: string; festivals: Festival[] }>();
@@ -342,7 +344,13 @@ export function FestivalLocationMap({
   }, [festivals, locale]);
 
   return (
-    <div className="festivalLocationMap">
+    <div
+      className="festivalLocationMap"
+      ref={mapGroup}
+      role={enabled ? "group" : undefined}
+      aria-label={enabled ? t.mapLabel : undefined}
+      tabIndex={optIn && enabled ? -1 : undefined}
+    >
       {enabled ? (
         festivals.some(festivalMapPoint) ? (
           <FestivalMapViewport festivals={festivals} t={t} />

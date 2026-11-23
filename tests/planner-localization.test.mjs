@@ -46,7 +46,7 @@ test("planner calendar and map expose localized visible and accessible copy", ()
     assert.match(views, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(views, /aria-label=\{t\.previous\}/);
-  assert.match(map, /aria-label=\{t\.mapLabel\}/);
+  assert.match(map, /aria-label=\{enabled \? t\.mapLabel : undefined\}/);
 });
 
 test("primary navigation uses the translated notification label", () => {
