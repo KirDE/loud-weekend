@@ -24,16 +24,20 @@ export function summarizeDataQuality(
     lastRecentCheck: undefined as string | undefined,
   };
   for (const festival of catalog.festivals) {
-    if (festivalDateInterval(festival)) summary.dates += 1;
+    const dateInterval = festivalDateInterval(festival);
+    if (dateInterval) summary.dates += 1;
     if (hasAnnouncedLineup(festival)) summary.lineup += 1;
     if (festival.ticketStatus !== "unknown") summary.tickets += 1;
+    // A verified range may span New Year. Without both dates, fall back to the edition year.
+    const scheduleYear = dateInterval && festival.endDate ? undefined : festival.editionYear;
     const hasUsableSchedule = festival.timetable?.some(
       (entry) =>
         entry.status === "scheduled" &&
         verifiedTime(entry.observedAt) &&
         (!festival.startDate || entry.date >= festival.startDate) &&
         (!festival.endDate || entry.date <= festival.endDate) &&
-        timetableEntrySchema.safeParse(entry).success,
+        timetableEntrySchema.safeParse(entry).success &&
+        (scheduleYear === undefined || Number(entry.date.slice(0, 4)) === scheduleYear),
     );
     if (hasUsableSchedule) summary.timetable += 1;
     const freshness = festival.freshness;

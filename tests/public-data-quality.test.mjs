@@ -114,3 +114,20 @@ test("stage schedule coverage excludes malformed, out-of-edition and future obse
   assert.equal(tally.timetable, 1);
   assert.doesNotMatch(JSON.stringify(tally), /private-schedule-fixture/);
 });
+
+test("undated editions do not count performances from another season", () => {
+  const edition = { ...festival, startDate: undefined, endDate: undefined, editionYear: 2027 };
+  const count = (festival) =>
+    summarizeDataQuality({ festivals: [festival], editions: [] }, now).timetable;
+  assert.equal(count({ ...edition, timetable: [{ ...performance, date: "2026-06-18" }] }), 0);
+  assert.equal(count(edition), 1);
+  assert.equal(
+    count({
+      ...edition,
+      startDate: "2027-12-31",
+      endDate: "2028-01-02",
+      timetable: [{ ...performance, date: "2028-01-01" }],
+    }),
+    1,
+  );
+});
