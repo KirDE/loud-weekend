@@ -12,6 +12,7 @@ import {
   type DiscoveryLineups,
   type DiscoverySort,
 } from "@/lib/discovery-sort";
+import { OriginSearch } from "./OriginSearch";
 import { DiscoveryDateFilters } from "./DiscoveryDateFilters";
 import {
   datesFromQuery,
@@ -51,8 +52,18 @@ export function FestivalExplorer({
 }) {
   const { locale, t } = useLanguage();
   const planner = useLocalPlanner();
-  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance, sort } =
-    planner.savedFilters;
+  const {
+    query,
+    country,
+    announcedOnly,
+    month,
+    ticketsOnly,
+    genre,
+    origin,
+    customOrigin,
+    maxDistance,
+    sort,
+  } = planner.savedFilters;
   const filtersReady = planner.ready;
   const queryParams = useSearchParams();
   const linkedDates = useMemo(
@@ -88,7 +99,10 @@ export function FestivalExplorer({
     const available = festivalGenres(festivals);
     return genre === "all" || available.includes(genre) ? available : [...available, genre].sort();
   }, [festivals, genre]);
-  const originCoordinates = origins[origin].coordinates;
+  const originCoordinates = customOrigin ?? origins[origin].coordinates;
+  const originLabel = customOrigin
+    ? `${customOrigin.name}, ${displayNames.of(customOrigin.countryCode)}`
+    : origins[origin].label;
   const filtered = useMemo(
     () =>
       festivals.filter((item) => {
@@ -229,11 +243,18 @@ export function FestivalExplorer({
         </select>
         <select
           aria-label={t("filterOrigin")}
-          value={origin}
-          onChange={(event) =>
-            updateFilters({ origin: event.target.value as DiscoveryPreferences["origin"] })
-          }
+          value={customOrigin ? "custom" : origin}
+          onChange={(event) => {
+            if (event.target.value !== "custom")
+              updateFilters({
+                origin: event.target.value as DiscoveryPreferences["origin"],
+                customOrigin: undefined,
+              });
+          }}
         >
+          {customOrigin && (
+            <option value="custom">{t("fromOrigin", { origin: originLabel })}</option>
+          )}
           {Object.entries(origins).map(([value, item]) => (
             <option key={value} value={value}>
               {t("fromOrigin", { origin: item.label })}
@@ -285,6 +306,7 @@ export function FestivalExplorer({
       <p className="srOnly" role="status" aria-live="polite" aria-atomic="true">
         {comparisonStatus}
       </p>
+      <OriginSearch onPick={(customOrigin) => updateFilters({ customOrigin })} />
       {compared.length > 0 && (
         <div className="compareTray">
           <div className="compareHeading">
@@ -326,7 +348,7 @@ export function FestivalExplorer({
                     ))}
                   </tr>
                   <tr>
-                    <th scope="row">{t("locationDistance", { origin: origins[origin].label })}</th>
+                    <th scope="row">{t("locationDistance", { origin: originLabel })}</th>
                     {compared.map((item) => (
                       <td key={item.slug}>
                         {item.city || item.country}
