@@ -4,78 +4,45 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#171712">
-  <title>Loud Weekend · Offline</title>
+  <title>Loud Weekend · Offline trips</title>
   <style>body{font:18px system-ui;margin:0;background:#f2efe7;color:#171712}main{max-width:42rem;margin:8vh auto;padding:2rem}a{color:inherit}li{margin:.6rem 0}h2{margin-top:2rem}article{border-top:1px solid #989385;margin-top:1rem}h2,h3,p,li{overflow-wrap:anywhere}button{font:inherit;padding:.35rem .5rem}.trip-actions{display:flex;flex-wrap:wrap;gap:.5rem}.trip-status:empty{margin:0}</style>
 </head>
 <body>
 <main>
-  <h1>You are offline</h1>
-  <p>Reconnect to refresh festival and timetable data. Saved data may be outdated.</p>
-  <p><a href="/">Try the festival list</a></p>
+  <h1 id="offline-title">Offline trips</h1>
+  <p id="offline-help">Reconnect to refresh festival and timetable data. Saved data may be outdated.</p>
+  <p><a id="offline-home" href="/en/">Open the festival list</a></p>
   <section id="trips" aria-labelledby="trips-title"><h2 id="trips-title"></h2><div id="trip-list"></div></section>
   <p id="catalog-status" role="status">Loading saved festival data…</p>
   <section id="catalog" aria-label="Saved festivals"></section>
 </main>
-<script>
-  async function showCatalog() {
-    const status = document.getElementById("catalog-status");
-    const catalog = document.getElementById("catalog");
-    try {
-      const scope = typeof navigator !== "undefined" && navigator.serviceWorker?.controller?.scriptURL;
-      const base = scope ? new URL(".", scope).pathname.replace(/\/$/, "") : "";
-      const home = document.querySelector?.("main > p > a");
-      if (home) home.href = `${base}/`;
-      const response = await fetch(`${base}/api/offline/catalog/`, { credentials: "omit", cache: "no-cache" });
-      if (!response.ok) throw new Error("Catalogue unavailable");
-      const data = await response.json();
-      if (data.schemaVersion !== 1 || !Array.isArray(data.festivals) || !data.festivals.length) throw new Error("Catalogue unavailable");
-      const fragment = document.createDocumentFragment();
-      for (const festival of data.festivals) {
-        const heading = document.createElement("h2");
-        heading.textContent = festival.name;
-        fragment.append(heading);
-        const dates = document.createElement("p");
-        dates.textContent = [festival.startDate, festival.endDate].filter(Boolean).join(" – ") || "Dates not published";
-        fragment.append(dates);
-        const timetable = document.createElement("ul");
-        for (const entry of festival.timetable) {
-          const item = document.createElement("li");
-          item.textContent = `${entry.date} · ${entry.start} (${entry.timeZone}) · ${entry.stage} · ${entry.artist}${entry.status === "cancelled" ? " · Cancelled" : ""}`;
-          timetable.append(item);
-        }
-        if (festival.timetable.length) fragment.append(timetable);
-        else {
-          const empty = document.createElement("p");
-          empty.textContent = "Timetable not published";
-          fragment.append(empty);
-        }
-      }
-      catalog.replaceChildren(fragment);
-      status.textContent = "Saved public festival and timetable data. Reconnect to check for updates.";
-    } catch {
-      status.textContent = "No saved festival data is available. Open Loud Weekend online to save it for your next visit.";
-    }
-  }
-  showCatalog();
-</script>
 <script type="module">
   const worker = navigator.serviceWorker?.controller?.scriptURL;
   const base = worker ? new URL(".", worker).pathname : location.pathname.replace(/offline\.html$/, "");
-  const { fetchOfflineTrip, offlineTripCopy, offlineTripKey, listOfflineTrips, readOfflineTrip, saveOfflineTrip } = await import(`${base}offline-trips.mjs`);
+  const { fetchOfflineTrip, offlineTripCopy, offlineTripKey, listOfflineTrips, readOfflineTrip, saveOfflineTrip, offlinePageCopy, showOfflineCatalog } = await import(`${base}offline-trips.mjs`);
   const language = (() => {
+    const routeLocale = location.pathname.slice(base.length).split("/")[0];
+    if (routeLocale === "en" || routeLocale === "de" || routeLocale === "ru") return routeLocale;
     try {
       const saved = localStorage.getItem("festival-radar-language");
       if (saved === "en" || saved === "de" || saved === "ru") return saved;
     } catch { /* Browser storage may be unavailable. */ }
-    const routeLocale = location.pathname.slice(base.length).split("/")[0];
-    if (routeLocale === "en" || routeLocale === "de" || routeLocale === "ru") return routeLocale;
     const locale = navigator.language.split("-")[0];
     return locale === "de" || locale === "ru" ? locale : "en";
   })();
+  const shell = offlinePageCopy[language];
+  document.documentElement.lang = language;
+  document.title = `Loud Weekend · ${shell.title}`;
+  document.getElementById("offline-title").textContent = shell.title;
+  document.getElementById("offline-help").textContent = shell.help;
+  const home = document.getElementById("offline-home");
+  home.textContent = shell.home;
+  home.href = `${base}${language}/`;
+  document.getElementById("catalog-status").textContent = shell.loading;
+  document.getElementById("catalog").setAttribute("aria-label", shell.catalog);
+  void showOfflineCatalog(document, fetch, base, language);
   const copy = offlineTripCopy[language];
   const list = document.getElementById("trip-list");
-  const group = document.getElementById("trips");
-  group.lang = language;
   document.getElementById("trips-title").textContent = copy.heading;
   const date = new Intl.DateTimeFormat(language, { dateStyle: "medium", timeZone: "UTC" });
   const dateTime = new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" });
