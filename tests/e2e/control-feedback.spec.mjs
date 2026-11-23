@@ -55,7 +55,10 @@ for (const locale of ['en', 'de', 'ru']) {
       await page.setViewportSize({ width, height: 1000 });
       await page.goto(`/${locale}/`);
       await expect(page.locator('.search')).toHaveAttribute('data-ready', 'true');
-      for (const select of await page.locator('select').all()) await expectFeedback(page, select);
+      const artistPicker = page.locator('.discoveryArtistPicker');
+      await artistPicker.locator('summary').click();
+      await expect(artistPicker.locator('select')).toBeVisible();
+      for (const select of await page.locator('select:visible').all()) await expectFeedback(page, select);
       const card = page.locator('.festivalCard').first();
       await page.mouse.move(0, 0);
       const normal = await card.evaluate(el => getComputedStyle(el).backgroundColor);
