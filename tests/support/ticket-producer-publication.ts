@@ -13,7 +13,7 @@ import { evaluateCandidate } from "../../lib/ingestion/policy.ts";
 import type { FestivalCandidate, IngestionResult } from "../../lib/ingestion/types.ts";
 
 /** Frozen public structural source data, local synthetic DB and mocked GET only. */
-export function ticketProducerPublication(input: { slug: string; produce: (archived: boolean, db: ReturnType<typeof createPrismaClient>) => Promise<FestivalCandidate>; forbiddenCandidates?: (candidate: FestivalCandidate) => FestivalCandidate[]; refusalPattern?: RegExp }) {
+export function ticketProducerPublication(input: { slug: string; produce: (archived?: boolean) => Promise<FestivalCandidate> }) {
   test(`${input.slug}: source producer → persisted evidence → canonical readback/replay and stale-publication rollback`, async () => {
     requireLocalDisposableDatabase(process.env.DATABASE_URL);
     const db = createPrismaClient(), sourceCommit = `test-ticket-${randomUUID()}`;
@@ -30,7 +30,7 @@ export function ticketProducerPublication(input: { slug: string; produce: (archi
     };
     const read = async () => (await readCatalog({ database: db })).festivals.find(f => f.slug === input.slug)!;
     try {
-      const candidate = await input.produce(false, db);
+      const candidate = await input.produce();
       assert.ok(candidate.ticketStatus, "fixture must exercise actual source-backed ticket status");
       assert.equal(candidate.festivalSlug, input.slug);
       assert.equal(candidate.observedEditionYears.length, 1);
@@ -59,18 +59,6 @@ export function ticketProducerPublication(input: { slug: string; produce: (archi
       assert.equal(value.publishable, true, JSON.stringify(value.reviewReasons));
       assert.ok(value.changes.some(c => c.field === "ticketStatus"));
       assert.ok(value.changes.every(c => ["ticketStatus", "ticketsUrl"].includes(c.field)), "stock check must not publish artists");
-      // Explicitly prove the canonical boundary, even if a caller lies about
-      // policy approval. No forged candidate may escape this transaction.
-      for (const forbidden of input.forbiddenCandidates?.(structuredClone(candidate)) ?? []) {
-        const blocked = evaluateCandidate(await read(), forbidden);
-        assert.equal(blocked.publishable, false);
-        const forged = { ...blocked, publishable: true, reviewReasons: [], changes: blocked.changes.map(c => ({ ...c, reviewRequired: false })) };
-        const rejected = await persist(forged), count = await db.catalogPublication.count();
-        await assert.rejects(publishIngestionResult(db, { attemptId: rejected.id, result: forged, sourceCommit }), input.refusalPattern ?? /./);
-        assert.equal(await db.catalogPublication.count(), count);
-        assert.equal((await read()).ticketStatus, "unknown");
-        assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
-      }
       const attempt = await persist(value);
       const publication = await publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit });
       assert.ok(publication);
@@ -90,7 +78,7 @@ export function ticketProducerPublication(input: { slug: string; produce: (archi
       assert.deepEqual(evaluateCandidate(after, candidate).changes, []);
       assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
       assert.equal(await db.festivalPlaylist.count(), bindings);
-      const archived = evaluateCandidate(after, await input.produce(true, db));
+      const archived = evaluateCandidate(after, await input.produce(true));
       assert.equal(archived.publishable, false, "old-edition source must not overwrite current inventory");
       const archivedAttempt = await persist(archived);
       await assert.rejects(publishIngestionResult(db, { attemptId: archivedAttempt.id, result: archived, sourceCommit }));

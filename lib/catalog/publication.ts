@@ -1,6 +1,3 @@
-import { isDeepStrictEqual } from "node:util";
-import { RESURRECTION_ARTIST_REVIEW, RESURRECTION_NAMESPACE, RESURRECTION_PRODUCT_ID, isResurrectionTicketOnly } from "../ingestion/resurrection-ticket-stock.ts";
-import { withRemainingProof } from "../ingestion/remaining-ticket-proof.ts";
 import { ticketSupplementUrl, ticketSupplementPurchaseUrl } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
@@ -262,14 +259,13 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     const observed = input.result.candidate;
     const stored = candidate.normalized as unknown as FestivalCandidate;
     if (observed.ticketSupplement || stored.ticketSupplement) {
-      const registeredSource = await withRemainingProof(db, { festivalSlug: input.result.festivalSlug,
+      const registeredSource = { festivalSlug: input.result.festivalSlug,
         url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
-        strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true });
+        strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true };
       const ticketUrl = ticketSupplementUrl(registeredSource);
       const purchaseUrl = ticketSupplementPurchaseUrl(registeredSource);
-      const provenance = { sourceUrl: input.result.sourceUrl, ticketUrl, editionYear: expectedYear,
-        ...(registeredSource.festivalSlug === "resurrection-fest" ? { scope: { namespace: RESURRECTION_NAMESPACE, productId: RESURRECTION_PRODUCT_ID } } : {}) };
-      const valid = ticketUrl && isDeepStrictEqual(observed.ticketSupplement, provenance) && isDeepStrictEqual(stored.ticketSupplement, provenance) && candidate.festivalSlug === input.result.festivalSlug &&
+      const provenance = { sourceUrl: input.result.sourceUrl, ticketUrl, editionYear: expectedYear };
+      const valid = ticketUrl && same(observed.ticketSupplement, provenance) && same(stored.ticketSupplement, provenance) && candidate.festivalSlug === input.result.festivalSlug &&
         candidate.attempt.requestedUrl === input.result.sourceUrl &&
         observed.sourceUrl === input.result.sourceUrl && stored.sourceUrl === observed.sourceUrl &&
         stored.festivalSlug === observed.festivalSlug && observed.festivalSlug === candidate.festivalSlug &&
@@ -285,10 +281,6 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
         }) && input.result.changes.filter(c => ["ticketStatus", "ticketsUrl"].includes(c.field))
           .every(c => same(c.after, observed[c.field as "ticketStatus" | "ticketsUrl"]));
       if (!valid) throw new Error("Ticket supplement publication requires matching persisted official ticket evidence");
-      if ((observed.warnings.includes(RESURRECTION_ARTIST_REVIEW) || stored.warnings.includes(RESURRECTION_ARTIST_REVIEW))
-        && (!isResurrectionTicketOnly(observed, input.result.changes, expectedYear)
-          || !isResurrectionTicketOnly(stored, input.result.changes, expectedYear)))
-        throw new Error("Resurrection stock publication cannot bypass source artist or date review");
     }
     const applied = await applyFestivalChanges(db, { festivalSlug: input.result.festivalSlug, expectedYear, changes: input.result.changes, strictBefore: true, observedAt: new Date(input.result.fetchedAt) });
     // Rockharz 2027 publications retain exact edition/source/field and persisted

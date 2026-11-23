@@ -1,11 +1,11 @@
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
-import { RESURRECTION_PRODUCTS, RESURRECTION_PURCHASE } from "./resurrection-ticket-stock.ts";
-import { remainingTicketUrl, observeRemainingTicket } from "./remaining-ticket-stock.ts";
+
+import { observeRemainingTicket, remainingTicketUrl } from "./remaining-ticket-stock.ts";
 
 export const TICKET_SUPPLEMENT = "official-ticket-supplement-v1";
 type TicketState = NonNullable<FestivalCandidate["ticketStatus"]>;
-export type TicketObservation = { status?: TicketState; excerpt: string; warning?: string; ticketsUrl?: string; scope?: { namespace: string; productId: string } };
+export type TicketObservation = { status?: TicketState; excerpt: string; warning?: string; ticketsUrl?: string };
 
 /** Reviewed source routes, not URLs supplied by arbitrary markup or API clients. */
 export function ticketSupplementUrl(source: FestivalSource): string | undefined {
@@ -23,13 +23,11 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
     return `https://www.wacken.com/de/tickets-shop/ticket-uebersicht-${source.editionYear}/`;
 }
 
-/** Human purchase gateway can differ from durable machine stock evidence. */
+/** Human purchase destination can differ from the machine-readable stock URL. */
 export function ticketSupplementPurchaseUrl(source: FestivalSource): string | undefined {
-  const stock = ticketSupplementUrl(source);
-  if (!stock) return;
-  if (source.festivalSlug === "full-rewind") return `https://full-rewind.de/collections/tickets-${source.editionYear}`;
-  if (stock === RESURRECTION_PRODUCTS) return RESURRECTION_PURCHASE;
-  return source.festivalSlug === "jera-on-air" ? "https://www.impericon.com/nl/collections/jera-on-air-tickets" : stock;
+  const stockUrl = ticketSupplementUrl(source);
+  if (!stockUrl) return;
+  return source.festivalSlug === "full-rewind" ? `https://full-rewind.de/collections/tickets-${source.editionYear}` : stockUrl;
 }
 
 export function isTicketSupplementUrl(source: FestivalSource, actual: string): boolean {
@@ -72,8 +70,7 @@ export function observeTicketSupplement(html: string, source: FestivalSource, ur
         excerpt: title + "; " + start + "–" + end + "; official Shopify standard weekend variant available=" + product.available };
     } catch { return fail("invalid public weekend product JSON"); }
   }
-  const remaining = observeRemainingTicket(html, source, url);
-  if (remaining) return remaining;
+  if (remainingTicketUrl(source)) return observeRemainingTicket(html, source, dates);
   const $ = load(html);
   const declaredEvents: Array<{ name?: unknown; startDate?: unknown; endDate?: unknown; eventStatus?: unknown }> = [];
   if (source.festivalSlug === "download") $("script[type='application/ld+json']").each((_, element) => {

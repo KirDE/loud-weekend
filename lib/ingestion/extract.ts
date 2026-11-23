@@ -1,4 +1,4 @@
-import { observeTicketSupplement, ticketSupplementUrl, ticketSupplementPurchaseUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
+import { observeTicketSupplement, ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import {extractRoskildeCandidate} from "./adapters/roskilde.ts";
 import { extractRoadburnCandidate } from "./adapters/roadburn.ts";
 import { extractCopenhellCurrent } from "./adapters/copenhell-current.ts";
@@ -141,9 +141,9 @@ export function extractFestivalCandidate(html: string, source: FestivalSource, f
   candidate.evidence = candidate.evidence.filter(evidence => evidence.field !== "ticketStatus");
   if (ticket.warning) candidate.warnings.push(ticket.warning);
   if (ticket.status) {
-    candidate.ticketSupplement = { sourceUrl: source.url, ticketUrl: envelope.ticket.url, editionYear: source.editionYear, ...(ticket.scope ? { scope: ticket.scope } : {}) };
+    candidate.ticketSupplement = { sourceUrl: source.url, ticketUrl: envelope.ticket.url, editionYear: source.editionYear };
     candidate.ticketStatus = ticket.status;
-    candidate.ticketsUrl = ticketSupplementPurchaseUrl(source);
+    candidate.ticketsUrl = ticket.ticketsUrl ?? envelope.ticket.url;
     candidate.observedEditionYears = [...new Set([...candidate.observedEditionYears, source.editionYear])];
     candidate.evidence = candidate.evidence.filter(evidence => evidence.field !== "ticketsUrl");
     for (const field of ["ticketStatus", "ticketsUrl"] as const) candidate.evidence.push({ field, sourceUrl: envelope.ticket.url, observedAt: fetchedAt, excerpt: ticket.excerpt });

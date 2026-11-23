@@ -1,4 +1,3 @@
-import { RESURRECTION_CONFIG, RESURRECTION_SHOP, RESURRECTION_PRODUCTS, RESURRECTION_DOCUMENTS, isResurrectionNamespace } from "./resurrection-ticket-stock.ts";
 import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters/full-rewind.ts';
@@ -537,51 +536,16 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
     // source overrides or authorization headers on a public ticket destination.
-    if (ticketUrl === RESURRECTION_PRODUCTS) {
-      // These are the official frontend's public configuration/inventory reads,
-      // not its side-effecting session/cart/order endpoints. Never enter a queue.
-      const read = async (url: string, headers?: Record<string, string>) => {
-        const result = await fetchSourceWithoutTicketSupplement({ ...source, url, headers,
-          fetchUrl: undefined, followLinkPattern: undefined, strategies: ["html_fallback"] }, options);
-        attempts += result.attempts;
-        if (!result.response.ok) throw new Error(`Resurrection public stock HTTP ${result.response.status}`);
-        if (result.response.url && result.response.url !== url) throw new Error("Resurrection public stock redirected");
-        if (!/^application\/json\b/i.test(result.response.headers.get("content-type") ?? "")) throw new Error("Resurrection public stock media type changed");
-        return JSON.parse(await boundedTicketText(result.response));
-      };
-      const config = await read(RESURRECTION_CONFIG);
-      const sale = config?.data?.shopSale;
-      if (!sale || sale.title !== "Resurrection Fest 2027" || !isResurrectionNamespace(sale.namespace)
-        || sale.requireLogin !== false || sale.requirePremiumMembership !== false || sale.shopMode !== "no_loading")
-        throw new Error("Resurrection current public sale identity/access mode changed");
-      const headers = { "x-event-namespace": sale.namespace };
-      const shop = await read(RESURRECTION_SHOP, headers);
-      const state = shop?.data;
-      if (!state || state.isOpen !== true || state.isReadOnly !== false || state.isAddOnShop !== false || state.isUpgradeShop !== false
-        || state.paymentQueueEnabled !== false || state.currency !== "EUR")
-        throw new Error("Resurrection ordinary shop closed, queued or read-only");
-      const products = await read(RESURRECTION_PRODUCTS, headers);
-      const selectedConfig = { data: { shopSale: { title: sale.title, namespace: sale.namespace,
-        requireLogin: sale.requireLogin, requirePremiumMembership: sale.requirePremiumMembership, shopMode: sale.shopMode } } };
-      const selectedShop = { data: { isOpen: state.isOpen, isReadOnly: state.isReadOnly, isAddOnShop: state.isAddOnShop,
-        isUpgradeShop: state.isUpgradeShop, paymentQueueEnabled: state.paymentQueueEnabled, currency: state.currency } };
-      const html = JSON.stringify({ kind: RESURRECTION_DOCUMENTS, configUrl: RESURRECTION_CONFIG, shopUrl: RESURRECTION_SHOP,
-        productsUrl: RESURRECTION_PRODUCTS, config: selectedConfig, shop: selectedShop, products });
-      const response = new Response(JSON.stringify({ kind: TICKET_SUPPLEMENT, body, ticket: { url: ticketUrl, html } }), { headers: { "content-type": "application/json" } });
-      Object.defineProperty(response, "url", { value: source.url });
-      return { response, attempts };
-    }
     const ticket = await fetchSourceWithoutTicketSupplement({ ...source, url: ticketUrl, headers: undefined,
       fetchUrl: undefined, followLinkPattern: undefined, strategies: ["html_fallback"] }, options);
     attempts += ticket.attempts;
     if (!ticket.response.ok) return { response: ticket.response, attempts };
     if (ticket.response.url && ticket.response.url !== ticketUrl) throw new Error("Official ticket destination changed identity");
     const type = ticket.response.headers.get("content-type") ?? "";
-    const jsonStock = source.festivalSlug === "jera-on-air" || source.festivalSlug === "full-rewind";
-    const validType = jsonStock ? /^(?:application\/(?:json|javascript)|text\/javascript)\b/i.test(type)
+    const supportedType = source.festivalSlug === "full-rewind"
+      ? /^(?:application\/json|text\/javascript|application\/javascript)\b/i.test(type)
       : /^text\/html\b|^application\/xhtml\+xml\b/i.test(type);
-    if (!validType) throw new Error(source.festivalSlug === "full-rewind"
-      ? "Official ticket destination returned a non-JSON document" : "Official ticket destination returned a non-HTML or unexpected stock document");
+    if (!supportedType) throw new Error(source.festivalSlug === "full-rewind" ? "Official ticket destination returned a non-JSON document" : "Official ticket destination returned a non-HTML document");
     const html = await boundedTicketText(ticket.response);
     const response = new Response(JSON.stringify({ kind: TICKET_SUPPLEMENT, body, ticket: { url: ticketUrl, html } }), { headers: { "content-type": "application/json" } });
     Object.defineProperty(response, "url", { value: source.url });

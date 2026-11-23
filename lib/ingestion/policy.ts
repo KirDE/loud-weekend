@@ -1,4 +1,3 @@
-import { RESURRECTION_ARTIST_REVIEW, isResurrectionTicketOnly } from "./resurrection-ticket-stock.ts";
 import { canonicalArtistNames, type AliasArtist } from "../catalog/artist-aliases.ts";
 import { isDownloadAnnouncement } from "./adapters/download.ts";
 import {ROSKILDE_HOME,ROSKILDE_REVIEW} from "./adapters/roskilde.ts";
@@ -69,9 +68,7 @@ export function evaluateCandidate(current: Festival, candidate: FestivalCandidat
     isCopenhellCurrentSource({ festivalSlug: candidate.festivalSlug, url: candidate.sourceUrl, editionYear: current.editionYear, strategies: ["official_markup"], enabled: true, refreshPolicy: "weekly" }) &&
     !changes.some(change => ["lineup", "headliners"].includes(change.field));
   const unchangedRoskilde = current.slug === "roskilde" && candidate.festivalSlug === current.slug && candidate.sourceUrl === ROSKILDE_HOME && candidate.observedEditionYears.length === 1 && candidate.observedEditionYears[0] === current.editionYear && candidate.artistListMode === "additive" && !changes.some(c => ["lineup","headliners"].includes(c.field));
-  const resurrectionTicketOnly = current.slug === candidate.festivalSlug && isResurrectionTicketOnly(candidate, changes, current.editionYear);
   const reviewReasons = new Set(warnings.filter(warning =>
-    !(resurrectionTicketOnly && warning === RESURRECTION_ARTIST_REVIEW) &&
     !(unchangedRoskilde && warning === ROSKILDE_REVIEW) &&
     !(unchangedMystic && warning === MYSTIC_ARTIST_REVIEW) &&
     !(unchangedRoadburn && warning === ROADBURN_ARTIST_REVIEW) &&
