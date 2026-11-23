@@ -2,18 +2,15 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
-import { collectReviewedArrival } from "../../lib/ingestion/arrival-collector.ts";
+import { stageArrivalFixture } from "../support/arrival-fixture.mjs";
 import { arrivalSourceUrls } from "../../lib/ingestion/adapters/arrival-guidance.ts";
-import { importReviewedArrival } from "../../lib/catalog/arrival-import.ts";
+import {
+  claimAgentIssue,
+  releaseAgentIssue,
+  resolveAgentIssue,
+} from "../../lib/ingestion/agent-issues.ts";
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 
-const actorLabel = "browser-guide-" + randomUUID();
-const receipt = {
-  actorLabel,
-  fingerprint: "a".repeat(64),
-  contentHash: "b".repeat(64),
-  observedAt: new Date().toISOString(),
-};
 const headings = {
   en: "Venue and arrival",
   de: "Veranstaltungsort und Anreise",
@@ -73,41 +70,25 @@ test("arrival details come from reviewed rows for the exact edition and organize
       },
     });
     festivalId = festival.id;
-    const rows = () => db.editionArrivalFact.findMany({ where: { edition: { festivalId } } });
-    expect((await importReviewedArrival(db, review)).checkOnly).toBe(true);
-    expect(await rows()).toEqual([]);
-
-    for (const invalid of [
-      { ...review, editionYear: 2031 },
-      { ...review, editionYear: 2029 },
-      { ...review, countryCode: "BE" },
-      { ...review, organizerHost: "other.example.test" },
-      { ...review, facts: [{ ...fact, sourceUrl: "https://other.example.test/travel" }] },
-    ]) {
-      await expect(importReviewedArrival(db, invalid, receipt)).rejects.toThrow();
-    }
-    expect(await rows()).toEqual([]);
-    await importReviewedArrival(db, review, receipt);
-    await importReviewedArrival(db, review, receipt);
-    const audit = await db.adminAuditEntry.findMany({
-      where: { actorLabel, resourceKey: slug, action: "FESTIVAL_ARRIVAL_PUBLICATION" },
+    const editionRow = await db.festivalEdition.findUniqueOrThrow({
+      where: { festivalId_year: { festivalId, year: 2030 } },
     });
-    expect(audit).toHaveLength(1);
-    expect(audit[0].evidence).toMatchObject({
-      fingerprint: receipt.fingerprint,
-      sourceUrls: [fact.sourceUrl, fact.supportingSourceUrl],
-      editionYear: 2030,
+    // This test isolates the generic public projection from organizer adapters.
+    await db.editionArrivalFact.create({
+      data: {
+        editionId: editionRow.id,
+        editionYear: review.editionYear,
+        countryCode: review.countryCode,
+        organizerHost: review.organizerHost,
+        kind: fact.kind,
+        descriptionEn: fact.description.en,
+        descriptionDe: fact.description.de,
+        descriptionRu: fact.description.ru,
+        sourceUrl: fact.sourceUrl,
+        supportingSourceUrl: fact.supportingSourceUrl,
+        checkedOn: new Date(fact.checkedOn),
+      },
     });
-    expect(await rows()).toMatchObject([
-      { kind: fact.kind, supportingSourceUrl: fact.supportingSourceUrl },
-    ]);
-    await expect(
-      importReviewedArrival(
-        db,
-        { ...review, facts: [{ ...fact, checkedOn: "2026-11-22" }] },
-        receipt,
-      ),
-    ).rejects.toThrow("more recently reviewed");
 
     for (const [locale, heading] of Object.entries(headings)) {
       const context = await browser.newContext({ viewport: { width: 320, height: 740 } });
@@ -174,18 +155,6 @@ test("Graspop arrival comes from the reviewed organizer observation", async ({ p
     [essentials, await fixture("graspop-essentials")],
     [announcement, await fixture("graspop-announcement")],
   ]);
-  const collect = (approval) =>
-    collectReviewedArrival(db, "graspop", 2027, {
-      approval,
-      actorLabel,
-      fetchImpl: async (url, init) => {
-        expect(init.redirect).toBe("error");
-        expect(pages.has(url)).toBe(true);
-        const response = new Response(pages.get(url), { headers: { "content-type": "text/html" } });
-        Object.defineProperty(response, "url", { value: url });
-        return response;
-      },
-    });
   let festivalId;
   try {
     const item = await db.festival.create({
@@ -210,22 +179,98 @@ test("Graspop arrival comes from the reviewed organizer observation", async ({ p
       },
     });
     festivalId = item.id;
-    const preview = await collect();
+    const staged = await stageArrivalFixture(db, item, pages);
+    const oldClaim = await claimAgentIssue(db, staged.sourceId, staged.issueId);
+    const approve = (claim) => ({
+      sourceId: claim.sourceId,
+      issueId: claim.issueId,
+      snapshot: claim.snapshot,
+      leaseToken: claim.leaseToken,
+      decision: {
+        action: "apply",
+        reason: "Reviewed the exact organizer arrival evidence",
+        arrival: claim.candidate.arrivalFingerprint,
+      },
+    });
     pages.set(
       announcement,
       pages.get(announcement).replace("Eindhoven Airport", "Antwerp Airport"),
     );
-    await expect(collect(preview.fingerprint)).rejects.toThrow(/changed since preview/);
+    const revised = await stageArrivalFixture(db, item, pages);
+    expect(revised.issueId).not.toBe(staged.issueId);
+    await expect(resolveAgentIssue(db, approve(oldClaim))).rejects.toThrow("stale");
+    await releaseAgentIssue(db, oldClaim.issueId, oldClaim.leaseToken);
+
+    const claim = await claimAgentIssue(db, revised.sourceId, revised.issueId);
+    await expect(claimAgentIssue(db, revised.sourceId, revised.issueId)).rejects.toThrow("busy");
+    const request = approve(claim);
+    await expect(resolveAgentIssue(db, { ...request, leaseToken: randomUUID() })).rejects.toThrow(
+      "busy",
+    );
+    await db.festivalSource.update({
+      where: { id: revised.sourceId },
+      data: { leaseOwner: randomUUID(), leaseExpiresAt: new Date(Date.now() + 60_000) },
+    });
+    await expect(resolveAgentIssue(db, request)).rejects.toThrow("busy");
+    await db.festivalSource.update({
+      where: { id: revised.sourceId },
+      data: { leaseOwner: null, leaseExpiresAt: null },
+    });
+    await expect(
+      resolveAgentIssue(db, {
+        ...request,
+        decision: { ...request.decision, arrival: "a".repeat(64) },
+      }),
+    ).rejects.toThrow("invalid");
+    const retry = await resolveAgentIssue(db, {
+      ...request,
+      decision: { action: "retry", reason: "Defer pending another review window" },
+    });
+    expect(retry.status).toBe("retry");
+    await expect(claimAgentIssue(db, revised.sourceId, revised.issueId)).rejects.toThrow("busy");
     expect(await db.editionArrivalFact.count({ where: { edition: { festivalId } } })).toBe(0);
-    const revised = await collect();
-    await collect(revised.fingerprint);
+    await db.operationalState.update({
+      where: { key: revised.key },
+      data: { payload: { status: "retry", retryAt: new Date(0).toISOString() } },
+    });
+    const fresh = await claimAgentIssue(db, revised.sourceId, revised.issueId);
+    const approved = approve(fresh);
+    const result = await resolveAgentIssue(db, approved);
+    expect(result.arrivalPublished).toBe(true);
+    expect(result.publicationId).toBeTruthy();
+    expect(await resolveAgentIssue(db, approved)).toEqual(result);
+    expect(
+      await db.catalogPublication.count({
+        where: { id: result.publicationId, fields: { equals: ["arrival"] } },
+      }),
+    ).toBe(1);
+    const audit = await db.adminAuditEntry.findMany({
+      where: {
+        action: "ingestion.agent.apply",
+        resourceKey: item.slug,
+        metadata: { path: ["issueId"], equals: revised.issueId },
+        beforeValue: { path: ["candidateId"], equals: fresh.candidate.id },
+      },
+    });
+    expect(audit).toHaveLength(1);
+    expect(audit[0].evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ url: announcement, adapter: "arrival-guidance-v1" }),
+      ]),
+    );
+    expect(
+      await db.ingestionCandidate.findUnique({ where: { id: fresh.candidate.id } }),
+    ).toMatchObject({ reviewState: "PUBLISHED", catalogueVersion: result.publicationId });
     await page.goto("/en/festivals/graspop/");
     const panel = page.getByRole("region", { name: headings.en });
     await expect(panel.locator("dd")).toHaveCount(2);
     await expect(panel.getByText(/Antwerp Airport/)).toBeVisible();
     await expect(panel.getByText(/Eindhoven Airport/)).toHaveCount(0);
   } finally {
-    if (festivalId) await db.festival.delete({ where: { id: festivalId } });
+    if (festivalId) {
+      await db.festivalSource.deleteMany({ where: { festivalId } });
+      await db.festival.delete({ where: { id: festivalId } });
+    }
     await db.$disconnect();
   }
 });
