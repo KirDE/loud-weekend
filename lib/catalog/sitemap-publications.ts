@@ -27,7 +27,7 @@ export async function readSitemapPublications(db: Pick<Prisma.TransactionClient,
       MAX("createdAt") FILTER (WHERE fields && ARRAY[
         'startDate', 'endDate', 'status', 'completeness', 'lineup', 'headliners', 'recordState'
       ]) AS edition,
-      MAX("createdAt") FILTER (WHERE fields && ARRAY['startDate', 'endDate', 'status', 'recordState']) AS listing,
+      MAX("createdAt") FILTER (WHERE fields && ARRAY['startDate', 'endDate', 'status', 'recordState', 'lineup', 'headliners']) AS listing,
       MAX("createdAt") FILTER (WHERE fields && ARRAY['city', 'countryCode', 'startDate']) AS appearance,
       MAX("createdAt") FILTER (WHERE 'name' = ANY(fields)) AS "sharedName"
     FROM "CatalogPublication"

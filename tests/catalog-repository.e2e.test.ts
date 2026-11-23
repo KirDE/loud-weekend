@@ -186,7 +186,8 @@ test("public freshness separates edition-bound checks, publication and source fa
     }
     assert.equal(dates[`/festivals/${slug}/2027/`], undefined);
     assert.equal(dates[`/festivals/${slug}/2026/`], archivePublished.toISOString());
-    for (const path of ["/submit/", "/archive/", "/editions/2027/"]) {
+    for (const path of ["/archive/", "/editions/2026/"]) assert.equal(dates[path], archivePublished.toISOString(), path);
+    for (const path of ["/submit/", "/editions/2027/"]) {
       assert.ok(path in dates);
       assert.equal(dates[path], undefined);
     }
