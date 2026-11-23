@@ -105,8 +105,14 @@ function timetable(value: unknown): FestivalCandidate["timetable"] {
 }
 
 export function extractJsonLdCandidate(html: string, source: FestivalSource, fetchedAt: string): FestivalCandidate {
-  const matches = eventRecords(html);
-  const matching = matches.filter(({ event }) => date(event.startDate)?.startsWith(`${source.editionYear}-`));
+  const events = eventRecords(html).map(record => ({
+    ...record,
+    startDate: date(record.event.startDate),
+    endDate: date(record.event.endDate),
+  }));
+  const matches = events.filter(({ startDate, endDate }) =>
+    !startDate || !endDate || festivalDateInterval({ startDate, endDate }));
+  const matching = matches.filter(({ startDate }) => startDate?.startsWith(`${source.editionYear}-`));
   const selected = matching[0] ?? matches[0];
   const candidate: FestivalCandidate = {
     schemaVersion: INGESTION_SCHEMA_VERSION,
@@ -118,14 +124,15 @@ export function extractJsonLdCandidate(html: string, source: FestivalSource, fet
     observedEditionYears: [],
   };
 
+  if (matches.length !== events.length) candidate.warnings.push("JSON-LD Event end date precedes its start date");
   if (!selected) {
-    candidate.warnings.push("No JSON-LD Event was found");
+    if (!events.length) candidate.warnings.push("No JSON-LD Event was found");
     return candidate;
   }
 
   const fields = {
-    startDate: date(selected.event.startDate),
-    endDate: date(selected.event.endDate),
+    startDate: selected.startDate,
+    endDate: selected.endDate,
     city: city(selected.event.location),
     lineup: names(selected.event.performer),
     ticketsUrl: ticketUrl(selected.event.offers),
