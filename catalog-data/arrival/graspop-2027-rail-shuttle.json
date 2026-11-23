@@ -1,0 +1,19 @@
+{
+  "festivalSlug": "graspop",
+  "editionYear": 2027,
+  "countryCode": "BE",
+  "organizerHost": "graspop.be",
+  "facts": [
+    {
+      "kind": "railShuttle",
+      "description": {
+        "en": "Paid coaches connect Brussels-Midi and Eindhoven Centraal with the festival. Departure days vary by station, and the Monday return needs its own ticket. Check the shuttle operator’s timetable before booking a train.",
+        "de": "Kostenpflichtige Reisebusse verbinden Bruxelles-Midi und Eindhoven Centraal mit dem Festival. Die Abfahrtstage hängen vom Bahnhof ab. Für die Rückfahrt am Montag brauchst du ein eigenes Ticket. Prüfe vor der Zugbuchung den Shuttlefahrplan.",
+        "ru": "Платные автобусы идут к фестивалю от вокзалов Брюссель-Миди и Эйндховен-Централ. Дни отправления зависят от вокзала. На обратный шаттл в понедельник нужен отдельный билет. Перед покупкой билета на поезд проверьте расписание шаттла."
+      },
+      "sourceUrl": "https://www.graspop.be/en/info/shuttles",
+      "checkedOn": "2026-11-23",
+      "supportingSourceUrl": "https://www.event-shuttle.be/en/GMM_Airport-rail-shuttle-c89443cc"
+    }
+  ]
+}
