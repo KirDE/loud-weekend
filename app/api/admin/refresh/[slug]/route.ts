@@ -10,9 +10,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const admin = await currentAdmin(["ADMIN"]);
   if (!admin) return error("Forbidden", 403);
   const year = new URL(request.url).searchParams.get("year");
-  if (year !== null && !/^(?:20[0-9]{2}|2100)$/.test(year)) return error("Invalid edition year.", 400);
+  if (year !== null && !/^(?:20[0-9]{2}|2100)$/.test(year))
+    return error("Invalid edition year.", 400);
   try {
-    const refreshed = await refreshFestival((await params).slug, admin, year === null ? undefined : Number(year));
+    const refreshed = await refreshFestival(
+      (await params).slug,
+      admin,
+      year === null ? undefined : Number(year),
+    );
     return NextResponse.json(refreshed, { status: 201 });
   } catch (cause) {
     if (cause instanceof FestivalRefreshError) return error(cause.message, cause.status);

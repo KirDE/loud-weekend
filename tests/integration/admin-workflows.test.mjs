@@ -1,5 +1,5 @@
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
-import { createPrismaClient } from '../../lib/prisma-client.mjs';
+import { createPrismaClient } from "../../lib/prisma-client.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -27,22 +27,43 @@ const sourceServer = createServer((request, response) => {
     return;
   }
   assert.ok(request.url === "/primary" || request.url === "/dates");
-  const startDate = request.url === "/dates" && datesChanged ? correctedStartDate : originalStartDate;
-  const availability = request.url === "/primary" ? ' ,"availability":"https://schema.org/SoldOut"' : "";
+  const startDate =
+    request.url === "/dates" && datesChanged ? correctedStartDate : originalStartDate;
+  const event = {
+    "@context": "https://schema.org",
+    "@type": "MusicEvent",
+    name: "Wacken Open Air",
+    startDate,
+    endDate: "2027-07-31",
+    location: { "@type": "Place", address: { addressLocality: "Wacken Preview" } },
+    offers: {
+      "@type": "Offer",
+      url: ticketsUrl,
+      ...(request.url === "/primary" && { availability: "https://schema.org/SoldOut" }),
+    },
+  };
   response.setHeader("content-type", "text/html");
-  response.end(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicEvent","name":"Wacken Open Air","startDate":"${startDate}","endDate":"2027-07-31","location":{"@type":"Place","address":{"addressLocality":"Wacken Preview"}},"offers":{"@type":"Offer","url":"${ticketsUrl}"${availability}}}</script>`);
+  response.end(`<script type="application/ld+json">${JSON.stringify(event)}</script>`);
 });
 
 class Client {
   cookies = new Map();
   async json(path, method = "GET", body, initialHeaders) {
     const headers = new Headers(initialHeaders);
-    if (method !== "GET" && method !== "HEAD" && !headers.has("origin")) headers.set("origin", origin);
+    if (method !== "GET" && method !== "HEAD" && !headers.has("origin"))
+      headers.set("origin", origin);
     if (body !== undefined) headers.set("content-type", "application/json");
-    if (this.cookies.size) headers.set("cookie", [...this.cookies].map(([key, value]) => `${key}=${value}`).join("; "));
-    const response = await fetch(`${origin}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), redirect: "manual" });
+    if (this.cookies.size)
+      headers.set("cookie", [...this.cookies].map(([key, value]) => `${key}=${value}`).join("; "));
+    const response = await fetch(`${origin}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      redirect: "manual",
+    });
     for (const cookie of response.headers.getSetCookie()) {
-      const [pair] = cookie.split(";"); const at = pair.indexOf("=");
+      const [pair] = cookie.split(";");
+      const at = pair.indexOf("=");
       if (at > 0) this.cookies.set(pair.slice(0, at), pair.slice(at + 1));
     }
     if (response.status === 308) {
@@ -54,124 +75,448 @@ class Client {
 }
 
 test.before(async () => {
-  await db.$executeRawUnsafe('TRUNCATE TABLE "AdminChange", "AdminDraft", "AdminParserRun", "AdminResourceState", "AdminAuditEntry", "Session", "User" CASCADE');
+  await db.$executeRawUnsafe(
+    'TRUNCATE TABLE "AdminChange", "AdminDraft", "AdminParserRun"' +
+      ', "AdminResourceState", "AdminAuditEntry", "Session", "User"' +
+      " CASCADE",
+  );
   const festival = await db.festival.upsert({
     where: { slug: "wacken-open-air" },
-    create: { slug: "wacken-open-air", name: "Wacken Open Air", country: "Germany", countryCode: "DE", city: "Wacken", officialUrl: "https://www.wacken.com/", genres: ["metal"] },
+    create: {
+      slug: "wacken-open-air",
+      name: "Wacken Open Air",
+      country: "Germany",
+      countryCode: "DE",
+      city: "Wacken",
+      officialUrl: "https://www.wacken.com/",
+      genres: ["metal"],
+    },
     update: { city: "Wacken" },
   });
   const edition = await db.festivalEdition.upsert({
     where: { festivalId_year: { festivalId: festival.id, year: 2027 } },
-    create: { festivalId: festival.id, year: 2027, startDate: new Date("2027-07-28T00:00:00Z"), endDate: new Date("2027-07-31T00:00:00Z"), status: "CONFIRMED", ticketStatus: "UNKNOWN", ticketsUrl, recordState: "CURRENT", completeness: "PARTIAL", sourceUpdatedAt: new Date() },
-    update: { recordState: "CURRENT", startDate: new Date("2027-07-28T00:00:00Z"), endDate: new Date("2027-07-31T00:00:00Z"), status: "CONFIRMED", ticketStatus: "UNKNOWN", ticketsUrl },
+    create: {
+      festivalId: festival.id,
+      year: 2027,
+      startDate: new Date("2027-07-28T00:00:00Z"),
+      endDate: new Date("2027-07-31T00:00:00Z"),
+      status: "CONFIRMED",
+      ticketStatus: "UNKNOWN",
+      ticketsUrl,
+      recordState: "CURRENT",
+      completeness: "PARTIAL",
+      sourceUpdatedAt: new Date(),
+    },
+    update: {
+      recordState: "CURRENT",
+      startDate: new Date("2027-07-28T00:00:00Z"),
+      endDate: new Date("2027-07-31T00:00:00Z"),
+      status: "CONFIRMED",
+      ticketStatus: "UNKNOWN",
+      ticketsUrl,
+    },
   });
   await db.lineupEntry.deleteMany({ where: { editionId: edition.id } });
   const archive = await db.festivalEdition.upsert({
     where: { festivalId_year: { festivalId: festival.id, year: 2026 } },
-    create: { festivalId: festival.id, year: 2026, status: "CONFIRMED", ticketStatus: "UNKNOWN", recordState: "ARCHIVED", completeness: "PARTIAL", sourceUpdatedAt: new Date() },
+    create: {
+      festivalId: festival.id,
+      year: 2026,
+      status: "CONFIRMED",
+      ticketStatus: "UNKNOWN",
+      recordState: "ARCHIVED",
+      completeness: "PARTIAL",
+      sourceUpdatedAt: new Date(),
+    },
     update: { recordState: "ARCHIVED" },
   });
   await db.festivalSource.deleteMany({ where: { festivalSlug: festival.slug } });
-  const configured = { festivalSlug: festival.slug, festivalId: festival.id, editionId: edition.id, editionYear: 2027,
-    strategies: ["json_ld_event", "html_fallback"], refreshPolicy: "daily", enabled: true,
-    parserKey: "json_ld_event+html_fallback", cadenceSeconds: 86400, configurationBackfilledAt: new Date() };
-  await db.festivalSource.createMany({ data: [
-    { ...configured, url: sourceOrigin + "/primary" },
-    { ...configured, url: sourceOrigin + "/dates" },
-    { ...configured, url: sourceOrigin + "/failing" },
-    { ...configured, url: sourceOrigin + "/disabled", enabled: false },
-    { ...configured, url: sourceOrigin + "/archived", editionId: archive.id, editionYear: 2026 },
-  ] });
-  sourceServer.listen(3250, "127.0.0.1"); await once(sourceServer, "listening");
-  app = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "-p", String(port)], { env: { ...process.env, DATABASE_URL: databaseUrl, AUTH_SECRET: "admin-integration-secret-at-least-32", APP_URL: origin, SUBMISSION_HASH_SALT: "integration-submission-salt", ADMIN_EMAILS: "viewer@example.test,editor@example.test,admin@example.test" }, stdio: ["ignore", "ignore", "inherit"] });
-  for (let attempt = 0; attempt < 120; attempt += 1) { try { if ((await fetch(origin)).status < 500) return; } catch {} await new Promise((resolve) => setTimeout(resolve, 250)); }
+  const configured = {
+    festivalSlug: festival.slug,
+    festivalId: festival.id,
+    editionId: edition.id,
+    editionYear: 2027,
+    strategies: ["json_ld_event", "html_fallback"],
+    refreshPolicy: "daily",
+    enabled: true,
+    parserKey: "json_ld_event+html_fallback",
+    cadenceSeconds: 86400,
+    configurationBackfilledAt: new Date(),
+  };
+  await db.festivalSource.createMany({
+    data: [
+      { ...configured, url: sourceOrigin + "/primary" },
+      { ...configured, url: sourceOrigin + "/dates" },
+      { ...configured, url: sourceOrigin + "/failing" },
+      { ...configured, url: sourceOrigin + "/disabled", enabled: false },
+      { ...configured, url: sourceOrigin + "/archived", editionId: archive.id, editionYear: 2026 },
+    ],
+  });
+  sourceServer.listen(3250, "127.0.0.1");
+  await once(sourceServer, "listening");
+  app = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "-p", String(port)], {
+    env: {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      AUTH_SECRET: "admin-integration-secret-at-least-32",
+      APP_URL: origin,
+      SUBMISSION_HASH_SALT: "integration-submission-salt",
+      ADMIN_EMAILS: "viewer@example.test,editor@example.test,admin@example.test",
+    },
+    stdio: ["ignore", "ignore", "inherit"],
+  });
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    try {
+      if ((await fetch(origin)).status < 500) return;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
   throw new Error("Integration server did not start");
 });
-test.after(async () => { if (app?.exitCode === null) { app.kill("SIGTERM"); await once(app, "exit"); } sourceServer.close(); await once(sourceServer, "close"); await db.$disconnect(); });
+test.after(async () => {
+  if (app?.exitCode === null) {
+    app.kill("SIGTERM");
+    await once(app, "exit");
+  }
+  sourceServer.close();
+  await once(sourceServer, "close");
+  await db.$disconnect();
+});
 
 test("persisted admin drafts, decisions, conflicts, authorization and audit invariants", async () => {
   const anonymous = new Client();
   assert.equal((await anonymous.json("/api/admin")).status, 403);
   assert.equal((await anonymous.json("/api/admin", "POST", {})).status, 403);
-  assert.equal((await anonymous.json("/api/admin/changes/missing", "POST", { decision: "approve" })).status, 403);
-  assert.equal((await anonymous.json("/api/admin/drafts/missing", "PATCH", { values: { city: "x" } })).status, 403);
+  assert.equal(
+    (await anonymous.json("/api/admin/changes/missing", "POST", { decision: "approve" })).status,
+    403,
+  );
+  assert.equal(
+    (await anonymous.json("/api/admin/drafts/missing", "PATCH", { values: { city: "x" } })).status,
+    403,
+  );
   assert.equal((await anonymous.json("/api/admin/drafts/missing", "DELETE")).status, 403);
   assert.equal((await anonymous.json("/api/admin/refresh/wacken-open-air", "POST")).status, 403);
-  assert.equal((await anonymous.json("/api/submissions", "POST", { name: "  New   Metal Fest ", year: 2028, officialUrl: "https://WWW.Example.test/festival#tickets", notes: "Official source", website: "" })).status, 201);
-  const persistedSubmission = await db.festivalSubmission.findFirstOrThrow({ include: { audit: true } });
-  assert.equal(persistedSubmission.name, "New Metal Fest"); assert.equal(persistedSubmission.officialUrl, "https://www.example.test/festival"); assert.equal(persistedSubmission.notes, "Official source"); assert.ok(persistedSubmission.publicReference.length >= 20); assert.equal(persistedSubmission.audit[0].action, "SUBMITTED");
-  const duplicate = await anonymous.json("/api/submissions", "POST", { name: "new metal fest", year: 2028, officialUrl: "https://example.test/other", notes: "duplicate", website: "" });
-  assert.equal(duplicate.status, 200); assert.equal((await duplicate.json()).reference, persistedSubmission.publicReference); assert.equal(await db.festivalSubmission.count(), 1);
-  assert.equal((await anonymous.json("/api/submissions", "POST", { name: "Bot", year: 2028, officialUrl: "https://bot.test", website: "filled" })).status, 400);
+  assert.equal(
+    (
+      await anonymous.json("/api/submissions", "POST", {
+        name: "  New   Metal Fest ",
+        year: 2028,
+        officialUrl: "https://WWW.Example.test/festival#tickets",
+        notes: "Official source",
+        website: "",
+      })
+    ).status,
+    201,
+  );
+  const persistedSubmission = await db.festivalSubmission.findFirstOrThrow({
+    include: { audit: true },
+  });
+  assert.equal(persistedSubmission.name, "New Metal Fest");
+  assert.equal(persistedSubmission.officialUrl, "https://www.example.test/festival");
+  assert.equal(persistedSubmission.notes, "Official source");
+  assert.ok(persistedSubmission.publicReference.length >= 20);
+  assert.equal(persistedSubmission.audit[0].action, "SUBMITTED");
+  const duplicate = await anonymous.json("/api/submissions", "POST", {
+    name: "new metal fest",
+    year: 2028,
+    officialUrl: "https://example.test/other",
+    notes: "duplicate",
+    website: "",
+  });
+  assert.equal(duplicate.status, 200);
+  assert.equal((await duplicate.json()).reference, persistedSubmission.publicReference);
+  assert.equal(await db.festivalSubmission.count(), 1);
+  assert.equal(
+    (
+      await anonymous.json("/api/submissions", "POST", {
+        name: "Bot",
+        year: 2028,
+        officialUrl: "https://bot.test",
+        website: "filled",
+      })
+    ).status,
+    400,
+  );
   const nonAdmin = new Client();
-  assert.equal((await nonAdmin.json("/api/auth/register", "POST", { email: "viewer@example.test", password: "correct horse battery staple" })).status, 201);
+  assert.equal(
+    (
+      await nonAdmin.json("/api/auth/register", "POST", {
+        email: "viewer@example.test",
+        password: "correct horse battery staple",
+      })
+    ).status,
+    201,
+  );
   assert.equal((await nonAdmin.json("/api/admin")).status, 403);
-  assert.equal((await nonAdmin.json("/api/admin", "POST", { resourceKind: "festival", resourceKey: "denied", baseRevision: 0, values: { city: "denied" } })).status, 403);
+  assert.equal(
+    (
+      await nonAdmin.json("/api/admin", "POST", {
+        resourceKind: "festival",
+        resourceKey: "denied",
+        baseRevision: 0,
+        values: { city: "denied" },
+      })
+    ).status,
+    403,
+  );
   assert.equal((await nonAdmin.json("/api/admin/refresh/wacken-open-air", "POST")).status, 403);
   assert.equal((await nonAdmin.json("/api/admin/parser-runs/missing/log")).status, 403);
   assert.equal((await anonymous.json("/api/admin/parser-runs/missing/log")).status, 403);
 
   const editor = new Client();
-  assert.equal((await editor.json("/api/auth/register", "POST", { email: "editor@example.test", password: "correct horse battery staple" })).status, 201);
+  assert.equal(
+    (
+      await editor.json("/api/auth/register", "POST", {
+        email: "editor@example.test",
+        password: "correct horse battery staple",
+      })
+    ).status,
+    201,
+  );
   await db.user.update({ where: { email: "editor@example.test" }, data: { role: "EDITOR" } });
   assert.equal((await editor.json("/api/admin")).status, 200);
-  assert.equal((await editor.json("/api/admin", "POST", { resourceKind: "link", resourceKey: "editor-draft", baseRevision: 0, values: { officialUrl: "https://editor.example.test" } })).status, 201);
+  assert.equal(
+    (
+      await editor.json("/api/admin", "POST", {
+        resourceKind: "link",
+        resourceKey: "editor-draft",
+        baseRevision: 0,
+        values: { officialUrl: "https://editor.example.test" },
+      })
+    ).status,
+    201,
+  );
   assert.equal((await editor.json("/api/admin/refresh/wacken-open-air", "POST")).status, 403);
   const admin = new Client();
-  assert.equal((await admin.json("/api/auth/register", "POST", { email: "admin@example.test", password: "correct horse battery staple" })).status, 201);
+  assert.equal(
+    (
+      await admin.json("/api/auth/register", "POST", {
+        email: "admin@example.test",
+        password: "correct horse battery staple",
+      })
+    ).status,
+    201,
+  );
   await db.user.update({ where: { email: "admin@example.test" }, data: { role: "ADMIN" } });
   const beforeForgedDrafts = await db.adminDraft.count();
   const beforeForgedAudit = await db.adminAuditEntry.count();
-  assert.equal((await admin.json("/api/admin", "POST", { resourceKind: "festival", resourceKey: "forged", baseRevision: 0, values: { city: "forged" } }, { origin: "https://foreign.example" })).status, 403);
+  assert.equal(
+    (
+      await admin.json(
+        "/api/admin",
+        "POST",
+        {
+          resourceKind: "festival",
+          resourceKey: "forged",
+          baseRevision: 0,
+          values: { city: "forged" },
+        },
+        { origin: "https://foreign.example" },
+      )
+    ).status,
+    403,
+  );
   assert.equal(await db.adminDraft.count(), beforeForgedDrafts);
   assert.equal(await db.adminAuditEntry.count(), beforeForgedAudit);
-  const draftResponse = await admin.json("/api/admin", "POST", { resourceKind: "festival", resourceKey: "wacken-open-air", baseRevision: 0, values: { city: "Wacken Preview", status: "confirmed" } });
+  const draftResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "festival",
+    resourceKey: "wacken-open-air",
+    baseRevision: 0,
+    values: { city: "Wacken Preview", status: "confirmed" },
+  });
   assert.equal(draftResponse.status, 201);
   const draft = await draftResponse.json();
-  assert.equal((await admin.json(`/api/admin/drafts/${draft.id}`, "PATCH", { values: { city: "Wacken Preview", status: "confirmed", country: "Germany" } })).status, 200);
+  assert.equal(
+    (
+      await admin.json(`/api/admin/drafts/${draft.id}`, "PATCH", {
+        values: { city: "Wacken Preview", status: "confirmed", country: "Germany" },
+      })
+    ).status,
+    200,
+  );
   assert.equal(await db.adminChange.count({ where: { draftId: draft.id } }), 3);
-  const city = await db.adminChange.findFirstOrThrow({ where: { draftId: draft.id, field: "city" } });
-  assert.equal((await admin.json(`/api/admin/changes/${city.id}`, "POST", { decision: "approve" })).status, 200);
-  assert.deepEqual((await db.adminResourceState.findUniqueOrThrow({ where: { resourceKind_resourceKey: { resourceKind: "FESTIVAL", resourceKey: "wacken-open-air" } } })).values, { city: "Wacken Preview" });
-  assert.equal((await admin.json("/api/admin", "POST", { resourceKind: "festival", resourceKey: "wacken-open-air", baseRevision: 0, values: { city: "stale" } })).status, 409);
-  const status = await db.adminChange.findFirstOrThrow({ where: { draftId: draft.id, field: "status" } });
-  assert.equal((await admin.json(`/api/admin/changes/${status.id}`, "POST", { decision: "reject" })).status, 200);
-  assert.equal((await db.adminResourceState.findUniqueOrThrow({ where: { resourceKind_resourceKey: { resourceKind: "FESTIVAL", resourceKey: "wacken-open-air" } } })).values.city, "Wacken Preview");
-  assert.equal((await db.festival.findUniqueOrThrow({ where: { slug: "wacken-open-air" } })).city, "Wacken Preview");
+  const city = await db.adminChange.findFirstOrThrow({
+    where: { draftId: draft.id, field: "city" },
+  });
+  assert.equal(
+    (await admin.json(`/api/admin/changes/${city.id}`, "POST", { decision: "approve" })).status,
+    200,
+  );
+  assert.deepEqual(
+    (
+      await db.adminResourceState.findUniqueOrThrow({
+        where: {
+          resourceKind_resourceKey: { resourceKind: "FESTIVAL", resourceKey: "wacken-open-air" },
+        },
+      })
+    ).values,
+    { city: "Wacken Preview" },
+  );
+  assert.equal(
+    (
+      await admin.json("/api/admin", "POST", {
+        resourceKind: "festival",
+        resourceKey: "wacken-open-air",
+        baseRevision: 0,
+        values: { city: "stale" },
+      })
+    ).status,
+    409,
+  );
+  const status = await db.adminChange.findFirstOrThrow({
+    where: { draftId: draft.id, field: "status" },
+  });
+  assert.equal(
+    (await admin.json(`/api/admin/changes/${status.id}`, "POST", { decision: "reject" })).status,
+    200,
+  );
+  assert.equal(
+    (
+      await db.adminResourceState.findUniqueOrThrow({
+        where: {
+          resourceKind_resourceKey: { resourceKind: "FESTIVAL", resourceKey: "wacken-open-air" },
+        },
+      })
+    ).values.city,
+    "Wacken Preview",
+  );
+  assert.equal(
+    (await db.festival.findUniqueOrThrow({ where: { slug: "wacken-open-air" } })).city,
+    "Wacken Preview",
+  );
   assert.ok(await db.catalogPublication.findUnique({ where: { sourceId: `admin:${city.id}` } }));
 
-  const lineupDraftResponse = await admin.json("/api/admin", "POST", { resourceKind: "festival", resourceKey: "wacken-open-air", baseRevision: 1, values: { headliners: "Integration Headliner" } });
+  const lineupDraftResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "festival",
+    resourceKey: "wacken-open-air",
+    baseRevision: 1,
+    values: { headliners: "Integration Headliner" },
+  });
   assert.equal(lineupDraftResponse.status, 201);
   const lineupDraft = await lineupDraftResponse.json();
-  const lineupChange = await db.adminChange.findFirstOrThrow({ where: { draftId: lineupDraft.id, field: "headliners" } });
-  assert.equal((await admin.json(`/api/admin/changes/${lineupChange.id}`, "POST", { decision: "approve" })).status, 200);
-  const lineupPublication = await db.catalogPublication.findUniqueOrThrow({ where: { sourceId: `admin:${lineupChange.id}` } });
+  const lineupChange = await db.adminChange.findFirstOrThrow({
+    where: { draftId: lineupDraft.id, field: "headliners" },
+  });
+  assert.equal(
+    (await admin.json(`/api/admin/changes/${lineupChange.id}`, "POST", { decision: "approve" }))
+      .status,
+    200,
+  );
+  const lineupPublication = await db.catalogPublication.findUniqueOrThrow({
+    where: { sourceId: `admin:${lineupChange.id}` },
+  });
   assert.equal(lineupPublication.lineupChanged, true);
-  assert.equal((await db.catalogPlaylistRefresh.findUniqueOrThrow({ where: { publicationId: lineupPublication.id } })).status, "PENDING");
-  const publishedHeadliners = await db.lineupEntry.findMany({ where: { edition: { festival: { slug: "wacken-open-air" }, recordState: "CURRENT" }, billing: "HEADLINER" }, include: { artist: true } });
-  assert.deepEqual(publishedHeadliners.map(({ artist }) => artist.name), ["Integration Headliner"]);
+  assert.equal(
+    (
+      await db.catalogPlaylistRefresh.findUniqueOrThrow({
+        where: { publicationId: lineupPublication.id },
+      })
+    ).status,
+    "PENDING",
+  );
+  const publishedHeadliners = await db.lineupEntry.findMany({
+    where: {
+      edition: { festival: { slug: "wacken-open-air" }, recordState: "CURRENT" },
+      billing: "HEADLINER",
+    },
+    include: { artist: true },
+  });
+  assert.deepEqual(
+    publishedHeadliners.map(({ artist }) => artist.name),
+    ["Integration Headliner"],
+  );
 
-  const playlistResponse = await admin.json("/api/admin", "POST", { resourceKind: "playlist", resourceKey: "integration-playlist", baseRevision: 0, values: { url: "https://open.spotify.com/playlist/integration", platform: "spotify", status: "draft" } });
+  const playlistResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "playlist",
+    resourceKey: "integration-playlist",
+    baseRevision: 0,
+    values: {
+      url: "https://open.spotify.com/playlist/integration",
+      platform: "spotify",
+      status: "draft",
+    },
+  });
   assert.equal(playlistResponse.status, 201);
   const playlist = await playlistResponse.json();
   let playlistSnapshot = await (await admin.json("/api/admin")).json();
-  assert.deepEqual(playlistSnapshot.drafts.find((item) => item.id === playlist.id).values, { url: "https://open.spotify.com/playlist/integration", platform: "spotify", status: "draft" });
-  assert.equal((await admin.json(`/api/admin/drafts/${playlist.id}`, "PATCH", { values: { url: "https://open.spotify.com/playlist/integration-updated", platform: "spotify", status: "published" } })).status, 200);
+  assert.deepEqual(playlistSnapshot.drafts.find((item) => item.id === playlist.id).values, {
+    url: "https://open.spotify.com/playlist/integration",
+    platform: "spotify",
+    status: "draft",
+  });
+  assert.equal(
+    (
+      await admin.json(`/api/admin/drafts/${playlist.id}`, "PATCH", {
+        values: {
+          url: "https://open.spotify.com/playlist/integration-updated",
+          platform: "spotify",
+          status: "published",
+        },
+      })
+    ).status,
+    200,
+  );
   playlistSnapshot = await (await admin.json("/api/admin")).json();
-  assert.deepEqual(playlistSnapshot.drafts.find((item) => item.id === playlist.id).values, { url: "https://open.spotify.com/playlist/integration-updated", platform: "spotify", status: "published" });
-  const playlistChanges = await db.adminChange.findMany({ where: { draftId: playlist.id }, orderBy: { field: "asc" } });
-  assert.deepEqual(playlistChanges.map((change) => change.field), ["platform", "status", "url"]);
-  for (const change of playlistChanges) assert.equal((await admin.json(`/api/admin/changes/${change.id}`, "POST", { decision: "approve" })).status, 200);
-  const publishedPlaylist = await db.adminResourceState.findUniqueOrThrow({ where: { resourceKind_resourceKey: { resourceKind: "PLAYLIST", resourceKey: "integration-playlist" } } });
+  assert.deepEqual(playlistSnapshot.drafts.find((item) => item.id === playlist.id).values, {
+    url: "https://open.spotify.com/playlist/integration-updated",
+    platform: "spotify",
+    status: "published",
+  });
+  const playlistChanges = await db.adminChange.findMany({
+    where: { draftId: playlist.id },
+    orderBy: { field: "asc" },
+  });
+  assert.deepEqual(
+    playlistChanges.map((change) => change.field),
+    ["platform", "status", "url"],
+  );
+  for (const change of playlistChanges)
+    assert.equal(
+      (await admin.json(`/api/admin/changes/${change.id}`, "POST", { decision: "approve" })).status,
+      200,
+    );
+  const publishedPlaylist = await db.adminResourceState.findUniqueOrThrow({
+    where: {
+      resourceKind_resourceKey: { resourceKind: "PLAYLIST", resourceKey: "integration-playlist" },
+    },
+  });
   assert.equal(publishedPlaylist.revision, 3);
-  assert.deepEqual(publishedPlaylist.values, { url: "https://open.spotify.com/playlist/integration-updated", platform: "spotify", status: "published" });
-  assert.equal((await admin.json("/api/admin", "POST", { resourceKind: "playlist", resourceKey: "integration-playlist", baseRevision: 0, values: { status: "stale" } })).status, 409);
-  const disposablePlaylistResponse = await admin.json("/api/admin", "POST", { resourceKind: "playlist", resourceKey: "delete-playlist", baseRevision: 0, values: { url: "https://example.test/delete-playlist" } });
+  assert.deepEqual(publishedPlaylist.values, {
+    url: "https://open.spotify.com/playlist/integration-updated",
+    platform: "spotify",
+    status: "published",
+  });
+  assert.equal(
+    (
+      await admin.json("/api/admin", "POST", {
+        resourceKind: "playlist",
+        resourceKey: "integration-playlist",
+        baseRevision: 0,
+        values: { status: "stale" },
+      })
+    ).status,
+    409,
+  );
+  const disposablePlaylistResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "playlist",
+    resourceKey: "delete-playlist",
+    baseRevision: 0,
+    values: { url: "https://example.test/delete-playlist" },
+  });
   const disposablePlaylist = await disposablePlaylistResponse.json();
-  assert.equal((await admin.json(`/api/admin/drafts/${disposablePlaylist.id}`, "DELETE")).status, 200);
+  assert.equal(
+    (await admin.json(`/api/admin/drafts/${disposablePlaylist.id}`, "DELETE")).status,
+    200,
+  );
   assert.equal(await db.adminDraft.count({ where: { id: disposablePlaylist.id } }), 0);
 
-  const disposableResponse = await admin.json("/api/admin", "POST", { resourceKind: "asset", resourceKey: "delete-me", baseRevision: 0, values: { logoUrl: "https://example.test/logo.svg" } });
+  const disposableResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "asset",
+    resourceKey: "delete-me",
+    baseRevision: 0,
+    values: { logoUrl: "https://example.test/logo.svg" },
+  });
   const disposable = await disposableResponse.json();
   assert.equal((await admin.json(`/api/admin/drafts/${disposable.id}`, "DELETE")).status, 200);
   assert.equal(await db.adminDraft.count({ where: { id: disposable.id } }), 0);
@@ -213,7 +558,8 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     assert.equal(response.status, 200);
     const page = await response.text();
     const event = [...page.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)]
-      .map((match) => JSON.parse(match[1])).find((entry) => entry["@type"] === "MusicEvent");
+      .map((match) => JSON.parse(match[1]))
+      .find((entry) => entry["@type"] === "MusicEvent");
     assert.ok(event);
     return event.offers?.availability;
   }
@@ -221,22 +567,39 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
 
   // Legacy proposals could accidentally publish to a later edition whose prior
   // value happened to match. Even an otherwise valid review cannot bind them.
-  const legacyRun = await db.adminParserRun.create({ data: {
-    festivalSlug: "wacken-open-air", sourceId: sourceOrigin + "/primary",
-    adapter: "json_ld_event", status: "SUCCEEDED", log: [],
-  } });
-  const legacyChange = await db.adminChange.create({ data: {
-    resourceKind: "FESTIVAL", resourceKey: "wacken-open-air", field: "ticketStatus",
-    beforeValue: ticketChange.beforeValue, afterValue: ticketChange.afterValue,
-    baseRevision: ticketChange.baseRevision, parserRunId: legacyRun.id,
-    sourceEvidence: ticketChange.sourceEvidence.evidence,
-  } });
+  const legacyRun = await db.adminParserRun.create({
+    data: {
+      festivalSlug: "wacken-open-air",
+      sourceId: sourceOrigin + "/primary",
+      adapter: "json_ld_event",
+      status: "SUCCEEDED",
+      log: [],
+    },
+  });
+  const legacyChange = await db.adminChange.create({
+    data: {
+      resourceKind: "FESTIVAL",
+      resourceKey: "wacken-open-air",
+      field: "ticketStatus",
+      beforeValue: ticketChange.beforeValue,
+      afterValue: ticketChange.afterValue,
+      baseRevision: ticketChange.baseRevision,
+      parserRunId: legacyRun.id,
+      sourceEvidence: ticketChange.sourceEvidence.evidence,
+    },
+  });
   const legacyPath = `/api/admin/changes/${legacyChange.id}`;
   const unbound = await admin.json(legacyPath, "POST", { decision: "approve" });
   assert.equal(unbound.status, 409);
   assert.match(await unbound.text(), /missing its edition binding/);
-  assert.equal((await db.adminChange.findUniqueOrThrow({ where: { id: legacyChange.id } })).status, "PENDING");
-  assert.equal(await db.catalogPublication.count({ where: { sourceId: `admin:${legacyChange.id}` } }), 0);
+  assert.equal(
+    (await db.adminChange.findUniqueOrThrow({ where: { id: legacyChange.id } })).status,
+    "PENDING",
+  );
+  assert.equal(
+    await db.catalogPublication.count({ where: { sourceId: `admin:${legacyChange.id}` } }),
+    0,
+  );
   assert.equal(await publicAvailability(), undefined);
   assert.equal((await admin.json(legacyPath, "POST", { decision: "reject" })).status, 200);
 
@@ -253,7 +616,9 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     where: { id: datesChange.sourceEvidence.editionId },
     data: { startDate: new Date(`${correctedStartDate}T00:00:00Z`) },
   });
-  const approveDates = await admin.json(`/api/admin/changes/${datesChange.id}`, "POST", { decision: "approve" });
+  const approveDates = await admin.json(`/api/admin/changes/${datesChange.id}`, "POST", {
+    decision: "approve",
+  });
   assert.equal(approveDates.status, 200);
   assert.equal((await approveDates.json()).catalogPublicationId, null);
 
@@ -261,19 +626,29 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal((await admin.json(approvePath, "POST", { decision: "approve" })).status, 200);
   assert.equal((await admin.json(approvePath, "POST", { decision: "approve" })).status, 409);
   assert.equal(await publicAvailability(), "https://schema.org/SoldOut");
-  const publication = await db.catalogPublication.findUniqueOrThrow({ where: { sourceId: `admin:${ticketChange.id}` } });
+  const publication = await db.catalogPublication.findUniqueOrThrow({
+    where: { sourceId: `admin:${ticketChange.id}` },
+  });
   assert.deepEqual(publication.fields, ["ticketStatus"]);
   assert.equal(publication.editionYear, 2027);
-  assert.equal(await db.catalogPlaylistRefresh.count({ where: { publicationId: publication.id } }), 0);
+  assert.equal(
+    await db.catalogPlaylistRefresh.count({ where: { publicationId: publication.id } }),
+    0,
+  );
   originalStartDate = correctedStartDate;
   const afterApproval = await admin.json(`${refreshPath}?year=2027`, "POST");
   assert.equal(afterApproval.status, 201);
   assert.equal((await afterApproval.json()).queued, 0);
 
   const configuredSource = await db.festivalSource.findUniqueOrThrow({
-    where: { festivalSlug_url: { festivalSlug: "wacken-open-air", url: sourceOrigin + "/primary" } },
+    where: {
+      festivalSlug_url: { festivalSlug: "wacken-open-air", url: sourceOrigin + "/primary" },
+    },
   });
-  await db.festivalSource.updateMany({ where: { festivalSlug: "wacken-open-air", editionYear: 2027 }, data: { enabled: false } });
+  await db.festivalSource.updateMany({
+    where: { festivalSlug: "wacken-open-air", editionYear: 2027 },
+    data: { enabled: false },
+  });
   const beforeDisabledRuns = await db.adminParserRun.count();
   assert.equal((await admin.json(refreshPath, "POST")).status, 409);
   assert.equal(await db.adminParserRun.count(), beforeDisabledRuns);
@@ -291,11 +666,37 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.deepEqual(storedLog.log, failedRun.log);
   assert.equal((await admin.json("/api/admin/parser-runs/missing/log")).status, 404);
 
-  const conflictA = await db.adminChange.create({ data: { resourceKind: "LINK", resourceKey: "concurrent", field: "url", baseRevision: 0, beforeValue: null, afterValue: "https://a.example", sourceEvidence: { test: true } } });
-  const conflictB = await db.adminChange.create({ data: { resourceKind: "LINK", resourceKey: "concurrent", field: "url", baseRevision: 0, beforeValue: null, afterValue: "https://b.example", sourceEvidence: { test: true } } });
-  const results = await Promise.all([conflictA, conflictB].map((change) => admin.json(`/api/admin/changes/${change.id}`, "POST", { decision: "approve" })));
+  const conflictA = await db.adminChange.create({
+    data: {
+      resourceKind: "LINK",
+      resourceKey: "concurrent",
+      field: "url",
+      baseRevision: 0,
+      beforeValue: null,
+      afterValue: "https://a.example",
+      sourceEvidence: { test: true },
+    },
+  });
+  const conflictB = await db.adminChange.create({
+    data: {
+      resourceKind: "LINK",
+      resourceKey: "concurrent",
+      field: "url",
+      baseRevision: 0,
+      beforeValue: null,
+      afterValue: "https://b.example",
+      sourceEvidence: { test: true },
+    },
+  });
+  const results = await Promise.all(
+    [conflictA, conflictB].map((change) =>
+      admin.json(`/api/admin/changes/${change.id}`, "POST", { decision: "approve" }),
+    ),
+  );
   assert.deepEqual(results.map((response) => response.status).sort(), [200, 409]);
-  const published = await db.adminResourceState.findUniqueOrThrow({ where: { resourceKind_resourceKey: { resourceKind: "LINK", resourceKey: "concurrent" } } });
+  const published = await db.adminResourceState.findUniqueOrThrow({
+    where: { resourceKind_resourceKey: { resourceKind: "LINK", resourceKey: "concurrent" } },
+  });
   assert.ok(["https://a.example", "https://b.example"].includes(published.values.url));
   assert.equal(published.revision, 1);
 
@@ -303,13 +704,37 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.ok(audit.some((entry) => entry.action === "DRAFT_UPDATED"));
   assert.ok(audit.some((entry) => entry.action === "DRAFT_DELETED"));
   const approvedAudit = audit.find((entry) => entry.action === "CHANGE_APPROVED");
-  assert.equal(approvedAudit.actorLabel, "admin@example.test"); assert.ok(approvedAudit.evidence);
-  await assert.rejects(db.adminAuditEntry.update({ where: { id: approvedAudit.id }, data: { action: "TAMPERED" } }), /append-only/);
-  await assert.rejects(db.adminAuditEntry.delete({ where: { id: approvedAudit.id } }), /append-only/);
+  assert.equal(approvedAudit.actorLabel, "admin@example.test");
+  assert.ok(approvedAudit.evidence);
+  await assert.rejects(
+    db.adminAuditEntry.update({ where: { id: approvedAudit.id }, data: { action: "TAMPERED" } }),
+    /append-only/,
+  );
+  await assert.rejects(
+    db.adminAuditEntry.delete({ where: { id: approvedAudit.id } }),
+    /append-only/,
+  );
   assert.equal((await admin.json("/api/admin")).status, 200);
-  const reviewed = await admin.json(`/api/admin/submissions/${persistedSubmission.publicReference}`, "POST", { decision: "approve", reviewNote: "Official source verified" });
-  assert.equal(reviewed.status, 200); assert.equal((await reviewed.json()).status, "APPROVED");
-  const submissionAudit = await db.festivalSubmissionAudit.findMany({ where: { submissionId: persistedSubmission.id }, orderBy: { createdAt: "asc" } });
-  assert.deepEqual(submissionAudit.map((entry) => entry.action), ["SUBMITTED", "APPROVED"]);
-  await assert.rejects(db.festivalSubmissionAudit.update({ where: { id: submissionAudit[1].id }, data: { action: "TAMPERED" } }), /append-only/);
+  const reviewed = await admin.json(
+    `/api/admin/submissions/${persistedSubmission.publicReference}`,
+    "POST",
+    { decision: "approve", reviewNote: "Official source verified" },
+  );
+  assert.equal(reviewed.status, 200);
+  assert.equal((await reviewed.json()).status, "APPROVED");
+  const submissionAudit = await db.festivalSubmissionAudit.findMany({
+    where: { submissionId: persistedSubmission.id },
+    orderBy: { createdAt: "asc" },
+  });
+  assert.deepEqual(
+    submissionAudit.map((entry) => entry.action),
+    ["SUBMITTED", "APPROVED"],
+  );
+  await assert.rejects(
+    db.festivalSubmissionAudit.update({
+      where: { id: submissionAudit[1].id },
+      data: { action: "TAMPERED" },
+    }),
+    /append-only/,
+  );
 });
