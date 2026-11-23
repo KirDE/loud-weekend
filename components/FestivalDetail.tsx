@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
+import { FestivalArrival } from "./FestivalArrival";
 import { PlanningTools } from "./PlanningTools";
 import type { PlaylistStatus } from "@/lib/domain/festival";
 import { ticketPresentation } from "@/lib/tickets";
@@ -198,6 +199,7 @@ export function FestivalDetail({
         )}
       </section>
       <PlanningTools item={item} festivals={festivals} />
+      <FestivalArrival festival={item} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
         <p>{t("catalogUpdated", { date: prettyDate(item.updatedAt.slice(0, 10)) })}</p>
