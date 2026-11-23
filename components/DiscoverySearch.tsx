@@ -25,8 +25,8 @@ export function DiscoverySearch({ query, ready, festivals, artists, inputRef, on
     return () => window.clearTimeout(timer);
   }, [query]);
 
-  const canSuggest = settled === query && query.trim().length >= 2 && query.length <= 80;
-  const active = open && canSuggest;
+  const canSuggest = query.trim().length >= 2 && query.length <= 80;
+  const active = open && settled === query && canSuggest;
   const matches = useMemo(() => discoverySuggestions(active ? settled : "", index, locale), [active, settled, index, locale]);
   const groups = [
     { title: t("artistSuggestions"), items: matches.artists },
@@ -47,11 +47,12 @@ export function DiscoverySearch({ query, ready, festivals, artists, inputRef, on
         setOpen(false);
       }
       if (event.key === "ArrowDown" && event.target === inputRef.current && canSuggest) {
-        if (open && !anyMatches) return;
+        if (active && !anyMatches) return;
         event.preventDefault();
-        if (open) panel.current?.querySelector<HTMLElement>("a,button")?.focus();
+        if (active) panel.current?.querySelector<HTMLElement>("a,button")?.focus();
         else {
           focusOnOpen.current = true;
+          setSettled(query);
           setOpen(true);
         }
       }

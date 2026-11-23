@@ -63,3 +63,16 @@ test("composition keys remain available to the input method", async ({ page }) =
   await expect(search).toBeFocused();
   await expect(suggestion).toHaveCount(0);
 });
+
+test("ArrowDown can open suggestions before the typing debounce completes", async ({ page }) => {
+  await page.goto("/en/");
+  await expect(page.locator(".search")).toHaveAttribute("data-ready", "true");
+  const search = page.locator(".search input");
+  await page.clock.install();
+  await page.clock.pauseAt(new Date(Date.now() + 1000));
+  await search.fill("synthetic fest");
+  const suggestion = page.locator(".discoverySuggestions").getByRole("link", { name: /Synthetic Fest/ });
+  await expect(suggestion).toHaveCount(0);
+  await search.press("ArrowDown");
+  await expect(suggestion).toBeFocused();
+});
