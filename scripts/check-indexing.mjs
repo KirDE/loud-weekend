@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { load } from "cheerio";
+import robotsParser from "robots-parser";
 
 const site = "https://loudweekend.eu";
 const namespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
 const languages = ["x-default", "en", "de", "ru"];
+const crawlers = ["Googlebot", "Bingbot"];
 
 // A header may scope a rule to a crawler. Image preview limits also use
 // a colon, but "none" in that value position is not an indexing directive.
@@ -99,8 +101,15 @@ export function inspectSitemap(xml, now = Date.now()) {
 export async function checkIndexing(origin = site) {
   assert.ok(origin === site || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin), "use the public site or a loopback test origin");
   const robots = await get(origin, "/robots.txt", ["text/plain"], 64_000);
-  assert.match(robots, /^Sitemap:\s*https:\/\/loudweekend\.eu\/sitemap\.xml\s*$/mi);
-  assert.doesNotMatch(robots, /^Disallow:\s*\/\s*$/mi);
+  assert.match(robots, /^User-agent:[ \t]*\*[ \t]*(?:#[^\r\n]*)?\r?$/mi, "missing default robots.txt group");
+  const rules = robotsParser(site + "/robots.txt", robots);
+  assert.ok(rules.getSitemaps().includes(site + "/sitemap.xml"), "missing canonical sitemap in robots.txt");
+  const checkCrawlAccess = path => {
+    for (const crawler of crawlers) {
+      assert.equal(rules.isAllowed(site + path, crawler), true, `robots.txt blocks ${crawler} on ${path}`);
+    }
+  };
+  checkCrawlAccess("/sitemap.xml");
   const xml = await get(origin, "/sitemap.xml", ["application/xml", "text/xml"], 50 * 1024 ** 2);
   const entries = inspectSitemap(xml);
   // Check all members of a representative localized cluster plus the canonical
@@ -116,6 +125,7 @@ export async function checkIndexing(origin = site) {
   }
   for (const path of sample) {
     assert.ok(entries.has(path), `sample not listed: ${path}`);
+    checkCrawlAccess(path);
     const html = await get(origin, path, ["text/html"], 12 * 1024 ** 2);
     const $ = load(html);
     const lang = /^\/(en|de|ru)\//.exec(path)?.[1];
