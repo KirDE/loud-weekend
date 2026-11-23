@@ -226,6 +226,11 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     const visibleSlugs = new Set(Object.values(artistSlugsByFestival).flat());
     const discoveryLineups = {
       artistSlugsByFestival,
+      artistNamesBySlug: Object.fromEntries(
+        artistRows
+          .filter((artist) => visibleSlugs.has(artist.slug))
+          .map(({ slug, name }) => [slug, name]),
+      ),
       legacyFavoriteSlugs: uniqueFavoriteSlugs(artistRows, visibleSlugs),
     };
     return Object.freeze({

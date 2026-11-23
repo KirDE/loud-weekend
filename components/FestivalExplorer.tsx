@@ -26,14 +26,10 @@ import {
   removeDateQuery,
   type DiscoveryDates,
 } from "@/lib/discovery-dates";
-import { lineupOverlap } from "@/lib/planning";
+import { FestivalComparison } from "./FestivalComparison";
 import { useLocalPlanner } from "./LocalPlanner";
 import { hasAvailableTickets } from "@/lib/tickets";
-import {
-  distanceKm,
-  festivalGenres,
-  festivalMatchesDiscoveryFilters,
-} from "@/lib/festival-discovery";
+import { festivalGenres, festivalMatchesDiscoveryFilters } from "@/lib/festival-discovery";
 import {
   availableFestivalMonths,
   festivalOverlapsMonth,
@@ -162,7 +158,6 @@ export function FestivalExplorer({
     [filtered, sort, locale, originCoordinates, favoriteKeys, discoveryLineups],
   );
   const compared = festivals.filter((item) => selected.includes(item.slug));
-  const overlap = lineupOverlap(compared);
   const toggleSelected = (item: Festival) =>
     setSelected((current) => {
       if (current.includes(item.slug)) {
@@ -341,71 +336,13 @@ export function FestivalExplorer({
           {compared.length < 2 ? (
             <p className="compareHint">{t("comparisonInstructions")}</p>
           ) : (
-            <div className="comparisonScroll" tabIndex={0}>
-              <table className="comparisonTable">
-                <thead>
-                  <tr>
-                    <th scope="col">{t("planningDetail")}</th>
-                    {compared.map((item) => (
-                      <th scope="col" key={item.slug}>
-                        <Link href={`/festivals/${item.slug}/`}>{item.name}</Link>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <th scope="row">{t("dates")}</th>
-                    {compared.map((item) => (
-                      <td key={item.slug}>
-                        {formatFestivalDateRange(item, locale, t("datesTba"))}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <th scope="row">{t("locationDistance", { origin: origins[origin].label })}</th>
-                    {compared.map((item) => (
-                      <td key={item.slug}>
-                        {item.city || item.country}
-                        {item.coordinates
-                          ? ` · ${distanceKm(originCoordinates, item.coordinates).toLocaleString(locale)} km`
-                          : ` · ${t("distanceUnavailable")}`}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <th scope="row">{t("tickets")}</th>
-                    {compared.map((item) => (
-                      <td key={item.slug}>
-                        {item.ticketsUrl ? (
-                          <a href={item.ticketsUrl} rel="noreferrer" target="_blank">
-                            {t("officialTickets")}
-                          </a>
-                        ) : item.ticketStatus === "unavailable" ? (
-                          t("unavailable")
-                        ) : (
-                          t("availabilityNotConfirmed")
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <th scope="row">{t("lineupOverlap")}</th>
-                    <td colSpan={compared.length}>
-                      {overlap.length ? (
-                        <>
-                          <strong>{t("sharedActs", { count: overlap.length })}</strong>
-                          <br />
-                          {overlap.join(", ")}
-                        </>
-                      ) : (
-                        t("noLineupOverlap")
-                      )}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <FestivalComparison
+              festivals={compared}
+              origin={originCoordinates}
+              originLabel={origins[origin].label}
+              lineups={discoveryLineups}
+              favorites={planner.favoriteArtists}
+            />
           )}
         </div>
       )}

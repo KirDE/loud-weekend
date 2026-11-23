@@ -9,6 +9,7 @@ type ArtistKey = { slug: string; name: string; aliases: readonly string[] };
 export type DiscoveryLineups = {
   artistSlugsByFestival: Readonly<Record<string, readonly string[]>>;
   legacyFavoriteSlugs: Readonly<Record<string, string>>;
+  artistNamesBySlug?: Readonly<Record<string, string>>;
 };
 
 export function uniqueFavoriteSlugs(artists: readonly ArtistKey[], current: ReadonlySet<string>) {
