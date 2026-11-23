@@ -340,7 +340,17 @@ export function FestivalEditionContent({
         )}
         {item.provenance.map((source) => (
           <p key={source.field + "-" + source.url}>
-            <b>{t.fields[source.field]}:</b> {source.note}{" "}
+            <b>
+              {
+                t.fields[
+                  source.field === "startDate" || source.field === "endDate"
+                    ? "dates"
+                    : source.field
+                ]
+              }
+              :
+            </b>{" "}
+            {source.note}{" "}
             <a href={source.url} target="_blank" rel="noreferrer">
               {t.officialSource}
             </a>{" "}

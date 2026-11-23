@@ -18,8 +18,9 @@ export function seasonYears(editions: readonly FestivalEdition[]) {
 
 export function hasSeasonCalendarDates(edition: FestivalEdition) {
   const { startDate, endDate } = edition;
+  const fields = new Set(edition.provenance.map(({ field }) => field));
   return (
-    edition.provenance.some(({ field }) => field === "dates") &&
+    (fields.has("dates") || (fields.has("startDate") && fields.has("endDate"))) &&
     Boolean(
       startDate && endDate && validDate(startDate) && validDate(endDate) && startDate <= endDate,
     )

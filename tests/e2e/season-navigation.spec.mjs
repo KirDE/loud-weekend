@@ -36,25 +36,18 @@ test("season navigation and local attendance use verified editions without repla
           sourceUpdatedAt: new Date(),
           snapshotAt: archived ? new Date("2026-11-01") : null,
           provenance:
-            year === 2028
+            year === 2028 || archived
               ? {
-                  create: {
-                    field: "edition",
-                    url: "https://festival.example.test/2028",
-                    note: "Synthetic edition announcement",
-                    checkedAt: new Date(),
-                  },
-                }
-              : archived
-                ? {
-                    create: {
-                      field: "dates",
-                      url: "https://festival.example.test/2026",
-                      note: "Synthetic archived date evidence",
+                  create: (archived ? ["startDate", "endDate"] : ["edition", "startDate"]).map(
+                    (field) => ({
+                      field,
+                      url: `https://festival.example.test/${year}`,
+                      note: "Synthetic reviewed edition evidence",
                       checkedAt: new Date(),
-                    },
-                  }
-                : undefined,
+                    }),
+                  ),
+                }
+              : undefined,
         },
         select: { id: true },
       });
