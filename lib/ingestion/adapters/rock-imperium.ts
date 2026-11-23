@@ -36,9 +36,19 @@ function sellerUrl(href: string, base: string): URL | undefined {
   } catch { /* Invalid links are not evidence. */ }
   return undefined;
 }
+function actionableMarkup(html: string) {
+  const $ = load(html);
+  $("script,style,template,noscript,[hidden],[inert],[aria-hidden='true'],[disabled],[aria-disabled='true']").remove();
+  $("[style]").each((_, element) => {
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? "")) $(element).remove();
+  });
+  return $;
+}
 function links(html: string): { href: string; label: string }[] {
-  return [...clean(html).matchAll(/<a\b[^>]*href\s*=\s*(?:"([^"]+)"|'([^']+)')[^>]*>([\s\S]*?)<\/a>/gi)]
-    .map(m => ({ href: m[1] ?? m[2], label: text(m[3]) }));
+  const $ = actionableMarkup(html);
+  return $("a[href]").map((_, element) => ({
+    href: $(element).attr("href") ?? "", label: text($(element).text()),
+  })).get();
 }
 function unique(values: string[]): string | undefined {
   const distinct = [...new Set(values)];
@@ -71,7 +81,7 @@ function generalPass(name: string, year: number): boolean {
   return new RegExp(`^Abono Rock Imperium Festival ${year}(?: \\(Cartagena\\))?$`, "i").test(name);
 }
 export function findRockImperiumProduct(document: PassDocument, year: number): string | undefined {
-  return unique([...clean(document.html).matchAll(/<h[1-6]\b[^>]*class=["'][^"']*\bproduct-title\b[^"']*["'][^>]*>([\s\S]*?)<\/h[1-6]>/gi)]
+  return unique([...actionableMarkup(document.html).html().matchAll(/<h[1-6]\b[^>]*class=["'][^"']*\bproduct-title\b[^"']*["'][^>]*>([\s\S]*?)<\/h[1-6]>/gi)]
     .flatMap(m => links(m[1]).flatMap(({ href, label }) => {
       const url = sellerUrl(href, document.url);
       return url && generalPass(label, year) && new RegExp(`^/(?:es|en)/rock-imperium-festival-${year}/\\d+-(?:comprar-entrada|buy-tickets)-abono-rock-imperium-festival-${year}-cartagena\\.html$`).test(url.pathname) ? [url.href] : [];

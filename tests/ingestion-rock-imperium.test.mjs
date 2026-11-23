@@ -229,3 +229,18 @@ test('reviewed English cart path aliases both preserve the current ordinary pass
   assert.equal(extract(e).ticketStatus,'available');
  }
 });
+
+test("inert links cannot establish or contradict the live organizer-to-seller route", () => {
+  const ghost = direct();
+  ghost.home = `<title>Rock Imperium Festival 2027</title><template><a href="${category}">Tickets</a></template>`;
+  assert.equal(extract(ghost).ticketStatus, undefined);
+
+  const mixed = direct();
+  mixed.home += `<div hidden><a href="${landing}">Archived gateway</a></div>`;
+  assert.equal(extract(mixed).ticketStatus, "available");
+
+  const staged = direct();
+  staged.documents[0].html = `<title>Rock Imperium Festival 2027</title>
+    <section inert><h2 class="product-title"><a href="${product}">Abono Rock Imperium Festival 2027</a></h2></section>`;
+  assert.equal(extract(staged).ticketStatus, undefined);
+});
