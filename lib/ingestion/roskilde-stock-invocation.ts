@@ -1,3 +1,4 @@
+import { ROSKILDE_HOME } from "./adapters/roskilde.ts";
 import type { PrismaClient } from "@prisma/client";
 import { readCatalog } from "../catalog/repository.ts";
 import { collectRoskildeStock } from "./adapters/roskilde-stock-transport.ts";
@@ -27,7 +28,7 @@ export async function recordRoskildeStockAttempt(
   if (
     !current ||
     current.editionYear !== ROSKILDE_STOCK_YEAR ||
-    current.officialUrl !== "https://www.roskilde-festival.dk/"
+    current.officialUrl !== ROSKILDE_HOME
   )
     throw new Error(`Current reviewed Roskilde ${ROSKILDE_STOCK_YEAR} target required`);
   const run = await createIngestionRun(db, {
