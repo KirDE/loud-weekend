@@ -54,6 +54,60 @@ test("install stamps the offline shell and warms a revision-aware DB catalogue t
   }
 });
 
+test("asset eviction keeps the installed trip shell, module and public catalogue available offline", async () => {
+  const { cache, caches } = memoryCache();
+  let online = true;
+  const { listeners } = await loadWorker({ cachesImpl: caches, fetchImpl: async (request) => {
+    if (!online) throw new TypeError("offline");
+    if (request instanceof Request && request.url === `${CATALOG_URL}/`) return catalogReply();
+    return new Response(request.url ?? request);
+  } });
+  let install;
+  listeners.install({ waitUntil: (promise) => { install = promise; } });
+  await install;
+  for (let index = 0; index < 90; index++) {
+    const url = `https://festivals.test/_next/static/chunk-${index}.js`;
+    assert.equal(await (await dispatch(listeners, new Request(url))).text(), url);
+  }
+  assert.equal((await cache.keys()).length, 80);
+  assert.equal(await cache.match("/_next/static/chunk-0.js"), undefined);
+  assert.ok(await cache.match("/_next/static/chunk-89.js"));
+  online = false;
+  const navigation = await dispatch(listeners, { method: "GET", url: "https://festivals.test/festivals/a", mode: "navigate" });
+  assert.equal(await navigation.text(), "/offline.html");
+  const module = await dispatch(listeners, new Request("https://festivals.test/offline-trips.mjs"));
+  assert.equal(await module.text(), "/offline-trips.mjs");
+  assert.deepEqual(await (await dispatch(listeners)).json(), payload());
+});
+
+test("worker activation removes only obsolete caches for its scope", async () => {
+  const obsolete = "festival-radar-public-v5";
+  const current = "festival-radar-public-v6";
+  const keys = new Set([obsolete, current, obsolete + ":%2Fradar", "unrelated-app-cache"]);
+  const { listeners } = await loadWorker({ cachesImpl: {
+    keys: async () => [...keys],
+    delete: async (key) => keys.delete(key),
+  } });
+  let activate;
+  listeners.activate({ waitUntil: (promise) => { activate = promise; } });
+  await activate;
+  assert.deepEqual([...keys], [current, obsolete + ":%2Fradar", "unrelated-app-cache"]);
+});
+
+test("public asset and trip module requests fall back to the network on Cache Storage failure", async () => {
+  for (const phase of ["open", "match", "put"]) {
+    const { cache, caches } = memoryCache();
+    const fail = async () => { throw new DOMException("Storage unavailable", "QuotaExceededError"); };
+    if (phase === "open") caches.open = fail;
+    else cache[phase] = fail;
+    const { listeners } = await loadWorker({ cachesImpl: caches, fetchImpl: async (request) => new Response(request.url) });
+    for (const path of ["/_next/static/chunk.js", "/offline-trips.mjs"]) {
+      const url = `https://festivals.test${path}`;
+      assert.equal(await (await dispatch(listeners, new Request(url))).text(), url, `${phase}: ${path}`);
+    }
+  }
+});
+
 test("private/user APIs and authenticated routes are never cache candidates", async () => {
   const { helpers } = await loadWorker();
   for (const path of ["/api/auth/me", "/api/sync", "/account", "/admin/review", "/notifications"]) assert.equal(helpers.isPrivatePath(path), true);
