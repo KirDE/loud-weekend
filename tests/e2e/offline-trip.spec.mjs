@@ -83,7 +83,20 @@ test("explicit mobile trip download keeps only public proof and works offline", 
       },
       false,
     );
-    await page.getByRole("button", { name: "Offline-Kopie aktualisieren" }).click();
+    await page.getByRole("link", { name: "Offline-Reisen öffnen" }).click();
+    const trip = page.locator("#trips article");
+    const update = trip.getByRole("button", {
+      name: "Offline-Kopie aktualisieren: Synthetic Fest",
+    });
+    await expect(trip.getByText("Abgesagt", { exact: false })).toHaveCount(0);
+    const sent = page.waitForRequest((req) => new URL(req.url()).pathname === api);
+    await update.click();
+    expect(await (await sent).headerValue("cookie")).toBeNull();
+    await expect(trip.getByRole("status")).toHaveText(
+      "Reisedetails wurden auf diesem Gerät gespeichert.",
+    );
+    await expect(update).toBeFocused();
+    await expect(trip.getByText("Abgesagt", { exact: false })).toContainText("20:30");
     await expect
       .poll(async () => JSON.parse(await saved()).trip.timetable[0].status)
       .toBe("cancelled");
@@ -136,7 +149,7 @@ test("explicit mobile trip download keeps only public proof and works offline", 
         return setItem.call(this, key, value);
       };
     });
-    await page.getByRole("button", { name: "Offline-Kopie aktualisieren" }).click();
+    await update.click();
     await expect(
       page.getByText("Offline-Kopie konnte nicht geändert werden.", { exact: false }),
     ).toBeVisible();
@@ -155,7 +168,6 @@ test("explicit mobile trip download keeps only public proof and works offline", 
 
     await context.setOffline(true);
     await page.goto("/de/festivals/synthetic-fest/");
-    const trip = page.locator("#trips article");
     await expect(trip.getByRole("heading", { name: "Synthetic Fest 2027" })).toBeVisible();
     await expect(trip.getByText("Abgesagt", { exact: false })).toContainText("20:30");
     await expect(trip.getByText(/Festivalort: .*Testland/)).toBeVisible();
@@ -163,6 +175,9 @@ test("explicit mobile trip download keeps only public proof and works offline", 
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(320);
+    await update.click();
+    await expect(trip.getByRole("status")).toContainText("Reisedetails nicht verfügbar");
+    expect(await saved()).toBe(lastGood);
     await trip.getByRole("button", { name: "Offline-Kopie entfernen: Synthetic Fest" }).click();
     await expect(
       page.getByText("Auf diesem Gerät wurden keine Reisedetails gespeichert."),
