@@ -1,3 +1,4 @@
+import { isBarcelonaSource } from "./adapters/barcelona-banner.ts";
 import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters/full-rewind.ts';
@@ -71,14 +72,17 @@ async function fetchSourceWithoutTicketSupplement(source: FestivalSource, option
     throw new Error("Fetch attempts exhausted without a response");
   };
 
+  const barcelona = source.festivalSlug === "barcelona-rock-fest";
+  if (barcelona && (!isBarcelonaSource(source) || source.fetchUrl || source.followLinkPattern))
+    throw Object.assign(new Error("Barcelona homepage identity is not configured"), { attempts: 0 });
+
   if (isRoskildeSource(source) && !options.fetchImpl) return fetchRoskildeDocuments(source.editionYear);
 
   let initial = await fetchWithRetry(source.fetchUrl ?? source.url);
-  if (source.festivalSlug === "barcelona-rock-fest" && (source.fetchUrl || source.followLinkPattern
-    || (initial.response.url && initial.response.url !== source.url)))
-    throw Object.assign(new Error("Barcelona homepage identity changed"), { attempts: initial.attempts });
   if (source.festivalSlug === "summer-punch" && (source.url !== "https://summerpunchfestival.pl/" || source.fetchUrl || source.followLinkPattern || (initial.response.ok && initial.response.url !== source.url)))
     throw Object.assign(new Error("Summer Punch homepage changed its trusted identity"), { attempts: initial.attempts });
+  if (barcelona && initial.response.url && initial.response.url !== new URL(source.url).href)
+    throw Object.assign(new Error("Barcelona homepage identity changed"), { attempts: initial.attempts });
   if (initial.response.ok && isDownloadSource(source)) {
     let attempts = initial.attempts;
     try {

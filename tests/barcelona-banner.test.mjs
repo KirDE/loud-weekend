@@ -114,3 +114,63 @@ test('fetch rejects redirected Barcelona bodies and alternate fetch routes',asyn
  }
  await assert.rejects(fetchSource({...source,fetchUrl:'https://foreign.test/'},{maxAttempts:1,fetchImpl:async()=>new Response(html)}),/identity/);
 });
+
+test('Barcelona keeps official event warnings but does not use JSON-LD offers as ticket proof', () => {
+  for (const status of ['EventCancelled', 'EventPostponed']) {
+    const event = {
+      '@type': 'Event', startDate: '2027-07-01', endDate: '2027-07-04',
+      location: { address: { addressLocality: 'Santa Coloma de Gramenet' } },
+      eventStatus: 'https://schema.org/' + status,
+      offers: { '@type': 'Offer', availability: 'https://schema.org/InStock', url: 'https://foreign.test/tickets' },
+    };
+    const ld = '<script type="application/ld+json">' + JSON.stringify(event) + '</script>';
+    const candidate = parse(html + ld);
+    assert.equal(candidate.ticketsUrl, 'https://www.barcelonarockfest.com/en/tickets');
+    assert.equal(candidate.city, 'Santa Coloma de Gramenet');
+    assert.ok(candidate.warnings.some(warning => warning.includes(status)));
+    const current = { slug: source.festivalSlug, editionYear: 2027, lineup: [], headliners: [] };
+    assert.ok(evaluateCandidate(current, candidate).reviewReasons.some(reason => reason.includes(status)));
+    const archived = parse(html + ld, { ...source, url: source.url + 'archive' });
+    assert.equal(archived.city, undefined);
+    assert.equal(archived.evidence.length, 0);
+    const jsonOnly = parse(ld, { ...source, strategies: ['json_ld_event'] });
+    assert.equal(jsonOnly.ticketStatus, undefined);
+    assert.equal(jsonOnly.ticketsUrl, undefined);
+  }
+});
+
+test('responsive Barcelona controls require a common visible viewport', () => {
+  const wrapControl = (classes, linkClasses = '') =>
+    html.replace('<a href=', '<div class="' + classes + '"><a class="' + linkClasses + '" href=')
+      .replace('</a>', '</a></div>');
+  for (const classes of ['hidden md:block', 'invisible md:visible', 'md:flex hidden']) {
+    assert.equal(parse(wrapControl(classes)).ticketStatus, 'available', classes);
+  }
+  for (const document of [
+    wrapControl('hidden md:block', 'md:hidden'),
+    wrapControl('invisible md:visible', 'md:invisible'),
+    wrapControl('hidden md:block', 'hidden md:inline-flex lg:hidden').replace('md:block', 'xl:block'),
+    wrapControl('hidden hover:block'),
+    wrapControl('hidden md:block').replace('<div class=', '<div hidden class='),
+  ]) assert.equal(parse(document).ticketStatus, undefined);
+});
+
+test('Barcelona fetch accepts an equivalent root URL but rejects unreviewed requests before fetching', async () => {
+  const { fetchSource } = await import('../lib/ingestion/fetch.ts');
+  const response = new Response(html);
+  Object.defineProperty(response, 'url', { value: source.url });
+  assert.equal((await fetchSource({ ...source, url: source.url.slice(0, -1) },
+    { maxAttempts: 1, fetchImpl: async () => response })).response, response);
+  for (const config of [
+    { ...source, url: source.url + 'archive' },
+    { ...source, fetchUrl: 'https://foreign.test/' },
+    { ...source, followLinkPattern: 'tickets' },
+  ]) {
+    let requested = false;
+    await assert.rejects(fetchSource(config, { maxAttempts: 1, fetchImpl: async () => {
+      requested = true;
+      return new Response(html);
+    } }), /identity/);
+    assert.equal(requested, false);
+  }
+});
