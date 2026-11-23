@@ -12,7 +12,7 @@ const copy = {
   },
 };
 
-test("season navigation only lists supported editions and leaves the existing plan intact", async ({
+test("season navigation and local attendance use verified editions without replacing the 2027 plan", async ({
   browser,
   request,
 }) => {
@@ -29,6 +29,8 @@ test("season navigation only lists supported editions and leaves the existing pl
           year,
           status: "TBA",
           ticketStatus: "UNKNOWN",
+          startDate: new Date(`${year}-07-03T00:00:00.000Z`),
+          endDate: new Date(`${year}-07-05T00:00:00.000Z`),
           recordState: archived ? "ARCHIVED" : "TRACKING",
           completeness: "TBA",
           sourceUpdatedAt: new Date(),
@@ -43,7 +45,16 @@ test("season navigation only lists supported editions and leaves the existing pl
                     checkedAt: new Date(),
                   },
                 }
-              : undefined,
+              : archived
+                ? {
+                    create: {
+                      field: "dates",
+                      url: "https://festival.example.test/2026",
+                      note: "Synthetic archived date evidence",
+                      checkedAt: new Date(),
+                    },
+                  }
+                : undefined,
         },
         select: { id: true },
       });
@@ -74,6 +85,17 @@ test("season navigation only lists supported editions and leaves the existing pl
         await page.goto(`/${lang}/`);
         const readPlan = () =>
           page.evaluate((key) => JSON.parse(localStorage.getItem(key)), planKey);
+        const remoteMutations = [];
+        page.on("request", (event) => {
+          if (
+            new URL(event.url()).pathname.startsWith("/api/") &&
+            !["GET", "HEAD", "OPTIONS"].includes(event.method())
+          )
+            remoteMutations.push(event.url());
+        });
+        const select = (year) =>
+          page.getByRole("combobox", { name: new RegExp(`Synthetic Fest ${year}$`) });
+        const calendar = page.locator("a[download$='-plan.ics']");
         const nav = page.getByRole("navigation", { name: t.nav });
         await expect(nav.getByRole("link")).toHaveText(["2028", "2027", "2026"]);
         await nav.getByRole("link", { name: "2028", exact: true }).click();
@@ -85,15 +107,54 @@ test("season navigation only lists supported editions and leaves the existing pl
         );
         await expect(page.getByText(t.tba, { exact: false })).toBeVisible();
         await expect(page.getByText("Synthetic Alpine 2028")).toHaveCount(0);
+        await expect(select(2028)).toHaveValue("");
+        await select(2028).selectOption("maybe");
+        await expect(calendar).toHaveCount(0);
         await expect
           .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
           .toBe(true);
         await nav.getByRole("link", { name: "2026" }).click();
-        await expect(page.getByText("Synthetic Fest 2026")).toBeVisible();
+        await expect(page.getByText("Synthetic Fest 2026", { exact: true })).toBeVisible();
+        await expect(select(2026)).toHaveValue("");
+        await select(2026).selectOption("going");
+        await expect(calendar).toHaveAttribute("download", "loud-weekend-2026-plan.ics");
+        const [download] = await Promise.all([page.waitForEvent("download"), calendar.click()]);
+        expect(download.suggestedFilename()).toBe("loud-weekend-2026-plan.ics");
+        const stream = await download.createReadStream();
+        const chunks = [];
+        for await (const chunk of stream) chunks.push(chunk);
+        const ics = Buffer.concat(chunks).toString("utf8");
+        expect(ics).toContain("UID:synthetic-fest-2026@festival-radar");
+        expect(ics).toContain("DTSTART;VALUE=DATE:20260703");
+        expect(ics).toContain("DTEND;VALUE=DATE:20260706");
+        expect(ics).not.toContain("synthetic-fest-2028");
+        await select(2026).selectOption("not-going");
+        await expect(calendar).toHaveCount(0);
+        await page.reload();
+        await expect(select(2026)).toHaveValue("not-going");
         await nav.getByRole("link", { name: "2027" }).click();
         await expect(page.getByText("Synthetic Alpine 2027")).toBeVisible();
+        await expect(select(2027)).toHaveValue("going");
+        expect((await readPlan()).seasonAttendance).toEqual({
+          "2026:synthetic-fest": "not-going",
+          "2028:synthetic-fest": "maybe",
+        });
+        expect(remoteMutations).toEqual([]);
         expect((await readPlan()).attendance).toEqual({ "synthetic-fest": "going" });
         expect((await readPlan()).favoriteFestivals).toEqual(["synthetic-fest"]);
+        if (lang === "en") {
+          await page.goto("/en/planner/");
+          await page.getByRole("button", { name: "Clear local data" }).click();
+          await page.getByRole("button", { name: "Reset local plan" }).click();
+          await expect.poll(async () => (await readPlan()).seasonAttendance).toBeUndefined();
+          await page.getByRole("button", { name: "Undo local reset" }).click();
+          await expect
+            .poll(async () => (await readPlan()).seasonAttendance)
+            .toEqual({
+              "2026:synthetic-fest": "not-going",
+              "2028:synthetic-fest": "maybe",
+            });
+        }
       } finally {
         await context.close();
       }

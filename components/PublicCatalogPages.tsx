@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
 import type { FestivalEdition } from "@/lib/domain/edition";
 import { FestivalExplorer } from "./FestivalExplorer";
+import { EditionAttendance, SeasonCalendar } from "./SeasonPlan";
 import { SeasonNavigation } from "./SeasonNavigation";
 import { useLanguage } from "./LanguageProvider";
 
@@ -171,7 +172,15 @@ function usePublicCopy() {
   return { t, date, dateTime, range, locale };
 }
 
-function EditionRow({ item, archive = false }: { item: FestivalEdition; archive?: boolean }) {
+function EditionRow({
+  item,
+  archive = false,
+  planning = false,
+}: {
+  item: FestivalEdition;
+  archive?: boolean;
+  planning?: boolean;
+}) {
   const { t, range } = usePublicCopy();
   const count = item.headliners.length + item.lineup.length;
   const summary = archive
@@ -182,7 +191,7 @@ function EditionRow({ item, archive = false }: { item: FestivalEdition; archive?
       ? t.lineupTba
       : t.artistsRecorded(count);
   return (
-    <article className="directoryRow">
+    <article className={planning ? "directoryRow seasonEditionRow" : "directoryRow"}>
       <div>
         <strong>
           {item.name} {item.editionYear}
@@ -191,9 +200,10 @@ function EditionRow({ item, archive = false }: { item: FestivalEdition; archive?
           {range(item)} · {summary}
         </span>
       </div>
-      <Link className="textLink" href={"/festivals/" + item.slug + "/" + item.editionYear + "/"}>
+      <Link className="textLink" href={`/festivals/${item.slug}/${item.editionYear}/`}>
         {t.openEdition}
       </Link>
+      {planning && <EditionAttendance item={item} />}
     </article>
   );
 }
@@ -248,9 +258,15 @@ export function EditionYearContent({
       <h1>{t.editionHeading(year)}</h1>
       <p>{t.records(items.length)}</p>
       <SeasonNavigation years={years} selectedYear={year} />
+      <SeasonCalendar year={year} items={items} />
       <section>
         {items.map((item) => (
-          <EditionRow item={item} archive={item.recordState === "archived"} key={item.slug} />
+          <EditionRow
+            item={item}
+            archive={item.recordState === "archived"}
+            planning
+            key={item.slug}
+          />
         ))}
       </section>
       <Link className="textLink" href="/archive/">

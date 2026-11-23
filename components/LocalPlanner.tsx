@@ -1,12 +1,18 @@
 "use client";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
-import { parsePlannerState, serializePlannerState } from "@/lib/planner-storage";
-export type Attendance = "going" | "maybe" | "not-going";
+import {
+  legacyPlannerYear,
+  parsePlannerState,
+  serializePlannerState,
+  type Attendance,
+} from "@/lib/planner-storage";
+export type { Attendance };
 export type PlannerState = {
   favoriteFestivals: string[];
   favoriteArtists: string[];
   attendance: Record<string, Attendance>;
+  seasonAttendance?: Record<string, Attendance>;
   playlistFestivals: string[];
   savedFilters: {
     query: string;
@@ -35,6 +41,8 @@ const Context = createContext<
       toggleFestival: (v: string) => void;
       toggleArtist: (v: string) => void;
       setAttendance: (v: string, a?: Attendance) => void;
+      editionAttendance: (slug: string, year: number) => Attendance | undefined;
+      setEditionAttendance: (slug: string, year: number, attendance?: Attendance) => void;
       togglePlaylistFestival: (v: string) => void;
       setSavedFilters: (value: PlannerState["savedFilters"]) => void;
       replace: (value: PlannerState) => void;
@@ -80,6 +88,20 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           else delete attendance[v];
           return { ...s, attendance };
         }),
+      editionAttendance: (slug: string, year: number) =>
+        year === legacyPlannerYear
+          ? state.attendance[slug]
+          : state.seasonAttendance?.[`${year}:${slug}`],
+      setEditionAttendance: (slug: string, year: number, attendance?: Attendance) =>
+        setState((current) => {
+          // The original planner already stores the 2027 plan; keep one copy.
+          const field = year === legacyPlannerYear ? "attendance" : "seasonAttendance";
+          const key = year === legacyPlannerYear ? slug : `${year}:${slug}`;
+          const selections = { ...current[field] };
+          if (attendance) selections[key] = attendance;
+          else delete selections[key];
+          return { ...current, [field]: selections };
+        }),
       togglePlaylistFestival: (v: string) =>
         setState((s) => ({
           ...s,
@@ -87,7 +109,12 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
         })),
       setSavedFilters: (savedFilters: PlannerState["savedFilters"]) =>
         setState((s) => ({ ...s, savedFilters })),
-      replace: (next: PlannerState) => setState({ ...emptyPlannerState, ...next }),
+      replace: (next: PlannerState) =>
+        setState((current) => ({
+          ...emptyPlannerState,
+          ...next,
+          seasonAttendance: current.seasonAttendance,
+        })),
       merge: (next: Partial<PlannerState>) =>
         setState((current) => ({
           favoriteFestivals: Array.from(
@@ -97,6 +124,9 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
             new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])]),
           ),
           attendance: { ...next.attendance, ...current.attendance },
+          seasonAttendance: next.seasonAttendance
+            ? { ...next.seasonAttendance, ...current.seasonAttendance }
+            : current.seasonAttendance,
           playlistFestivals: Array.from(
             new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]),
           ),

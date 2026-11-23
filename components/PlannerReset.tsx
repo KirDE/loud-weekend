@@ -56,6 +56,7 @@ function snapshot(planner: PlannerState): PlannerState {
     favoriteFestivals: planner.favoriteFestivals,
     favoriteArtists: planner.favoriteArtists,
     attendance: planner.attendance,
+    seasonAttendance: planner.seasonAttendance,
     playlistFestivals: planner.playlistFestivals,
     savedFilters: planner.savedFilters,
   });

@@ -35,16 +35,37 @@ function escapeIcs(value: string) {
     .replaceAll(/\r?\n/g, "\\n");
 }
 
-export function calendarFile(items: Festival[]) {
+type CalendarFestival = Pick<
+  Festival,
+  | "slug"
+  | "name"
+  | "city"
+  | "country"
+  | "startDate"
+  | "endDate"
+  | "editionYear"
+  | "officialUrl"
+  | "updatedAt"
+>;
+
+export function calendarFile(items: readonly CalendarFestival[]) {
   const events = items
     .filter((item) => item.startDate)
     .flatMap((item) => {
       const end = new Date(`${item.endDate || item.startDate}T12:00:00Z`);
       end.setUTCDate(end.getUTCDate() + 1);
       const location = [item.city, item.country].filter(Boolean).join(", ");
+      const updated = new Date(item.updatedAt);
+      const stamp = Number.isFinite(updated.getTime())
+        ? updated
+            .toISOString()
+            .replace(/[-:]/g, "")
+            .replace(/\.\d{3}Z$/, "Z")
+        : null;
       return [
         "BEGIN:VEVENT",
         `UID:${item.slug}-${item.editionYear || 2027}@festival-radar`,
+        ...(stamp ? [`DTSTAMP:${stamp}`] : []),
         `DTSTART;VALUE=DATE:${compactDate(item.startDate!)}`,
         `DTEND;VALUE=DATE:${compactDate(end.toISOString().slice(0, 10))}`,
         `SUMMARY:${escapeIcs(item.name)}`,
