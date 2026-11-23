@@ -98,6 +98,15 @@ export function inspectSitemap(xml, now = Date.now()) {
   return entries;
 }
 
+function outsideTemplate(_, element) {
+  // A parsed template has a document-fragment parent between its contents
+  // and the template element, so follow the full tree, including fragments.
+  for (let node = element.parent; node; node = node.parent) {
+    if (node.name === "template") return false;
+  }
+  return true;
+}
+
 export async function checkIndexing(origin = site) {
   assert.ok(origin === site || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin), "use the public site or a loopback test origin");
   const robots = await get(origin, "/robots.txt", ["text/plain"], 64_000);
@@ -130,14 +139,14 @@ export async function checkIndexing(origin = site) {
     const $ = load(html);
     const lang = /^\/(en|de|ru)\//.exec(path)?.[1];
     if (lang) assert.equal($("html").attr("lang"), lang, `document language mismatch on ${path}`);
-    const canonical = $('link[rel="canonical"]');
+    const canonical = $('link[rel="canonical"]').filter(outsideTemplate);
     assert.equal(canonical.length, 1, `expected a single canonical on ${path}`);
     assert.equal(canonical.attr("href"), site + path, `canonical mismatch on ${path}`);
     const robotsDirectives = $('meta[name="robots" i], meta[name="googlebot" i], meta[name="bingbot" i]')
-      .map((_, node) => $(node).attr("content")).get().join(",");
+      .filter(outsideTemplate).map((_, node) => $(node).attr("content")).get().join(",");
     assert.doesNotMatch(robotsDirectives, /(?:^|,)\s*(?:noindex|none)\s*(?:,|$)/i, `not indexable: ${path}`);
     for (const [lang, target] of entries.get(path)) {
-      const link = $(`link[rel="alternate"][hreflang="${lang}"]`);
+      const link = $(`link[rel="alternate"][hreflang="${lang}"]`).filter(outsideTemplate);
       assert.equal(link.length, 1, `missing/duplicate ${lang} alternate on ${path}`);
       assert.equal(link.attr("href"), site + target, `alternate mismatch on ${path}`);
     }

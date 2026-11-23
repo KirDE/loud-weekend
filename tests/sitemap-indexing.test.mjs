@@ -47,6 +47,8 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
   let robotsBody = openRobots;
   let robotsHeader;
   let robotsMeta = '<meta name="robots" content="index, max-image-preview:none">';
+  let wrapCanonical = false;
+  let wrapAlternates = false;
   const server = createServer((request, response) => {
     const path = request.url;
     if (path === "/robots.txt") {
@@ -58,8 +60,10 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
       const links = [...entries.get(path)].map(([code, target]) =>
         `<link rel="alternate" hreflang="${code}" href="${site}${target}">`).join("");
       if (path === "/de/" && robotsHeader) response.setHeader("X-Robots-Tag", robotsHeader);
+      const canonical = `<link rel="canonical" href="${site}${path}">`;
+      const metadata = (value, wrap) => wrap && path === "/de/" ? `<template>${value}</template>` : value;
       response.writeHead(200, { "content-type": "text/html" }).end(
-        `<!doctype html><html lang="${lang}"><head><link rel="canonical" href="${site}${path}">${links}${path === "/de/" ? robotsMeta : ""}</head></html>`);
+        `<!doctype html><html lang="${lang}"><head>${metadata(canonical, wrapCanonical)}${metadata(links, wrapAlternates)}${path === "/de/" ? robotsMeta : ""}</head></html>`);
     } else {
       response.writeHead(404).end();
     }
@@ -70,6 +74,27 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
   const origin = `http://127.0.0.1:${server.address().port}`;
   await t.test("allows pages that only suppress the image preview", async () => {
     assert.deepEqual(await checkIndexing(origin), { entries: 22, sampled: 18 });
+  });
+  await t.test("requires canonical and alternate links outside inert templates", async () => {
+    try {
+      wrapCanonical = true;
+      await assert.rejects(checkIndexing(origin), /expected a single canonical on \/de\//);
+      wrapCanonical = false;
+      wrapAlternates = true;
+      await assert.rejects(checkIndexing(origin), /missing\/duplicate x-default alternate on \/de\//);
+    } finally {
+      wrapCanonical = false;
+      wrapAlternates = false;
+    }
+  });
+  await t.test("ignores robots directives inside inert templates", async () => {
+    const previous = robotsMeta;
+    try {
+      robotsMeta += '<template><meta name="robots" content="noindex"></template>';
+      assert.deepEqual(await checkIndexing(origin), { entries: 22, sampled: 18 });
+    } finally {
+      robotsMeta = previous;
+    }
   });
   await t.test("rejects crawler access regressions for sampled public routes", async () => {
     for (const [rules, expected] of [
