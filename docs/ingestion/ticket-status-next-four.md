@@ -78,3 +78,9 @@ Legal/contact/customer/cookie content and full raw pages are not committed.
 Mutated negative fixtures are tests, not claims that the live source was in that
 state. The dated audit of the original remaining 31 is separate JSON/Markdown;
 source transport or offline success is never release acceptance.
+
+The reviewed shop identities for these four sources are stored in PostgreSQL
+and keyed by exact festival, primary URL and edition. The publisher resolves
+the same binding independently. Missing bindings do not trigger supplemental
+requests. The separate Resurrection Fest route and signed-off product scope
+are unchanged by this migration.

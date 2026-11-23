@@ -1,3 +1,4 @@
+import { remainingProofFixtures } from "./fixtures/ticket-status/remaining-reviewed-proofs.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -15,7 +16,7 @@ export const cases = [
  ["jera-on-air","https://www.jeraonair.nl/en/info/","jera"],
 ];
 for(const [slug,url,key] of cases){
- const source=parserSource(slug,{url,strategies:["html_fallback"]});
+ const source=parserSource(slug,{url,remainingProof:remainingProofFixtures[slug],strategies:["html_fallback"]});
  const fixture=fixtures[key],stock=ticketSupplementUrl(source);
  test(`${slug}: audited ordinary stock is available, not a global sellout or low-price guess`,()=>{
   const observation=observeTicketSupplement(fixture,source,stock);
@@ -55,7 +56,7 @@ for(const [slug,url,key] of cases){
  });
 }
 for(const key of ['pinkpop','eurockeennes']){
- const row=cases.find(c=>c[2]===key),source=parserSource(row[0],{url:row[1],strategies:['html_fallback']}),fixture=fixtures[key],url=ticketSupplementUrl(source);
+ const row=cases.find(c=>c[2]===key),source=parserSource(row[0],{url:row[1],remainingProof:remainingProofFixtures[row[0]],strategies:['html_fallback']}),fixture=fixtures[key],url=ticketSupplementUrl(source);
  for(const [name,change] of [
   ['hidden cards',f=>f.replaceAll(key==='pinkpop'?'<article':'<a class="lkbill27','<'+(key==='pinkpop'?'article hidden':'a hidden class="lkbill27'))],
   ['hidden ancestor',f=>f.replace('<body>','<body><section hidden>').replace('</body>','</section></body>')],
@@ -67,7 +68,7 @@ for(const key of ['pinkpop','eurockeennes']){
  ])test(`${key}: ${name} fails closed`,()=>{const o=observeTicketSupplement(change(fixture),source,url);assert.equal(o.status,undefined,o.excerpt);assert.ok(o.warning);});
  test(`${key}: minified DOM keeps original stock word boundaries`,()=>assert.equal(observeTicketSupplement(fixture.replace(/>\s+</g,'><'),source,url).status,'available'));
 }
-const trees=parserSource('2000trees',{url:cases[0][1],strategies:['html_fallback']}),treesUrl=ticketSupplementUrl(trees);
+const trees=parserSource('2000trees',{url:cases[0][1],remainingProof:remainingProofFixtures['2000trees'],strategies:['html_fallback']}),treesUrl=ticketSupplementUrl(trees);
 for(const [name,change] of [
  ['child/accessory stock only',e=>{e.offers=e.offers.filter(o=>/Parking|Child|Campervan/.test(o.name));}],
  ['unavailable ordinary admissions',e=>{e.offers.forEach(o=>{if(!/Parking|Child|Campervan/.test(o.name))o.availability='https://schema.org/SoldOut';});}],
@@ -78,7 +79,7 @@ for(const [name,change] of [
  let f=fixtures['2000trees'];const match=f.match(/<script type="application\/ld\+json">([^]*?)<\/script>/),data=JSON.parse(match[1]);change(data['@graph'][0]);f=f.replace(match[1],JSON.stringify(data));const o=observeTicketSupplement(f,trees,treesUrl);assert.equal(o.status,undefined);assert.ok(o.warning);
 });
 test('2000trees: disabled shop control cannot be rescued by LD+JSON',()=>assert.equal(observeTicketSupplement(fixtures['2000trees'].replace('<a ','<a aria-disabled="true" '),trees,treesUrl).status,undefined));
-const jera=parserSource('jera-on-air',{url:cases[3][1],strategies:['html_fallback']}),jeraUrl=ticketSupplementUrl(jera);
+const jera=parserSource('jera-on-air',{url:cases[3][1],remainingProof:remainingProofFixtures['jera-on-air'],strategies:['html_fallback']}),jeraUrl=ticketSupplementUrl(jera);
 for(const [name,change] of [
  ['camping product',p=>{p.title=p.title.replace('Weekend','Camping');p.handle=p.handle.replace('weekend','camping');}],
  ['soldout weekend only',p=>{p.available=false;p.variants[0].available=false;}],

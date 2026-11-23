@@ -1,5 +1,4 @@
 import { RESURRECTION_CONFIG, RESURRECTION_SHOP, RESURRECTION_PRODUCTS, RESURRECTION_DOCUMENTS, isResurrectionNamespace } from "./resurrection-ticket-stock.ts";
-import { JERA_STOCK } from "./remaining-ticket-stock.ts";
 import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters/full-rewind.ts';
@@ -578,7 +577,7 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     if (!ticket.response.ok) return { response: ticket.response, attempts };
     if (ticket.response.url && ticket.response.url !== ticketUrl) throw new Error("Official ticket destination changed identity");
     const type = ticket.response.headers.get("content-type") ?? "";
-    const jsonStock = ticketUrl === JERA_STOCK || source.festivalSlug === "full-rewind";
+    const jsonStock = source.festivalSlug === "jera-on-air" || source.festivalSlug === "full-rewind";
     const validType = jsonStock ? /^(?:application\/(?:json|javascript)|text\/javascript)\b/i.test(type)
       : /^text\/html\b|^application\/xhtml\+xml\b/i.test(type);
     if (!validType) throw new Error(source.festivalSlug === "full-rewind"

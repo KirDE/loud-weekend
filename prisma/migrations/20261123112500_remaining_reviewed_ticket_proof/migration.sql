@@ -1,0 +1,6 @@
+INSERT INTO "ReviewedTicketProof" ("festivalSlug", "sourceUrl", "editionYear", "proof") VALUES
+  ('jera-on-air', 'https://www.jeraonair.nl/en/info/', 2027, '{"kind": "jera", "handle": "jera-on-air-24-25-26-06-2027-weekend-ticket", "title": "24./25./26.06.2027 Weekend - Ticket", "sku": "TIKJER27WEE"}'::jsonb),
+  ('jera-on-air', 'https://www.jeraonair.nl/en/line-up/', 2027, '{"kind": "jera", "handle": "jera-on-air-24-25-26-06-2027-weekend-ticket", "title": "24./25./26.06.2027 Weekend - Ticket", "sku": "TIKJER27WEE"}'::jsonb),
+  ('2000trees', 'https://2000trees.co.uk/', 2027, '{"kind": "trees", "eventName": "2000trees 2027 20th Anniversary Special", "eventStart": "2027-07-07T12:00:00+01:00", "eventEnd": "2027-07-11T15:00:00+01:00", "shopId": "2213997", "checkoutId": "8296090"}'::jsonb),
+  ('pinkpop', 'https://www.pinkpop.nl/', 2027, '{"kind": "pinkpop", "title": "Tickets – Pinkpop 2027", "onSale": "De reguliere ticketverkoop voor Pinkpop 2027 is reeds gestart.", "ticketmasterId": "1884453946"}'::jsonb),
+  ('eurockeennes', 'https://www.eurockeennes.fr/', 2027, '{"kind": "eurockeennes", "titlePrefix": "Billetterie | Les Eurockéennes de Belfort – 2, 3, 4 et 5 juillet 2027", "cardClass": "lkbill27", "widgetId": "91a253ee-12da-4261-ba09-4270b6d7108c"}'::jsonb);
