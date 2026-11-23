@@ -69,11 +69,11 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
   const planner = useLocalPlanner(); const { language, locale } = useLanguage(); const t = labels[language];
   const [user, setUser] = useState<{ id: string; email: string } | null>(null); const [docs, setDocs] = useState<Partial<Record<Kind, Document>>>({}); const [busy, setBusyState] = useState(false); const [status, setStatus] = useState(""); const [conflict, setConflict] = useState<Conflict | null>(null); const [shareUrl, setShareUrl] = useState(""); const [expiry, setExpiry] = useState("");
   function setBusy(value: boolean) { setBusyState(value); onBusyChange?.(value); }
-  async function parseDocument(kind: Kind, response: Response) {
+  async function parseDocument(kind: Kind, response: Response, ownerId: string | undefined) {
     const document = (await response.json().catch(() => null))?.document as
       (Document & { kind?: string; userId?: string }) | null | undefined;
     if (document === null) return null;
-    if (!document || typeof document.id !== "string" || !document.id ||
+    if (!document || !ownerId || document.userId !== ownerId || typeof document.id !== "string" || !document.id ||
       !Number.isSafeInteger(document.revision) || document.revision < 1 ||
       document.payload === undefined || document.kind !== documentKinds[kind]) {
       throw new Error(t.failed);
@@ -85,14 +85,14 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
     return document;
   }
 
-  async function readDocument(kind: Kind) {
+  async function readDocument(kind: Kind, ownerId = user?.id) {
     const response = await fetch("/api/sync/" + kind, { cache: "no-store" });
     if (!response.ok) throw new Error(t.failed);
-    return parseDocument(kind, response);
+    return parseDocument(kind, response, ownerId);
   }
 
-  async function readDocuments() {
-    const entries = await Promise.all(kinds.map(async kind => [kind, await readDocument(kind)] as const));
+  async function readDocuments(ownerId: string | undefined) {
+    const entries = await Promise.all(kinds.map(async kind => [kind, await readDocument(kind, ownerId)] as const));
     return Object.fromEntries(entries.filter(([, document]) => document)) as Partial<Record<Kind, Document>>;
   }
 
@@ -100,8 +100,9 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
     try {
       const me = await fetch("/api/auth/me", {cache:"no-store"});
       if (!me.ok) {setUser(null);setDocs({});return;}
-      setUser((await me.json()).user);setDocs({});
-      setDocs(await readDocuments());
+      const account = (await me.json()).user;
+      setUser(account);setDocs({});
+      if (account) setDocs(await readDocuments(account.id));
     } catch {setStatus(t.failed);}
   }
 
@@ -116,8 +117,8 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
       throw new Error("conflict");
     }
     if (!response.ok) throw new Error(t.failed);
-    const document = await parseDocument(kind, response);
-    if (!document || document.userId !== user?.id || document.revision !== revision + 1 ||
+    const document = await parseDocument(kind, response, user?.id);
+    if (!document || document.revision !== revision + 1 ||
       (base && document.id !== base.id)) throw new Error(t.failed);
     setDocs((current) => ({ ...current, [kind]: document }));
     return document;
@@ -127,7 +128,7 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
     const merged: Partial<PlannerState> = {};
     try {
       if (mode === "remote") {
-        const latest = await readDocuments();
+        const latest = await readDocuments(user?.id);
         setDocs(latest);
         if (!Object.keys(latest).length) {
           setStatus(t.noAccountData);

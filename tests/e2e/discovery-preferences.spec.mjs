@@ -90,7 +90,10 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
     const invalidFields = { json: { document: {
       ...previous, payload: { savedFilters: { ...activeFilters, origin: 42, ticketsOnly: "true" } },
     } } };
-    for (const response of [{ status: 503 }, { json: {} }, invalidPayload, invalidFields]) {
+    const missingOwner = { json: { document: {
+      ...previous, userId: undefined, payload: { savedFilters: latest },
+    } } };
+    for (const response of [{ status: 503 }, { json: {} }, invalidPayload, invalidFields, missingOwner]) {
       await secondPage.route(filtersRoute, route => route.fulfill(response));
       await pull.click();
       await expect(secondPage.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
