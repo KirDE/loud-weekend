@@ -120,3 +120,51 @@ test("Spotify import does not restore a selection removed while account sync is 
    JSON.parse(localStorage.getItem("festival-radar-planner-v1")).playlistFestivals,
  )).toEqual([]);
 });
+
+test("sync waits for the initial account revision before saving", async ({ page }) => {
+ const date = "2026-11-17T22:00:00.000Z";
+ let releaseRead, markReadStarted;
+ const readGate = new Promise(resolve => { releaseRead = resolve; });
+ const readStarted = new Promise(resolve => { markReadStarted = resolve; });
+ const docs = { collections: {
+   id: "existing-collection", userId, kind: documentKinds.collections, revision: 4,
+   updatedAt: date, payload: { schemaVersion: 1, playlistFestivals: [], spotify: null },
+ } };
+ let writes = 0;
+ await page.route("**/api/auth/me**", route => route.fulfill({ json: {
+   user: { id: userId, email: "browser-collections@example.test" },
+ } }));
+ await page.route("**/api/sync/**", async route => {
+   const request = route.request();
+   const kind = new URL(request.url()).pathname.split("/").filter(Boolean).at(-1);
+   if (request.method() === "GET") {
+     if (kind === "collections") {
+       markReadStarted();
+       await readGate;
+     }
+     return route.fulfill({ json: { document: docs[kind] ?? null } });
+   }
+   writes++;
+   const { payload, revision } = request.postDataJSON();
+   const previous = docs[kind];
+   expect(revision).toBe(previous?.revision ?? 0);
+   docs[kind] = {
+     id: previous?.id ?? kind, userId, kind: documentKinds[kind], revision: revision + 1, updatedAt: date, payload,
+   };
+   return route.fulfill({ json: { document: docs[kind] } });
+ });
+ await page.goto("/en/planner/");
+ await readStarted;
+ const panel = page.locator(".accountSync");
+ const sync = panel.getByRole("button", { name: copy.en.sync, exact: true });
+ try {
+   await expect(sync).toBeDisabled();
+   expect(writes).toBe(0);
+ } finally {
+   releaseRead();
+ }
+ await sync.click();
+ await expect(panel.getByText("Everything is synchronized.")).toBeVisible();
+ expect(writes).toBe(4);
+ expect(docs.collections.revision).toBe(5);
+});

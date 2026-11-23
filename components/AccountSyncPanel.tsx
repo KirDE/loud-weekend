@@ -104,17 +104,36 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
     return Object.fromEntries(entries.filter(([, document]) => document)) as Partial<Record<Kind, Document>>;
   }
 
-  async function load() {
-    try {
-      const me = await fetch("/api/auth/me", {cache:"no-store"});
-      if (!me.ok) {setUser(null);setDocs({});return;}
-      const account = (await me.json()).user;
-      setUser(account);setDocs({});
-      if (account) setDocs(await readDocuments(account.id));
-    } catch {setStatus(t.failed);}
-  }
-
-  useEffect(() => { void load(); const listener = () => void load(); window.addEventListener("loud-weekend-authenticated", listener); return () => window.removeEventListener("loud-weekend-authenticated", listener); }, []);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let latest = 0;
+    async function load() {
+      const request = ++latest;
+      setLoading(true);
+      setStatus("");
+      try {
+        const me = await fetch("/api/auth/me", { cache: "no-store" });
+        const account = me.ok ? (await me.json()).user : null;
+        if (request !== latest) return;
+        setUser(account);
+        setDocs({});
+        if (account) {
+          const documents = await readDocuments(account.id);
+          if (request === latest) setDocs(documents);
+        }
+      } catch {
+        if (request === latest) setStatus(t.failed);
+      } finally {
+        if (request === latest) setLoading(false);
+      }
+    }
+    void load();
+    window.addEventListener("loud-weekend-authenticated", load);
+    return () => {
+      latest++;
+      window.removeEventListener("loud-weekend-authenticated", load);
+    };
+  }, []);
   async function put(kind: Kind, payload: unknown, base?: Document, mergeLocal = false) {
     const revision = base?.revision ?? 0;
     const response = await fetch(`/api/sync/${kind}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ payload, revision }) });
@@ -211,5 +230,5 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
   const imported=readCollections(docs.collections?.payload).spotify;
 
   if (!user) return <section className="plannerSection accountSync"><h2>{t.title}</h2><p>{t.local}</p><strong>{t.login}</strong></section>;
-  return <section className="plannerSection accountSync" aria-busy={busy}><div className="sectionHeading"><div><div className="eyebrow">{user.email}</div><h2>{t.title}</h2></div><span aria-live="polite">{busy ? t.syncing : status}</span></div><div className="syncActions"><button disabled={busy || disabled} onClick={() => synchronize("merge")}>{t.migrate}</button><button disabled={busy || disabled} onClick={() => synchronize("remote")}>{t.replace}</button><button disabled={busy || disabled} onClick={() => synchronize()}>{t.sync}</button></div>{conflict && <div className="syncConflict" role="alert"><strong>{t.conflict}</strong><div><button disabled={busy || disabled} onClick={() => resolve(true)}>{t.keepLocal}</button><button disabled={busy || disabled} onClick={() => resolve(false)}>{t.keepRemote}</button></div></div>}<div className="syncGrid"><div><h3>{t.share}</h3><label>{t.expiry}<input type="date" value={expiry} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setExpiry(event.target.value)} /></label><button disabled={busy || disabled} onClick={share}>{t.share}</button>{shareUrl && <div className="shareResult"><a href={shareUrl}>{shareUrl}</a><button onClick={async () => { await navigator.clipboard.writeText(shareUrl); setStatus(t.copied); }}>{t.copy}</button></div>}<small>{t.expired}</small></div><div><h3>{t.spotify}</h3><a className="outlineButton" href="/api/spotify/connect">{t.connect}</a><button disabled={busy || disabled} onClick={spotifySync}>{t.import}</button>{imported ? <div className="importedCollections"><p>{t.last}: <time dateTime={imported.syncedAt}>{new Intl.DateTimeFormat(locale, {dateStyle:"medium",timeStyle:"short"}).format(new Date(imported.syncedAt))}</time></p><h4>{t.imported}</h4><ul>{imported.playlists.map(playlist=><li key={playlist.id}><a href={playlist.url} target="_blank" rel="noopener noreferrer">{playlist.name}</a><span> · {playlist.trackCount} {t.tracks}</span></li>)}</ul></div> : <p>{t.empty}</p>}</div></div></section>;
+  return <section className="plannerSection accountSync" aria-busy={busy || loading}><div className="sectionHeading"><div><div className="eyebrow">{user.email}</div><h2>{t.title}</h2></div><span aria-live="polite">{busy || loading ? t.syncing : status}</span></div><div className="syncActions"><button disabled={busy || loading || disabled} onClick={() => synchronize("merge")}>{t.migrate}</button><button disabled={busy || loading || disabled} onClick={() => synchronize("remote")}>{t.replace}</button><button disabled={busy || loading || disabled} onClick={() => synchronize()}>{t.sync}</button></div>{conflict && <div className="syncConflict" role="alert"><strong>{t.conflict}</strong><div><button disabled={busy || loading || disabled} onClick={() => resolve(true)}>{t.keepLocal}</button><button disabled={busy || loading || disabled} onClick={() => resolve(false)}>{t.keepRemote}</button></div></div>}<div className="syncGrid"><div><h3>{t.share}</h3><label>{t.expiry}<input type="date" value={expiry} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setExpiry(event.target.value)} /></label><button disabled={busy || loading || disabled} onClick={share}>{t.share}</button>{shareUrl && <div className="shareResult"><a href={shareUrl}>{shareUrl}</a><button onClick={async () => { await navigator.clipboard.writeText(shareUrl); setStatus(t.copied); }}>{t.copy}</button></div>}<small>{t.expired}</small></div><div><h3>{t.spotify}</h3><a className="outlineButton" href="/api/spotify/connect">{t.connect}</a><button disabled={busy || loading || disabled} onClick={spotifySync}>{t.import}</button>{imported ? <div className="importedCollections"><p>{t.last}: <time dateTime={imported.syncedAt}>{new Intl.DateTimeFormat(locale, {dateStyle:"medium",timeStyle:"short"}).format(new Date(imported.syncedAt))}</time></p><h4>{t.imported}</h4><ul>{imported.playlists.map(playlist=><li key={playlist.id}><a href={playlist.url} target="_blank" rel="noopener noreferrer">{playlist.name}</a><span> · {playlist.trackCount} {t.tracks}</span></li>)}</ul></div> : <p>{t.empty}</p>}</div></div></section>;
 }
