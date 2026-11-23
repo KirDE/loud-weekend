@@ -265,6 +265,11 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     // Replay reports the persisted queue relation, never creating a new job.
     if (existing) return { ...existing, playlistRefreshRequested: Boolean(existing.playlistRefresh) };
     if (candidate.reviewState !== "PENDING") throw new Error(`Candidate is not pending: ${candidate.reviewState}`);
+    const observedAt = new Date(stored.fetchedAt);
+    if (!Number.isFinite(observedAt.getTime()) || stored.fetchedAt !== observed.fetchedAt ||
+      stored.fetchedAt !== input.result.fetchedAt) {
+      throw new Error("Ingestion publication does not match the persisted observation time");
+    }
     if (candidate.diffs.some(({ reviewRequired }) => reviewRequired)) throw new Error("Persisted candidate requires review");
     const normalizedDiffs = (values: { field: string; before: unknown; after: unknown }[]) => values.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
     const expected = normalizedDiffs(input.result.changes.map(({ field, before, after }) => ({ field, before: before ?? null, after: after ?? null })));
@@ -299,7 +304,7 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
           .every(c => same(c.after, observed[c.field as "ticketStatus" | "ticketsUrl"]));
       if (!valid) throw new Error("Ticket supplement publication requires matching persisted official ticket evidence");
     }
-    const applied = await applyFestivalChanges(db, { festivalSlug: input.result.festivalSlug, expectedYear, changes: input.result.changes, strictBefore: true, observedAt: new Date(input.result.fetchedAt) });
+    const applied = await applyFestivalChanges(db, { festivalSlug: input.result.festivalSlug, expectedYear, changes: input.result.changes, strictBefore: true, observedAt });
     // Rockharz 2027 publications retain exact edition/source/field and persisted
     // evidence guards. Verified lineup changes use the normal provider queue.
     const sourceField = input.result.sourceUrl === "https://www.rockharz-festival.com/bands" ? "lineup"
