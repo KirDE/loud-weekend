@@ -103,14 +103,17 @@ function extractConfiguredCandidate(html: string, source: FestivalSource, fetche
   };
   for (const candidate of candidates) {
     if (candidate.artistListMode) merged.artistListMode = candidate.artistListMode;
+    const suppliedFields = new Set<FieldEvidence["field"]>();
     for (const field of supportedFields) {
       if (merged[field] !== undefined || candidate[field] === undefined) continue;
       Object.assign(merged, { [field]: candidate[field] });
+      suppliedFields.add(field);
       if (field === "ticketsUrl" || field === "ticketStatus" || field === "lineup" || field === "headliners") {
         (merged.fieldEditionYears ??= {})[field] = candidate.observedEditionYears;
       }
-      const evidence = candidate.evidence.find((item) => item.field === field);
-      if (evidence) merged.evidence.push(evidence);
+    }
+    for (const evidence of candidate.evidence) {
+      if (suppliedFields.delete(evidence.field)) merged.evidence.push(evidence);
     }
     if (candidate.lineupScope && merged.lineup === candidate.lineup) merged.lineupScope = candidate.lineupScope;
     merged.observedEditionYears.push(...candidate.observedEditionYears);
