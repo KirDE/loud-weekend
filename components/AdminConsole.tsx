@@ -1,5 +1,6 @@
 "use client";
 
+import { AdminSocialLinkReview } from "./AdminSocialLinkReview";
 import { useEffect, useMemo, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import type { AuditEntry, ParserRun, ReviewChange } from "@/lib/admin";
@@ -16,7 +17,12 @@ type Submission = {
   submittedAt: string;
   audit: { action: string; at: string }[];
 };
-type EditableArtist = { slug: string; name: string; officialUrl?: string };
+type EditableArtist = {
+  slug: string;
+  name: string;
+  officialUrl?: string;
+  socialCandidates: string[];
+};
 type Operator = { email: string; role: "USER" | "EDITOR" | "ADMIN" };
 
 export function AdminConsole({
@@ -120,7 +126,7 @@ export function AdminConsole({
   const save = async (
     resourceKind: "festival" | "artist" | "link" | "asset" | "playlist",
     resourceKey: string,
-    values: Record<string, string>,
+    values: Record<string, unknown>,
   ) => {
     const snapshotResponse = await fetch("/api/admin");
     const snapshot = await snapshotResponse.json();
@@ -471,6 +477,15 @@ export function AdminConsole({
                     >
                       Save artist draft
                     </button>
+                    {selectedArtist.socialCandidates.length > 0 && (
+                      <AdminSocialLinkReview
+                        key={selectedArtist.slug}
+                        candidates={selectedArtist.socialCandidates}
+                        onSave={(proof) =>
+                          save("artist", selectedArtist.slug, { socialProfile: proof })
+                        }
+                      />
+                    )}
                   </div>
                 )}
               </div>
