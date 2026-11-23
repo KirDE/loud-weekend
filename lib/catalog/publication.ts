@@ -123,6 +123,20 @@ async function applyFestivalChanges(db: Database, input: {
     throw new Error("Reviewed edition is no longer current");
   if (input.expectedYear !== undefined && edition.year !== input.expectedYear) throw new Error(`Candidate edition ${input.expectedYear} does not match catalogue edition ${edition.year}`);
 
+  // Validate the resulting range together, including any unchanged endpoint.
+  // A batch may legitimately move both dates past the original range.
+  const dates = { startDate: edition.startDate, endDate: edition.endDate };
+  let datesChanged = false;
+  for (const change of input.changes) {
+    if (change.field !== "startDate" && change.field !== "endDate") continue;
+    if (same(isoDate(edition[change.field]), change.after)) continue;
+    dates[change.field] = dateOnly(change.after);
+    datesChanged = true;
+  }
+  if (datesChanged && dates.startDate && dates.endDate && dates.endDate < dates.startDate) {
+    throw new Error("Edition end date precedes its start date");
+  }
+
   const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
   for (const change of input.changes) {

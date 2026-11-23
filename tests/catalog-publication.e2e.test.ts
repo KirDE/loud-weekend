@@ -640,6 +640,37 @@ test('Provinssi provenance drift rolls back catalogue, completeness and provider
 });
 
 
+test("a scoped refresh approval cannot persist reversed edition dates", async () => {
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+  });
+  const change = {
+    id: randomUUID(), resourceKey: "synthetic-fest", field: "startDate",
+    beforeValue: edition.startDate!.toISOString().slice(0, 10), afterValue: "2027-06-13",
+    sourceEvidence: { kind: "scoped-refresh", editionId: edition.id, editionYear: edition.year },
+    parserRunId: randomUUID(),
+  };
+  const approve = (afterValue: string) => db.$transaction(tx => publishAdminFestivalChange(tx, {
+    change: { ...change, afterValue }, actorLabel: "synthetic-date-review",
+  }));
+  await assert.rejects(approve(change.afterValue), /Edition end date precedes its start date/);
+  assert.equal(await db.catalogPublication.count({ where: { sourceId: `admin:${change.id}` } }), 0);
+  assert.deepEqual(await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } }), edition);
+
+  // A one-day interval remains valid and can be read back from the public catalog.
+  try {
+    await approve("2027-06-12");
+    const { festivals } = await readCatalog({ database: db });
+    const item = festivals.find(festival => festival.slug === "synthetic-fest");
+    assert.equal(item?.startDate, "2027-06-12");
+    assert.equal(item?.endDate, "2027-06-12");
+  } finally {
+    await db.festivalEdition.update({ where: { id: edition.id }, data: {
+      startDate: edition.startDate, sourceUpdatedAt: edition.sourceUpdatedAt,
+    } });
+  }
+});
+
 test("explicit ticket states survive reviewed publication and canonical public readback", async () => {
   const { ticketPresentation } = await import("../lib/tickets.ts");
   const { festivalMusicEvent } = await import("../lib/seo.ts");
