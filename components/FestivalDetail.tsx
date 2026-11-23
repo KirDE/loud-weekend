@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
+import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import { PlanningTools } from "./PlanningTools";
@@ -155,6 +156,13 @@ export function FestivalDetail({
           </div>
         )}
       </div>
+      {item.editionYear && (
+        <OfflineTripDownload
+          key={`${item.slug}:${item.editionYear}`}
+          slug={item.slug}
+          year={item.editionYear}
+        />
+      )}
       <section className="lineupSection">
         <div className="sectionHeading">
           <div>
