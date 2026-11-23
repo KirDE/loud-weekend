@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Language } from "@/components/LanguageProvider";
 import { FestivalDetail } from "@/components/FestivalDetail";
 import { supportedLanguages } from "@/lib/catalog/public";
+import { socialPreviewMetadata } from "@/lib/social-preview";
 import { getCatalog } from "@/lib/catalog/repository";
 import { festivalMusicEvent } from "@/lib/seo";
 
@@ -18,10 +19,17 @@ export async function generateMetadata({
   const { festivals } = await getCatalog();
   const festival = festivals.find((item) => item.slug === slug);
   if (!festival || !supportedLanguages.includes(lang as Language)) return {};
+  const canonical = `/${lang}/festivals/${festival.slug}/`;
   return {
+    ...(festival.editionYear &&
+      socialPreviewMetadata(
+        { kind: "festivals", name: festival.name, slug: festival.slug, year: festival.editionYear },
+        canonical,
+        lang as Language,
+      )),
     title: festival.name,
     alternates: {
-      canonical: `/${lang}/festivals/${festival.slug}/`,
+      canonical,
       languages: {
         "x-default": `/festivals/${festival.slug}/`,
         en: `/en/festivals/${festival.slug}/`,

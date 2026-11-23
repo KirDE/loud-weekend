@@ -5,6 +5,7 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "esbuild";
+import { socialPreviewMetadata } from "../lib/social-preview.ts";
 import { editionStatusLabel } from "../lib/edition-status.ts";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
 import { LanguageProvider } from "../components/LanguageProvider.tsx";
@@ -52,6 +53,7 @@ function loadPage(editions, artists = []) {
         throw new Error("NEXT_NOT_FOUND");
       },
     },
+    "@/lib/social-preview": { socialPreviewMetadata },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
   };
