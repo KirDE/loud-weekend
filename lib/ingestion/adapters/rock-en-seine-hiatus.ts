@@ -7,17 +7,19 @@ export const ROCK_EN_SEINE_HOME = "https://www.rockenseine.com/";
  */
 export type RockEnSeineHiatusProposal = {
   festivalSlug: "rock-en-seine";
-  editionYear: 2027;
+  editionYear: number;
   lifecycle: "hiatus";
-  announcedReturnYear: 2028;
+  announcedReturnYear: number;
   alternativeEvent: "under_consideration";
   sourceUrl: typeof ROCK_EN_SEINE_HOME;
   observedAt: string;
   excerpt: string;
 };
-const heading = "Le festival revient en 2028";
-const pause = "C’est pourquoi nous faisons le choix difficile de faire une pause en 2027 pour mieux se retrouver en 2028.";
-const alternative = "Mais comme on n’a pas l’intention de passer toute une année sans vous, on réfléchit à la possibilité de proposer en 2027 un rendez-vous différent pour continuer à faire vivre l’esprit Rock en Seine ensemble.";
+const heading = /^Le festival revient en (20\d{2}|21\d{2}|2200)$/;
+const pause = /^C’est pourquoi nous faisons le choix difficile de faire une pause en (20\d{2}|21\d{2}) pour mieux se retrouver en (20\d{2}|21\d{2}|2200)\.$/;
+const alternative = /^Mais comme on n’a pas l’intention de passer toute une année sans vous, on réfléchit à la possibilité de proposer en (20\d{2}|21\d{2}) un rendez-vous différent pour continuer à faire vivre l’esprit Rock en Seine ensemble\.$/;
+const hiatusExcerpt = (paused: number, returning: number) =>
+  `Rock en Seine: festival pauses in ${paused} and announces a return in ${returning}. A different ${paused} event is only under consideration, not confirmed. No ordinary ${paused} ticket inventory assertion.`;
 const clean = (v: string) => v.replace(/\s+/gu, " ").trim();
 const fail = (): never => { throw new Error("Rock en Seine edition hiatus not verified"); };
 export function observeRockEnSeineHiatus(
@@ -36,18 +38,23 @@ export function observeRockEnSeineHiatus(
   const section = $("section#artistes");
   if (section.length !== 1) fail();
   const group = section.children("div.container-md.t-balance.cn-block-group");
-  if (group.length !== 1 || group.children("h2").length !== 1 || clean(group.children("h2").text()) !== heading) fail();
+  if (group.length !== 1 || group.children("h2").length !== 1) fail();
+  const headlineYear = Number(clean(group.children("h2").text()).match(heading)?.[1]);
   const paragraphs = group.children("p").toArray().map(el => clean($(el).text()));
-  if (paragraphs.filter(p => p === pause).length !== 1 || paragraphs.filter(p => p === alternative).length !== 1
-    || paragraphs.some(p => /(?:billets? en vente|tickets? on sale|édition 2027 (?:aura lieu|confirmée))/i.test(p))) fail();
+  const pauses = paragraphs.map(text => text.match(pause)).filter(match => match !== null);
+  const alternatives = paragraphs.map(text => text.match(alternative)).filter(match => match !== null);
+  const editionYear = Number(pauses[0]?.[1]);
+  const announcedReturnYear = Number(pauses[0]?.[2]);
+  const contradiction = new RegExp(`(?:billets? en vente|tickets? on sale|édition ${editionYear} (?:aura lieu|confirmée))`, "i");
+  if (pauses.length !== 1 || alternatives.length !== 1 || Number(alternatives[0]?.[1]) !== editionYear
+    || announcedReturnYear !== headlineYear || announcedReturnYear !== editionYear + 1
+    || paragraphs.some(text => contradiction.test(text))) fail();
   return {
-    festivalSlug: "rock-en-seine", editionYear: 2027, lifecycle: "hiatus", announcedReturnYear: 2028,
+    festivalSlug: "rock-en-seine", editionYear, lifecycle: "hiatus", announcedReturnYear,
     alternativeEvent: "under_consideration", sourceUrl: ROCK_EN_SEINE_HOME, observedAt,
-    // Fixed minimized assertion; never copy arbitrary page/legal/contact text.
-    excerpt: "Rock en Seine: festival pauses in 2027 and announces a return in 2028. A different 2027 event is only under consideration, not confirmed. No ordinary 2027 ticket inventory assertion.",
+    excerpt: hiatusExcerpt(editionYear, announcedReturnYear),
   };
 }
-
 /** Reviewed source contract: all festival-specific proof expectations live here. */
 export const rockEnSeineLifecycleSource = {
   parserVersion: "rock-en-seine-hiatus-v1",
@@ -55,9 +62,9 @@ export const rockEnSeineLifecycleSource = {
   observe: observeRockEnSeineHiatus,
   validate(proposal: unknown) {
     const p = proposal as RockEnSeineHiatusProposal;
-    if (p.festivalSlug !== "rock-en-seine" || p.editionYear !== 2027 || p.lifecycle !== "hiatus"
-      || p.announcedReturnYear !== 2028 || p.alternativeEvent !== "under_consideration"
+    if (p.festivalSlug !== "rock-en-seine" || p.lifecycle !== "hiatus"
+      || p.announcedReturnYear !== p.editionYear + 1 || p.alternativeEvent !== "under_consideration"
       || p.sourceUrl !== ROCK_EN_SEINE_HOME
-      || p.excerpt !== "Rock en Seine: festival pauses in 2027 and announces a return in 2028. A different 2027 event is only under consideration, not confirmed. No ordinary 2027 ticket inventory assertion.") fail();
+      || p.excerpt !== hiatusExcerpt(p.editionYear, p.announcedReturnYear)) fail();
   },
 };
