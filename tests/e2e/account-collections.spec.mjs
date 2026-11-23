@@ -95,6 +95,8 @@ for (const [locale, t] of Object.entries(copy))
             ? {
                 schemaVersion: 1,
                 playlistFestivals: body.payload.playlistFestivals,
+                playlistExcludedArtists:
+                  body.payload.playlistExcludedArtists ?? previous?.payload.playlistExcludedArtists,
                 spotify: previous?.payload.spotify ?? null,
               }
             : body.payload;
@@ -137,6 +139,7 @@ for (const [locale, t] of Object.entries(copy))
               favoriteArtists: [],
               attendance: {},
               playlistFestivals: ["wacken-open-air"],
+              playlistExcludedArtists: ["sample-artist"],
               savedFilters: {
                 query: "",
                 country: "all",
@@ -155,6 +158,7 @@ for (const [locale, t] of Object.entries(copy))
       await expect(panel.getByRole("heading", { name: t.saved })).toBeVisible();
       await expect(panel.locator("time")).toHaveAttribute("datetime", imported.syncedAt);
       expect(docs.collections.payload.playlistFestivals).toEqual(["graspop", "wacken-open-air"]);
+      expect(docs.collections.payload.playlistExcludedArtists).toEqual(["sample-artist"]);
       await panel.getByRole("button", { name: t.sync, exact: true }).click();
       await expect(panel).toHaveAttribute("aria-busy", "false");
       expect(docs.collections.payload.spotify).toEqual(imported);
@@ -226,10 +230,27 @@ for (const [locale, t] of Object.entries(copy))
       for (const field of ["favoriteFestivals", "favoriteArtists", "attendance", "savedFilters"])
         expect(retained[field]).toEqual(unsynced[field]);
 
+      await page.evaluate(() => {
+        const key = "festival-radar-planner-v1";
+        const state = JSON.parse(localStorage.getItem(key));
+        state.playlistExcludedArtists = [];
+        localStorage.setItem(key, JSON.stringify(state));
+      });
+      await page.reload();
+      await expect(link).toBeVisible();
       failImport = true;
       await panel.getByRole("button", { name: t.import, exact: true }).click();
       await expect(panel).toHaveAttribute("aria-busy", "false");
       await expect(link).toBeVisible();
       await expect(panel.locator("time")).toHaveAttribute("datetime", imported.syncedAt);
+      expect(docs.collections.payload.playlistExcludedArtists).toEqual([]);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              JSON.parse(localStorage.getItem("festival-radar-planner-v1")).playlistExcludedArtists,
+          ),
+        )
+        .toEqual([]);
     },
   );

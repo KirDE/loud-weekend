@@ -88,10 +88,17 @@ const labels = {
     login: "Войдите через меню аккаунта, чтобы включить синхронизацию между устройствами.",
   },
 } as const;
+function playlistSelection(value: unknown) {
+  const { playlistFestivals, playlistExcludedArtists } = readCollections(value);
+  return { playlistFestivals, playlistExcludedArtists };
+}
 function payloads(p: ReturnType<typeof useLocalPlanner>): Record<Kind, unknown> {
   return {
     favorites: { favoriteFestivals: p.favoriteFestivals, favoriteArtists: p.favoriteArtists },
-    collections: readCollections({ playlistFestivals: p.playlistFestivals }),
+    collections: readCollections({
+      playlistFestivals: p.playlistFestivals,
+      playlistExcludedArtists: p.playlistExcludedArtists,
+    }),
     "saved-filters": { savedFilters: p.savedFilters },
     plans: { attendance: p.attendance },
   };
@@ -101,7 +108,7 @@ function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
   return {
     ...emptyPlannerState,
     ...value("favorites"),
-    playlistFestivals: readCollections(documents.collections?.payload).playlistFestivals,
+    ...playlistSelection(documents.collections?.payload),
     savedFilters: readDiscoveryPreferences(value("saved-filters").savedFilters),
     ...value("plans"),
   };
@@ -232,7 +239,7 @@ export function AccountSyncPanel({
             favoriteArtists: planner.favoriteArtists,
             attendance: planner.attendance,
             savedFilters: planner.savedFilters,
-            playlistFestivals: readCollections(conflict.remote.payload).playlistFestivals,
+            ...playlistSelection(conflict.remote.payload),
           });
         else if (conflict.kind === "saved-filters")
           planner.setSavedFilters(plannerFrom(next).savedFilters);
@@ -276,9 +283,14 @@ export function AccountSyncPanel({
     try {
       // Preserve unsynchronized device selection first, under the same revision
       // checks as normal sync. A conflict aborts before calling the provider.
-      const selection = mergeCollections(docs.collections?.payload, payloads(planner).collections);
+      const remoteCollections = readCollections(docs.collections?.payload);
+      const selection = {
+        ...mergeCollections(remoteCollections, { playlistFestivals: planner.playlistFestivals }),
+        playlistExcludedArtists:
+          planner.playlistExcludedArtists ?? remoteCollections.playlistExcludedArtists,
+      };
       const saved = await put("collections", selection, docs.collections?.revision ?? 0);
-      planner.merge({ playlistFestivals: readCollections(saved.payload).playlistFestivals });
+      planner.merge(playlistSelection(saved.payload));
       const response = await fetch("/api/spotify/sync", {
         method: "POST",
         headers: { "content-type": "application/json" },

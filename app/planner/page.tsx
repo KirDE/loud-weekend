@@ -3,6 +3,12 @@ import { getCatalog } from "@/lib/catalog/repository";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "My festival plan" };
 export default async function Planner() {
-  const { festivals } = await getCatalog();
-  return <PlannerPage festivals={festivals} />;
+  const { festivals, artists, discoveryLineups } = await getCatalog();
+  return (
+    <PlannerPage
+      festivals={festivals}
+      catalogueArtists={artists.map(({ name, slug }) => ({ name, slug }))}
+      lineups={discoveryLineups}
+    />
+  );
 }

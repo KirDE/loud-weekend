@@ -1,8 +1,11 @@
+import { readPlaylistExclusions } from "./playlist-selection.ts";
+
 type PlannerState = {
   favoriteFestivals: string[];
   favoriteArtists: string[];
   attendance: Record<string, "going" | "maybe" | "not-going">;
   playlistFestivals: string[];
+  playlistExcludedArtists?: string[];
   savedFilters?: unknown;
 };
 
@@ -17,5 +20,6 @@ export function parsePlannerState(value: string): Partial<PlannerState> {
     playlistFestivals: Array.isArray(parsed.playlistFestivals)
       ? parsed.playlistFestivals.filter((item): item is string => typeof item === "string")
       : [],
+    playlistExcludedArtists: readPlaylistExclusions(parsed.playlistExcludedArtists),
   };
 }

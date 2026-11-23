@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { playlistLineup } from "@/lib/playlist-selection";
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { Festival } from "@/lib/domain/festival";
 import { useLocalPlanner, type Attendance } from "./LocalPlanner";
 import { PlannerReset } from "./PlannerReset";
@@ -156,10 +158,42 @@ const plannerLabels: Record<Language, PlannerLabels> = {
     downloadArtists: "Скачать список артистов",
   },
 };
-export function PlannerPage({ festivals }: { festivals: Festival[] }) {
+const playlistCopy = {
+  en: {
+    choose: "Choose artists",
+    all: "Include all artists",
+    favorites: "Include only favorites",
+    limit:
+      "Spotify accepts up to 250 artists and 50 festivals per request. Narrow the selection or export the artist list.",
+  },
+  de: {
+    choose: "Künstler auswählen",
+    all: "Alle Künstler auswählen",
+    favorites: "Nur Lieblingskünstler auswählen",
+    limit:
+      "Spotify erlaubt bis zu 250 Künstler und 50 Festivals. Passe die Auswahl an oder exportiere die Liste.",
+  },
+  ru: {
+    choose: "Выбрать артистов",
+    all: "Включить всех артистов",
+    favorites: "Оставить только любимых",
+    limit: "Лимит Spotify: 250 артистов и 50 фестивалей. Сократите выбор или экспортируйте список.",
+  },
+};
+
+export function PlannerPage({
+  festivals,
+  catalogueArtists,
+  lineups,
+}: {
+  festivals: Festival[];
+  catalogueArtists: { slug: string; name: string }[];
+  lineups: DiscoveryLineups;
+}) {
   const { language } = useLanguage();
   const t = plannerLabels[language];
   const p = useLocalPlanner();
+  const copy = playlistCopy[language];
   const [syncBusy, setSyncBusy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [playlist, setPlaylist] = useState<{
@@ -171,9 +205,36 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
     (f) => p.favoriteFestivals.includes(f.slug) || p.attendance[f.slug],
   );
   const selected = festivals.filter((f) => p.playlistFestivals.includes(f.slug));
-  const artists = Array.from(
-    new Set(selected.flatMap((f) => [...f.headliners, ...f.lineup])),
-  ).sort();
+  const candidates = playlistLineup(
+    selected.map((festival) => festival.slug),
+    lineups,
+    catalogueArtists,
+  );
+  const excluded = new Set(p.playlistExcludedArtists ?? []);
+  const favorites = new Set(
+    p.favoriteArtists.map((key) =>
+      key.startsWith("artist:")
+        ? key.slice("artist:".length)
+        : Object.hasOwn(lineups.legacyFavoriteSlugs, key)
+          ? lineups.legacyFavoriteSlugs[key]
+          : undefined,
+    ),
+  );
+  const artists = [
+    ...new Set(
+      candidates.filter((artist) => !excluded.has(artist.slug)).map((artist) => artist.name),
+    ),
+  ].sort();
+  const exceedsProviderLimit = artists.length > 250 || selected.length > 50;
+
+  function selectArtists(favoritesOnly: boolean) {
+    const next = new Set(excluded);
+    for (const { slug } of candidates) {
+      if (favoritesOnly && !favorites.has(slug)) next.add(slug);
+      else next.delete(slug);
+    }
+    p.setPlaylistExclusions([...next]);
+  }
   const dated = planned
     .filter((f) => f.startDate)
     .sort((a, b) => a.startDate!.localeCompare(b.startDate!));
@@ -291,13 +352,46 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
                 </label>
               ))}
             </div>
+            {!!candidates.length && (
+              <details className="playlistArtistPicker">
+                <summary>{copy.choose}</summary>
+                <div className="playlistActions">
+                  <button
+                    type="button"
+                    className="outlineButton"
+                    onClick={() => selectArtists(false)}
+                  >
+                    {copy.all}
+                  </button>
+                  <button
+                    type="button"
+                    className="outlineButton"
+                    onClick={() => selectArtists(true)}
+                  >
+                    {copy.favorites}
+                  </button>
+                </div>
+                <div className="playlistFestivalGrid">
+                  {candidates.map(({ slug, name }) => (
+                    <label key={slug}>
+                      <input
+                        type="checkbox"
+                        checked={!excluded.has(slug)}
+                        onChange={() => p.togglePlaylistArtist(slug)}
+                      />
+                      <span>{name}</span>
+                    </label>
+                  ))}
+                </div>
+              </details>
+            )}
             {!!artists.length && (
               <div>
                 <div className="playlistActions">
                   <button
                     className="primaryButton"
                     type="button"
-                    disabled={playlist.status === "creating"}
+                    disabled={playlist.status === "creating" || exceedsProviderLimit}
                     onClick={createPlaylist}
                   >
                     {playlist.status === "creating" ? t.creating : t.createPlaylist}
@@ -307,7 +401,7 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
                   </a>
                 </div>
                 <p className={`playlistStatus ${playlist.status}`} role="status">
-                  {playlist.message || t.playlistIntro}
+                  {exceedsProviderLimit ? copy.limit : playlist.message || t.playlistIntro}
                   {playlist.url && (
                     <>
                       {" "}
