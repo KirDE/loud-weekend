@@ -147,6 +147,7 @@ export function parseOfflineTrip(value) {
   if (!value || value.version !== 1 || typeof value.slug !== "string" || !/^[a-z0-9-]{1,160}$/.test(value.slug) ||
       !Number.isInteger(value.year) || value.year < 2000 || value.year > 2100 || !shortText(value.name) ||
       !(value.startDate === null || isoDate(value.startDate)) || !(value.endDate === null || isoDate(value.endDate)) ||
+      (value.startDate !== null && value.endDate !== null && value.endDate < value.startDate) ||
       !(value.location === null || shortText(value.location)) || !instant(value.updatedAt) ||
       !Array.isArray(value.timetable) || value.timetable.length > 800) return null;
   const timetable = [];
