@@ -358,6 +358,14 @@ const translations = {
     freshnessSetlists: "setlists every",
     freshnessDays: "days",
     filterSearch: "Search festivals, artists or cities",
+    shareDiscovery: "Share filters",
+    shareDiscoveryPrivacy:
+      "Search text and favorite artists are left out unless you include them. " +
+      "Anyone with the link can see what you include.",
+    shareDiscoveryText: "Include search text",
+    shareDiscoveryArtists: "Include artists used for sorting",
+    copyDiscoveryLink: "Copy filter link",
+    discoveryLinkCopied: "Filter link copied.",
     clearSearch: "Clear search",
     clearAllFilters: "Clear all",
     filterMonth: "Filter by month",
@@ -529,6 +537,14 @@ const translations = {
     freshnessSetlists: "Setlists alle",
     freshnessDays: "Tage",
     filterSearch: "Festivals, Künstler oder Städte durchsuchen",
+    shareDiscovery: "Filter teilen",
+    shareDiscoveryPrivacy:
+      "Suchtext und Lieblingskünstler werden nur auf Wunsch geteilt. " +
+      "Alle mit dem Link können die ausgewählten Angaben sehen.",
+    shareDiscoveryText: "Suchtext einschließen",
+    shareDiscoveryArtists: "Künstler für die Sortierung einschließen",
+    copyDiscoveryLink: "Filterlink kopieren",
+    discoveryLinkCopied: "Filterlink kopiert.",
     clearSearch: "Suche löschen",
     clearAllFilters: "Alles zurücksetzen",
     filterMonth: "Nach Monat filtern",
@@ -702,6 +718,14 @@ const translations = {
     freshnessSetlists: "сетлисты — каждые",
     freshnessDays: "дней",
     filterSearch: "Поиск по фестивалям, артистам и городам",
+    shareDiscovery: "Поделиться фильтрами",
+    shareDiscoveryPrivacy:
+      "Текст поиска и избранные исполнители не передаются без вашего выбора. " +
+      "Выбранные данные увидит любой, у кого есть ссылка.",
+    shareDiscoveryText: "Добавить текст поиска",
+    shareDiscoveryArtists: "Добавить исполнителей для сортировки",
+    copyDiscoveryLink: "Скопировать ссылку на фильтры",
+    discoveryLinkCopied: "Ссылка на фильтры скопирована.",
     clearSearch: "Очистить поиск",
     clearAllFilters: "Очистить всё",
     filterMonth: "Фильтр по месяцу",
