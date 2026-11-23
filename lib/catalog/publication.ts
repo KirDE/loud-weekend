@@ -24,9 +24,17 @@ type CatalogChange = { field: string; before?: unknown; after?: unknown };
 const festivalStatuses = { confirmed: FestivalStatus.CONFIRMED, partial: FestivalStatus.PARTIAL, tba: FestivalStatus.TBA } as const;
 const ticketStatuses = { available: TicketStatus.AVAILABLE, low: TicketStatus.LOW, not_on_sale: TicketStatus.NOT_ON_SALE, sold_out: TicketStatus.SOLD_OUT, sales_ended: TicketStatus.SALES_ENDED, unavailable: TicketStatus.UNAVAILABLE, unknown: TicketStatus.UNKNOWN } as const;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
-const dateOnly = (value: unknown) => typeof value === "string" && value ? new Date(`${value}T00:00:00.000Z`) : null;
 const isoDate = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 const same = (left: unknown, right: unknown) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+
+function dateOnly(value: unknown) {
+  if (value == null || value === "") return null;
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isFinite(date.getTime()) && isoDate(date) === value) return date;
+  }
+  throw new Error("Invalid catalogue date");
+}
 
 function artistSlug(name: string) {
   return encodeURIComponent(name.toLocaleLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, ""));
