@@ -195,18 +195,24 @@ async function refreshSource(refreshId: string, sourceId: string, editionId: str
     if (candidate.observedEditionYears.some((year) => year !== active.editionYear))
       throw new Error("Official source returned another edition");
     const reviewReasons = [...result.reviewReasons];
-    const fields = ["startDate", "endDate", "city", "headliners", "lineup", "ticketsUrl", "ticketStatus", "status"] as const;
-    const proposals = fields.flatMap((field) => {
+    const fields = {
+      startDate: "Start date",
+      endDate: "End date",
+      city: "City",
+      headliners: "Headliners",
+      lineup: "Lineup",
+      ticketsUrl: "Ticket URL",
+      ticketStatus: "Ticket availability",
+      status: "Status",
+    } as const;
+    const proposals = (Object.keys(fields) as (keyof typeof fields)[]).flatMap((field) => {
       const differences = result.changes.filter((item) => item.field === field);
       const evidence = candidate.evidence.filter((item) => item.field === field);
       if (!differences.length || !evidence.length) return [];
-      if (field === "ticketsUrl" || field === "ticketStatus" || field === "lineup" || field === "headliners") {
-        const observedYears = candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
-        if (!observedYears.includes(active.editionYear)) {
-          const label = { ticketsUrl: "Ticket URL", ticketStatus: "Ticket availability", lineup: "Lineup", headliners: "Headliners" }[field];
-          reviewReasons.push(`${label} could not be verified for the selected edition.`);
-          return [];
-        }
+      const observedYears = candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
+      if (!observedYears.includes(active.editionYear)) {
+        reviewReasons.push(`${fields[field]} could not be verified for the selected edition.`);
+        return [];
       }
       const afterValue = field === "lineup" || field === "headliners"
         ? [...festival[field].filter((name) => !differences.some((diff) => diff.before === name)),

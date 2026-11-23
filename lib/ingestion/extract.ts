@@ -26,7 +26,7 @@ const missingFormatWarnings = new Set([
   "HTML fallback did not find explicitly marked festival fields",
 ]);
 
-const supportedFields: FieldEvidence["field"][] = ["startDate", "endDate", "city", "headliners", "lineup", "ticketsUrl", "status", "ticketStatus"];
+const supportedFields: Exclude<FieldEvidence["field"], "timetable">[] = ["startDate", "endDate", "city", "headliners", "lineup", "ticketsUrl", "status", "ticketStatus"];
 
 function extractCatalogueCandidate(html: string, source: FestivalSource, fetchedAt: string): FestivalCandidate {
   const candidate=extractConfiguredCandidate(html,source,fetchedAt);
@@ -108,9 +108,7 @@ function extractConfiguredCandidate(html: string, source: FestivalSource, fetche
       if (merged[field] !== undefined || candidate[field] === undefined) continue;
       Object.assign(merged, { [field]: candidate[field] });
       suppliedFields.add(field);
-      if (field === "ticketsUrl" || field === "ticketStatus" || field === "lineup" || field === "headliners") {
-        (merged.fieldEditionYears ??= {})[field] = candidate.observedEditionYears;
-      }
+      (merged.fieldEditionYears ??= {})[field] = candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
     }
     for (const evidence of candidate.evidence) {
       if (suppliedFields.delete(evidence.field)) merged.evidence.push(evidence);
@@ -157,8 +155,7 @@ export function extractFestivalCandidate(html: string, source: FestivalSource, f
     candidate.ticketStatus = ticket.status;
     candidate.ticketsUrl = ticket.ticketsUrl ?? envelope.ticket.url;
     candidate.fieldEditionYears = {
-      lineup: candidate.fieldEditionYears?.lineup ?? candidate.observedEditionYears,
-      headliners: candidate.fieldEditionYears?.headliners ?? candidate.observedEditionYears,
+      ...Object.fromEntries(supportedFields.map(field => [field, candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears])),
       ticketStatus: [source.editionYear],
       ticketsUrl: [source.editionYear],
     };

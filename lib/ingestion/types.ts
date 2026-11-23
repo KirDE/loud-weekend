@@ -32,8 +32,8 @@ export type FestivalCandidate = Partial<Pick<Festival, "startDate" | "endDate" |
   artistListMode?: "additive";
   /** Explicit producer provenance; persisted with normalized candidate evidence. */
   ticketSupplement?: { sourceUrl: string; ticketUrl: string; editionYear: number };
-  /** Edition observations from the strategy that supplied each merged ticket or artist field. */
-  fieldEditionYears?: Partial<Record<"ticketsUrl" | "ticketStatus" | "lineup" | "headliners", number[]>>;
+  /** Edition observations from the strategy that supplied each merged proposal field. */
+  fieldEditionYears?: Partial<Record<Exclude<FieldEvidence["field"], "timetable">, number[]>>;
   timetable?: { date: string; stage: string; start: string; artist: string }[];
   schemaVersion: typeof INGESTION_SCHEMA_VERSION;
   festivalSlug: string;
