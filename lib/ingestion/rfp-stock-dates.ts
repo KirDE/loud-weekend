@@ -23,5 +23,7 @@ export async function withRfpStockDates<T extends FestivalSource>(db: Pick<Prism
     SELECT "dates" FROM "ReviewedTicketSchedule"
     WHERE "sourceUrl" = ${source.url} AND "editionYear" = ${source.editionYear}
   `;
-  return { ...source, rfpStockDates: schema.parse(row?.dates) };
+  const dates = schema.safeParse(row?.dates);
+  if (!dates.success) throw new Error("Reviewed Rock for People ticket schedule is missing or invalid");
+  return { ...source, rfpStockDates: dates.data };
 }

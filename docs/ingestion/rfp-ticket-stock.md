@@ -41,3 +41,5 @@ published exact head, separately from this local receipt.
 The exact festival dates, sale start, seller schedule and ordinary rate start used
 by this verification are read from the reviewed PostgreSQL schedule. A missing
 or malformed schedule must not be reported as verified stock.
+
+A missing or invalid schedule is recorded as a failure for the selected Rock for People source; it does not prevent other sources from running.

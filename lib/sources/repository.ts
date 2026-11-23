@@ -1,4 +1,3 @@
-import { withRfpStockDates } from "../ingestion/rfp-stock-dates.ts";
 import { Prisma, PrismaClient, type FestivalSource as SourceRow } from "@prisma/client";
 import { hasOfficialMarkupAdapter } from "../ingestion/adapters/official-markup.ts";
 import type { FestivalSource, ParserStrategy, RefreshPolicy } from "../ingestion/types.ts";
@@ -54,6 +53,5 @@ export function mapSource(row: SourceRow & { edition?: { festivalId: string; yea
 }
 
 export async function listConfiguredSources(db: Database, festivalSlug?: string): Promise<ConfiguredSource[]> {
-  const rows = (await db.festivalSource.findMany({ ...(festivalSlug ? { where: { festivalSlug } } : {}), include: { edition: { select: { festivalId: true, year: true } } }, orderBy: [{ festivalSlug: "asc" }, { url: "asc" }] })).map(mapSource);
-  return Promise.all(rows.map(source => withRfpStockDates(db, source)));
+  return (await db.festivalSource.findMany({ ...(festivalSlug ? { where: { festivalSlug } } : {}), include: { edition: { select: { festivalId: true, year: true } } }, orderBy: [{ festivalSlug: "asc" }, { url: "asc" }] })).map(mapSource);
 }
