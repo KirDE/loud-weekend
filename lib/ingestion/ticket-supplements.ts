@@ -40,7 +40,7 @@ export function observeTicketSupplement(html: string, source: FestivalSource, ur
   const fail = (reason: string): TicketObservation => ({ excerpt: "", warning: `Official ${source.festivalSlug} ticket source requires review: ${reason}` });
   if (!isTicketSupplementUrl(source, url) || html.length > 2_000_000) return fail("source identity or size changed");
   if (source.festivalSlug === "idays") return observeIdaysTicketStock(html, source.editionYear);
-  if (source.festivalSlug === "rock-for-people") return observeRfpStock(html, source.rfpStockDates, dates);
+  if (source.festivalSlug === "rock-for-people") return observeRfpStock(html, source.editionYear, dates);
   if (source.festivalSlug === "full-rewind") {
     const year = source.editionYear;
     try {

@@ -902,11 +902,3 @@ model OperationalState {
   leaseExpiresAt DateTime?
   updatedAt      DateTime @updatedAt
 }
-
-model ReviewedTicketSchedule {
-  sourceUrl   String
-  editionYear Int
-  dates       Json
-
-  @@id([sourceUrl, editionYear])
-}

@@ -547,7 +547,6 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
   let attempts = primary.attempts;
   try {
     if (primary.response.url && primary.response.url !== source.url) throw new Error("Official ticket primary source changed identity");
-    if (ticketUrl === RFP_STOCK && !source.rfpStockDates) throw new Error("Reviewed GoOut stock dates are unavailable");
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
     // source overrides or authorization headers on a public ticket destination.

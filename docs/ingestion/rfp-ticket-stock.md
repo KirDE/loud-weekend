@@ -38,8 +38,8 @@ publication rollback in disposable local PostgreSQL, without provider jobs.
 Full typecheck and test:data pass. Full PR Quality/Codex must be observed on the
 published exact head, separately from this local receipt.
 
-The exact festival dates, sale start, seller schedule and ordinary rate start used
-by this verification are read from the reviewed PostgreSQL schedule. A missing
-or malformed schedule must not be reported as verified stock.
-
-A missing or invalid schedule is recorded as a failure for the selected Rock for People source; it does not prevent other sources from running.
+Dates and sale windows come from the exact public GoOut response, not from a
+seed. Require a valid current four-day schedule and already-open regular sale
+and rate windows. If the independently parsed organizer dates are available,
+they must agree with the seller schedule. Missing or contradictory observations
+do not publish ticket stock.

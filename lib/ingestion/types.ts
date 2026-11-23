@@ -12,7 +12,6 @@ export type FestivalSource = {
   enabled: boolean;
   editionYear: number;
   lastSuccessfulCheck?: string;
-  rfpStockDates?: import("./rfp-stock-dates.ts").RfpStockDates;
   fetchUrl?: string;
   followLinkPattern?: string;
   headers?: Record<string, string>;
