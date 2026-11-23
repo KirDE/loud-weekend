@@ -141,3 +141,28 @@ test("edition evidence quotes the selected record, not another event in the same
     assert.doesNotMatch(excerpt, /Archived edition/);
   }
 });
+
+test("only chronological offset-qualified event timestamps prove the edition", () => {
+  const observed = "2026-11-17T00:00:00Z";
+  const event = {
+    "@type": "MusicEvent", startDate: "2027-07-03T18:00:00+02:00",
+    offers: { availability: "SoldOut" },
+  };
+  const extract = endDate => extractJsonLdCandidate(
+    `<script type="application/ld+json">${JSON.stringify({ ...event, endDate })}</script>`,
+    source, observed,
+  );
+  // The later wall-clock time is an earlier instant once the offsets are applied.
+  const reversed = extract("2027-07-03T19:00:00+04:00");
+  assert.deepEqual(reversed.observedEditionYears, []);
+  assert.equal(reversed.ticketStatus, undefined);
+  assert.deepEqual(reversed.evidence, []);
+  assert.ok(reversed.warnings.includes("JSON-LD Event end date precedes its start date"));
+
+  // Mixed precision has date-only semantics; two explicit offsets compare as instants.
+  for (const endDate of ["2027-07-03", "2027-07-03T17:00:00Z"]) {
+    const valid = extract(endDate);
+    assert.deepEqual(valid.observedEditionYears, [2027]);
+    assert.equal(valid.ticketStatus, "sold_out");
+  }
+});
