@@ -28,7 +28,7 @@ export async function readPublishedOfflineTrip(slug: string, year: number, datab
   const trip = parseOfflineTrip({
     version: 1, slug, year, name, location: [city, country].filter(Boolean).join(", ") || null,
     startDate: date(edition.startDate), endDate: date(edition.endDate), updatedAt: edition.sourceUpdatedAt.toISOString(),
-    timetable: edition.timetable.flatMap(projectOfflinePerformance),
+    timetable: edition.timetable.flatMap(performance => projectOfflinePerformance(performance, edition)),
   });
   if (!trip) throw new Error("Invalid public trip data");
   return trip;

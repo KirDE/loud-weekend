@@ -16,7 +16,9 @@ type TimetableRow = {
   status: string; sourceUrl: string | null; observedAt: Date | null;
 };
 
-export function projectOfflinePerformance(row: TimetableRow) {
+export function projectOfflinePerformance(row: TimetableRow, edition: { startDate: Date | null; endDate: Date | null }) {
+  // Edition dates can be corrected after a timetable was imported.
+  if ((edition.startDate && row.date < edition.startDate) || (edition.endDate && row.date > edition.endDate)) return [];
   const entry = timetableEntrySchema.safeParse({
     date: row.date.toISOString().slice(0, 10), stage: row.stage, start: row.start,
     artist: row.artistName, timeZone: row.timeZone,

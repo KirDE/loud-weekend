@@ -25,7 +25,7 @@ export function projectOfflineCatalog(rows: readonly OfflineEdition[], editionYe
     name: row.festival.name,
     startDate: dateOnly(row.startDate),
     endDate: dateOnly(row.endDate),
-    timetable: row.timetable.flatMap(projectOfflinePerformance)
+    timetable: row.timetable.flatMap(performance => projectOfflinePerformance(performance, row))
       .map(({ date, stage, start, artist, timeZone, status }) => ({ date, stage, start, artist, timeZone, status }))
       .sort((a, b) => compare(JSON.stringify(a), JSON.stringify(b))),
   })).sort((a, b) => compare(a.slug, b.slug));

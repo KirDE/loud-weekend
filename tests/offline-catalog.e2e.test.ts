@@ -53,7 +53,10 @@ test("real DB content mutations invalidate ETag; timestamps alone do not; missin
     const renamed = await serveOfflineCatalog(request(etag), read);
     assert.equal(renamed.status, 200);
     assert.notEqual(renamed.headers.get("etag"), etag);
-    await tx.festivalEdition.update({ where: { id: edition.id }, data: { startDate: new Date("2027-12-30") } });
+    await tx.festivalEdition.update({
+      where: { id: edition.id },
+      data: { startDate: new Date("2027-12-30"), endDate: new Date("2027-12-31") },
+    });
     const dated = await serveOfflineCatalog(request(renamed.headers.get("etag")), read);
     assert.equal(dated.status, 200);
     const basePerformance = {
@@ -83,6 +86,38 @@ test("real DB content mutations invalidate ETag; timestamps alone do not; missin
     assert.equal(missing.status, 503);
     assert.equal(missing.headers.get("cache-control"), "no-store");
     assert.equal(missing.headers.get("etag"), null);
+    throw rollback;
+  }, { timeout: 15_000 }), (error) => error === rollback);
+});
+
+test("offline catalogue and trip omit performances outside the edition dates", async () => {
+  const rollback = new Error("rollback schedule range test");
+  await assert.rejects(db.$transaction(async (tx) => {
+    const edition = await tx.festivalEdition.findFirstOrThrow({
+      where: { festival: { slug: "synthetic-fest" }, year: 2027, recordState: "CURRENT" },
+    });
+    await tx.festivalEdition.update({
+      where: { id: edition.id },
+      data: { startDate: new Date("2027-12-30"), endDate: new Date("2028-01-02") },
+    });
+    const proof = {
+      editionId: edition.id, stage: "Edition range fixture", start: "20:00", timeZone: "Europe/Berlin",
+      sourceUrl: "https://festival.example.test/timetable/", observedAt: new Date("2027-11-12T10:00:00Z"),
+    };
+    await tx.timetablePerformance.createMany({ data: [
+      { ...proof, date: new Date("2027-12-29"), artistName: "Too early" },
+      { ...proof, date: new Date("2027-12-30"), artistName: "First day" },
+      { ...proof, date: new Date("2028-01-02"), artistName: "Last day" },
+      { ...proof, date: new Date("2028-01-03"), artistName: "Too late" },
+    ] });
+    const catalogue = await readOfflineCatalog(tx);
+    const trip = await readPublishedOfflineTrip("synthetic-fest", 2027, tx);
+    for (const timetable of [
+      catalogue.festivals.find(({ slug }) => slug === "synthetic-fest")?.timetable,
+      trip?.timetable,
+    ]) {
+      assert.deepEqual(timetable?.map(({ artist }) => artist), ["First day", "Last day"]);
+    }
     throw rollback;
   }, { timeout: 15_000 }), (error) => error === rollback);
 });
