@@ -87,6 +87,14 @@ export function AdminConsole({
       body: JSON.stringify({ decision: status === "approved" ? "approve" : "reject" }),
     });
     const body = await response.json();
+    if (response.status === 409 && body.status === "CONFLICT") {
+      setChanges((items) =>
+        items.map((item) =>
+          item.id === id ? { ...item, status: "conflict", conflict: true } : item,
+        ),
+      );
+      return setNotice(`${id}: ${ta("conflict")}. ${ta("decisionNotice")}`);
+    }
     if (!response.ok) return setNotice(body.error ?? "Decision failed");
     setChanges((items) => items.map((item) => (item.id === id ? { ...item, status } : item)));
     setNotice(`${id}: ${ta(status)}. ${ta("decisionNotice")}`);

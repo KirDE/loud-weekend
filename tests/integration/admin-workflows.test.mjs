@@ -538,7 +538,15 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   const correction = await correctionResponse.json();
   assert.ok(correction.revision > rejectedDraft.revision);
   assert.equal(correction.baseRevision, rejectedDraft.baseRevision);
-  const competingResponse = await submitArtistCorrection("Integration Competing Correction");
+  const competingResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist",
+    resourceKey: artistSlug,
+    baseRevision: 3,
+    values: {
+      canonicalName: "Integration Competing Correction",
+      officialUrl: "https://competing.example.test/",
+    },
+  });
   assert.equal(competingResponse.status, 201);
   const competing = await competingResponse.json();
   assert.ok(competing.revision > correction.revision);
@@ -546,9 +554,44 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   const correctedName = await db.adminChange.findFirstOrThrow({
     where: { draftId: correction.id },
   });
-  const competingName = await db.adminChange.findFirstOrThrow({ where: { draftId: competing.id } });
+  const competingName = await db.adminChange.findFirstOrThrow({
+    where: { draftId: competing.id, field: "canonicalName" },
+  });
   assert.equal((await decideArtist(correctedName.id)).status, 200);
+  const staleDecision = await decideArtist(competingName.id);
+  assert.equal(staleDecision.status, 409);
+  assert.equal((await staleDecision.json()).status, "CONFLICT");
+  const conflictedChange = await db.adminChange.findUniqueOrThrow({
+    where: { id: competingName.id },
+  });
+  assert.equal(conflictedChange.status, "CONFLICT");
+  assert.ok(conflictedChange.decidedById);
+  assert.ok(conflictedChange.decidedAt);
+  assert.equal(
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: competing.id } })).status,
+    "QUEUED",
+  );
+  const competingUrl = await db.adminChange.findFirstOrThrow({
+    where: { draftId: competing.id, field: "officialUrl" },
+  });
+  assert.equal((await decideArtist(competingUrl.id, "reject")).status, 200);
+  assert.equal(
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: competing.id } })).status,
+    "CONFLICT",
+  );
   assert.equal((await decideArtist(competingName.id)).status, 409);
+  const conflictAudit = await db.adminAuditEntry.findMany({
+    where: {
+      action: "CHANGE_CONFLICT",
+      metadata: { path: ["changeId"], equals: competingName.id },
+    },
+  });
+  assert.equal(conflictAudit.length, 1);
+  assert.deepEqual(conflictAudit[0].metadata, {
+    changeId: competingName.id,
+    baseRevision: 3,
+    currentRevision: 4,
+  });
   assert.equal(
     (await db.adminDraft.findUniqueOrThrow({ where: { id: rejectedDraft.id } })).status,
     "REJECTED",
