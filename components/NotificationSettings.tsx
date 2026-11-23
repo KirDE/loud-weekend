@@ -3,53 +3,566 @@
 import { useEffect, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
 
-const events = ["ARTIST_ADDED", "ARTIST_CANCELLED", "FESTIVAL_DATE_MOVED", "TICKETS_ON_SALE", "TICKETS_LOW", "TICKETS_SOLD_OUT", "TIMETABLE_PUBLISHED"] as const;
+const events = [
+  "ARTIST_ADDED",
+  "ARTIST_CANCELLED",
+  "FESTIVAL_DATE_MOVED",
+  "TICKETS_ON_SALE",
+  "TICKETS_LOW",
+  "TICKETS_SOLD_OUT",
+  "TIMETABLE_PUBLISHED",
+] as const;
 const channels = ["EMAIL", "TELEGRAM", "WEB_PUSH"] as const;
 const frequencies = ["IMMEDIATE", "DAILY", "WEEKLY"] as const;
-type Channel = typeof channels[number];
-type Preference = { id: string; festivalId: string | null; eventType: string; channel: Channel; frequency: string; enabled: boolean };
-type Subscription = { id: string; channel: Channel; endpoint: string; enabled: boolean; updatedAt: string };
-type Delivery = { channel: Channel; status: string; attempts: number; sentAt: string | null; updatedAt: string; lastError: string | null };
-type Copy = { eyebrow: string; title: string; intro: string; signIn: string; loading: string; scope: string; global: string; event: string; channel: string; frequency: string; save: string; channels: string; telegram: string; telegramHelp: string; enroll: string; webpush: string; emailVerified: string; emailUnverified: string; verifyEmail: string; verificationSent: string; test: string; remove: string; enabled: string; disabled: string; health: string; noItems: string; saved: string; queued: string; failed: string; pushUnsupported: string; pushUnavailable: string; permission: string; providerReady: string; providerUnavailable: string; attempts: string; eventNames: Record<typeof events[number], string>; channelNames: Record<Channel, string>; frequencyNames: Record<typeof frequencies[number], string> };
+type Channel = (typeof channels)[number];
+type Preference = {
+  id: string;
+  festivalId: string | null;
+  eventType: string;
+  channel: Channel;
+  frequency: string;
+  enabled: boolean;
+};
+type Subscription = {
+  id: string;
+  channel: Channel;
+  endpoint: string;
+  enabled: boolean;
+  updatedAt: string;
+};
+type Delivery = {
+  channel: Channel;
+  status: string;
+  attempts: number;
+  sentAt: string | null;
+  updatedAt: string;
+  lastError: string | null;
+};
+type Copy = {
+  eyebrow: string;
+  title: string;
+  intro: string;
+  signIn: string;
+  loading: string;
+  scope: string;
+  global: string;
+  event: string;
+  channel: string;
+  frequency: string;
+  save: string;
+  channels: string;
+  telegram: string;
+  telegramHelp: string;
+  enroll: string;
+  webpush: string;
+  emailVerified: string;
+  emailUnverified: string;
+  verifyEmail: string;
+  verificationSent: string;
+  test: string;
+  remove: string;
+  enabled: string;
+  disabled: string;
+  health: string;
+  noItems: string;
+  saved: string;
+  queued: string;
+  failed: string;
+  pushUnsupported: string;
+  pushUnavailable: string;
+  permission: string;
+  providerReady: string;
+  providerUnavailable: string;
+  attempts: string;
+  eventNames: Record<(typeof events)[number], string>;
+  channelNames: Record<Channel, string>;
+  frequencyNames: Record<(typeof frequencies)[number], string>;
+};
 const copy: Record<string, Copy> = {
-  en: { eyebrow: "ACCOUNT", title: "Notification settings", intro: "Choose what Loud Weekend sends, where, and how often.", signIn: "Sign in to manage notifications.", loading: "Loading…", scope: "Festival scope", global: "All festivals", event: "Event type", channel: "Channel", frequency: "Frequency", save: "Save preference", channels: "Channel enrollment", telegram: "Telegram chat ID", telegramHelp: "Start the Loud Weekend bot, then enter the numeric chat ID it provides.", enroll: "Enroll / update", webpush: "Enable browser push", emailVerified: "Your account email is verified for delivery.", emailUnverified: "Verify your account email before enabling email delivery.", verifyEmail: "Send verification email", verificationSent: "Verification email sent.", test: "Send test", remove: "Delete", enabled: "Enabled", disabled: "Disabled", health: "Delivery health", noItems: "Nothing configured yet.", saved: "Saved.", queued: "Test queued.", failed: "Request failed.", pushUnsupported: "Web push is not supported by this browser.", pushUnavailable: "Web push is not configured on the server.", permission: "Browser notification permission", providerReady: "Provider ready", providerUnavailable: "Provider unavailable", attempts: "attempt(s)", eventNames: { ARTIST_ADDED: "Artist added", ARTIST_CANCELLED: "Artist cancelled", FESTIVAL_DATE_MOVED: "Festival date moved", TICKETS_ON_SALE: "Tickets on sale", TICKETS_LOW: "Tickets low", TICKETS_SOLD_OUT: "Tickets sold out", TIMETABLE_PUBLISHED: "Timetable published" }, channelNames: { EMAIL: "Email", TELEGRAM: "Telegram", WEB_PUSH: "Browser push" }, frequencyNames: { IMMEDIATE: "Immediate", DAILY: "Daily", WEEKLY: "Weekly" } },
-  de: { eyebrow: "KONTO", title: "Benachrichtigungen", intro: "Lege fest, was Loud Weekend wohin und wie oft sendet.", signIn: "Melde dich an, um Benachrichtigungen zu verwalten.", loading: "Wird geladen…", scope: "Festival-Auswahl", global: "Alle Festivals", event: "Ereignis", channel: "Kanal", frequency: "Häufigkeit", save: "Einstellung speichern", channels: "Kanäle verbinden", telegram: "Telegram-Chat-ID", telegramHelp: "Starte den Festival-Radar-Bot und trage dann die dort angezeigte numerische Chat-ID ein.", enroll: "Verbinden / aktualisieren", webpush: "Browser-Push aktivieren", emailVerified: "Deine Konto-Adresse ist für die Zustellung bestätigt.", emailUnverified: "Bestätige deine Konto-Adresse, bevor du E-Mail-Zustellung aktivierst.", verifyEmail: "Bestätigungs-E-Mail senden", verificationSent: "Bestätigungs-E-Mail wurde gesendet.", test: "Test senden", remove: "Löschen", enabled: "Aktiv", disabled: "Inaktiv", health: "Zustellstatus", noItems: "Noch nichts eingerichtet.", saved: "Gespeichert.", queued: "Test eingeplant.", failed: "Anfrage fehlgeschlagen.", pushUnsupported: "Browser-Push wird von diesem Browser nicht unterstützt.", pushUnavailable: "Browser-Push ist auf dem Server nicht konfiguriert.", permission: "Browser-Berechtigung für Benachrichtigungen", providerReady: "Anbieter bereit", providerUnavailable: "Anbieter nicht verfügbar", attempts: "Versuch(e)", eventNames: { ARTIST_ADDED: "Künstler hinzugefügt", ARTIST_CANCELLED: "Künstler abgesagt", FESTIVAL_DATE_MOVED: "Festivaldatum verschoben", TICKETS_ON_SALE: "Ticketverkauf gestartet", TICKETS_LOW: "Wenige Tickets", TICKETS_SOLD_OUT: "Ausverkauft", TIMETABLE_PUBLISHED: "Zeitplan veröffentlicht" }, channelNames: { EMAIL: "E-Mail", TELEGRAM: "Telegram", WEB_PUSH: "Browser-Push" }, frequencyNames: { IMMEDIATE: "Sofort", DAILY: "Täglich", WEEKLY: "Wöchentlich" } },
-  ru: { eyebrow: "АККАУНТ", title: "Настройки уведомлений", intro: "Выберите, что, куда и как часто будет отправлять Loud Weekend.", signIn: "Войдите, чтобы управлять уведомлениями.", loading: "Загрузка…", scope: "Фестивали", global: "Все фестивали", event: "Событие", channel: "Канал", frequency: "Частота", save: "Сохранить", channels: "Подключение каналов", telegram: "ID чата Telegram", telegramHelp: "Запустите бота Loud Weekend и введите выданный им числовой ID чата.", enroll: "Подключить / обновить", webpush: "Включить push в браузере", emailVerified: "Адрес аккаунта подтверждён для доставки.", emailUnverified: "Подтвердите адрес аккаунта перед включением email-доставки.", verifyEmail: "Отправить письмо для подтверждения", verificationSent: "Письмо для подтверждения отправлено.", test: "Отправить тест", remove: "Удалить", enabled: "Включено", disabled: "Отключено", health: "Состояние доставки", noItems: "Пока ничего не настроено.", saved: "Сохранено.", queued: "Тест поставлен в очередь.", failed: "Не удалось выполнить запрос.", pushUnsupported: "Этот браузер не поддерживает push-уведомления.", pushUnavailable: "Push-уведомления не настроены на сервере.", permission: "Разрешение браузера на уведомления", providerReady: "Провайдер готов", providerUnavailable: "Провайдер недоступен", attempts: "попыток", eventNames: { ARTIST_ADDED: "Артист добавлен", ARTIST_CANCELLED: "Артист отменён", FESTIVAL_DATE_MOVED: "Даты фестиваля изменены", TICKETS_ON_SALE: "Билеты поступили в продажу", TICKETS_LOW: "Билеты заканчиваются", TICKETS_SOLD_OUT: "Билеты распроданы", TIMETABLE_PUBLISHED: "Расписание опубликовано" }, channelNames: { EMAIL: "Email", TELEGRAM: "Telegram", WEB_PUSH: "Push в браузере" }, frequencyNames: { IMMEDIATE: "Сразу", DAILY: "Ежедневно", WEEKLY: "Еженедельно" } },
+  en: {
+    eyebrow: "ACCOUNT",
+    title: "Notification settings",
+    intro: "Choose what Loud Weekend sends, where, and how often.",
+    signIn: "Sign in to manage notifications.",
+    loading: "Loading…",
+    scope: "Festival scope",
+    global: "All festivals",
+    event: "Event type",
+    channel: "Channel",
+    frequency: "Frequency",
+    save: "Save preference",
+    channels: "Channel enrollment",
+    telegram: "Telegram chat ID",
+    telegramHelp: "Start the Loud Weekend bot, then enter the numeric chat ID it provides.",
+    enroll: "Enroll / update",
+    webpush: "Enable browser push",
+    emailVerified: "Your account email is verified for delivery.",
+    emailUnverified: "Verify your account email before enabling email delivery.",
+    verifyEmail: "Send verification email",
+    verificationSent: "Verification email sent.",
+    test: "Send test",
+    remove: "Delete",
+    enabled: "Enabled",
+    disabled: "Disabled",
+    health: "Delivery health",
+    noItems: "Nothing configured yet.",
+    saved: "Saved.",
+    queued: "Test queued.",
+    failed: "Request failed.",
+    pushUnsupported: "Web push is not supported by this browser.",
+    pushUnavailable: "Web push is not configured on the server.",
+    permission: "Browser notification permission",
+    providerReady: "Provider ready",
+    providerUnavailable: "Provider unavailable",
+    attempts: "attempt(s)",
+    eventNames: {
+      ARTIST_ADDED: "Artist added",
+      ARTIST_CANCELLED: "Artist cancelled",
+      FESTIVAL_DATE_MOVED: "Festival date moved",
+      TICKETS_ON_SALE: "Tickets on sale",
+      TICKETS_LOW: "Tickets low",
+      TICKETS_SOLD_OUT: "Tickets sold out",
+      TIMETABLE_PUBLISHED: "Timetable published",
+    },
+    channelNames: { EMAIL: "Email", TELEGRAM: "Telegram", WEB_PUSH: "Browser push" },
+    frequencyNames: { IMMEDIATE: "Immediate", DAILY: "Daily", WEEKLY: "Weekly" },
+  },
+  de: {
+    eyebrow: "KONTO",
+    title: "Benachrichtigungen",
+    intro: "Lege fest, was Loud Weekend wohin und wie oft sendet.",
+    signIn: "Melde dich an, um Benachrichtigungen zu verwalten.",
+    loading: "Wird geladen…",
+    scope: "Festival-Auswahl",
+    global: "Alle Festivals",
+    event: "Ereignis",
+    channel: "Kanal",
+    frequency: "Häufigkeit",
+    save: "Einstellung speichern",
+    channels: "Kanäle verbinden",
+    telegram: "Telegram-Chat-ID",
+    telegramHelp:
+      "Starte den Festival-Radar-Bot und trage dann die dort angezeigte numerische Chat-ID ein.",
+    enroll: "Verbinden / aktualisieren",
+    webpush: "Browser-Push aktivieren",
+    emailVerified: "Deine Konto-Adresse ist für die Zustellung bestätigt.",
+    emailUnverified: "Bestätige deine Konto-Adresse, bevor du E-Mail-Zustellung aktivierst.",
+    verifyEmail: "Bestätigungs-E-Mail senden",
+    verificationSent: "Bestätigungs-E-Mail wurde gesendet.",
+    test: "Test senden",
+    remove: "Löschen",
+    enabled: "Aktiv",
+    disabled: "Inaktiv",
+    health: "Zustellstatus",
+    noItems: "Noch nichts eingerichtet.",
+    saved: "Gespeichert.",
+    queued: "Test eingeplant.",
+    failed: "Anfrage fehlgeschlagen.",
+    pushUnsupported: "Browser-Push wird von diesem Browser nicht unterstützt.",
+    pushUnavailable: "Browser-Push ist auf dem Server nicht konfiguriert.",
+    permission: "Browser-Berechtigung für Benachrichtigungen",
+    providerReady: "Anbieter bereit",
+    providerUnavailable: "Anbieter nicht verfügbar",
+    attempts: "Versuch(e)",
+    eventNames: {
+      ARTIST_ADDED: "Künstler hinzugefügt",
+      ARTIST_CANCELLED: "Künstler abgesagt",
+      FESTIVAL_DATE_MOVED: "Festivaldatum verschoben",
+      TICKETS_ON_SALE: "Ticketverkauf gestartet",
+      TICKETS_LOW: "Wenige Tickets",
+      TICKETS_SOLD_OUT: "Ausverkauft",
+      TIMETABLE_PUBLISHED: "Zeitplan veröffentlicht",
+    },
+    channelNames: { EMAIL: "E-Mail", TELEGRAM: "Telegram", WEB_PUSH: "Browser-Push" },
+    frequencyNames: { IMMEDIATE: "Sofort", DAILY: "Täglich", WEEKLY: "Wöchentlich" },
+  },
+  ru: {
+    eyebrow: "АККАУНТ",
+    title: "Настройки уведомлений",
+    intro: "Выберите, что, куда и как часто будет отправлять Loud Weekend.",
+    signIn: "Войдите, чтобы управлять уведомлениями.",
+    loading: "Загрузка…",
+    scope: "Фестивали",
+    global: "Все фестивали",
+    event: "Событие",
+    channel: "Канал",
+    frequency: "Частота",
+    save: "Сохранить",
+    channels: "Подключение каналов",
+    telegram: "ID чата Telegram",
+    telegramHelp: "Запустите бота Loud Weekend и введите выданный им числовой ID чата.",
+    enroll: "Подключить / обновить",
+    webpush: "Включить push в браузере",
+    emailVerified: "Адрес аккаунта подтверждён для доставки.",
+    emailUnverified: "Подтвердите адрес аккаунта перед включением email-доставки.",
+    verifyEmail: "Отправить письмо для подтверждения",
+    verificationSent: "Письмо для подтверждения отправлено.",
+    test: "Отправить тест",
+    remove: "Удалить",
+    enabled: "Включено",
+    disabled: "Отключено",
+    health: "Состояние доставки",
+    noItems: "Пока ничего не настроено.",
+    saved: "Сохранено.",
+    queued: "Тест поставлен в очередь.",
+    failed: "Не удалось выполнить запрос.",
+    pushUnsupported: "Этот браузер не поддерживает push-уведомления.",
+    pushUnavailable: "Push-уведомления не настроены на сервере.",
+    permission: "Разрешение браузера на уведомления",
+    providerReady: "Провайдер готов",
+    providerUnavailable: "Провайдер недоступен",
+    attempts: "попыток",
+    eventNames: {
+      ARTIST_ADDED: "Артист добавлен",
+      ARTIST_CANCELLED: "Артист отменён",
+      FESTIVAL_DATE_MOVED: "Даты фестиваля изменены",
+      TICKETS_ON_SALE: "Билеты поступили в продажу",
+      TICKETS_LOW: "Билеты заканчиваются",
+      TICKETS_SOLD_OUT: "Билеты распроданы",
+      TIMETABLE_PUBLISHED: "Расписание опубликовано",
+    },
+    channelNames: { EMAIL: "Email", TELEGRAM: "Telegram", WEB_PUSH: "Push в браузере" },
+    frequencyNames: { IMMEDIATE: "Сразу", DAILY: "Ежедневно", WEEKLY: "Еженедельно" },
+  },
 };
 
-function publicKey(value: string) { const padding = "=".repeat((4 - value.length % 4) % 4); const raw = atob((value + padding).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from([...raw].map((c) => c.charCodeAt(0))); }
+function publicKey(value: string) {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const raw = atob((value + padding).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
 
 export function NotificationSettings({ festivals }: { festivals: { id: string; name: string }[] }) {
-  const { language } = useLanguage(); const t = copy[language];
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null); const [preferences, setPreferences] = useState<Preference[]>([]); const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const { language } = useLanguage();
+  const t = copy[language];
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [preferences, setPreferences] = useState<Preference[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [emailVerified, setEmailVerified] = useState(false);
   const [recent, setRecent] = useState<Delivery[]>([]);
-  const [providers, setProviders] = useState<Record<Channel, boolean>>({ EMAIL: false, TELEGRAM: false, WEB_PUSH: false }); const [vapid, setVapid] = useState<string | null>(null);
-  const [scope, setScope] = useState(""); const [eventType, setEventType] = useState(events[0]); const [channel, setChannel] = useState<Channel>("EMAIL"); const [frequency, setFrequency] = useState("IMMEDIATE"); const [telegram, setTelegram] = useState(""); const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
-  async function load() { const me = await fetch("/api/auth/me"); if (!me.ok) { setAuthenticated(false); return; } const md = await me.json(); setAuthenticated(true); setEmailVerified(md.user?.emailVerified === true); const [p, s] = await Promise.all([fetch("/api/notifications/preferences"), fetch("/api/notifications/status")]); const pd = await p.json(); const sd = await s.json(); setPreferences(pd.preferences || []); setSubscriptions(sd.subscriptions || []); setRecent(sd.recent || []); setProviders(sd.providers || {}); setVapid(sd.webPushPublicKey); }
-  useEffect(() => { void load(); }, []);
-  async function call(url: string, method: string, body: unknown, successMessage?: string) { setBusy(true); setMessage(""); try { const response = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); await response.json(); if (!response.ok) throw new Error(t.failed); setMessage(successMessage ?? (response.status === 202 ? t.queued : t.saved)); await load(); } catch { setMessage(t.failed); } finally { setBusy(false); } }
-  async function enrollPush() { if (!("serviceWorker" in navigator) || !("PushManager" in window)) { setMessage(t.pushUnsupported); return; } if (!vapid) { setMessage(t.pushUnavailable); return; } const permission = await Notification.requestPermission(); if (permission !== "granted") { setMessage(`${t.permission}: ${permission}.`); return; } const registration = await navigator.serviceWorker.ready; const push = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: publicKey(vapid) }); await call("/api/notifications/subscriptions", "PUT", { channel: "WEB_PUSH", endpoint: push.endpoint, metadata: push.toJSON(), enabled: true }); }
-  if (authenticated === null) return <section className="notificationPage" aria-busy="true">{t.loading}</section>;
-  if (!authenticated) return <section className="notificationPage"><h1>{t.title}</h1><p role="alert">{t.signIn}</p></section>;
-  return <section className="notificationPage">
-    <header><span className="eyebrow">{t.eyebrow}</span><h1>{t.title}</h1><p>{t.intro}</p></header>
-    {message && <p className="notificationMessage" role="status">{message}</p>}
-    <form className="notificationForm" onSubmit={(e) => { e.preventDefault(); void call("/api/notifications/preferences", "PUT", { festivalId: scope || null, eventType, channel, frequency, enabled: true }); }}>
-      <label>{t.scope}<select value={scope} onChange={(e) => setScope(e.target.value)}><option value="">{t.global}</option>{festivals.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
-      <label>{t.event}<select value={eventType} onChange={(e) => setEventType(e.target.value as typeof eventType)}>{events.map((v) => <option key={v} value={v}>{t.eventNames[v]}</option>)}</select></label>
-      <label>{t.channel}<select value={channel} onChange={(e) => setChannel(e.target.value as Channel)}>{channels.map((v) => <option key={v} value={v} disabled={!providers[v]}>{t.channelNames[v]}</option>)}</select></label>
-      <label>{t.frequency}<select value={frequency} onChange={(e) => setFrequency(e.target.value)}>{frequencies.map((v) => <option key={v} value={v}>{t.frequencyNames[v]}</option>)}</select></label>
-      {!providers[channel] && <span role="alert">{t.providerUnavailable}</span>}
-      <button className="primaryButton" disabled={busy || !providers[channel] || (channel === "EMAIL" && !emailVerified)}>{t.save}</button>
-    </form>
-    <div className="notificationGrid">
-      <section><h2>{t.channels}</h2><p>{emailVerified ? t.emailVerified : t.emailUnverified}</p>{!emailVerified && <button disabled={busy || !providers.EMAIL} onClick={() => void call("/api/auth/email-verification/request", "POST", {}, t.verificationSent)}>{t.verifyEmail}</button>}<div className="channelRow"><strong>{t.channelNames.EMAIL}</strong><span>{providers.EMAIL && emailVerified ? t.enabled : t.disabled}</span><button disabled={busy || !providers.EMAIL || !emailVerified} onClick={() => void call("/api/notifications/status", "POST", { channel: "EMAIL" })}>{t.test}</button></div>
-        <label>{t.telegram}<input inputMode="numeric" pattern="-?[0-9]+" value={telegram} onChange={(e) => setTelegram(e.target.value)} aria-describedby="telegram-help" /></label><small id="telegram-help">{t.telegramHelp}</small><button disabled={busy || !providers.TELEGRAM || !/^-?\d+$/.test(telegram)} onClick={() => void call("/api/notifications/subscriptions", "PUT", { channel: "TELEGRAM", endpoint: telegram, metadata: { enrolledBy: "settings" }, enabled: true })}>{t.enroll}</button>
-        <button disabled={busy || !providers.WEB_PUSH || !vapid} onClick={() => void enrollPush()}>{t.webpush}</button>
+  const [providers, setProviders] = useState<Record<Channel, boolean>>({
+    EMAIL: false,
+    TELEGRAM: false,
+    WEB_PUSH: false,
+  });
+  const [vapid, setVapid] = useState<string | null>(null);
+  const [scope, setScope] = useState("");
+  const [eventType, setEventType] = useState(events[0]);
+  const [channel, setChannel] = useState<Channel>("EMAIL");
+  const [frequency, setFrequency] = useState("IMMEDIATE");
+  const [telegram, setTelegram] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function load() {
+    const me = await fetch("/api/auth/me");
+    if (!me.ok) {
+      setAuthenticated(false);
+      return;
+    }
+    const md = await me.json();
+    setAuthenticated(true);
+    setEmailVerified(md.user?.emailVerified === true);
+    const [p, s] = await Promise.all([
+      fetch("/api/notifications/preferences"),
+      fetch("/api/notifications/status"),
+    ]);
+    const pd = await p.json();
+    const sd = await s.json();
+    setPreferences(pd.preferences || []);
+    setSubscriptions(sd.subscriptions || []);
+    setRecent(sd.recent || []);
+    setProviders(sd.providers || {});
+    setVapid(sd.webPushPublicKey);
+  }
+  useEffect(() => {
+    void load();
+  }, []);
+  async function call(url: string, method: string, body: unknown, successMessage?: string) {
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      await response.json();
+      if (!response.ok) throw new Error(t.failed);
+      setMessage(successMessage ?? (response.status === 202 ? t.queued : t.saved));
+      await load();
+    } catch {
+      setMessage(t.failed);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function enrollPush() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setMessage(t.pushUnsupported);
+      return;
+    }
+    if (!vapid) {
+      setMessage(t.pushUnavailable);
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      setMessage(`${t.permission}: ${permission}.`);
+      return;
+    }
+    const registration = await navigator.serviceWorker.ready;
+    const push = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: publicKey(vapid),
+    });
+    await call("/api/notifications/subscriptions", "PUT", {
+      channel: "WEB_PUSH",
+      endpoint: push.endpoint,
+      metadata: push.toJSON(),
+      enabled: true,
+    });
+  }
+  if (authenticated === null)
+    return (
+      <section className="notificationPage" aria-busy="true">
+        {t.loading}
       </section>
-      <section><h2>{t.health}</h2>{channels.map((value) => <div className="channelRow" key={`provider-${value}`}><strong>{t.channelNames[value]}</strong><span>{providers[value] ? t.providerReady : t.providerUnavailable}</span></div>)}{subscriptions.length ? subscriptions.map((s) => <div className="channelRow" key={s.id}><span><strong>{t.channelNames[s.channel]}</strong><small>{s.endpoint} · {s.enabled ? t.enabled : t.disabled}</small></span><button disabled={busy || !providers[s.channel]} onClick={() => void call("/api/notifications/status", "POST", { channel: s.channel })}>{t.test}</button><button onClick={() => void call("/api/notifications/subscriptions", "DELETE", { id: s.id })}>{t.remove}</button></div>) : <p>{t.noItems}</p>}{recent.map((delivery, index) => <div className="channelRow" key={`${delivery.channel}-${delivery.updatedAt}-${index}`}><span><strong>{t.channelNames[delivery.channel]} · {delivery.status}</strong><small>{delivery.sentAt || delivery.updatedAt}{delivery.lastError ? ` · ${delivery.lastError}` : ""}</small></span><span>{delivery.attempts} {t.attempts}</span></div>)}</section>
-    </div>
-    <section><h2>{t.title}</h2>{preferences.length ? preferences.map((p) => <div className="preferenceRow" key={p.id}><span><strong>{t.eventNames[p.eventType as typeof events[number]] || p.eventType}</strong><small>{p.festivalId ? festivals.find((f) => f.id === p.festivalId)?.name || p.festivalId : t.global} · {t.channelNames[p.channel]} · {t.frequencyNames[p.frequency as typeof frequencies[number]] || p.frequency}</small></span><button onClick={() => void call("/api/notifications/preferences", "PUT", { festivalId: p.festivalId, eventType: p.eventType, channel: p.channel, frequency: p.frequency, enabled: !p.enabled })}>{p.enabled ? t.disabled : t.enabled}</button><button onClick={() => void call("/api/notifications/preferences", "DELETE", { id: p.id })}>{t.remove}</button></div>) : <p>{t.noItems}</p>}</section>
-  </section>;
+    );
+  if (!authenticated)
+    return (
+      <section className="notificationPage">
+        <h1>{t.title}</h1>
+        <p role="alert">{t.signIn}</p>
+      </section>
+    );
+  return (
+    <section className="notificationPage">
+      <header>
+        <span className="eyebrow">{t.eyebrow}</span>
+        <h1>{t.title}</h1>
+        <p>{t.intro}</p>
+      </header>
+      {message && (
+        <p className="notificationMessage" role="status">
+          {message}
+        </p>
+      )}
+      <form
+        className="notificationForm"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void call("/api/notifications/preferences", "PUT", {
+            festivalId: scope || null,
+            eventType,
+            channel,
+            frequency,
+            enabled: true,
+          });
+        }}
+      >
+        <label>
+          {t.scope}
+          <select value={scope} onChange={(e) => setScope(e.target.value)}>
+            <option value="">{t.global}</option>
+            {festivals.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {t.event}
+          <select
+            value={eventType}
+            onChange={(e) => setEventType(e.target.value as typeof eventType)}
+          >
+            {events.map((v) => (
+              <option key={v} value={v}>
+                {t.eventNames[v]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {t.channel}
+          <select value={channel} onChange={(e) => setChannel(e.target.value as Channel)}>
+            {channels.map((v) => (
+              <option key={v} value={v} disabled={!providers[v]}>
+                {t.channelNames[v]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {t.frequency}
+          <select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
+            {frequencies.map((v) => (
+              <option key={v} value={v}>
+                {t.frequencyNames[v]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!providers[channel] && <span role="alert">{t.providerUnavailable}</span>}
+        <button
+          className="primaryButton"
+          disabled={busy || !providers[channel] || (channel === "EMAIL" && !emailVerified)}
+        >
+          {t.save}
+        </button>
+      </form>
+      <div className="notificationGrid">
+        <section>
+          <h2>{t.channels}</h2>
+          <p>{emailVerified ? t.emailVerified : t.emailUnverified}</p>
+          {!emailVerified && (
+            <button
+              disabled={busy || !providers.EMAIL}
+              onClick={() =>
+                void call("/api/auth/email-verification/request", "POST", {}, t.verificationSent)
+              }
+            >
+              {t.verifyEmail}
+            </button>
+          )}
+          <div className="channelRow">
+            <strong>{t.channelNames.EMAIL}</strong>
+            <span>{providers.EMAIL && emailVerified ? t.enabled : t.disabled}</span>
+            <button
+              disabled={busy || !providers.EMAIL || !emailVerified}
+              onClick={() => void call("/api/notifications/status", "POST", { channel: "EMAIL" })}
+            >
+              {t.test}
+            </button>
+          </div>
+          <label>
+            {t.telegram}
+            <input
+              inputMode="numeric"
+              pattern="-?[0-9]+"
+              value={telegram}
+              onChange={(e) => setTelegram(e.target.value)}
+              aria-describedby="telegram-help"
+            />
+          </label>
+          <small id="telegram-help">{t.telegramHelp}</small>
+          <button
+            disabled={busy || !providers.TELEGRAM || !/^-?\d+$/.test(telegram)}
+            onClick={() =>
+              void call("/api/notifications/subscriptions", "PUT", {
+                channel: "TELEGRAM",
+                endpoint: telegram,
+                metadata: { enrolledBy: "settings" },
+                enabled: true,
+              })
+            }
+          >
+            {t.enroll}
+          </button>
+          <button
+            disabled={busy || !providers.WEB_PUSH || !vapid}
+            onClick={() => void enrollPush()}
+          >
+            {t.webpush}
+          </button>
+        </section>
+        <section>
+          <h2>{t.health}</h2>
+          {channels.map((value) => (
+            <div className="channelRow" key={`provider-${value}`}>
+              <strong>{t.channelNames[value]}</strong>
+              <span>{providers[value] ? t.providerReady : t.providerUnavailable}</span>
+            </div>
+          ))}
+          {subscriptions.length ? (
+            subscriptions.map((s) => (
+              <div className="channelRow" key={s.id}>
+                <span>
+                  <strong>{t.channelNames[s.channel]}</strong>
+                  <small>
+                    {s.endpoint} · {s.enabled ? t.enabled : t.disabled}
+                  </small>
+                </span>
+                <button
+                  disabled={busy || !providers[s.channel]}
+                  onClick={() =>
+                    void call("/api/notifications/status", "POST", { channel: s.channel })
+                  }
+                >
+                  {t.test}
+                </button>
+                <button
+                  onClick={() =>
+                    void call("/api/notifications/subscriptions", "DELETE", { id: s.id })
+                  }
+                >
+                  {t.remove}
+                </button>
+              </div>
+            ))
+          ) : (
+            <p>{t.noItems}</p>
+          )}
+          {recent.map((delivery, index) => (
+            <div className="channelRow" key={`${delivery.channel}-${delivery.updatedAt}-${index}`}>
+              <span>
+                <strong>
+                  {t.channelNames[delivery.channel]} · {delivery.status}
+                </strong>
+                <small>
+                  {delivery.sentAt || delivery.updatedAt}
+                  {delivery.lastError ? ` · ${delivery.lastError}` : ""}
+                </small>
+              </span>
+              <span>
+                {delivery.attempts} {t.attempts}
+              </span>
+            </div>
+          ))}
+        </section>
+      </div>
+      <section>
+        <h2>{t.title}</h2>
+        {preferences.length ? (
+          preferences.map((p) => (
+            <div className="preferenceRow" key={p.id}>
+              <span>
+                <strong>
+                  {t.eventNames[p.eventType as (typeof events)[number]] || p.eventType}
+                </strong>
+                <small>
+                  {p.festivalId
+                    ? festivals.find((f) => f.id === p.festivalId)?.name || p.festivalId
+                    : t.global}{" "}
+                  · {t.channelNames[p.channel]} ·{" "}
+                  {t.frequencyNames[p.frequency as (typeof frequencies)[number]] || p.frequency}
+                </small>
+              </span>
+              <button
+                onClick={() =>
+                  void call("/api/notifications/preferences", "PUT", {
+                    festivalId: p.festivalId,
+                    eventType: p.eventType,
+                    channel: p.channel,
+                    frequency: p.frequency,
+                    enabled: !p.enabled,
+                  })
+                }
+              >
+                {p.enabled ? t.disabled : t.enabled}
+              </button>
+              <button
+                onClick={() => void call("/api/notifications/preferences", "DELETE", { id: p.id })}
+              >
+                {t.remove}
+              </button>
+            </div>
+          ))
+        ) : (
+          <p>{t.noItems}</p>
+        )}
+      </section>
+    </section>
+  );
 }

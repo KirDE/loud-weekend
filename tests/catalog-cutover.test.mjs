@@ -4,8 +4,9 @@ import path from "node:path";
 import test from "node:test";
 
 test("public catalogue routes resolve fresh data at request time", async () => {
-  const files = (await readdir("app", { recursive: true }))
-    .filter((file) => /(?:page\.tsx|sitemap\.ts)$/.test(file));
+  const files = (await readdir("app", { recursive: true })).filter((file) =>
+    /(?:page\.tsx|sitemap\.ts)$/.test(file),
+  );
   const catalogueRoutes = [];
   for (const file of files) {
     const source = await readFile(path.join("app", file), "utf8");
@@ -14,8 +15,14 @@ test("public catalogue routes resolve fresh data at request time", async () => {
     assert.match(source, /export const dynamic = "force-dynamic"/);
     if (file !== "[lang]/page.tsx") assert.doesNotMatch(source, /generateStaticParams/);
   }
-  assert.ok(catalogueRoutes.includes("[lang]/page.tsx"), "localized homepage must remain in the freshness check");
-  assert.ok(catalogueRoutes.includes("page.tsx"), "root homepage must remain in the freshness check");
+  assert.ok(
+    catalogueRoutes.includes("[lang]/page.tsx"),
+    "localized homepage must remain in the freshness check",
+  );
+  assert.ok(
+    catalogueRoutes.includes("page.tsx"),
+    "root homepage must remain in the freshness check",
+  );
   assert.ok(catalogueRoutes.length >= 16);
   const homeLoader = await readFile("lib/home-metadata.ts", "utf8");
   assert.match(homeLoader, /getHomeCatalog\s*=\s*cache\(getCatalog\)/);
@@ -23,7 +30,10 @@ test("public catalogue routes resolve fresh data at request time", async () => {
 
 test("festival details receive related catalogue data from the database snapshot", async () => {
   const source = await readFile("components/FestivalDetail.tsx", "utf8");
-  assert.doesNotMatch(source, /import \{[^}]*\b(?:artistSlug|festivals)\b[^}]*\} from "@\/data\/festivals"/);
+  assert.doesNotMatch(
+    source,
+    /import \{[^}]*\b(?:artistSlug|festivals)\b[^}]*\} from "@\/data\/festivals"/,
+  );
   assert.match(source, /festivals: Festival\[\]/);
   assert.match(source, /artistSlugs: Readonly<Record<string, string>>/);
 });
@@ -34,7 +44,10 @@ test("production catalogue code has no file mode or runtime overlay writes", asy
   const deploy = await readFile(".github/workflows/deploy.yml", "utf8");
   const qualityWorkflow = await readFile(".github/workflows/quality.yml", "utf8");
 
-  assert.doesNotMatch(repository, /FileCatalogRepository|CATALOG_READ_MODE|CATALOG_DATABASE_FALLBACK_ENABLED/);
+  assert.doesNotMatch(
+    repository,
+    /FileCatalogRepository|CATALOG_READ_MODE|CATALOG_DATABASE_FALLBACK_ENABLED/,
+  );
   assert.match(ingestion, /if \(!persistenceEnabled\) throw new Error/);
   assert.doesNotMatch(ingestion, /data\/|applyPublication|appendFile/);
   assert.doesNotMatch(deploy, /ingestion-publications|changed-publication-lineups/);

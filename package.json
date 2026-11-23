@@ -45,7 +45,13 @@
     "test:runtime": "node --import tsx --test tests/production-release.test.mjs tests/playlist-provider-lock.test.mjs tests/provider-timers.test.mjs tests/logo-serving.test.ts tests/festival-logo.test.ts && python3 -m unittest discover -s tests -p test_playlist_plan.py",
     "test:persistence-db": "node --import tsx --test tests/catalog-persistence.e2e.test.ts",
     "pretest:persistence-db": "node scripts/prepare-test-db.mjs",
-    "artists:add-alias": "node scripts/add-artist-aliases.mjs"
+    "artists:add-alias": "node scripts/add-artist-aliases.mjs",
+    "lint": "npm run lint:js && npm run lint:css && npm run lint:lines",
+    "lint:js": "oxlint --deny-warnings",
+    "lint:css": "stylelint \"**/*.css\" --max-warnings 0",
+    "csslint": "npm run lint:css",
+    "lint:lines": "node scripts/check-line-length.mjs",
+    "format": "prettier --write \"**/*.{js,mjs,cjs,ts,tsx,css}\""
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",
@@ -71,6 +77,11 @@
   "devDependencies": {
     "@playwright/test": "^1.65.1",
     "esbuild": "^0.28.2",
+    "oxlint": "1.95.0",
+    "postcss": "8.5.23",
+    "prettier": "3.10.1",
+    "stylelint": "18.1.0",
+    "stylelint-config-standard": "41.1.0",
     "tsx": "^4.23.15"
   },
   "overrides": {
