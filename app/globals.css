@@ -1047,7 +1047,7 @@ main {
 /* stylelint-disable-next-line no-descending-specificity
    -- Preserve component cascade against earlier .notificationPage button:disabled.
 */
-.search button {
+.search > button {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
@@ -1059,7 +1059,7 @@ main {
   cursor: pointer;
 }
 
-.search button:focus-visible {
+.search > button:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
@@ -1067,7 +1067,7 @@ main {
 /* stylelint-disable-next-line no-descending-specificity
    -- Preserve component cascade against earlier .channelRow > span:first-child.
 */
-.search button span {
+.search > button span {
   font-size: 19px;
 }
 
