@@ -8,10 +8,25 @@ import { sourceParserKey } from "../lib/sources/repository.ts";
 
 const url = "https://copenhell.dk/faith-no-more-headline-copenhell-2027/";
 const at = "2026-10-06T19:37:00Z";
-const fixture = (name) => readFile(new URL("./fixtures/official-markup/copenhell-" + name + "-2027.html", import.meta.url), "utf8");
+const fixture = (name) =>
+  readFile(
+    new URL("./fixtures/official-markup/copenhell-" + name + "-2027.html", import.meta.url),
+    "utf8",
+  );
 const source = (overrides = {}) => parserSource("copenhell", { url, ...overrides });
 const extract = (html, overrides) => extractFestivalCandidate(html, source(overrides), at);
-const current = { slug: "copenhell", name: "Copenhell", editionYear: 2027, startDate: null, endDate: null, country: "DK", officialUrl: url, status: "partial", headliners: [], lineup: [] };
+const current = {
+  slug: "copenhell",
+  name: "Copenhell",
+  editionYear: 2027,
+  startDate: null,
+  endDate: null,
+  country: "DK",
+  officialUrl: url,
+  status: "partial",
+  headliners: [],
+  lineup: [],
+};
 
 test("only the dated Danish official article yields exact 2027 dates and two explicitly named headliners", async () => {
   assert.equal(sourceParserKey(source()), "official_markup:copenhell");
@@ -21,34 +36,60 @@ test("only the dated Danish official article yields exact 2027 dates and two exp
   assert.deepEqual(candidate.headliners, ["Faith No More", "Judas Priest"]);
   assert.equal(candidate.lineup, undefined);
   assert.deepEqual(candidate.observedEditionYears, [2027]);
-  assert.deepEqual(candidate.evidence.map(({ field }) => field), ["startDate", "endDate", "headliners"]);
+  assert.deepEqual(
+    candidate.evidence.map(({ field }) => field),
+    ["startDate", "endDate", "headliners"],
+  );
   assert.ok(candidate.evidence.every(({ sourceUrl }) => sourceUrl === url));
   assert.match(candidate.evidence[0].excerpt, /06.10.2026.*23.-26. juni 2027/);
-  assert.match(candidate.warnings.join('; '), /Agent review required before lineup-triggered provider activity/);
+  assert.match(
+    candidate.warnings.join("; "),
+    /Agent review required before lineup-triggered provider activity/,
+  );
   assert.equal(evaluateCandidate(current, candidate).publishable, false); // no automatic playlist create
 });
 
-test("undated homepage and programme never extract a full lineup, even with a synthetic year heading and 29 cards", async () => {
-  for (const [name, path] of [["home", "https://copenhell.dk/"], ["program", "https://copenhell.dk/program/"]]) {
-    const candidate = extract(await fixture(name), { url: path });
-    assert.deepEqual(candidate.evidence, []);
-    assert.deepEqual(candidate.observedEditionYears, []);
-    assert.equal(candidate.lineup, undefined);
-    assert.match(candidate.warnings.join("; "), /requires the dated official announcement URL/);
-    assert.deepEqual(evaluateCandidate({ ...current, lineup: ["Faith No More"] }, candidate).changes, []);
-  }
-  for (const path of [url + "?old=2026", "https://copenhell.dk/en/faith-no-more-will-headline-copenhell-2027/", "https://evil.example/faith-no-more-headline-copenhell-2027/"]) {
-    assert.deepEqual(extract(await fixture("announcement"), { url: path }).evidence, []);
-  }
-});
+test(
+  "undated homepage and programme never extract a full lineup, " +
+    "even with a synthetic year heading and 29 cards",
+  async () => {
+    for (const [name, path] of [
+      ["home", "https://copenhell.dk/"],
+      ["program", "https://copenhell.dk/program/"],
+    ]) {
+      const candidate = extract(await fixture(name), { url: path });
+      assert.deepEqual(candidate.evidence, []);
+      assert.deepEqual(candidate.observedEditionYears, []);
+      assert.equal(candidate.lineup, undefined);
+      assert.match(candidate.warnings.join("; "), /requires the dated official announcement URL/);
+      assert.deepEqual(
+        evaluateCandidate({ ...current, lineup: ["Faith No More"] }, candidate).changes,
+        [],
+      );
+    }
+    for (const path of [
+      url + "?old=2026",
+      "https://copenhell.dk/en/faith-no-more-will-headline-copenhell-2027/",
+      "https://evil.example/faith-no-more-headline-copenhell-2027/",
+    ]) {
+      assert.deepEqual(extract(await fixture("announcement"), { url: path }).evidence, []);
+    }
+  },
+);
 
 test("Danish article teaser and programme spelling/count drift cannot become lineup", async () => {
   const article = await fixture("announcement");
-  const variant = article.replace("</h2>", "</h2><p>FAITH NO MORE, JUDAS PRIEST, HAYWIRE, BLOOD STAIN and 25 other names.</p>");
+  const variant = article.replace(
+    "</h2>",
+    "</h2><p>FAITH NO MORE, JUDAS PRIEST, HAYWIRE, BLOOD STAIN and 25 other names.</p>",
+  );
   const candidate = extract(variant);
   assert.deepEqual(candidate.headliners, ["Faith No More", "Judas Priest"]);
   assert.equal(candidate.lineup, undefined);
-  assert.deepEqual(candidate.evidence.map(({ field }) => field), ["startDate", "endDate", "headliners"]);
+  assert.deepEqual(
+    candidate.evidence.map(({ field }) => field),
+    ["startDate", "endDate", "headliners"],
+  );
 });
 
 test("wrong year, dates, headliner prose, or publication timestamp fail closed", async () => {
