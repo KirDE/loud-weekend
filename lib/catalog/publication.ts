@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { withFestivalStockDates } from "../ingestion/festival-stock-dates.ts";
 import { ticketSupplementUrl, ticketSupplementPurchaseUrl, ticketSupplementScope } from "../ingestion/ticket-supplements.ts";
 import { isProvinssiAnnouncement, PROVINSSI_HOME } from '../ingestion/adapters/provinssi.ts';
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
@@ -263,9 +264,9 @@ export async function publishIngestionResult(client: PrismaClient, input: { atte
     // including ticket-URL-only updates approved by an untrusted caller.
     const summerTicketChange = input.result.festivalSlug === "summer-punch" && input.result.changes.some(c => ["ticketStatus", "ticketsUrl"].includes(c.field));
     if (observed.ticketSupplement || stored.ticketSupplement || summerTicketChange || input.result.festivalSlug === "provinssi" && input.result.changes.some(c => c.field === "ticketStatus")) {
-      const registeredSource = { festivalSlug: input.result.festivalSlug,
+      const registeredSource = await withFestivalStockDates(db, { festivalSlug: input.result.festivalSlug,
         url: input.result.sourceUrl, editionYear: expectedYear ?? 0,
-        strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true };
+        strategies: ["html_fallback", "official_markup"] as ("html_fallback" | "official_markup")[], refreshPolicy: "daily" as const, enabled: true });
       const ticketUrl = ticketSupplementUrl(registeredSource);
       const purchaseUrl = ticketSupplementPurchaseUrl(registeredSource);
       const scope = ticketSupplementScope(registeredSource);

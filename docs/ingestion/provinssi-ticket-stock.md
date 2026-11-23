@@ -42,3 +42,8 @@ addition + unknown→available stock transaction, without provider jobs. Full co
 Roadburn uses the same API, but its official buy link still points to `/offsale`
 while API ordinary inventory is positive. That conflict is **not** resolved by
 this implementation and must not produce automatic availability.
+
+Reviewed edition dates, provider event labels and fixed schedule assertions are
+loaded from PostgreSQL by exact festival, source and edition. Missing bindings
+do not trigger a supplement request. The existing explicit provider routes and
+ordinary rate identities continue to constrain the public stock contract.

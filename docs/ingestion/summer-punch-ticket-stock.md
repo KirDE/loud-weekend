@@ -73,3 +73,8 @@ from machine proof.
   zero warnings. No production publication or ticket selection/reservation.
 - Published full Quality and exact-head completed Codex gates are separate
   receipts and must be checked after publication.
+
+Reviewed edition dates, provider event labels and fixed schedule assertions are
+loaded from PostgreSQL by exact festival, source and edition. Missing bindings
+do not trigger a supplement request. The existing explicit provider routes and
+ordinary rate identities continue to constrain the public stock contract.

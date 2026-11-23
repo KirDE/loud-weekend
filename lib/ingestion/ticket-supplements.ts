@@ -1,3 +1,4 @@
+import { getProvinssiDates, getSummerDates } from "./festival-stock-dates.ts";
 import { PROVINSSI_STOCK, PROVINSSI_SCOPE, PROVINSSI_PURCHASE, observeProvinssiStock } from "./provinssi-ticket-stock.ts";
 import { SUMMER_STOCK, SUMMER_SCOPE, SUMMER_PURCHASE, observeSummerStock } from "./summer-ticket-stock.ts";
 import { observeIdaysTicketStock } from "./adapters/idays.ts";
@@ -13,8 +14,8 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review")) return;
   let url: URL; try { url = new URL(source.url); } catch { return; }
   if (url.protocol !== "https:" || url.username || url.password || url.port || url.search || url.hash) return;
-  if (source.festivalSlug === "provinssi" && source.editionYear === 2027 && url.href === "https://www.provinssi.fi/en/" && source.strategies.includes("official_markup")) return PROVINSSI_STOCK;
-  if (source.festivalSlug === "summer-punch" && source.editionYear === 2027 && url.href === "https://summerpunchfestival.pl/" && source.strategies.includes("official_markup")) return SUMMER_STOCK;
+  if (getProvinssiDates(source)) return PROVINSSI_STOCK;
+  if (getSummerDates(source)) return SUMMER_STOCK;
   if (source.festivalSlug === "full-rewind" && url.href === "https://full-rewind.de/" && source.strategies.includes("official_markup")
     && Number.isInteger(source.editionYear) && source.editionYear >= 2027 && source.editionYear <= 2100)
     return "https://full-rewind.de/products/full-rewind-weekend-ticket-" + source.editionYear + ".js";
@@ -49,8 +50,10 @@ export function observeTicketSupplement(html: string, source: FestivalSource, ur
   const fail = (reason: string): TicketObservation => ({ excerpt: "", warning: `Official ${source.festivalSlug} ticket source requires review: ${reason}` });
   if (!isTicketSupplementUrl(source, url) || html.length > 2_000_000) return fail("source identity or size changed");
   if (source.festivalSlug === "idays") return observeIdaysTicketStock(html, source.editionYear);
-  if (source.festivalSlug === "provinssi") return observeProvinssiStock(html, dates);
-  if (source.festivalSlug === "summer-punch") return observeSummerStock(html, dates);
+  const provinssiDates = getProvinssiDates(source);
+  if (provinssiDates) return observeProvinssiStock(html, provinssiDates, dates);
+  const summerDates = getSummerDates(source);
+  if (summerDates) return observeSummerStock(html, summerDates, dates);
   if (source.festivalSlug === "full-rewind") {
     const year = source.editionYear;
     try {
