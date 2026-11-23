@@ -3410,3 +3410,40 @@ summary:focus-visible {
 .plannerReset [role="status"] {
   max-width: 28rem;
 }
+
+.groupTrips {
+  overflow-wrap: anywhere;
+}
+
+.groupTrips fieldset {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+}
+
+.groupTrips form {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  margin: 24px 0;
+}
+
+.groupTrips :where(label) {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.groupTrips :where(input),
+.groupTrips :where(select),
+.groupTrips :where(button) {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 6px 10px;
+}
+
+.groupTripOptions {
+  padding-left: 20px;
+}
