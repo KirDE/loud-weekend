@@ -122,7 +122,7 @@ pre-network edition/identity checks, and CLI validation plus a mocked DB-free
 preview with intentionally invalid DATABASE_URL. Production DBs are never used.
 
 The reviewed edition identity, shop route key and required Danish copy live
-in `lib/ingestion/config/roskilde-stock.json`. This is trusted, versioned source
+in `lib/ingestion/adapters/roskilde-stock.ts`. This is trusted, versioned source
 configuration, not a response from the remote shop. Keeping it as data allows
 the read-only preview to remain DB-free. The transport and publisher bind
 to the same exact product route and edition; a later edition requires new

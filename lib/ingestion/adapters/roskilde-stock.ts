@@ -1,11 +1,16 @@
-import reviewedStock from "../config/roskilde-stock.json" with { type: "json" };
 import { load } from "cheerio";
 import type { FestivalCandidate, FestivalSource } from "../types.ts";
 import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 
-export const ROSKILDE_STOCK_YEAR = reviewedStock.editionYear;
-export const ROSKILDE_STOCK_INITIALIZATION = reviewedStock.initializationText;
-export const ROSKILDE_STOCK_ROOT = `https://ticket.roskilde-festival.dk/da/${reviewedStock.shopKey}`;
+// Reviewed product-group identity. The live documents must still match the
+// initialized edition and ordinary full-pass description before stock is emitted.
+export const ROSKILDE_STOCK_YEAR = 2027;
+const eventName = "Roskilde Festival";
+const fullPassDescription =
+  "Giver adgang til hele Roskilde Festival 2027 " +
+  "fra lørdag 26. juni til og med lørdag 3. juli.";
+export const ROSKILDE_STOCK_INITIALIZATION = "Alle otte dage på Roskilde Festival 2027.";
+export const ROSKILDE_STOCK_ROOT = "https://ticket.roskilde-festival.dk/da/vgkw6td2h3rrfkv";
 export const ROSKILDE_PRODUCTS_URL = `${ROSKILDE_STOCK_ROOT}/products`;
 export function isRoskildeStockRoute(url: string | null | undefined): boolean {
   return url === ROSKILDE_PRODUCTS_URL;
@@ -77,8 +82,7 @@ export function observeRoskildeStock(
   const group = groups.first();
   if (group.find("h3.ProductsNameCellProductName").length !== 1) fail();
   const description = group.find("p.ProductsNameCellProductDescription");
-  if (description.length !== 1 || clean(description.text()) !== reviewedStock.fullPassDescription)
-    fail();
+  if (description.length !== 1 || clean(description.text()) !== fullPassDescription) fail();
   if (
     clean(group.find("h3.ProductsNameCellProductName").text()) !== "Partout" ||
     /udsolgt|ikke til salg|not on sale|sold out/i.test(group.text())
@@ -138,7 +142,7 @@ export function observeRoskildeStock(
     fail();
   // A fixed minimized assertion, not text copied from untrusted arbitrary fields.
   const excerpt =
-    `${reviewedStock.eventName} ${ROSKILDE_STOCK_YEAR} / Partout / Standard (15+): ` +
+    `${eventName} ${ROSKILDE_STOCK_YEAR} / Partout / Standard (15+): ` +
     "enabled quantity selector with positive choices. " +
     "Ordinary full pass only; not inventory quantity or availability of all categories.";
   return {
