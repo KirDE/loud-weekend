@@ -6,7 +6,11 @@ import { getCatalog } from "@/lib/catalog/repository";
 export const dynamic = "force-dynamic";
 import type { Language } from "@/components/LanguageProvider";
 
-const titles: Record<Language, string> = { en: "My festival plan", de: "Mein Festivalplan", ru: "Мой фестивальный план" };
+const titles: Record<Language, string> = {
+  en: "My festival plan",
+  de: "Mein Festivalplan",
+  ru: "Мой фестивальный план",
+};
 
 export async function generateMetadata({ params }: { params: Promise<{ lang: string }> }) {
   const lang = (await params).lang as Language;
@@ -18,5 +22,10 @@ export default async function LocalizedPlanner({ params }: { params: Promise<{ l
   const lang = (await params).lang as Language;
   if (!supportedLanguages.includes(lang)) notFound();
   const { festivals, artists } = await getCatalog();
-  return <PlannerPage festivals={festivals} artists={artists.map(({ slug, name, aliases }) => ({ slug, name, aliases }))} />;
+  return (
+    <PlannerPage
+      festivals={festivals}
+      artists={artists.map(({ slug, name, aliases }) => ({ slug, name, aliases }))}
+    />
+  );
 }

@@ -8,14 +8,26 @@ export type PlannerState = {
   favoriteArtists: string[];
   attendance: Record<string, Attendance>;
   playlistFestivals: string[];
-  savedFilters: { query: string; country: string; announcedOnly: boolean; month: string; ticketsOnly: boolean };
+  savedFilters: {
+    query: string;
+    country: string;
+    announcedOnly: boolean;
+    month: string;
+    ticketsOnly: boolean;
+  };
 };
 export const emptyPlannerState: PlannerState = {
   favoriteFestivals: [],
   favoriteArtists: [],
   attendance: {},
   playlistFestivals: [],
-  savedFilters: { query: "", country: "all", announcedOnly: false, month: "all", ticketsOnly: false },
+  savedFilters: {
+    query: "",
+    country: "all",
+    announcedOnly: false,
+    month: "all",
+    ticketsOnly: false,
+  },
 };
 const Context = createContext<
   | (PlannerState & {
@@ -31,11 +43,7 @@ const Context = createContext<
     })
   | null
 >(null);
-export function LocalPlannerProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function LocalPlannerProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState(emptyPlannerState);
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -48,11 +56,9 @@ export function LocalPlannerProvider({
     setReady(true);
   }, []);
   useEffect(() => {
-    if (ready)
-      localStorage.setItem("festival-radar-planner-v1", serializePlannerState(state));
+    if (ready) localStorage.setItem("festival-radar-planner-v1", serializePlannerState(state));
   }, [ready, state]);
-  const toggle = (a: string[], v: string) =>
-    a.includes(v) ? a.filter((x) => x !== v) : [...a, v];
+  const toggle = (a: string[], v: string) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]);
   const value = useMemo(
     () => ({
       ...state,
@@ -65,9 +71,12 @@ export function LocalPlannerProvider({
       toggleArtist: (v: string, legacyValues: readonly string[]) =>
         setState((s) => {
           const matches = new Set([v, ...legacyValues]);
-          return { ...s, favoriteArtists: s.favoriteArtists.some((value) => matches.has(value))
-            ? s.favoriteArtists.filter((value) => !matches.has(value))
-            : [...s.favoriteArtists, v] };
+          return {
+            ...s,
+            favoriteArtists: s.favoriteArtists.some((value) => matches.has(value))
+              ? s.favoriteArtists.filter((value) => !matches.has(value))
+              : [...s.favoriteArtists, v],
+          };
         }),
       setAttendance: (v: string, a?: Attendance) =>
         setState((s) => {
@@ -81,15 +90,23 @@ export function LocalPlannerProvider({
           ...s,
           playlistFestivals: toggle(s.playlistFestivals, v),
         })),
-      setSavedFilters: (savedFilters: PlannerState["savedFilters"]) => setState((s) => ({ ...s, savedFilters })),
+      setSavedFilters: (savedFilters: PlannerState["savedFilters"]) =>
+        setState((s) => ({ ...s, savedFilters })),
       replace: (next: PlannerState) => setState({ ...emptyPlannerState, ...next }),
-      merge: (next: Partial<PlannerState>) => setState((current) => ({
-        favoriteFestivals: Array.from(new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])])),
-        favoriteArtists: Array.from(new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])])),
-        attendance: { ...(next.attendance || {}), ...current.attendance },
-        playlistFestivals: Array.from(new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])])),
-        savedFilters: { ...current.savedFilters, ...(next.savedFilters || {}) },
-      })),
+      merge: (next: Partial<PlannerState>) =>
+        setState((current) => ({
+          favoriteFestivals: Array.from(
+            new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])]),
+          ),
+          favoriteArtists: Array.from(
+            new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])]),
+          ),
+          attendance: { ...next.attendance, ...current.attendance },
+          playlistFestivals: Array.from(
+            new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]),
+          ),
+          savedFilters: { ...current.savedFilters, ...next.savedFilters },
+        })),
       clear: () => setState(emptyPlannerState),
     }),
     [ready, state],
@@ -112,8 +129,10 @@ export function FavoriteButton({
 }) {
   const p = useLocalPlanner();
   const { t } = useLanguage();
-  const selected = kind === "festival" ? p.favoriteFestivals.includes(value)
-    : p.favoriteArtists.some((saved) => saved === value || legacyValues.includes(saved));
+  const selected =
+    kind === "festival"
+      ? p.favoriteFestivals.includes(value)
+      : p.favoriteArtists.some((saved) => saved === value || legacyValues.includes(saved));
   return (
     <button
       className={`favoriteButton${selected ? " selected" : ""}`}
