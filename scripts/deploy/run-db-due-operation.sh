@@ -15,7 +15,8 @@ case "$mode" in
   tick) GITHUB_SHA="$commit" exec "$release/.runtime/node" scripts/db-due-tick.mjs ;;
   health) exec "$release/.runtime/node" scripts/report-db-due-health.mjs ;;
   ingest)
-    output="$(mktemp -d /opt/festival-radar/shared/.db-due.XXXXXXXX 2>/dev/null)" || { echo 'DB due output unavailable' >&2; exit 1; }
+    output="$(mktemp -d /opt/festival-radar/shared/.db-due.XXXXXXXX 2>/dev/null)" || { echo\
+ 'DB due output unavailable' >&2; exit 1; }
     trap 'rm -rf -- "$output" 2>/dev/null' EXIT
     # Worker diagnostics stay inside the private, short-lived output directory.
     # Never forward stderr itself: it can contain URLs, IDs or exception text.
@@ -23,7 +24,8 @@ case "$mode" in
     (: > "$worker_stderr") 2>/dev/null || { echo 'DB due diagnostics unavailable' >&2; exit 1; }
     # systemd does not inherit the GitHub dispatch environment. Pin provenance to
     # the release SHA already checked against current and DEPLOYED_COMMIT.
-    if ! ( GITHUB_SHA="$commit" "$release/.runtime/node" scripts/ingest-festivals.mjs --db-due --publish --max-fetch-errors=0 "--output=$output" >/dev/null 2>"$worker_stderr" ) 2>/dev/null; then
+    if ! ( GITHUB_SHA="$commit" "$release/.runtime/node" scripts/ingest-festivals.mjs --db-due\
+ --publish --max-fetch-errors=0 "--output=$output" >/dev/null 2>"$worker_stderr" ) 2>/dev/null; then
       # Fail closed on oversized/malformed diagnostics. The only relayed value
       # is one exact, compile-time allowlisted label, never a worker line.
       stage=; stage_count=0; invalid_stage=false
@@ -32,7 +34,10 @@ case "$mode" in
         while IFS= read -r line || [[ -n "$line" ]]; do
           if [[ "$line" == *db_due_failure_stage=* ]]; then
             case "$line" in
-              db_due_failure_stage=claim|db_due_failure_stage=source_setup|db_due_failure_stage=source_lookup|db_due_failure_stage=fetch|db_due_failure_stage=extraction|db_due_failure_stage=attempt_persistence|db_due_failure_stage=artifact_write|db_due_failure_stage=publication|db_due_failure_stage=lease_completion|db_due_failure_stage=result_recording|db_due_failure_stage=run_finalization)
+              db_due_failure_stage=claim|db_due_failure_stage=source_setup|db_due_failure_stage\
+=source_lookup|db_due_failure_stage=fetch|db_due_failure_stage=extraction|db_due_failure_stage=\
+attempt_persistence|db_due_failure_stage=artifact_write|db_due_failure_stage=publication|db_due\
+_failure_stage=lease_completion|db_due_failure_stage=result_recording|db_due_failure_stage=run_finalization)
                 stage="${line#db_due_failure_stage=}"; (( stage_count += 1 ));;
               *) invalid_stage=true;;
             esac
@@ -47,7 +52,9 @@ case "$mode" in
       echo 'DB due ingestion failed' >&2
       exit 1
     fi
-    "$release/.runtime/node" scripts/report-db-due-run.mjs "$output/summary.json" || { echo 'DB due run audit failed' >&2; exit 1; } ;;
+    "$release/.runtime/node" scripts/report-db-due-run.mjs "$output/summary.json" || { echo\
+ 'DB due run audit failed' >&2; exit 1; } ;;
   drain)
-    "$release/.runtime/node" scripts/drain-ingestion-notifications.mjs --db-due >/dev/null 2>&1 || { echo 'DB due outbox drain failed' >&2; exit 1; } ;;
+    "$release/.runtime/node" scripts/drain-ingestion-notifications.mjs --db-due >/dev/null 2>&1 || {\
+ echo 'DB due outbox drain failed' >&2; exit 1; } ;;
 esac

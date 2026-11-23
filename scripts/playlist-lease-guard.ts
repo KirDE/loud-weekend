@@ -1,59 +1,119 @@
-import { db } from '../lib/db.ts';
-import { renewPlaylistRefreshLease, spotifyCreationState, assertSpotifyPlanCurrent } from '../lib/catalog/playlist-queue.ts';
-import { youtubeProviderState, saveYoutubeProgress } from '../lib/catalog/youtube-playlist-queue.ts';
+import { db } from "../lib/db.ts";
+import {
+  renewPlaylistRefreshLease,
+  spotifyCreationState,
+  assertSpotifyPlanCurrent,
+} from "../lib/catalog/playlist-queue.ts";
+import {
+  youtubeProviderState,
+  saveYoutubeProgress,
+} from "../lib/catalog/youtube-playlist-queue.ts";
 
 async function guardSpotify() {
-  const claim = JSON.parse(process.env.PLAYLIST_LEASE ?? 'null');
+  const claim = JSON.parse(process.env.PLAYLIST_LEASE ?? "null");
   claim.leaseExpiresAt = new Date(claim.leaseExpiresAt);
   const renewed = await renewPlaylistRefreshLease(db, claim, 120_000);
   await assertSpotifyPlanCurrent(db, claim);
-  const publication = await db.catalogPublication.findUniqueOrThrow({ where: { id: claim.publicationId }, select: { createdAt: true, editionYear: true } });
-  const expectedUrl = process.env.PLAYLIST_EXPECTED_URL ?? '';
-  const creating = ['', 'NEW'].includes(expectedUrl);
-  const action = process.argv[2] ?? 'read';
+  const publication = await db.catalogPublication.findUniqueOrThrow({
+    where: { id: claim.publicationId },
+    select: { createdAt: true, editionYear: true },
+  });
+  const expectedUrl = process.env.PLAYLIST_EXPECTED_URL ?? "";
+  const creating = ["", "NEW"].includes(expectedUrl);
+  const action = process.argv[2] ?? "read";
   let state;
   if (creating) {
     // Includes edition, binding and newer-publication checks inside the fence.
-    state = await spotifyCreationState(db, claim, action as 'read' | 'reserve' | 'bind', expectedUrl, process.argv[3]);
+    state = await spotifyCreationState(
+      db,
+      claim,
+      action as "read" | "reserve" | "bind",
+      expectedUrl,
+      process.argv[3],
+    );
   } else {
-    if (action !== 'read') throw new Error('Existing playlist cannot create');
-    const binding = await db.festivalPlaylist.findFirst({ where: { provider: 'spotify', url: expectedUrl, edition: { year: publication.editionYear, recordState: 'CURRENT', festival: { slug: claim.festivalSlug } } } });
-    if (!binding) throw new Error('Playlist binding changed');
+    if (action !== "read") throw new Error("Existing playlist cannot create");
+    const binding = await db.festivalPlaylist.findFirst({
+      where: {
+        provider: "spotify",
+        url: expectedUrl,
+        edition: {
+          year: publication.editionYear,
+          recordState: "CURRENT",
+          festival: { slug: claim.festivalSlug },
+        },
+      },
+    });
+    if (!binding) throw new Error("Playlist binding changed");
   }
-  const [stamp] = await db.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AT TIME ZONE 'UTC' AS now`;
-  if (renewed.leaseExpiresAt.getTime() - stamp.now.getTime() < 60_000) throw new Error('Insufficient request lifetime');
+  const [stamp] = await db.$queryRaw<
+    { now: Date }[]
+  >`SELECT clock_timestamp() AT TIME ZONE 'UTC' AS now`;
+  if (renewed.leaseExpiresAt.getTime() - stamp.now.getTime() < 60_000)
+    throw new Error("Insufficient request lifetime");
   if (process.argv[2]) console.log(JSON.stringify(state));
 }
 
 async function guardYoutube() {
-  const claim = JSON.parse(process.env.PLAYLIST_LEASE ?? 'null');
+  const claim = JSON.parse(process.env.PLAYLIST_LEASE ?? "null");
   claim.leaseExpiresAt = new Date(claim.leaseExpiresAt);
   const renewed = await renewPlaylistRefreshLease(db, claim, 120_000);
-  const [stamp] = await db.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AT TIME ZONE 'UTC' AS now`;
-  if (renewed.leaseExpiresAt.getTime() - stamp.now.getTime() < 60_000) throw new Error('Insufficient request lifetime');
-  const expectedUrl = process.env.YOUTUBE_EXPECTED_URL ?? '';
-  const action = process.argv[2] ?? 'read';
+  const [stamp] = await db.$queryRaw<
+    { now: Date }[]
+  >`SELECT clock_timestamp() AT TIME ZONE 'UTC' AS now`;
+  if (renewed.leaseExpiresAt.getTime() - stamp.now.getTime() < 60_000)
+    throw new Error("Insufficient request lifetime");
+  const expectedUrl = process.env.YOUTUBE_EXPECTED_URL ?? "";
+  const action = process.argv[2] ?? "read";
   let payload: unknown;
-  if (['reserve', 'adopt', 'bind', 'insert', 'confirm', 'metadata', 'metadata-confirm', 'progress', 'create-rejected', 'insert-rejected', 'metadata-rejected'].includes(action)) {
-    let input = '';
+  if (
+    [
+      "reserve",
+      "adopt",
+      "bind",
+      "insert",
+      "confirm",
+      "metadata",
+      "metadata-confirm",
+      "progress",
+      "create-rejected",
+      "insert-rejected",
+      "metadata-rejected",
+    ].includes(action)
+  ) {
+    let input = "";
     for await (const chunk of process.stdin) {
       input += chunk.toString();
-      if (input.length > 32_000) throw new Error('Invalid provider checkpoint');
+      if (input.length > 32_000) throw new Error("Invalid provider checkpoint");
     }
     payload = JSON.parse(input);
   }
-  if (action === 'progress') {
-    await saveYoutubeProgress(db, claim, expectedUrl, payload as Parameters<typeof saveYoutubeProgress>[3]);
-    console.log('{}');
+  if (action === "progress") {
+    await saveYoutubeProgress(
+      db,
+      claim,
+      expectedUrl,
+      payload as Parameters<typeof saveYoutubeProgress>[3],
+    );
+    console.log("{}");
   } else {
-    const state = await youtubeProviderState(db, claim, expectedUrl, action as Parameters<typeof youtubeProviderState>[3], payload);
+    const state = await youtubeProviderState(
+      db,
+      claim,
+      expectedUrl,
+      action as Parameters<typeof youtubeProviderState>[3],
+      payload,
+    );
     if (process.argv[2]) console.log(JSON.stringify(state));
   }
 }
 
 try {
-  if (process.env.PLAYLIST_PROVIDER === 'youtube_music') await guardYoutube();
-  else if (process.env.PLAYLIST_PROVIDER === 'spotify') await guardSpotify();
-  else throw new Error('Explicit playlist provider required');
-} catch { process.exitCode = 1; }
-finally { await db.$disconnect(); }
+  if (process.env.PLAYLIST_PROVIDER === "youtube_music") await guardYoutube();
+  else if (process.env.PLAYLIST_PROVIDER === "spotify") await guardSpotify();
+  else throw new Error("Explicit playlist provider required");
+} catch {
+  process.exitCode = 1;
+} finally {
+  await db.$disconnect();
+}

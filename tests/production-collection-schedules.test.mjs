@@ -1,3 +1,4 @@
+import { shellLogicalLines } from "./support/source-contracts.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -19,10 +20,11 @@ test("production installer owns every collection schedule", async () => {
   assert.match(installer, /RandomizedDelaySec=300/);
   assert.match(packager, /scripts\/spotify_gmm_2026\/\./);
   assert.match(packager, /spotify_gmm_2026\/spotify_auth\.py/);
-  assert.match(packager, /python3 -m pip install[^\n]+--target[^\n]+\.python/);
+  assert.match(shellLogicalLines(packager), /python3 -m pip install[^\n]+--target[^\n]+\.python/);
   assert.match(deploy, /actions\/setup-python@[0-9a-f]{40}/);
   assert.match(installer, /Environment=PYTHONPATH=\$app_root\/current\/\.python/);
   assert.match(installer, /^Environment=PLAYLIST_PYTHON=\/usr\/bin\/python3\.13$/m);
   assert.doesNotMatch(installer, /python3 -m venv|playlist-venv\/bin\/pip/);
-  for (const name of ["SETLIST_API_KEY", "SPOTIFY_REFRESH_TOKEN"]) assert.match(deploy, new RegExp(name));
+  for (const name of ["SETLIST_API_KEY", "SPOTIFY_REFRESH_TOKEN"])
+    assert.match(deploy, new RegExp(name));
 });

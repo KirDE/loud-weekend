@@ -34,15 +34,21 @@ test("edition-matched first dates and lineup can publish without a pre-existing 
   const result = evaluateCandidate(current, candidate);
   assert.equal(result.publishable, true);
   assert.deepEqual(result.reviewReasons, []);
-  assert.deepEqual(result.changes.map(({ field, reviewRequired }) => [field, reviewRequired]), [
-    ["startDate", false],
-    ["endDate", false],
-    ["lineup", false],
-  ]);
+  assert.deepEqual(
+    result.changes.map(({ field, reviewRequired }) => [field, reviewRequired]),
+    [
+      ["startDate", false],
+      ["endDate", false],
+      ["lineup", false],
+    ],
+  );
 });
 
 test("changing established dates still requires review", () => {
-  const result = evaluateCandidate({ ...current, startDate: "2027-06-22", endDate: "2027-06-25" }, candidate);
+  const result = evaluateCandidate(
+    { ...current, startDate: "2027-06-22", endDate: "2027-06-25" },
+    candidate,
+  );
   assert.equal(result.publishable, false);
   assert.ok(result.reviewReasons.includes("date_changed requires review"));
 });
@@ -50,7 +56,9 @@ test("changing established dates still requires review", () => {
 test("a lineup for another edition still fails closed", () => {
   const result = evaluateCandidate(current, { ...candidate, observedEditionYears: [2028] });
   assert.equal(result.publishable, false);
-  assert.ok(result.reviewReasons.includes("Candidate edition 2028 does not match catalogue edition 2027"));
+  assert.ok(
+    result.reviewReasons.includes("Candidate edition 2028 does not match catalogue edition 2027"),
+  );
 });
 
 test("headliner-only announcements still need matching edition evidence", () => {

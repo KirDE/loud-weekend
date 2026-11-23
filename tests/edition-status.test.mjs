@@ -11,53 +11,91 @@ import { LanguageProvider } from "../components/LanguageProvider.tsx";
 
 function makeEdition(overrides = {}) {
   return {
-    slug: "synthetic-fest", name: "Synthetic Fest", country: "Germany", countryCode: "DE",
-    editionYear: 2027, recordState: "tracking", completeness: "tba",
-    status: "tba", ticketStatus: "unknown", headliners: [], lineup: [],
-    officialUrl: "https://example.test/", updatedAt: "2026-10-08T00:00:00Z",
-    genres: [], provenance: [], ...overrides,
+    slug: "synthetic-fest",
+    name: "Synthetic Fest",
+    country: "Germany",
+    countryCode: "DE",
+    editionYear: 2027,
+    recordState: "tracking",
+    completeness: "tba",
+    status: "tba",
+    ticketStatus: "unknown",
+    headliners: [],
+    lineup: [],
+    officialUrl: "https://example.test/",
+    updatedAt: "2026-10-08T00:00:00Z",
+    genres: [],
+    provenance: [],
+    ...overrides,
   };
 }
 
 // Execute the real route and its JSX with only the catalogue and Next boundary
 // stubbed. Unexpected imports fail closed, so this cannot reach a database.
-const source = await readFile(new URL("../app/festivals/[slug]/[year]/page.tsx", import.meta.url), "utf8");
+const source = await readFile(
+  new URL("../app/festivals/[slug]/[year]/page.tsx", import.meta.url),
+  "utf8",
+);
 const { code: outputText } = await transform(source, {
-  loader: "tsx", format: "cjs", jsx: "automatic", target: "es2022",
+  loader: "tsx",
+  format: "cjs",
+  jsx: "automatic",
+  target: "es2022",
 });
 const require = createRequire(import.meta.url);
 function loadPage(editions, artists = []) {
   const module = { exports: {} };
   const dependencies = {
     "react/jsx-runtime": require("react/jsx-runtime"),
-    "next/navigation": { notFound() { throw new Error("NEXT_NOT_FOUND"); } },
+    "next/navigation": {
+      notFound() {
+        throw new Error("NEXT_NOT_FOUND");
+      },
+    },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
   };
-  new Function("require", "module", "exports", outputText)((id) => {
-    assert.ok(Object.hasOwn(dependencies, id), `Unexpected route dependency: ${id}`);
-    return dependencies[id];
-  }, module, module.exports);
+  new Function("require", "module", "exports", outputText)(
+    (id) => {
+      assert.ok(Object.hasOwn(dependencies, id), `Unexpected route dependency: ${id}`);
+      return dependencies[id];
+    },
+    module,
+    module.exports,
+  );
   assert.equal(module.exports.dynamic, "force-dynamic");
   return module.exports.default;
 }
 
 async function renderEdition(item, editions = [item], language = "en", artists = []) {
   const page = loadPage(editions, artists);
-  const body = await page({ params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }) });
+  const body = await page({
+    params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }),
+  });
   return renderToStaticMarkup(createElement(LanguageProvider, { initialLanguage: language }, body));
 }
 
 test("stale TBA completeness derives only a partial record from published facts", () => {
   for (const facts of [
-    { startDate: "2027-07-07", endDate: "2027-07-10", headliners: ["AMON AMARTH"], lineup: ["Artist"] },
+    {
+      startDate: "2027-07-07",
+      endDate: "2027-07-10",
+      headliners: ["AMON AMARTH"],
+      lineup: ["Artist"],
+    },
     { startDate: "2027-07-07", endDate: "2027-07-10" },
     { startDate: "2027-07-07" },
     { endDate: "2027-07-10" },
     { headliners: ["AMON AMARTH"] },
     { lineup: ["Artist"] },
   ]) {
-    const item = Object.freeze(makeEdition({ ...facts, headliners: Object.freeze(facts.headliners ?? []), lineup: Object.freeze(facts.lineup ?? []) }));
+    const item = Object.freeze(
+      makeEdition({
+        ...facts,
+        headliners: Object.freeze(facts.headliners ?? []),
+        lineup: Object.freeze(facts.lineup ?? []),
+      }),
+    );
     const before = structuredClone(item);
     assert.equal(editionStatusLabel(item), "partial record");
     assert.deepEqual(item, before);
@@ -67,37 +105,60 @@ test("stale TBA completeness derives only a partial record from published facts"
 test("genuine TBA retains its label regardless of status or ticket availability", () => {
   for (const status of ["tba", "partial", "confirmed"]) {
     for (const ticketStatus of ["unknown", "unavailable", "available", "low"]) {
-      assert.equal(editionStatusLabel(makeEdition({ status, ticketStatus })), "Official dates and lineup TBA");
+      assert.equal(
+        editionStatusLabel(makeEdition({ status, ticketStatus })),
+        "Official dates and lineup TBA",
+      );
     }
   }
-  assert.equal(editionStatusLabel(makeEdition({ startDate: "", endDate: "" })), "Official dates and lineup TBA");
+  assert.equal(
+    editionStatusLabel(makeEdition({ startDate: "", endDate: "" })),
+    "Official dates and lineup TBA",
+  );
 });
 
 test("explicit non-TBA completeness keeps existing labels with or without published facts", () => {
   for (const completeness of ["partial", "complete"]) {
     for (const facts of [{}, { startDate: "2027-07-07", lineup: ["Artist"] }]) {
-      assert.equal(editionStatusLabel(makeEdition({ completeness, ...facts })), `${completeness} record`);
+      assert.equal(
+        editionStatusLabel(makeEdition({ completeness, ...facts })),
+        `${completeness} record`,
+      );
     }
   }
 });
 
-test("canonical Rockharz route renders known dates and all 30 artists with a partial badge despite stale TBA", async () => {
-  const item = makeEdition({
-    slug: "rockharz", name: "Rockharz", startDate: "2027-07-07", endDate: "2027-07-10",
-    status: "partial", ticketStatus: "unavailable", headliners: ["AMON AMARTH"],
-    lineup: Array.from({ length: 29 }, (_, index) => `Published Artist ${index + 1}`),
-  });
-  const before = structuredClone(item);
-  const html = await renderEdition(item, [makeEdition(), makeEdition({ ...item, editionYear: 2026, completeness: "complete" }), item]);
-  assert.match(html, /<h1>Rockharz 2027<\/h1>/);
-  assert.match(html, /<p class="detailDate">Jul 7, 2027 — Jul 10, 2027<\/p>/);
-  assert.match(html, /<span class="status partial">partial record<\/span>/);
-  const grid = html.match(/<div class="lineupGrid">(.*?)<\/div>/)[1];
-  assert.equal((grid.match(/<span>/g) ?? []).length, 30);
-  for (const artist of [...item.headliners, ...item.lineup]) assert.ok(grid.includes(`<span>${artist}</span>`));
-  assert.doesNotMatch(html, /Official dates and lineup TBA|complete record|No artists published/);
-  assert.deepEqual(item, before);
-});
+test(
+  "canonical Rockharz route renders known dates and all 30 arti" +
+    "sts with a partial badge despite stale TBA",
+  async () => {
+    const item = makeEdition({
+      slug: "rockharz",
+      name: "Rockharz",
+      startDate: "2027-07-07",
+      endDate: "2027-07-10",
+      status: "partial",
+      ticketStatus: "unavailable",
+      headliners: ["AMON AMARTH"],
+      lineup: Array.from({ length: 29 }, (_, index) => `Published Artist ${index + 1}`),
+    });
+    const before = structuredClone(item);
+    const html = await renderEdition(item, [
+      makeEdition(),
+      makeEdition({ ...item, editionYear: 2026, completeness: "complete" }),
+      item,
+    ]);
+    assert.match(html, /<h1>Rockharz 2027<\/h1>/);
+    assert.match(html, /<p class="detailDate">Jul 7, 2027 — Jul 10, 2027<\/p>/);
+    assert.match(html, /<span class="status partial">partial record<\/span>/);
+    const grid = html.match(/<div class="lineupGrid">(.*?)<\/div>/)[1];
+    assert.equal((grid.match(/<span>/g) ?? []).length, 30);
+    for (const artist of [...item.headliners, ...item.lineup])
+      assert.ok(grid.includes(`<span>${artist}</span>`));
+    assert.doesNotMatch(html, /Official dates and lineup TBA|complete record|No artists published/);
+    assert.deepEqual(item, before);
+  },
+);
 
 test("canonical genuine TBA route retains badge, missing dates, and empty tracking lineup", async () => {
   const html = await renderEdition(makeEdition());
@@ -127,17 +188,23 @@ test("canonical route preserves partial facts and explicit completeness for othe
 });
 
 test("edition route keeps partial facts and localized badges in DE and RU", async () => {
-  const item = makeEdition({ startDate: "2027-07-07", endDate: "2027-07-10", headliners: ["AMON AMARTH"] });
+  const item = makeEdition({
+    startDate: "2027-07-07",
+    endDate: "2027-07-10",
+    headliners: ["AMON AMARTH"],
+  });
   const before = structuredClone(item);
   for (const [language, badge, locale] of [
     ["de", "unvollständiger Datensatz", "de-DE"],
     ["ru", "частичная запись", "ru-RU"],
   ]) {
     const html = await renderEdition(item, [item], language);
-    assert.ok(html.includes('<span class="status tba">' + badge + '</span>'));
-    const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(new Date("2027-07-07T12:00:00Z"));
+    assert.ok(html.includes('<span class="status tba">' + badge + "</span>"));
+    const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
+      new Date("2027-07-07T12:00:00Z"),
+    );
     assert.ok(html.includes(date));
-    assert.ok(html.includes('<span>AMON AMARTH</span>'));
+    assert.ok(html.includes("<span>AMON AMARTH</span>"));
     assert.doesNotMatch(html, /partial record|Official dates and lineup TBA/);
   }
   assert.deepEqual(item, before);
@@ -148,7 +215,11 @@ test("canonical route still rejects a missing edition", async () => {
 });
 
 test("canonical edition links only resolved catalogue identities without modifying its lineup", async () => {
-  const item = makeEdition({ recordState: "current", headliners: ["New Headliner"], lineup: ["Known Support", "Archive-only Artist"] });
+  const item = makeEdition({
+    recordState: "current",
+    headliners: ["New Headliner"],
+    lineup: ["Known Support", "Archive-only Artist"],
+  });
   const before = structuredClone(item);
   for (const language of ["en", "de", "ru"]) {
     const html = await renderEdition(item, [item], language, [

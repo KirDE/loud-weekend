@@ -6,7 +6,11 @@ import { getCatalog } from "@/lib/catalog/repository";
 export const dynamic = "force-dynamic";
 import type { Language } from "@/components/LanguageProvider";
 
-const titles: Record<Language, string> = { en: "My festival plan", de: "Mein Festivalplan", ru: "Мой фестивальный план" };
+const titles: Record<Language, string> = {
+  en: "My festival plan",
+  de: "Mein Festivalplan",
+  ru: "Мой фестивальный план",
+};
 
 export async function generateMetadata({ params }: { params: Promise<{ lang: string }> }) {
   const lang = (await params).lang as Language;
