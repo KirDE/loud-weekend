@@ -18,16 +18,19 @@ import { discoverySorts, sortDiscoveryFestivals, type DiscoveryLineups, type Dis
 import { DiscoveryDateFilters } from "./DiscoveryDateFilters";
 import { DiscoveryArtistPicker } from "./DiscoveryArtistPicker";
 import { festivalArtistMatch, matchesArtistMode, type DiscoveryArtist } from "@/lib/discovery-artists";
+import { DiscoverySearch } from "./DiscoverySearch";
+import type { SuggestionArtist } from "@/lib/discovery-suggestions";
 import { DiscoveryShare } from "./DiscoveryShare";
 import { discoveryFromQuery, shareableFavoriteSlugs } from "@/lib/discovery-share";
 import { defaultDiscoveryPreferences, discoveryDistances, discoveryOrigins as origins, type DiscoveryPreferences } from "@/lib/discovery-preferences";
 
 const emptyArtistSelection: string[] = [];
 
-export function FestivalExplorer({ festivals, discoveryLineups, matchingArtists }: {
+export function FestivalExplorer({ festivals, discoveryLineups, matchingArtists, suggestionArtists }: {
   festivals: Festival[];
   discoveryLineups?: DiscoveryLineups;
   matchingArtists?: readonly DiscoveryArtist[];
+  suggestionArtists?: readonly SuggestionArtist[];
 }) {
   const { locale, t } = useLanguage();
   const planner = useLocalPlanner();
@@ -130,7 +133,8 @@ export function FestivalExplorer({ festivals, discoveryLineups, matchingArtists 
 
   return <section className="explorer">
     <div className="filterBar">
-      <div className="search" data-ready={filtersReady}><span aria-hidden="true">⌕</span><input ref={searchRef} aria-label={t("filterSearch")} value={query} onChange={(event) => updateFilters({ query: event.target.value })} placeholder={t("search")} />{query && <button type="button" aria-label={t("clearSearch")} onClick={() => { updateFilters({ query: "" }); searchRef.current?.focus(); }}><span aria-hidden="true">✕</span></button>}</div>
+      <DiscoverySearch query={query} ready={filtersReady} festivals={festivals} artists={suggestionArtists}
+        inputRef={searchRef} onChange={query => updateFilters({ query })} />
       <select aria-label={t("countries")} value={country} onChange={(event) => updateFilters({ country: event.target.value })}><option value="all">{t("allCountries")}</option>{countries.map((value) => <option value={value} key={value}>{displayNames.of(value) || value}</option>)}</select>
       <select aria-label={t("filterMonth")} value={month} onChange={(event) => updateFilters({ month: event.target.value })}><option value="all">{t("allMonths")}</option>{months.map((value) => <option key={value} value={String(value).padStart(2, "0")}>{new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2027, value - 1, 1)))}</option>)}</select>
       <select aria-label={t("filterGenre")} value={genre} onChange={(event) => updateFilters({ genre: event.target.value })}><option value="all">{t("allGenres")}</option>{genres.map((value) => <option key={value} value={value}>{value}</option>)}</select>
