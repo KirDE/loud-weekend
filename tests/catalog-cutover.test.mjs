@@ -52,7 +52,7 @@ test("production catalogue code has no file mode or runtime overlay writes", asy
   assert.doesNotMatch(ingestion, /data\/|applyPublication|appendFile/);
   assert.doesNotMatch(deploy, /ingestion-publications|changed-publication-lineups/);
   assert.match(qualityWorkflow, /test:catalog-db[\s\S]*test:seed[\s\S]*test:integration/);
-  assert.match(qualityWorkflow, /needs: \[core, browser-tests\]/);
+  assert.match(qualityWorkflow, /needs: \[lint, core, browser-tests\]/);
   assert.match(qualityWorkflow, /if: \$\{\{ always\(\) \}\}/);
   const browserRunner = await readFile("scripts/ci-browser-tests.sh", "utf8");
   assert.match(browserRunner, /prisma migrate deploy[\s\S]*test:seed[\s\S]*test:admin:e2e/);
