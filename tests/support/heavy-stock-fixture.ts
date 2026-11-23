@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { HEAVY_WIDGET, HEAVY_WIDGET_API, HEAVY_STOCK } from "../fixtures/ticket-status/heavy-reviewed-proof.ts";
+import { HEAVY_WIDGET, HEAVY_WIDGET_API, HEAVY_STOCK } from "../../lib/ingestion/heavy-ticket-stock.ts";
 export const heavyStockHtml = readFileSync(new URL("../fixtures/ticket-status/heavy-ordinary-stock.html", import.meta.url), "utf8");
 /** Synthetic test token: never a captured provider credential. */
 export function heavyMetadata(claims: Record<string, unknown> = {}) {

@@ -51,8 +51,7 @@ session-bearing URL is exposed as a purchase link or normalized evidence.
 - Local `npm run typecheck`, `npm run test:data`, source tests and DB chain pass.
   PR CI/review results must be checked separately against the published head.
 
-PostgreSQL stores the reviewed widget, event, rate, category and dates in
-`ReviewedTicketProof`, keyed by festival, exact primary source and edition.
-The publisher independently resolves the same binding. An edition without a
-reviewed binding does not request this supplement. The migration carries
-forward the existing reviewed record; render and privacy guards are unchanged.
+No production seed or proof side table is used. The provider start must agree
+with the independently parsed organizer dates. The parser derives the ordinary
+rate from the current public render's category, subcategory and matching row /
+single-ticket quantity control. The normal ingestion path persists its evidence.

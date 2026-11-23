@@ -1,5 +1,4 @@
-import { getHeavyProof, heavyWidgetApi } from "./heavy-ticket-proof.ts";
-import { HEAVY_STOCK_DOCUMENTS, heavyRenderAction, reduceHeavyStockDocument } from "./heavy-ticket-stock.ts";
+import { HEAVY_STOCK, HEAVY_WIDGET_API, HEAVY_STOCK_DOCUMENTS, heavyRenderAction, reduceHeavyStockDocument } from "./heavy-ticket-stock.ts";
 import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import {isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS} from './adapters/full-rewind.ts';
@@ -551,9 +550,8 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
     // source overrides or authorization headers on a public ticket destination.
-    const heavyProof = getHeavyProof(source);
-    if (heavyProof) {
-      const widgetApi = heavyWidgetApi(heavyProof);
+    if (ticketUrl === HEAVY_STOCK) {
+      const widgetApi = HEAVY_WIDGET_API;
       // The official public embed's first step returns only the initial stock
       // document. No quantity/customer/cart/reservation/order action is sent.
       const meta = await fetchSourceWithoutTicketSupplement({ ...source, url: widgetApi,
@@ -562,7 +560,7 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
       if (!meta.response.ok) return { response: meta.response, attempts };
       if (meta.response.url && meta.response.url !== widgetApi) throw new Error("Heavy public widget metadata redirected");
       if (!/^application\/json\b/i.test(meta.response.headers.get("content-type") ?? "")) throw new Error("Heavy public widget metadata media type changed");
-      const action = heavyRenderAction(JSON.parse(await boundedTicketText(meta.response)), heavyProof);
+      const action = heavyRenderAction(JSON.parse(await boundedTicketText(meta.response)));
       attempts += 1;
       // One read-only document-render POST, no blind retry. Never forward the
       // primary's authorization/cookies or follow a token-bearing redirect.
@@ -573,7 +571,7 @@ export async function fetchSource(source: FestivalSource, options: FetchOptions 
       if (render.url && render.url !== ticketUrl) throw new Error("Heavy public initial render redirected");
       if (!/^text\/html\b|^application\/xhtml\+xml\b/i.test(render.headers.get("content-type") ?? "")) throw new Error("Heavy public initial render media type changed");
       const html = JSON.stringify({ kind: HEAVY_STOCK_DOCUMENTS, apiUrl: widgetApi, renderUrl: ticketUrl,
-        meta: action.meta, html: reduceHeavyStockDocument(await boundedTicketText(render), heavyProof) });
+        meta: action.meta, html: reduceHeavyStockDocument(await boundedTicketText(render)) });
       // No issued token, session/hidden form data or whole provider page leaves
       // this fetcher in the normalized/persisted source envelope.
       const response = new Response(JSON.stringify({ kind: TICKET_SUPPLEMENT, body, ticket: { url: ticketUrl, html } }), { headers: { "content-type": "application/json" } });

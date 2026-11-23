@@ -1,4 +1,3 @@
-import { withHeavyProof } from "../lib/ingestion/heavy-ticket-proof.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ticketProducerPublication } from "./support/ticket-producer-publication.ts";
@@ -9,8 +8,8 @@ import { parserSource } from "./support/parser-source.ts";
 const baseSource = parserSource("heavy-weekend", { url: "https://www.heavyweekend.live/" });
 const primary = JSON.parse(readFileSync(new URL("./fixtures/official-markup/heavy-weekend-linked-2027.json", import.meta.url), "utf8"));
 const logo = readFileSync(new URL("./fixtures/official-markup/heavy-slash-logo.png", import.meta.url));
-ticketProducerPublication({ slug: baseSource.festivalSlug, produce: async (archived, db) => {
-  const source = await withHeavyProof(db, baseSource);
+ticketProducerPublication({ slug: baseSource.festivalSlug, produce: async (archived) => {
+  const source = baseSource;
   const capture = structuredClone(primary);
   if (archived) {
     capture.home = capture.home.replaceAll("2027", "2026");
