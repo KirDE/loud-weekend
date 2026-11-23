@@ -37,3 +37,12 @@ test('unrelated arbitrary page text never persisted',()=>{
  const p=parse(mutate($=>$('.cn-block-group').append('<p>unrelated arbitrary content</p>')));
  assert.doesNotMatch(JSON.stringify(p),/unrelated arbitrary/);
 });
+
+test('the same source format can prove a different paused edition', () => {
+ const future = html.replaceAll('2028', '2030').replaceAll('2027', '2029');
+ const proposal = parse(future);
+ assert.equal(proposal.editionYear, 2029);
+ assert.equal(proposal.announcedReturnYear, 2030);
+ assert.match(proposal.excerpt, /pauses in 2029 and announces a return in 2030/);
+ assert.throws(() => parse(future.replace('proposer en 2029', 'proposer en 2027')), /not verified/);
+});
