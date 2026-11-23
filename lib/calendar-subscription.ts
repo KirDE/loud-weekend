@@ -12,19 +12,17 @@ export const calendarPrivateHeaders = {
 
 const digestKey = (key: string) => createHash("sha256").update(key).digest("hex");
 
+// Slug-only FESTIVAL_PLANS choices belong to the original 2027 planner.
+const legacyPlannerYear = 2027;
+
 export async function issueCalendarKey(db: PrismaClient, userId: string) {
-  const key = randomBytes(32).toString("base64url");
-  const editions = await db.festivalEdition.findMany({
-    where: { recordState: "CURRENT" },
-    distinct: ["year"],
-    select: { year: true },
+  const available = await db.festivalEdition.findFirst({
+    where: { recordState: "CURRENT", year: legacyPlannerYear },
+    select: { id: true },
   });
-  if (!editions.length) return null;
-  const data = {
-    keyDigest: digestKey(key),
-    seasons: editions.map(({ year }) => year),
-    createdAt: new Date(),
-  };
+  if (!available) return null;
+  const key = randomBytes(32).toString("base64url");
+  const data = { keyDigest: digestKey(key), seasons: [legacyPlannerYear], createdAt: new Date() };
   await db.calendarSubscription.upsert({
     where: { userId },
     create: { userId, ...data },
@@ -45,6 +43,7 @@ export async function readCalendarFeed(db: PrismaClient, key: string) {
         select: { userId: true, seasons: true },
       });
       if (!subscription) return null;
+      if (!subscription.seasons.includes(legacyPlannerYear)) return calendarFile([]);
       const plans = await tx.syncDocument.findUnique({
         where: { userId_kind: { userId: subscription.userId, kind: "FESTIVAL_PLANS" } },
         select: { payload: true },
@@ -65,7 +64,7 @@ export async function readCalendarFeed(db: PrismaClient, key: string) {
       const editions = await tx.festivalEdition.findMany({
         where: {
           recordState: "CURRENT",
-          year: { in: subscription.seasons },
+          year: legacyPlannerYear,
           startDate: { not: null },
           festival: { slug: { in: slugs } },
         },
