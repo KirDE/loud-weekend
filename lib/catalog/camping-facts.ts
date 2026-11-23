@@ -23,7 +23,7 @@ export async function readCampingFacts(
   item: Pick<Festival, "slug" | "editionYear" | "city" | "countryCode" | "officialUrl">,
 ): Promise<PublicCampingFact[]> {
   const organizerHost = campingSourceHost(item.officialUrl);
-  if (!organizerHost || item.editionYear === undefined) return [];
+  if (!organizerHost || !item.city || item.editionYear === undefined) return [];
 
   const rows = await db.editionCampingFact.findMany({
     where: {

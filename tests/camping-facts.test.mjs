@@ -21,3 +21,11 @@ test("reviewed camping inputs reject foreign sources, invalid dates and duplicat
   await assert.rejects(importReviewedCamping(null, { ...record, facts: [{ ...arrival, earliestDate: "2027-02-29" }] }), /Invalid ISO date/);
   await assert.rejects(importReviewedCamping(null, { ...record, facts: [arrival, arrival] }), /appear once/);
 });
+
+test("unknown city cannot match a reviewed camping location", async () => {
+  const { readCampingFacts } = await import("../lib/catalog/camping-facts.ts");
+  assert.deepEqual(await readCampingFacts(null, {
+    slug: "fixture", editionYear: 2027, city: undefined, countryCode: "DE",
+    officialUrl: "https://organizer.example/",
+  }), []);
+});
