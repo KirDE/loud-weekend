@@ -17,6 +17,10 @@ test("120 characters pass; 121 fail, including non-ASCII and CRLF", () => {
 test("all maintained source is covered; data and immutable migration history are not reformatted", () => {
   for (const name of [
     "app/a.tsx",
+    "app/a.jsx",
+    "lib/a.mts",
+    "lib/a.cts",
+    "scripts/deploy/start-db-due",
     "scripts/a.py",
     "scripts/a.sh",
     ".github/workflows/quality.yml",
