@@ -12,6 +12,9 @@ const saved = {
     month: "06",
     announcedOnly: true,
     ticketsOnly: true,
+    genre: "metal",
+    origin: "prague",
+    maxDistance: "500",
   },
 };
 const empty = {
@@ -25,6 +28,9 @@ const empty = {
     month: "all",
     announcedOnly: false,
     ticketsOnly: false,
+    genre: "all",
+    origin: "berlin",
+    maxDistance: "all",
   },
 };
 const copy = {

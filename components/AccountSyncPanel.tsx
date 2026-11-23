@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { readDiscoveryPreferences } from "@/lib/discovery-preferences";
 import { readCollections, mergeCollections } from "@/lib/collections";
 import { useLanguage } from "./LanguageProvider";
 import { emptyPlannerState, type PlannerState, useLocalPlanner } from "./LocalPlanner";
@@ -101,7 +102,7 @@ function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
     ...emptyPlannerState,
     ...value("favorites"),
     playlistFestivals: readCollections(documents.collections?.payload).playlistFestivals,
-    ...value("saved-filters"),
+    savedFilters: readDiscoveryPreferences(value("saved-filters").savedFilters),
     ...value("plans"),
   };
 }
@@ -233,6 +234,8 @@ export function AccountSyncPanel({
             savedFilters: planner.savedFilters,
             playlistFestivals: readCollections(conflict.remote.payload).playlistFestivals,
           });
+        else if (conflict.kind === "saved-filters")
+          planner.setSavedFilters(plannerFrom(next).savedFilters);
         else planner.replace(plannerFrom(next));
       }
       setConflict(null);
