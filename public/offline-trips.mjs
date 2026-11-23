@@ -111,8 +111,11 @@ export async function fetchOfflineTrip(basePath, slug, year) {
   if (response.status !== 200 || !/^application\/json(?:;|$)/i.test(response.headers.get("content-type") || "")) {
     throw new Error("Trip download unavailable");
   }
-  const trip = parseOfflineTrip(await response.json());
-  if (!trip || trip.slug !== slug || trip.year !== year) throw new Error("Unexpected trip download");
+  const data = await response.json();
+  const trip = parseOfflineTrip(data);
+  if (!trip || trip.slug !== slug || trip.year !== year || trip.timetable.length !== data.timetable.length) {
+    throw new Error("Unexpected trip download");
+  }
   return trip;
 }
 
@@ -132,6 +135,8 @@ export function parseOfflineTrip(value) {
     if (!row || !isoDate(row.date) || typeof row.start !== "string" || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(row.start) ||
         !shortText(row.stage) || !shortText(row.artist) || !shortText(row.timeZone) || !instant(row.checkedAt) ||
         !["scheduled", "cancelled"].includes(row.status)) return null;
+    // Copies stored before the server checked edition bounds may contain extra rows.
+    if ((value.startDate && row.date < value.startDate) || (value.endDate && row.date > value.endDate)) continue;
     timetable.push({
       date: row.date, start: row.start, stage: row.stage, artist: row.artist,
       timeZone: row.timeZone, status: row.status, checkedAt: row.checkedAt,
