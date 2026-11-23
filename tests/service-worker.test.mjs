@@ -342,6 +342,11 @@ test("an invalid public-looking catalogue cannot replace or revalidate a good of
         date: "2027-06-06", stage: "Main", start: "20:00", artist: "Example", timeZone: "Europe/Berlin", status: "scheduled",
       }],
     }] },
+    { ...payload(), timetableStatus: "published", festivals: [{
+      ...festival, timetable: [{
+        date: "2027-06-04", stage: "Main", start: "20:00", artist: "Example", timeZone: "Europe/Not-A-Time-Zone", status: "scheduled",
+      }],
+    }] },
     { ...payload(), dataVersion: "different-edition" },
     { ...payload(), editionYear: 2029 },
     { ...payload(), privateNote: "not part of the public projection" },

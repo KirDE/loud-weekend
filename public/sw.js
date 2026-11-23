@@ -94,32 +94,46 @@ const catalogDate = (value) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$
   Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 const catalogText = (value) => typeof value === "string" && value.trim().length > 0;
 
-function catalogPerformance(row) {
+function catalogTimeZone(value, validTimeZones) {
+  if (!catalogText(value)) return false;
+  if (validTimeZones.has(value)) return true;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    validTimeZones.add(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function catalogPerformance(row, validTimeZones) {
   return hasFields(row, ["date", "stage", "start", "artist", "timeZone", "status"]) &&
-    catalogDate(row.date) && catalogText(row.stage) && catalogText(row.artist) && catalogText(row.timeZone) &&
+    catalogDate(row.date) && catalogText(row.stage) && catalogText(row.artist) && catalogTimeZone(row.timeZone, validTimeZones) &&
     typeof row.start === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(row.start) &&
     (row.status === "scheduled" || row.status === "cancelled");
 }
 
-function catalogFestival(row) {
+function catalogFestival(row, validTimeZones) {
   return hasFields(row, ["slug", "name", "startDate", "endDate", "timetable"]) &&
     typeof row.slug === "string" && /^[a-z0-9-]+$/.test(row.slug) && catalogText(row.name) &&
     (row.startDate === null || catalogDate(row.startDate)) &&
     (row.endDate === null || catalogDate(row.endDate)) &&
     (row.startDate === null || row.endDate === null || row.startDate <= row.endDate) &&
     Array.isArray(row.timetable) && row.timetable.every((performance) =>
-      catalogPerformance(performance) &&
+      catalogPerformance(performance, validTimeZones) &&
       (row.startDate === null || row.startDate <= performance.date) &&
       (row.endDate === null || performance.date <= row.endDate));
 }
 
 function validCatalog(body) {
   // Only persist the known public projection, never extra response fields.
+  const validTimeZones = new Set();
   if (!hasFields(body, ["schemaVersion", "dataVersion", "editionYear", "generatedAt", "timetableStatus", "festivals"]) ||
       body.schemaVersion !== 1 || !Number.isInteger(body.editionYear) ||
       body.editionYear < 1000 || body.editionYear > 9999 ||
       body.dataVersion !== `festivals-${body.editionYear}-v1` || body.generatedAt !== null ||
-      !Array.isArray(body.festivals) || !body.festivals.length || !body.festivals.every(catalogFestival)) return false;
+      !Array.isArray(body.festivals) || !body.festivals.length ||
+      !body.festivals.every(festival => catalogFestival(festival, validTimeZones))) return false;
   const hasTimetable = body.festivals.some((festival) => festival.timetable.length);
   return body.timetableStatus === (hasTimetable ? "published" : "not-published");
 }
