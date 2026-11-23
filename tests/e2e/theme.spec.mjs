@@ -27,7 +27,14 @@ for (const [language, label] of [
     expect(await response.text()).toContain('data-theme="dark"');
     await page.reload();
     await expect(toggle).toHaveAttribute("aria-checked", "true");
-    await page.locator("footer > a").click();
+    await page
+      .locator("footer")
+      .getByRole("link", {
+        name: { en: "Submit a festival", de: "Festival vorschlagen", ru: "Предложить фестиваль" }[
+          language
+        ],
+      })
+      .click();
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     for (const width of [320, 375, 700, 768, 850, 1100, 1440]) {
       await page.setViewportSize({ width, height: 900 });
@@ -38,7 +45,9 @@ for (const [language, label] of [
         true,
       );
       const geometry = await page.locator("footer").evaluate((footer) => {
-        const boxes = [...footer.children].map((el) => el.getBoundingClientRect());
+        const boxes = [...footer.children]
+          .filter((el) => !el.matches(".footerGuides"))
+          .map((el) => el.getBoundingClientRect());
         return {
           pickerLeft: footer.querySelector(".languagePicker").getBoundingClientRect().left,
           firstLeft: boxes[0].left,

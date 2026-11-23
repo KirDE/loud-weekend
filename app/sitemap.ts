@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { DatabaseCatalogRepository } from "@/lib/catalog/repository";
 import { editionKey, latestDate } from "@/lib/catalog/freshness";
 import { readSitemapPublications } from "@/lib/catalog/sitemap-publications";
+import { guideTopics } from "@/lib/festival-guides";
 import { festivalOverlapsMonth } from "@/lib/festival-dates";
 import { localizedAlternates, SITE_ORIGIN } from "@/lib/seo";
 
@@ -89,5 +90,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   for (const [year, date] of years) add(`/editions/${year}/`, date);
   add("/archive/", latestDate(archiveDates));
   add("/submit/");
+  for (const topic of guideTopics) addLocalized(`/guides/${topic}/`);
   return [...entries.values()];
 }

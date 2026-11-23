@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { festivalGuides, guideTopics } from "@/lib/festival-guides";
 import { useLanguage, type Language } from "./LanguageProvider";
 import { useTheme } from "./ThemeProvider";
 import { AccountMenu } from "./AccountMenu";
@@ -28,6 +29,9 @@ export function SiteFooter() {
   const { language, setLanguage, t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
   const themeLabel = { en: "Dark mode", de: "Dunkelmodus", ru: "Тёмная тема" }[language];
+  const guidesLabel = { en: "Festival guides", de: "Festival-Ratgeber", ru: "Гиды по фестивалям" }[
+    language
+  ];
   return (
     <footer className="siteFooter">
       <span>Loud Weekend · {t("region")}</span>
@@ -58,6 +62,13 @@ export function SiteFooter() {
           <span aria-hidden="true">{theme === "dark" ? "☾" : "☀"}</span> {themeLabel}
         </button>
       </div>
+      <nav className="footerGuides" aria-label={guidesLabel}>
+        {guideTopics.map((topic) => (
+          <Link key={topic} href={`/${language}/guides/${topic}/`}>
+            {festivalGuides[topic][language].title}
+          </Link>
+        ))}
+      </nav>
     </footer>
   );
 }
