@@ -85,6 +85,14 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
     return document;
   }
 
+  async function readWriteAcknowledgement(kind: Kind, response: Response, base?: Document) {
+    if (!response.ok) throw new Error(t.failed);
+    const document = await parseDocument(kind, response, user?.id);
+    if (!document || document.revision !== (base?.revision ?? 0) + 1 ||
+      (base && document.id !== base.id)) throw new Error(t.failed);
+    return document;
+  }
+
   async function readDocument(kind: Kind, ownerId = user?.id) {
     const response = await fetch("/api/sync/" + kind, { cache: "no-store" });
     if (!response.ok) throw new Error(t.failed);
@@ -116,10 +124,7 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
       setConflict({ kind, remote: latest, mergeLocal });
       throw new Error("conflict");
     }
-    if (!response.ok) throw new Error(t.failed);
-    const document = await parseDocument(kind, response, user?.id);
-    if (!document || document.revision !== revision + 1 ||
-      (base && document.id !== base.id)) throw new Error(t.failed);
+    const document = await readWriteAcknowledgement(kind, response, base);
     setDocs((current) => ({ ...current, [kind]: document }));
     return document;
   }
@@ -198,10 +203,8 @@ export function AccountSyncPanel({ disabled = false, onBusyChange }: { disabled?
         setConflict({kind:"collections",remote:document,mergeLocal:true});
         setStatus(t.conflict);return;
       }
-      const body=await response.json();
-      if(!response.ok)throw new Error(t.failed);
-      readCollections(body.document.payload);
-      setDocs(value=>({...value,collections:body.document}));setStatus(t.current);
+      const document = await readWriteAcknowledgement("collections", response, saved);
+      setDocs(value=>({...value,collections:document}));setStatus(t.current);
     }catch(reason){if(!(reason instanceof Error&&reason.message==="conflict"))setStatus(t.failed);}
     finally{setBusy(false);}
   }

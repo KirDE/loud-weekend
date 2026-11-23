@@ -9,7 +9,7 @@ const userId="synthetic-user";
 for(const [locale,t] of Object.entries(copy))test(locale+" imported Spotify collections survive ordinary/merge sync, reload, second device and conflict UI",async({page,context})=>{
  const imported={syncedAt:"2026-11-17T22:00:00.000Z",playlists:[{id:"abc",name:"Synthetic retained playlist",url:"https://open.spotify.com/playlist/abc",image:null,owner:"Synthetic provider",trackCount:3}]};
  const docs={collections:{id:"collection",userId,kind:documentKinds.collections,revision:1,updatedAt:imported.syncedAt,payload:{schemaVersion:1,playlistFestivals:["graspop"],spotify:null}}};
- let failImport=false,conflictNext=false,importRevisionConflict=false;
+ let failImport=false,conflictNext=false,importRevisionConflict=false,invalidImport=true;
  await context.route("**/api/auth/me**",route=>route.fulfill({json:{user:{id:userId,email:"browser-collections@example.test",emailVerified:true,role:"USER"}}}));
  await context.route("**/api/sync/**",async route=>{
   const req=route.request(),kind=new URL(req.url()).pathname.split("/").filter(Boolean).at(-1);
@@ -26,12 +26,19 @@ for(const [locale,t] of Object.entries(copy))test(locale+" imported Spotify coll
   if(failImport)return route.fulfill({status:502,json:{error:"Synthetic upstream failure"}});
   if(importRevisionConflict){importRevisionConflict=false;docs.collections={...previous,revision:previous.revision+1,payload:{...previous.payload,playlistFestivals:["reading"]}};return route.fulfill({status:409,json:{error:"concurrent device write"}});}
   if(route.request().postDataJSON().revision!==previous.revision)return route.fulfill({status:409,json:{error:"conflict"}});
+  if(invalidImport){
+   invalidImport=false;
+   return route.fulfill({json:{document:{...previous,payload:{...previous.payload,spotify:imported}}}});
+  }
   docs.collections={...previous,revision:previous.revision+1,payload:{...previous.payload,spotify:imported}};
   return route.fulfill({json:{document:docs.collections}});
  });
  await page.addInitScript(()=>{if(!localStorage.getItem("festival-radar-planner-v1"))localStorage.setItem("festival-radar-planner-v1",JSON.stringify({favoriteFestivals:[],favoriteArtists:[],attendance:{},playlistFestivals:["wacken-open-air"],savedFilters:{query:"",country:"all",announcedOnly:false,month:"all",ticketsOnly:false}}));});
  await page.goto("/"+locale+"/planner/");
  const panel=page.locator(".accountSync"),link=panel.getByRole("link",{name:"Synthetic retained playlist"});
+ await panel.getByRole("button",{name:t.import,exact:true}).click();
+ await expect(panel).toHaveAttribute("aria-busy","false");
+ await expect(link).toHaveCount(0);
  await panel.getByRole("button",{name:t.import,exact:true}).click();
  await expect(link).toBeVisible();await expect(panel.getByRole("heading",{name:t.saved})).toBeVisible();
  await expect(panel.locator("time")).toHaveAttribute("datetime",imported.syncedAt);
