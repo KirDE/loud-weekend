@@ -159,7 +159,7 @@ const expectations: Record<"de" | "ru", string[]> = {
     "Kalender &amp; Karte",
     "Bühnenplan",
     "Noch kein bestätigter Zeitplan",
-    "Ähnliche Festivals",
+    "Verwandte Festivals",
     "1 gemeinsame Künstler",
   ],
   ru: [
@@ -173,7 +173,7 @@ const expectations: Record<"de" | "ru", string[]> = {
     "Календарь и карта",
     "Расписание сцен",
     "Подтверждённое расписание пока не опубликовано",
-    "Похожие фестивали",
+    "Связанные фестивали",
     "Общих артистов: 1",
   ],
 };
@@ -186,6 +186,13 @@ for (const language of ["de", "ru"] as const) {
           <FestivalDetail
             item={festival}
             festivals={[festival, similar]}
+            discoveryLineups={{
+              artistSlugsByFestival: {
+                [festival.slug]: ["sample-artist"],
+                [similar.slug]: ["sample-artist"],
+              },
+              legacyFavoriteSlugs: {},
+            }}
             artistSlugs={{ "Sample Artist": "sample-artist" }}
           />
         </LocalPlannerProvider>
@@ -203,7 +210,7 @@ for (const language of ["de", "ru"] as const) {
       "Calendar &amp; map",
       "Stage timetable",
       "No verified timetable",
-      "Similar festivals",
+      "Related festivals",
       "shared act",
     ]) {
       assert.ok(!html.includes(english), "Unexpected English copy: " + english);

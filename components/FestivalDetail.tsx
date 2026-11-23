@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import { PlanningTools } from "./PlanningTools";
@@ -20,12 +21,14 @@ import { FavoriteButton, useLocalPlanner, type Attendance } from "./LocalPlanner
 export function FestivalDetail({
   item,
   festivals,
+  discoveryLineups,
   artistSlugs,
   playlist,
   artistPopularity = {},
 }: {
   item: Festival;
   festivals: Festival[];
+  discoveryLineups?: DiscoveryLineups;
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
   artistPopularity?: Readonly<Record<string, number | null>>;
@@ -209,7 +212,12 @@ export function FestivalDetail({
           </>
         )}
       </section>
-      <PlanningTools item={item} festivals={festivals} />
+      <PlanningTools
+        item={item}
+        festivals={festivals}
+        discoveryLineups={discoveryLineups}
+        favorites={planner.favoriteArtists}
+      />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
         <p>{t("catalogUpdated", { date: prettyDate(item.updatedAt.slice(0, 10)) })}</p>
