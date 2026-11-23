@@ -7,6 +7,7 @@ const offlineSelect = {
   startDate: true,
   endDate: true,
   timetable: {
+    where: { timeZone: { not: null }, sourceUrl: { not: null }, observedAt: { not: null } },
     select: {
       date: true,
       stage: true,
@@ -32,14 +33,20 @@ export function projectOfflineCatalog(rows: readonly OfflineEdition[]) {
       startDate: dateOnly(row.startDate),
       endDate: dateOnly(row.endDate),
       timetable: row.timetable
-        .map((entry) => ({
-          date: dateOnly(entry.date)!,
-          stage: entry.stage,
-          start: entry.start,
-          artist: entry.artistName,
-          timeZone: entry.timeZone ?? "UTC",
-          status: entry.status === "CANCELLED" ? "cancelled" : "scheduled",
-        }))
+        .flatMap((entry) =>
+          entry.timeZone
+            ? [
+                {
+                  date: dateOnly(entry.date)!,
+                  stage: entry.stage,
+                  start: entry.start,
+                  artist: entry.artistName,
+                  timeZone: entry.timeZone,
+                  status: entry.status === "CANCELLED" ? "cancelled" : "scheduled",
+                },
+              ]
+            : [],
+        )
         .sort((a, b) => compare(JSON.stringify(a), JSON.stringify(b))),
     }))
     .sort((a, b) => compare(a.slug, b.slug));

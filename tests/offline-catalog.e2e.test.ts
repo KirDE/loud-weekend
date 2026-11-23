@@ -75,19 +75,33 @@ test("real DB content mutations invalidate ETag; timestamps alone do not; missin
         });
         const dated = await serveOfflineCatalog(request(renamed.headers.get("etag")), read);
         assert.equal(dated.status, 200);
-        await tx.timetablePerformance.create({
-          data: {
-            editionId: edition.id,
-            artistName: "Offline mutation artist",
-            date: new Date("2027-12-30"),
-            stage: "Test",
-            start: "20:00",
-          },
+        const basePerformance = {
+          editionId: edition.id,
+          date: new Date("2027-12-30"),
+          stage: "Test",
+          start: "20:00",
+          timeZone: "Europe/Berlin",
+          sourceUrl: "https://festival.example.test/timetable/",
+          observedAt: new Date("2026-11-12T10:00:00Z"),
+        };
+        await tx.timetablePerformance.createMany({
+          data: [
+            { ...basePerformance, artistName: "No time zone", timeZone: null },
+            { ...basePerformance, artistName: "No source", sourceUrl: null },
+            { ...basePerformance, artistName: "No observation", observedAt: null },
+          ],
         });
-        assert.equal(
-          (await serveOfflineCatalog(request(dated.headers.get("etag")), read)).status,
-          200,
-        );
+        const datedTag = dated.headers.get("etag");
+        assert.equal((await serveOfflineCatalog(request(datedTag), read)).status, 304);
+
+        await tx.timetablePerformance.create({
+          data: { ...basePerformance, artistName: "Verified offline artist" },
+        });
+        const withSchedule = await serveOfflineCatalog(request(datedTag), read);
+        assert.equal(withSchedule.status, 200);
+        const schedule = await withSchedule.text();
+        assert.match(schedule, /"artist":"Verified offline artist","timeZone":"Europe\/Berlin"/);
+        assert.doesNotMatch(schedule, /No time zone|No source|No observation|sourceUrl|observedAt/);
         await tx.festivalEdition.updateMany({
           where: { year: 2027, recordState: "CURRENT" },
           data: { recordState: "TRACKING" },
