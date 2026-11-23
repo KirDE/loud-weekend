@@ -1,5 +1,8 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
+import { collectReviewedArrival } from "../../lib/ingestion/arrival-collector.ts";
+import { arrivalSourceUrls } from "../../lib/ingestion/adapters/arrival-guidance.ts";
 import { importReviewedArrival } from "../../lib/catalog/arrival-import.ts";
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 
@@ -100,6 +103,47 @@ test("arrival details come from reviewed rows for the exact edition and organize
     } finally {
       await page.close();
     }
+  } finally {
+    if (festivalId) await db.festival.delete({ where: { id: festivalId } });
+    await db.$disconnect();
+  }
+});
+
+test("Graspop arrival comes from the reviewed organizer observation", async ({ page }) => {
+  requireLocalDisposableDatabase(process.env.DATABASE_URL);
+  const db = createPrismaClient();
+  const [essentials, announcement] = arrivalSourceUrls("graspop", 2027);
+  const fixture = name => readFile(new URL(`../fixtures/arrival/${name}.html`, import.meta.url), "utf8");
+  const pages = new Map([[essentials, await fixture("graspop-essentials")], [announcement, await fixture("graspop-announcement")]]);
+  const collect = approval => collectReviewedArrival(db, "graspop", 2027, { approval, fetchImpl: async (url, init) => {
+    expect(init.redirect).toBe("error");
+    expect(pages.has(url)).toBe(true);
+    const response = new Response(pages.get(url), { headers: { "content-type": "text/html" } });
+    Object.defineProperty(response, "url", { value: url });
+    return response;
+  } });
+  let festivalId;
+  try {
+    const item = await db.festival.create({ data: {
+      slug: "graspop", name: "Arrival source fixture", country: "Belgium", countryCode: "BE",
+      officialUrl: "https://www.graspop.be/", genres: [], catalogOrder: 9100,
+      editions: { create: {
+        year: 2027, status: "TBA", ticketStatus: "UNKNOWN",
+        recordState: "CURRENT", completeness: "TBA", sourceUpdatedAt: new Date(),
+      } },
+    } });
+    festivalId = item.id;
+    const preview = await collect();
+    pages.set(announcement, pages.get(announcement).replace("Eindhoven Airport", "Antwerp Airport"));
+    await expect(collect(preview.fingerprint)).rejects.toThrow(/changed since preview/);
+    expect(await db.editionArrivalFact.count({ where: { edition: { festivalId } } })).toBe(0);
+    const revised = await collect();
+    await collect(revised.fingerprint);
+    await page.goto("/en/festivals/graspop/");
+    const panel = page.getByRole("region", { name: headings.en });
+    await expect(panel.locator("dd")).toHaveCount(2);
+    await expect(panel.getByText(/Antwerp Airport/)).toBeVisible();
+    await expect(panel.getByText(/Eindhoven Airport/)).toHaveCount(0);
   } finally {
     if (festivalId) await db.festival.delete({ where: { id: festivalId } });
     await db.$disconnect();
