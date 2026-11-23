@@ -112,3 +112,32 @@ test("a reversed event interval cannot prove the selected edition", () => {
   assert.equal(valid.ticketStatus, "available");
   assert.equal(valid.endDate, "2028-01-02");
 });
+
+test("only actual JSON-LD script elements supply edition evidence", () => {
+  const event = JSON.stringify({ "@type": "MusicEvent", startDate: "2027-07-01", offers: { availability: "SoldOut" } });
+  for (const html of [
+    `<!-- <script type="application/ld+json">${event}</script> -->`,
+    `<script data-type="application/ld+json">${event}</script>`,
+    `<template><script type="application/ld+json">${event}</script></template>`,
+  ]) {
+    const candidate = extractJsonLdCandidate(html, source, "2026-11-17T00:00:00Z");
+    assert.deepEqual(candidate.observedEditionYears, []);
+    assert.deepEqual(candidate.evidence, []);
+    assert.equal(candidate.ticketStatus, undefined);
+  }
+});
+
+test("edition evidence quotes the selected record, not another event in the same graph", () => {
+  const html = `<script type = 'Application/LD+JSON'>${JSON.stringify({ "@graph": [
+    { "@type": "MusicEvent", startDate: "2026-07-01", name: "Archived edition" },
+    { "@type": "MusicEvent", startDate: "2027-07-01", offers: { availability: "InStock" } },
+  ] })}</script>`;
+  const candidate = extractJsonLdCandidate(html, source, "2026-11-17T00:00:00Z");
+  assert.deepEqual(candidate.observedEditionYears, [2027]);
+  assert.equal(candidate.ticketStatus, "available");
+  assert.ok(candidate.evidence.length > 0);
+  for (const { excerpt } of candidate.evidence) {
+    assert.match(excerpt, /2027-07-01/);
+    assert.doesNotMatch(excerpt, /Archived edition/);
+  }
+});
