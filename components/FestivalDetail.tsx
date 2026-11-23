@@ -1,5 +1,7 @@
 "use client";
 
+import type { PlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-readback";
+
 import { useState } from "react";
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
@@ -23,12 +25,14 @@ export function FestivalDetail({
   festivals,
   artistSlugs,
   playlist,
+  playlistRefreshFailures,
   artistPopularity = {},
 }: {
   item: Festival;
   festivals: Festival[];
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
+  playlistRefreshFailures?: PlaylistRefreshFailures;
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
   const { locale, t } = useLanguage();
@@ -120,21 +124,38 @@ export function FestivalDetail({
           <a href={playlistUrl} target="_blank" rel="noreferrer">
             <small>{t("listen")}</small>
             <strong>{t("spotifyPlaylist")}</strong>
-            <PlaylistCoverageLabel coverage={playlist?.coverage?.spotify} />
+            <PlaylistCoverageLabel
+              coverage={playlist?.coverage?.spotify}
+              failed={playlistRefreshFailures?.spotify}
+            />
           </a>
         ) : (
           <div className="disabled">
             <small>{t("listen")}</small>
-            <strong>{t("playlistSoon")}</strong>
+            <strong>
+              {playlistRefreshFailures?.spotify ? t("spotifyPlaylist") : t("playlistSoon")}
+            </strong>
+            {playlistRefreshFailures?.spotify && <PlaylistCoverageLabel failed />}
           </div>
         )}
         {playlist?.youtubeMusicUrl ? (
           <a href={playlist.youtubeMusicUrl} target="_blank" rel="noreferrer">
             <small>{t("listen")}</small>
             <strong>{t("youtubeMusicPlaylist")}</strong>
-            <PlaylistCoverageLabel coverage={playlist.coverage?.youtubeMusic} />
+            <PlaylistCoverageLabel
+              coverage={playlist.coverage?.youtubeMusic}
+              failed={playlistRefreshFailures?.youtubeMusic}
+            />
           </a>
-        ) : null}
+        ) : (
+          playlistRefreshFailures?.youtubeMusic && (
+            <div className="disabled">
+              <small>{t("listen")}</small>
+              <strong>{t("youtubeMusicPlaylist")}</strong>
+              <PlaylistCoverageLabel failed />
+            </div>
+          )
+        )}
         {setlistUrl ? (
           <a href={setlistUrl} target="_blank" rel="noreferrer">
             <small>{t("liveHistory")}</small>

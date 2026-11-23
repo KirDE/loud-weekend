@@ -9,28 +9,38 @@ const copy = {
     matched: "Artists matched",
     tracks: "Tracks",
     recorded: "Last recorded sync",
+    failed: "Latest refresh failed",
   },
   de: {
     unknown: "Keine verifizierten Angaben zur Abdeckung",
     matched: "Zugeordnete Künstler",
     tracks: "Titel",
     recorded: "Letzter erfasster Abgleich",
+    failed: "Letzte Aktualisierung fehlgeschlagen",
   },
   ru: {
     unknown: "Подтверждённый охват неизвестен",
     matched: "Подобрано артистов",
     tracks: "Треки",
     recorded: "Последняя зафиксированная синхронизация",
+    failed: "Последнее обновление не удалось",
   },
 };
 
-export function PlaylistCoverageLabel({ coverage }: { coverage?: PlaylistCoverage }) {
+export function PlaylistCoverageLabel({
+  coverage,
+  failed,
+}: {
+  coverage?: PlaylistCoverage;
+  failed?: boolean;
+}) {
   const { language, locale } = useLanguage();
   const t = copy[language];
-  if (!coverage) return <span className="playlistCoverage">{t.unknown}</span>;
+  if (!coverage) return <span className="playlistCoverage">{failed ? t.failed : t.unknown}</span>;
   const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" });
   return (
     <span className="playlistCoverage">
+      {failed && <span>{t.failed}</span>}
       <span>
         {t.matched}: {coverage.matchedArtists.toLocaleString(locale)} · {t.tracks}:{" "}
         {coverage.tracks.toLocaleString(locale)}

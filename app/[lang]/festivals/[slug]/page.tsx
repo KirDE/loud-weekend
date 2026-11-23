@@ -1,3 +1,4 @@
+import { getPlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-readback";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { Language } from "@/components/LanguageProvider";
@@ -42,6 +43,9 @@ export default async function LocalizedFestivalPage({
   const { festivals, artists, playlists } = await getCatalog();
   const item = festivals.find((festival) => festival.slug === slug);
   if (!item) notFound();
+  const failures = item.editionYear
+    ? await getPlaylistRefreshFailures(item.slug, item.editionYear)
+    : {};
   const event = festivalMusicEvent(item);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
@@ -58,6 +62,7 @@ export default async function LocalizedFestivalPage({
           artists.map((artist) => [artist.name, artist.spotifyStats?.popularity ?? null]),
         )}
         playlist={playlists[item.slug]}
+        playlistRefreshFailures={failures}
       />
     </>
   );
