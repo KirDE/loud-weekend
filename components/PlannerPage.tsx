@@ -1,10 +1,14 @@
 "use client";
+
 import Link from "next/link";
 import { useState } from "react";
+import { festivalDateInterval } from "@/lib/festival-dates";
+import { calendarFile } from "@/lib/planning";
 import type { Festival } from "@/lib/domain/festival";
 import { useLocalPlanner, type Attendance } from "./LocalPlanner";
 import { PlannerReset } from "./PlannerReset";
 import { AccountSyncPanel } from "./AccountSyncPanel";
+import { PersonalCalendar } from "./PersonalCalendar";
 import { FestivalViews } from "./FestivalViews";
 import { useLanguage, type Language } from "./LanguageProvider";
 
@@ -175,7 +179,7 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
     new Set(selected.flatMap((f) => [...f.headliners, ...f.lineup])),
   ).sort();
   const dated = planned
-    .filter((f) => f.startDate)
+    .filter((f) => festivalDateInterval(f))
     .sort((a, b) => a.startDate!.localeCompare(b.startDate!));
   async function createPlaylist() {
     setPlaylist({ status: "creating", message: t.creating });
@@ -271,6 +275,7 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
               </a>
             )}
           </section>
+          <PersonalCalendar festivals={festivals} />
           <section className="plannerSection">
             <div className="sectionHeading">
               <div>
@@ -340,27 +345,4 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
       )}
     </div>
   );
-}
-function calendarFile(items: Festival[]) {
-  const out = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Loud Weekend//Trip Planner//EN",
-    "CALSCALE:GREGORIAN",
-  ];
-  for (const f of items) {
-    const end = new Date(`${f.endDate || f.startDate}T12:00:00Z`);
-    end.setUTCDate(end.getUTCDate() + 1);
-    out.push(
-      "BEGIN:VEVENT",
-      `UID:${f.slug}-2027@festival-radar`,
-      `DTSTART;VALUE=DATE:${f.startDate!.replaceAll("-", "")}`,
-      `DTEND;VALUE=DATE:${end.toISOString().slice(0, 10).replaceAll("-", "")}`,
-      `SUMMARY:${f.name}`,
-      `LOCATION:${f.city || f.country}`,
-      `URL:${f.officialUrl}`,
-      "END:VEVENT",
-    );
-  }
-  return [...out, "END:VCALENDAR"].join("\r\n");
 }
