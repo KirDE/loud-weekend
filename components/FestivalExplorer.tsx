@@ -1,12 +1,33 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import type { CatalogFreshness } from "@/lib/domain/freshness";
 import { formatFreshnessDate } from "@/lib/freshness-date";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
+import {
+  discoverySorts,
+  sortDiscoveryFestivals,
+  type DiscoveryLineups,
+  type DiscoverySort,
+} from "@/lib/discovery-sort";
+import { DiscoveryShare } from "./DiscoveryShare";
+import {
+  discoveryFromQuery,
+  removeDiscoveryQuery,
+  shareableFavoriteSlugs,
+} from "@/lib/discovery-share";
+import { DiscoveryDateFilters } from "./DiscoveryDateFilters";
+import {
+  datesFromQuery,
+  hasDiscoveryDates,
+  matchesDiscoveryDates,
+  removeDateQuery,
+  type DiscoveryDates,
+} from "@/lib/discovery-dates";
 import { lineupOverlap } from "@/lib/planning";
 import { useLocalPlanner } from "./LocalPlanner";
 import { hasAvailableTickets, ticketPresentation } from "@/lib/tickets";
@@ -53,16 +74,48 @@ export function FestivalComparisonTicket({ item }: { item: Festival }) {
 export function FestivalExplorer({
   festivals,
   freshness,
+  discoveryLineups,
 }: {
   festivals: Festival[];
   freshness?: CatalogFreshness;
+  discoveryLineups?: DiscoveryLineups;
 }) {
   const { locale, t } = useLanguage();
   const planner = useLocalPlanner();
-  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance } =
-    planner.savedFilters;
   const filtersReady = planner.ready;
-  const updateFilters = planner.updateSavedFilters;
+  const queryParams = useSearchParams();
+  const linkKey = queryParams?.toString() ?? "";
+  const shared = useMemo(
+    () => (queryParams ? discoveryFromQuery(queryParams, discoveryLineups) : null),
+    [queryParams, discoveryLineups],
+  );
+  const [draft, setDraft] = useState<{ key: string; patch: Partial<DiscoveryPreferences> }>();
+  const activeFilters = shared
+    ? { ...shared.filters, ...(draft?.key === linkKey ? draft.patch : {}) }
+    : planner.savedFilters;
+  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance, sort } =
+    activeFilters;
+  const linkedDates = useMemo(
+    () => (queryParams ? datesFromQuery(queryParams) : null),
+    [queryParams],
+  );
+  const dateFilters = shared ? activeFilters : (linkedDates ?? activeFilters);
+  const dateFiltersActive = hasDiscoveryDates(dateFilters);
+  const favoriteKeys = shared?.favorites ?? planner.favoriteArtists;
+  const shareFavorites = useMemo(
+    () => shareableFavoriteSlugs(favoriteKeys, discoveryLineups),
+    [favoriteKeys, discoveryLineups],
+  );
+  const updateFilters = (patch: Partial<DiscoveryPreferences>) => {
+    if (!shared) {
+      planner.updateSavedFilters(patch);
+      return;
+    }
+    setDraft((current) => ({
+      key: linkKey,
+      patch: { ...(current?.key === linkKey ? current.patch : {}), ...patch },
+    }));
+  };
   const searchRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [comparisonStatus, setComparisonStatus] = useState("");
@@ -90,27 +143,26 @@ export function FestivalExplorer({
     return genre === "all" || available.includes(genre) ? available : [...available, genre].sort();
   }, [festivals, genre]);
   const originCoordinates = origins[origin].coordinates;
-  const visible = useMemo(
+  const filtered = useMemo(
     () =>
-      festivals
-        .filter((item) => {
-          const haystack = [item.name, item.country, item.city, ...item.headliners, ...item.lineup]
-            .join(" ")
-            .toLowerCase();
-          return (
-            haystack.includes(query.toLowerCase()) &&
-            (country === "all" || item.countryCode === country) &&
-            (!announcedOnly || hasAnnouncedLineup(item)) &&
-            (month === "all" || festivalOverlapsMonth(item, Number(month))) &&
-            (!ticketsOnly || hasAvailableTickets(item)) &&
-            festivalMatchesDiscoveryFilters(item, {
-              genre: genre === "all" ? undefined : genre,
-              origin: originCoordinates,
-              maxDistanceKm: maxDistance === "all" ? undefined : Number(maxDistance),
-            })
-          );
-        })
-        .sort((a, b) => (a.startDate || "9999").localeCompare(b.startDate || "9999")),
+      festivals.filter((item) => {
+        const haystack = [item.name, item.country, item.city, ...item.headliners, ...item.lineup]
+          .join(" ")
+          .toLowerCase();
+        return (
+          haystack.includes(query.toLowerCase()) &&
+          (country === "all" || item.countryCode === country) &&
+          (!announcedOnly || hasAnnouncedLineup(item)) &&
+          (month === "all" || festivalOverlapsMonth(item, Number(month))) &&
+          (!ticketsOnly || hasAvailableTickets(item)) &&
+          matchesDiscoveryDates(item, dateFilters) &&
+          festivalMatchesDiscoveryFilters(item, {
+            genre: genre === "all" ? undefined : genre,
+            origin: originCoordinates,
+            maxDistanceKm: maxDistance === "all" ? undefined : Number(maxDistance),
+          })
+        );
+      }),
     [
       festivals,
       query,
@@ -121,7 +173,18 @@ export function FestivalExplorer({
       genre,
       originCoordinates,
       maxDistance,
+      dateFilters,
     ],
+  );
+  const visible = useMemo(
+    () =>
+      sortDiscoveryFestivals(filtered, sort, {
+        locale,
+        origin: originCoordinates,
+        favorites: favoriteKeys,
+        lineups: discoveryLineups,
+      }),
+    [filtered, sort, locale, originCoordinates, favoriteKeys, discoveryLineups],
   );
   const compared = festivals.filter((item) => selected.includes(item.slug));
   const overlap = lineupOverlap(compared);
@@ -140,8 +203,25 @@ export function FestivalExplorer({
       setComparisonStatus(t("comparisonSelected", { festival: item.name, count: next.length }));
       return next;
     });
+  const clearLinkedDates = () => {
+    const url = new URL(window.location.href);
+    removeDateQuery(url);
+    window.history.replaceState(null, "", url);
+  };
+  const updateDates = (patch: Partial<DiscoveryDates>) => {
+    updateFilters(shared ? patch : { ...linkedDates, ...patch });
+    if (!shared && linkedDates) clearLinkedDates();
+  };
   const clearFilters = () => {
-    planner.setSavedFilters(defaultDiscoveryPreferences);
+    if (shared) {
+      const url = new URL(window.location.href);
+      removeDiscoveryQuery(url);
+      setDraft(undefined);
+      window.history.pushState(null, "", url);
+    } else {
+      if (linkedDates) clearLinkedDates();
+      planner.setSavedFilters(defaultDiscoveryPreferences);
+    }
     searchRef.current?.focus();
   };
 
@@ -241,6 +321,8 @@ export function FestivalExplorer({
         >
           {t("clearAllFilters")}
         </button>
+        <DiscoveryShare filters={{ ...activeFilters, ...dateFilters }} favorites={shareFavorites} />
+        <DiscoveryDateFilters filters={dateFilters} onChange={updateDates} />
         <div className="filterToggles">
           <label className="toggle">
             <input
@@ -342,6 +424,22 @@ export function FestivalExplorer({
           )}
         </div>
       )}
+      <div className="discoveryOrder">
+        <label>
+          {t("discoverySort")}{" "}
+          <select
+            value={sort}
+            disabled={!filtersReady}
+            onChange={(event) => updateFilters({ sort: event.target.value as DiscoverySort })}
+          >
+            {discoverySorts.map((value) => (
+              <option key={value} value={value}>
+                {t(`discoverySort_${value}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="resultMeta">
         <span>
           {visible.length} {t("festivals")}
@@ -422,7 +520,7 @@ export function FestivalExplorer({
       {!visible.length && (
         <div className="empty">
           <strong>{t("noMatches")}</strong>
-          <p>{t("noDiscoveryMatches")}</p>
+          <p>{t(dateFiltersActive ? "noDateMatches" : "noDiscoveryMatches")}</p>
         </div>
       )}
     </section>
