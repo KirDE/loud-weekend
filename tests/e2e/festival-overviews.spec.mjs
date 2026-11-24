@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
-import { collectReviewedOverview } from "../../lib/ingestion/overview-collector.ts";
+import { collectOverviewCandidate } from "../../lib/ingestion/overview-collector.ts";
 import { overviewOrganizer } from "../../lib/ingestion/adapters/festival-overview.ts";
+import {
+  claimAgentIssue,
+  releaseAgentIssue,
+  resolveAgentIssue,
+} from "../../lib/ingestion/agent-issues.ts";
+import { stageOrganizerFixture } from "../support/arrival-fixture.mjs";
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
@@ -10,24 +16,39 @@ const db = createPrismaClient();
 const slug = "hellfest";
 const year = 2027;
 const source = overviewOrganizer(slug, year);
-const actorLabel = `overview-import:e2e-${randomUUID()}`;
-const auditWhere = { action: "FESTIVAL_OVERVIEW_PUBLICATION", resourceKey: slug, actorLabel };
 const detailPath = (language) => `/${language}/festivals/${slug}/`;
 
 function fixture(stageCount, edition = year) {
-  return async (url) => {
-    expect(url).toBe(source.url);
-    const evidence =
-      stageCount === undefined
-        ? ""
-        : `<h4>Expanding from 2 to ${stageCount} stages and featuring over 42 bands</h4>`;
-    const html = `<div class="article"><h1>HELLFEST ${edition} - FIRST INSIGHTS</h1>
-      <div class="ck-content">${evidence}</div></div>`;
-    const response = new Response(html, { headers: { "content-type": "text/html" } });
-    Object.defineProperty(response, "url", { value: url });
-    return response;
-  };
+  const evidence =
+    stageCount === undefined
+      ? ""
+      : `<h4>Expanding from 2 to ${stageCount} stages and featuring over 42 bands</h4>`;
+  return new Map([
+    [
+      source.url,
+      `<div class="article"><h1>HELLFEST ${edition} - FIRST INSIGHTS</h1>
+      <div class="ck-content">${evidence}</div></div>`,
+    ],
+  ]);
 }
+
+const stage = (count) =>
+  stageOrganizerFixture(db, { id: festivalId, slug }, fixture(count), {
+    editionYear: year,
+    collect: collectOverviewCandidate,
+    fingerprintField: "overviewFingerprint",
+  });
+const approve = ({ sourceId, issueId, snapshot, leaseToken, candidate }) => ({
+  sourceId,
+  issueId,
+  snapshot,
+  leaseToken,
+  decision: {
+    action: "apply",
+    reason: "Reviewed the exact organizer overview evidence",
+    overview: candidate.overviewFingerprint,
+  },
+});
 
 let festivalId;
 test.beforeAll(async () => {
@@ -56,86 +77,72 @@ test.beforeAll(async () => {
   festivalId = festival.id;
 });
 test.afterAll(async () => {
-  if (festivalId) await db.festival.delete({ where: { id: festivalId } });
+  if (festivalId) {
+    await db.festivalSource.deleteMany({ where: { festivalId } });
+    await db.festival.delete({ where: { id: festivalId } });
+  }
   await db.$disconnect();
 });
 
-test("preview, evidence changes, absence and edition mismatches do not publish", async ({
-  page,
-}) => {
+test("only the current imported overview can be approved and replayed", async ({ page }) => {
   const region = page.getByRole("region", { name: "About this festival" });
-  const preview = await collectReviewedOverview(db, slug, year, { fetchImpl: fixture(7) });
+  const staged = await stage(7);
+  const obsolete = await claimAgentIssue(db, staged.sourceId, staged.issueId);
   await page.goto(detailPath("en"));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fixture Festival");
   await expect(region).toHaveCount(0);
 
-  for (const fetchImpl of [fixture(), fixture(7, year - 1)]) {
-    await expect(
-      collectReviewedOverview(db, slug, year, {
-        fetchImpl,
-        approval: preview.fingerprint,
-        actorLabel,
-      }),
-    ).rejects.toThrow(/No complete organizer overview evidence/);
-  }
+  const next = await stage(8);
+  await expect(resolveAgentIssue(db, approve(obsolete))).rejects.toThrow("stale");
+  await releaseAgentIssue(db, obsolete.issueId, obsolete.leaseToken);
+  const claim = await claimAgentIssue(db, next.sourceId, next.issueId);
+  const request = approve(claim);
+  await expect(resolveAgentIssue(db, { ...request, leaseToken: randomUUID() })).rejects.toThrow(
+    "busy",
+  );
   await expect(
-    collectReviewedOverview(db, slug, year, {
-      fetchImpl: fixture(8),
-      approval: preview.fingerprint,
-      actorLabel,
+    resolveAgentIssue(db, {
+      ...request,
+      decision: { ...request.decision, overview: "a".repeat(64) },
     }),
-  ).rejects.toThrow(/changed since preview/);
-  await page.reload();
-  await expect(region).toHaveCount(0);
+  ).rejects.toThrow("invalid");
+  expect(await db.editionOverview.count({ where: { edition: { festivalId } } })).toBe(0);
 
-  const next = await collectReviewedOverview(db, slug, year, { fetchImpl: fixture(8) });
-  const apply = () =>
-    collectReviewedOverview(db, slug, year, {
-      fetchImpl: fixture(8),
-      approval: next.fingerprint,
-      actorLabel,
-    });
-  expect(await db.adminAuditEntry.count({ where: auditWhere })).toBe(0);
-  await expect(
-    collectReviewedOverview(db, slug, year, {
-      fetchImpl: fixture(8),
-      approval: next.fingerprint,
-    }),
-  ).rejects.toThrow(/actorLabel/);
-  await apply();
-  await apply();
-  const rows = await db.adminAuditEntry.findMany({ where: auditWhere });
-  expect(rows).toHaveLength(1);
-  expect(rows[0].afterValue).toEqual(next.record);
-  expect(rows[0].evidence).toMatchObject({
-    fingerprint: next.fingerprint,
-    contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
-    sources: [source.url],
+  const receipt = await resolveAgentIssue(db, request);
+  expect(receipt.overviewPublished).toBe(true);
+  expect(receipt.providerJobs).toBe(0);
+  expect(await resolveAgentIssue(db, request)).toEqual(receipt);
+  const publication = await db.catalogPublication.findUniqueOrThrow({
+    where: { id: receipt.publicationId },
   });
-  const revised = await collectReviewedOverview(db, slug, year, { fetchImpl: fixture(9) });
-  await collectReviewedOverview(db, slug, year, {
-    fetchImpl: fixture(9),
-    approval: revised.fingerprint,
-    actorLabel,
+  expect(publication.fields).toEqual(["overview"]);
+  expect(publication.evidence).toMatchObject({
+    candidateId: next.candidate.id,
+    fingerprint: request.decision.overview,
+    documents: [{ url: source.url, contentHash: expect.stringMatching(/^[a-f0-9]{64}$/) }],
   });
-  const history = await db.adminAuditEntry.findMany({
-    where: auditWhere,
-    orderBy: { createdAt: "asc" },
+  const audit = await db.adminAuditEntry.findMany({
+    where: {
+      action: "ingestion.agent.apply",
+      resourceKey: slug,
+      afterValue: { path: ["publicationId"], equals: receipt.publicationId },
+    },
   });
-  expect(history).toHaveLength(2);
-  expect(history[0].id).toBe(rows[0].id);
-  expect(history[1].beforeValue.summaryEn).toBe(next.record.summary.en);
-  expect(history[1].afterValue).toEqual(revised.record);
-  await page.reload();
-  await expect(region.getByText(revised.record.summary.en)).toBeVisible();
+  expect(audit).toHaveLength(1);
+  expect(audit[0].afterValue.overview).toEqual(next.candidate.overview);
 
+  await page.reload();
+  await expect(region.getByText(next.candidate.overview.summary.en)).toBeVisible();
+  const staleCity = await stage(9);
+  const boundToCity = await claimAgentIssue(db, staleCity.sourceId, staleCity.issueId);
   await db.festival.update({ where: { id: festivalId }, data: { city: null } });
   try {
     await page.reload();
     await expect(region).toHaveCount(0);
-    await expect(apply()).rejects.toThrow(/exact catalogue edition/);
+    await expect(resolveAgentIssue(db, approve(boundToCity))).rejects.toThrow("stale");
   } finally {
     await db.festival.update({ where: { id: festivalId }, data: { city: source.city } });
+    await releaseAgentIssue(db, boundToCity.issueId, boundToCity.leaseToken);
   }
 });
 
@@ -145,9 +152,10 @@ for (const [lang, heading] of Object.entries({
   ru: "О фестивале",
 })) {
   test(`${lang} shows the localized reviewed observation and provenance`, async ({ page }) => {
-    const fetchImpl = fixture(8);
-    const { record, fingerprint } = await collectReviewedOverview(db, slug, year, { fetchImpl });
-    await collectReviewedOverview(db, slug, year, { fetchImpl, approval: fingerprint, actorLabel });
+    const count = { en: 10, de: 11, ru: 12 }[lang];
+    const issue = await stage(count);
+    const record = issue.candidate.overview;
+    await resolveAgentIssue(db, approve(await claimAgentIssue(db, issue.sourceId, issue.issueId)));
     await page.setViewportSize({ width: 320, height: 760 });
     await page.goto(detailPath(lang));
     const region = page.getByRole("region", { name: heading });

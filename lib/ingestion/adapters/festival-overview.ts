@@ -21,6 +21,12 @@ export function overviewOrganizer(slug: string, year: number) {
   return { ...identity, url };
 }
 
+export function overviewSourceUrls(slug: string) {
+  if (!Object.hasOwn(sources, slug)) return [];
+  if (slug === "alcatraz") return [overviewOrganizer(slug, 2000)!.url];
+  return Array.from({ length: 100 }, (_, index) => overviewOrganizer(slug, 2000 + index)!.url);
+}
+
 export function parseFestivalOverview(html: string, slug: string, year: number) {
   if (!overviewOrganizer(slug, year)) return;
   const $ = load(html);

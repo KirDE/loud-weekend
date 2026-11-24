@@ -1,9 +1,17 @@
+import {
+  collectOverviewCandidate,
+  registeredOverviewSource,
+} from "../lib/ingestion/overview-collector.ts";
 import { drainImportEvents } from "../lib/ingestion/import-events.ts";
 import { sendImportEvent, transportConfigured } from "../lib/ingestion/import-event-transport.mjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { listConfiguredSources } from "../lib/sources/repository.ts";
+import {
+  collectArrivalCandidate,
+  registeredArrivalSource,
+} from "../lib/ingestion/arrival-collector.ts";
 import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
 import { fetchSource } from "../lib/ingestion/fetch.ts";
 import { evaluateCandidate } from "../lib/ingestion/policy.ts";
@@ -74,7 +82,20 @@ const hydratedSources = configuredSources.map((source) => ({
 const eligible = dueOnly
   ? dueFestivalSources(hydratedSources)
   : hydratedSources.filter((source) => source.enabled);
-let selected = eligible.filter((source) => !slugArg || source.festivalSlug === slugArg);
+const sourceIdentity = (source) => ({
+  slug: source.festivalSlug,
+  year: source.editionYear,
+  url: source.url,
+  parserKey: source.parserKey,
+});
+function reviewCollector(source) {
+  const identity = sourceIdentity(source);
+  if (registeredArrivalSource(identity)) return collectArrivalCandidate;
+  if (registeredOverviewSource(identity)) return collectOverviewCandidate;
+}
+let selected = eligible.filter(
+  (source) => (!slugArg || source.festivalSlug === slugArg) && !reviewCollector(source),
+);
 const notificationEndpoint =
   !dbDue &&
   (process.env.NOTIFICATION_EVENTS_URL ||
@@ -226,9 +247,15 @@ for (const source of selected) {
     const startedAt = new Date();
     let response;
     let html;
+    let organizerReview;
+    const collectReview = sourceLease && reviewCollector(source);
     failureStage = "fetch";
     try {
-      if (!fixturePath) {
+      if (collectReview) {
+        if (current.editionYear !== source.editionYear)
+          throw new Error("Organizer source does not match the current edition");
+        organizerReview = await collectReview(source);
+      } else if (!fixturePath) {
         const fetched = await fetchSource(source);
         response = fetched.response;
         if (!response.ok)
@@ -239,7 +266,7 @@ for (const source of selected) {
       }
       html = fixturePath
         ? await readFile(path.resolve(fixturePath), "utf8")
-        : await response.text();
+        : await response?.text();
     } catch (error) {
       const attempts = Number(error?.attempts) || 1;
       if (run) {
@@ -297,8 +324,8 @@ for (const source of selected) {
     let result;
     failureStage = "extraction";
     try {
-      candidate = extractFestivalCandidate(html, source, fetchedAt);
-      result = evaluateCandidate(current, candidate, aliasArtists);
+      candidate = organizerReview?.candidate ?? extractFestivalCandidate(html, source, fetchedAt);
+      result = organizerReview ?? evaluateCandidate(current, candidate, aliasArtists);
     } catch (error) {
       failureOutcome = "parser_error";
       if (run)
@@ -335,7 +362,8 @@ for (const source of selected) {
           festivalSlug: source.festivalSlug,
           requestedUrl: source.url,
           finalUrl: response?.url ?? source.url,
-          httpStatus: response?.status ?? null,
+          httpStatus: organizerReview ? 200 : (response?.status ?? null),
+          ...(organizerReview && { sourceLease }),
           durationMs: Date.now() - startedAt.getTime(),
           startedAt,
           endedAt: new Date(),
@@ -352,11 +380,11 @@ for (const source of selected) {
     if (result.changes.length) summary.changed += 1;
     if (result.publishable) summary.publishable += 1;
     if (result.reviewReasons.length) summary.reviewRequired += 1;
-    let outcome = result.changes.length
-      ? result.reviewReasons.length
-        ? "review_required"
-        : "dry_run"
-      : "unchanged";
+    let outcome = result.reviewReasons.length
+      ? "review_required"
+      : result.changes.length
+        ? "dry_run"
+        : "unchanged";
     let catalogPublication = null;
     failureStage = "publication";
     if (publish && result.publishable && !result.reviewReasons.length) {

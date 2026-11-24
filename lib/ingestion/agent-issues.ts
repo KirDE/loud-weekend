@@ -1,4 +1,12 @@
 import { Prisma, type PrismaClient, type Prisma as PrismaTypes } from "@prisma/client";
+import { overviewObservation } from "../catalog/festival-overview-import.ts";
+import { OVERVIEW_ADAPTER, registeredOverviewSource } from "./overview-collector.ts";
+import { arrivalObservation } from "../catalog/arrival-import.ts";
+import {
+  ARRIVAL_ADAPTER,
+  allowedArrivalEvidenceUrl,
+  registeredArrivalSource,
+} from "./arrival-collector.ts";
 import { failureRetryAt } from "./failure-policy.ts";
 import { enqueueParserRepair } from "./parser-repairs.ts";
 import { randomUUID } from "node:crypto";
@@ -9,7 +17,11 @@ import {
   type AgentDecision,
 } from "./agent-contract.ts";
 import { mapSource, validateSource } from "../sources/repository.ts";
-import { publishAgentFestivalResolution } from "../catalog/publication.ts";
+import {
+  publishAgentArrivalResolution,
+  publishAgentFestivalResolution,
+  publishAgentOverviewResolution,
+} from "../catalog/publication.ts";
 
 type Database = PrismaClient | PrismaTypes.TransactionClient;
 const prefix = "ingestion-agent-";
@@ -48,6 +60,7 @@ export async function inspectSource(db: Database, sourceId: string) {
       festival: true,
       edition: {
         include: {
+          overview: true,
           lineup: {
             include: {
               artist: { select: { id: true, name: true, slug: true } },
@@ -93,6 +106,34 @@ export async function inspectSource(db: Database, sourceId: string) {
   if (!manual && !failed && !review) return null;
   const kind = failed ? "failure" : manual ? "manual_source" : "review";
   const normalized = (c?.normalized ?? {}) as Record<string, unknown>;
+  const parsedOverview = overviewObservation.safeParse(normalized.overview);
+  const overview = parsedOverview.success ? parsedOverview.data : null;
+  const overviewEvidence =
+    c?.evidence.filter((e) => e.field === "overview" && e.adapter === OVERVIEW_ADAPTER) ?? [];
+  const overviewFingerprint = overview
+    ? fingerprint({
+        overview,
+        evidence: overviewEvidence.map((e) => ({
+          url: e.sourceUrl,
+          observedAt: e.observedAt.toISOString(),
+          contentHash: e.contentHash,
+          excerpt: e.excerpt,
+        })),
+      })
+    : null;
+  const parsedArrival = arrivalObservation.safeParse(normalized.arrival);
+  const arrival = parsedArrival.success ? parsedArrival.data : null;
+  const arrivalEvidence = (c?.evidence ?? [])
+    .filter((e) => e.field === "arrival" && e.adapter === ARRIVAL_ADAPTER)
+    .map((e) => ({
+      field: "arrival",
+      url: e.sourceUrl,
+      checkedAt: e.observedAt.toISOString(),
+      contentHash: e.contentHash,
+      excerpt: e.excerpt ?? "",
+    }))
+    .sort((a, b) => a.url.localeCompare(b.url));
+  const arrivalFingerprint = arrival ? fingerprint({ arrival, evidence: arrivalEvidence }) : null;
   const facts = Object.fromEntries(
     fields.filter((k) => Object.hasOwn(normalized, k)).map((k) => [k, normalized[k]]),
   );
@@ -122,6 +163,19 @@ export async function inspectSource(db: Database, sourceId: string) {
     source: config(s),
     kind,
     facts,
+    ...(arrival && {
+      arrival: {
+        ...arrival,
+        facts: arrival.facts.map(({ checkedOn: _checkedOn, ...fact }) => fact),
+      },
+    }),
+    ...(overview && {
+      overview: {
+        editionId: overview.editionId,
+        sourceUrl: overview.sourceUrl,
+        summary: overview.summary,
+      },
+    }),
     warnings: c?.warnings ?? [],
     diffs:
       c?.diffs
@@ -170,6 +224,19 @@ export async function inspectSource(db: Database, sourceId: string) {
     candidateId: c?.id ?? null,
     attemptId: a?.id ?? null,
     current,
+    ...(overview && {
+      overviewFingerprint,
+      currentOverview: s.edition.overview
+        ? { ...s.edition.overview, checkedOn: s.edition.overview.checkedOn.toISOString() }
+        : null,
+      overviewCountry: s.festival.countryCode,
+      overviewOfficialUrl: s.festival.officialUrl,
+    }),
+    ...(arrival && {
+      arrivalFingerprint,
+      country: s.festival.countryCode,
+      officialUrl: s.festival.officialUrl,
+    }),
   });
   // Request headers, credentials and raw server errors never enter agent data.
   const error = s.lastError ?? a?.error ?? "";
@@ -206,9 +273,13 @@ export async function inspectSource(db: Database, sourceId: string) {
       ? {
           id: c.id,
           facts,
+          ...(arrival && { arrival, arrivalFingerprint }),
+          ...(overview && { overview, overviewFingerprint }),
+          reviewState: c.reviewState,
           warnings: c.warnings,
           evidence: c.evidence.map((e) => ({
             field: e.field,
+            adapter: e.adapter,
             url: e.sourceUrl,
             observedAt: e.observedAt,
             contentHash: e.contentHash,
@@ -465,6 +536,108 @@ TIME ZONE 'UTC')) FOR UPDATE
 `;
       if (sources.length !== 1) throw new ImportAgentError("busy");
       allowedEvidence(i, d, now);
+      const candidateOverview =
+        i.candidate && "overview" in i.candidate ? i.candidate.overview : null;
+      const overviewDocuments =
+        i.candidate?.evidence.filter(
+          (e) => e.field === "overview" && e.adapter === OVERVIEW_ADAPTER,
+        ) ?? [];
+      const [overviewDocument] = overviewDocuments;
+      const overviewSource = registeredOverviewSource(i.source);
+      if (d.action === "apply" && overviewSource && !d.overview && (!d.source || d.facts))
+        throw new ImportAgentError("invalid");
+      if (
+        d.overview &&
+        (!overviewSource ||
+          !candidateOverview ||
+          i.candidate?.reviewState !== "PENDING" ||
+          i.kind === "failure" ||
+          i.attempt?.status !== "REVIEW" ||
+          i.candidate.overviewFingerprint !== d.overview ||
+          candidateOverview.editionId !== i.current.editionId ||
+          candidateOverview.editionYear !== i.current.year ||
+          candidateOverview.festivalSlug !== i.festivalSlug ||
+          candidateOverview.sourceUrl !== i.source.url ||
+          overviewDocuments.length !== 1 ||
+          overviewDocument.url !== i.source.url ||
+          !/^[a-f0-9]{64}$/.test(overviewDocument.contentHash) ||
+          overviewDocument.observedAt > now ||
+          overviewDocument.observedAt.getTime() < now.getTime() - 86_400_000 ||
+          overviewDocument.observedAt.toISOString().slice(0, 10) !== candidateOverview.checkedOn)
+      )
+        throw new ImportAgentError("invalid");
+      const candidateArrival = i.candidate && "arrival" in i.candidate ? i.candidate.arrival : null;
+      const arrivalEvidence =
+        i.candidate?.evidence.filter(
+          (e) => e.field === "arrival" && e.adapter === ARRIVAL_ADAPTER,
+        ) ?? [];
+      const guidanceSource = registeredArrivalSource(i.source);
+      // An evidence-backed source-only repair must remain available after an import failure.
+      // It cannot also publish unrelated facts or approve a guidance candidate.
+      if (d.action === "apply" && guidanceSource && !d.arrival && (!d.source || d.facts))
+        throw new ImportAgentError("invalid");
+      if (d.arrival) {
+        const expectedUrls = candidateArrival?.facts.flatMap((fact) =>
+          fact.supportingSourceUrl ? [fact.sourceUrl, fact.supportingSourceUrl] : [fact.sourceUrl],
+        );
+        if (
+          !guidanceSource ||
+          !candidateArrival ||
+          i.candidate?.reviewState !== "PENDING" ||
+          i.kind === "failure" ||
+          i.attempt?.status !== "REVIEW" ||
+          i.candidate.arrivalFingerprint !== d.arrival ||
+          candidateArrival.editionId !== i.current.editionId ||
+          candidateArrival.editionYear !== i.current.year ||
+          candidateArrival.festivalSlug !== i.festivalSlug ||
+          !expectedUrls?.includes(i.source.url) ||
+          !expectedUrls.every((url) =>
+            arrivalEvidence.some((e) => e.url === url && e.contentHash),
+          ) ||
+          arrivalEvidence.some(
+            (e) =>
+              !expectedUrls.includes(e.url) ||
+              !allowedArrivalEvidenceUrl(i.festivalSlug, i.current.year, e.url) ||
+              !/^[a-f0-9]{64}$/.test(e.contentHash) ||
+              e.observedAt > now ||
+              e.observedAt.getTime() < now.getTime() - 86_400_000,
+          )
+        )
+          throw new ImportAgentError("invalid");
+      }
+      const publicationSourceId = "openclaw:" + i.issueId + ":" + i.snapshot;
+      const persistedOverviewEvidence = overviewDocuments.map((e) => ({
+        ...e,
+        observedAt: e.observedAt.toISOString(),
+      }));
+      const overviewPublication =
+        d.overview && candidateOverview
+          ? await publishAgentOverviewResolution(tx, {
+              sourceId: publicationSourceId,
+              overview: candidateOverview,
+              evidence: {
+                candidateId: i.candidate?.id,
+                fingerprint: d.overview,
+                documents: persistedOverviewEvidence,
+              },
+            })
+          : null;
+      const persistedArrivalEvidence = arrivalEvidence.map((e) => ({
+        ...e,
+        observedAt: e.observedAt.toISOString(),
+      }));
+      const arrivalPublication =
+        d.arrival && candidateArrival
+          ? await publishAgentArrivalResolution(tx, {
+              sourceId: publicationSourceId,
+              arrival: candidateArrival,
+              evidence: {
+                candidateId: i.candidate?.id,
+                fingerprint: d.arrival,
+                documents: persistedArrivalEvidence,
+              },
+            })
+          : null;
       // A stored candidate is not proof of a parser problem. In particular,
       // manual no-op reviews (including unchanged supplied facts/source) must
       // not manufacture repair tasks. Actual corrections and rejected/review
@@ -487,13 +660,13 @@ TIME ZONE 'UTC')) FOR UPDATE
           i.candidate.diffs.length > 0 ||
           !Array.isArray(i.candidate.warnings) ||
           i.candidate.warnings.length > 0);
-      let publication = null;
+      let publication = overviewPublication ?? arrivalPublication;
       if (d.action === "apply") {
         if (d.facts && changedFacts)
           publication = await publishAgentFestivalResolution(tx, {
             editionId: i.current.editionId!,
             festivalSlug: i.festivalSlug,
-            sourceId: "openclaw:" + i.issueId + ":" + i.snapshot,
+            sourceId: publicationSourceId,
             reason: d.reason,
             facts: d.facts,
             evidence: d.evidence,
@@ -552,6 +725,8 @@ TIME ZONE 'UTC')) FOR UPDATE
             : null;
       const parserRepairId =
         ["apply", "dismiss"].includes(d.action) &&
+        !d.arrival &&
+        !d.overview &&
         (changedFacts || changedSource || candidateFeedback)
           ? await enqueueParserRepair(tx, {
               sourceId: i.sourceId,
@@ -579,6 +754,8 @@ TIME ZONE 'UTC')) FOR UPDATE
         reason: d.reason,
         question: d.question ?? null,
         publicationId: publication?.id ?? null,
+        ...(d.arrival && { arrivalPublished: !!arrivalPublication }),
+        ...(d.overview && { overviewPublished: !!overviewPublication }),
         parserRepairId,
         providerJobs: publication?.playlistRefreshRequested ? 1 : 0,
         at: now.toISOString(),
@@ -618,8 +795,14 @@ TIME ZONE 'UTC')) FOR UPDATE
             ...receipt,
             facts: d.facts ?? {},
             sourceChange: d.source ?? null,
+            ...(d.arrival && { arrival: candidateArrival, arrivalFingerprint: d.arrival }),
+            ...(d.overview && { overview: candidateOverview, overviewFingerprint: d.overview }),
           },
-          evidence: d.evidence,
+          evidence: d.overview
+            ? persistedOverviewEvidence
+            : d.arrival
+              ? persistedArrivalEvidence
+              : d.evidence,
           metadata: {
             issueId: i.issueId,
             reason: d.reason,
