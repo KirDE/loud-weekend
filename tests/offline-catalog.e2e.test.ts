@@ -143,7 +143,7 @@ test("offline catalogue and trip omit performances outside the edition dates", a
           start: "20:00",
           timeZone: "Europe/Berlin",
           sourceUrl: "https://festival.example.test/timetable/",
-          observedAt: new Date("2027-11-12T10:00:00Z"),
+          observedAt: new Date("2026-11-12T10:00:00Z"),
         };
         await tx.timetablePerformance.createMany({
           data: [
@@ -236,7 +236,7 @@ test("trip download refuses a bounded query that could hide valid performances",
           stage: "Oversize fixture stage",
           start: "20:00",
           sourceUrl: "https://festival.example.test/timetable/",
-          observedAt: new Date("2027-05-01T10:00:00Z"),
+          observedAt: new Date("2026-11-12T10:00:00Z"),
         };
         await tx.timetablePerformance.createMany({
           data: Array.from({ length: 800 }, (_, index) => ({
