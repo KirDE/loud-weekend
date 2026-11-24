@@ -12,12 +12,14 @@ export default defineConfig({
     reuseExistingServer: false,
     env: {
       DATABASE_URL: process.env.DATABASE_URL,
+      CALENDAR_SUBSCRIPTIONS_ENABLED: "1",
       AUTH_SECRET: "admin-e2e-secret-at-least-32-characters",
       APP_URL: "http://localhost:3245",
       ADMIN_EMAILS: [
         "browser-admin@example.test",
         "browser-editor@example.test",
         "browser-viewer@example.test",
+        "browser-corrections-editor@example.test",
         "browser-onboarding-editor@example.test",
       ].join(","),
       SUBMISSION_HASH_SALT: "browser-submission-test-salt",
