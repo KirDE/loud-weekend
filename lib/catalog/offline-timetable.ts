@@ -1,29 +1,53 @@
 import { timetableEntrySchema } from "../timetables.ts";
 
-export const offlineTimetableWhere = () => ({
-  timeZone: { not: null },
-  sourceUrl: { not: null },
-  observedAt: { lte: new Date() },
-} as const);
+export const offlineTimetableWhere = () =>
+  ({
+    timeZone: { not: null },
+    sourceUrl: { not: null },
+    observedAt: { lte: new Date() },
+  }) as const;
 
 export const offlineTimetableSelect = {
-  date: true, stage: true, start: true, artistName: true, timeZone: true, status: true,
-  sourceUrl: true, observedAt: true,
+  date: true,
+  stage: true,
+  start: true,
+  artistName: true,
+  timeZone: true,
+  status: true,
+  sourceUrl: true,
+  observedAt: true,
 } as const;
 
 type TimetableRow = {
-  date: Date; stage: string; start: string; artistName: string; timeZone: string | null;
-  status: string; sourceUrl: string | null; observedAt: Date | null;
+  date: Date;
+  stage: string;
+  start: string;
+  artistName: string;
+  timeZone: string | null;
+  status: string;
+  sourceUrl: string | null;
+  observedAt: Date | null;
 };
 
-export function projectOfflinePerformance(row: TimetableRow, edition: { startDate: Date | null; endDate: Date | null }) {
+export function projectOfflinePerformance(
+  row: TimetableRow,
+  edition: { startDate: Date | null; endDate: Date | null },
+) {
   // Edition dates can be corrected after a timetable was imported.
-  if ((edition.startDate && row.date < edition.startDate) || (edition.endDate && row.date > edition.endDate)) return [];
+  if (
+    (edition.startDate && row.date < edition.startDate) ||
+    (edition.endDate && row.date > edition.endDate)
+  )
+    return [];
   const entry = timetableEntrySchema.safeParse({
-    date: row.date.toISOString().slice(0, 10), stage: row.stage, start: row.start,
-    artist: row.artistName, timeZone: row.timeZone,
+    date: row.date.toISOString().slice(0, 10),
+    stage: row.stage,
+    start: row.start,
+    artist: row.artistName,
+    timeZone: row.timeZone,
     status: row.status === "CANCELLED" ? "cancelled" : "scheduled",
-    sourceUrl: row.sourceUrl, observedAt: row.observedAt?.toISOString(),
+    sourceUrl: row.sourceUrl,
+    observedAt: row.observedAt?.toISOString(),
   });
   if (!entry.success) return [];
   // The source URL validates the stored proof but is not part of either download.
