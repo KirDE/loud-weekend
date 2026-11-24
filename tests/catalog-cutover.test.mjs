@@ -25,7 +25,10 @@ test("public catalogue routes resolve fresh data at request time", async () => {
   );
   assert.ok(catalogueRoutes.length >= 16);
   const homeLoader = await readFile("lib/home-metadata.ts", "utf8");
-  assert.match(homeLoader, /getHomeCatalog\s*=\s*cache\(getCatalog\)/);
+  assert.match(
+    homeLoader,
+    /getHomeCatalog\s*=\s*cache\(\(\)\s*=>\s*getCatalog\(\{\s*includeFreshness:\s*true\s*\}\)\)/,
+  );
 });
 
 test("festival details receive related catalogue data from the database snapshot", async () => {
