@@ -1,3 +1,4 @@
+import { extractPolandrockAdmission } from "./adapters/polandrock-admission.ts";
 import {
   observeTicketSupplement,
   ticketSupplementUrl,
@@ -58,6 +59,8 @@ function extractConfiguredCandidate(
   source: FestivalSource,
   fetchedAt: string,
 ): FestivalCandidate {
+  const admission = extractPolandrockAdmission(html, source, fetchedAt);
+  if (admission) return admission;
   const roskilde = extractRoskildeCandidate(html, source, fetchedAt);
   if (roskilde) return roskilde;
   const roadburn = extractRoadburnCandidate(html, source, fetchedAt);

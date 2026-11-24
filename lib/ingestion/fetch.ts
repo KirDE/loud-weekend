@@ -1,4 +1,5 @@
 import { RFP_STOCK, reduceRfpStockDocument } from "./rfp-ticket-stock.ts";
+import { isPolandrockAdmissionSource } from "./adapters/polandrock-admission.ts";
 import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import { isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS } from "./adapters/full-rewind.ts";
@@ -154,6 +155,11 @@ async function fetchSourceWithoutTicketSupplement(
     return fetchRoskildeDocuments(source.editionYear);
 
   let initial = await fetchWithRetry(source.fetchUrl ?? source.url);
+  if (isPolandrockAdmissionSource(source)) {
+    if (initial.response.ok && initial.response.url && initial.response.url !== source.url)
+      throw new Error("Pol'and'Rock newsroom changed its official identity");
+    return initial;
+  }
   if (
     source.festivalSlug === "area53" &&
     (source.url !== "https://area53festival.at/de/" ||

@@ -2694,3 +2694,162 @@ test("I-Days direct ticketsUrl-only publication validates durable proof and atom
     }
   }
 });
+
+test("PolandRock admission publishes with durable proof and rejects drift or stale writes", async () => {
+  const { POLANDROCK_NEWSROOM } = await import("../lib/ingestion/adapters/polandrock-admission.ts");
+  const source = {
+    festivalSlug: "polandrock",
+    url: POLANDROCK_NEWSROOM,
+    strategies: ["html_fallback"] as const,
+    editionYear: 2027,
+    refreshPolicy: "daily" as const,
+    enabled: true,
+  };
+  const html = await readFile(
+    new URL("./fixtures/official-markup/polandrock-admission.html", import.meta.url),
+    "utf8",
+  );
+  const festival = await db.festival.upsert({
+    where: { slug: "polandrock" },
+    create: {
+      slug: "polandrock",
+      name: "Synthetic PolandRock",
+      country: "Testland",
+      countryCode: "PL",
+      officialUrl: "https://polandrockfestival.pl/",
+      genres: [],
+    },
+    update: {},
+  });
+  const edition = await db.festivalEdition.upsert({
+    where: { festivalId_year: { festivalId: festival.id, year: 2027 } },
+    create: {
+      festivalId: festival.id,
+      year: 2027,
+      status: "PARTIAL",
+      completeness: "PARTIAL",
+      recordState: "CURRENT",
+      ticketStatus: "UNKNOWN",
+      startDate: new Date("2027-07-29"),
+      endDate: new Date("2027-07-31"),
+      sourceUpdatedAt: new Date(),
+    },
+    update: { ticketStatus: "UNKNOWN" },
+  });
+  const current = async () =>
+    (await readCatalog({ database: db })).festivals.find((f) => f.slug === "polandrock")!;
+  const make = async () => {
+    const calls: string[] = [];
+    const response = await fetchSource(
+      { ...source, strategies: [...source.strategies] },
+      {
+        maxAttempts: 1,
+        fetchImpl: async (u) => {
+          calls.push(String(u));
+          return new Response(html);
+        },
+      },
+    );
+    assert.deepEqual(calls, [source.url]);
+    const c = extractFestivalCandidate(
+      await response.response.text(),
+      { ...source, strategies: [...source.strategies] },
+      new Date().toISOString(),
+    );
+    const r = evaluateCandidate(await current(), c);
+    assert.deepEqual(r.reviewReasons, []);
+    return r;
+  };
+  const counts = () =>
+    Promise.all([
+      db.catalogPublication.count(),
+      db.catalogPlaylistRefresh.count(),
+      db.festivalPlaylist.count(),
+    ]);
+  for (const drift of [
+    "none",
+    "missing",
+    "source",
+    "time",
+    "value",
+    "normalized-year",
+    "stripped-source",
+    "stripped-slug",
+    "stale",
+  ]) {
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: { ticketStatus: "UNKNOWN" },
+    });
+    const value = await make(),
+      attempt = await persist(value);
+    const saved = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    const where = { candidateId: saved.id, field: "ticketStatus" };
+    if (drift === "missing") await db.ingestionEvidence.deleteMany({ where });
+    if (drift === "source")
+      await db.ingestionEvidence.updateMany({
+        where,
+        data: { sourceUrl: "https://foreign.test/" },
+      });
+    if (drift === "time")
+      await db.ingestionEvidence.updateMany({
+        where,
+        data: { observedAt: new Date("2020-01-01") },
+      });
+    if (drift === "value")
+      await db.ingestionEvidence.updateMany({ where, data: { observedValue: "available" } });
+    if (drift === "normalized-year")
+      await db.ingestionCandidate.update({
+        where: { id: saved.id },
+        data: { normalized: { ...(saved.normalized as any), observedEditionYears: [2026] } },
+      });
+    if (drift === "stripped-source") {
+      value.sourceUrl = "https://polandrockfestival.pl/";
+      value.candidate.sourceUrl = value.sourceUrl;
+    }
+    if (drift === "stripped-slug") {
+      value.festivalSlug = "synthetic-fest";
+      value.candidate.festivalSlug = "synthetic-fest";
+    }
+    if (drift === "stale")
+      await db.festivalEdition.update({
+        where: { id: edition.id },
+        data: { ticketStatus: "SOLD_OUT" },
+      });
+    const before = await counts();
+    if (drift === "none") {
+      const pub = await publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: value,
+        sourceCommit: suffix,
+      });
+      assert(pub);
+      assert.equal((await current()).ticketStatus, "free");
+      assert.deepEqual((await make()).changes, []);
+      assert.equal(
+        (
+          await publishIngestionResult(db, {
+            attemptId: attempt.id,
+            result: value,
+            sourceCommit: suffix,
+          })
+        )?.id,
+        pub.id,
+      );
+      assert.deepEqual(await counts(), [before[0] + 1, before[1], before[2]]);
+    } else {
+      await assert.rejects(
+        publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
+        /PolandRock admission publication|Stale ticketStatus/,
+      );
+      assert.deepEqual(await counts(), before);
+      assert.equal((await current()).ticketStatus, drift === "stale" ? "sold_out" : "unknown");
+      assert.equal(
+        (await db.ingestionCandidate.findUniqueOrThrow({ where: { id: saved.id } })).reviewState,
+        "PENDING",
+      );
+    }
+  }
+});

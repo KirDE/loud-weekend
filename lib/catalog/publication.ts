@@ -4,6 +4,7 @@ import {
   isTolminatorStockRoute,
   matchesTolminatorStockEdition,
 } from "../ingestion/adapters/tolminator-stock.ts";
+import { POLANDROCK_NEWSROOM } from "../ingestion/adapters/polandrock-admission.ts";
 import {
   ticketSupplementUrl,
   ticketSupplementPurchaseUrl,
@@ -470,6 +471,67 @@ export async function publishIngestionResult(
           candidate.attempt.requestedUrl !== input.result.sourceUrl)
       )
         throw new Error("Leased candidate source does not match persisted attempt");
+      // Admission-only observations cannot turn a camping link or missing proof
+      // into free general entry. Bind request, normalized data and durable evidence.
+      const admission = input.result.candidate;
+      const savedAdmission = candidate.normalized as unknown as FestivalCandidate;
+      if (
+        (input.result.festivalSlug === "polandrock" || candidate.festivalSlug === "polandrock") &&
+        (candidate.attempt.requestedUrl === POLANDROCK_NEWSROOM ||
+          input.result.sourceUrl === POLANDROCK_NEWSROOM ||
+          admission.ticketStatus === "free" ||
+          savedAdmission?.ticketStatus === "free")
+      ) {
+        const at = Date.parse(input.result.fetchedAt);
+        const valid =
+          input.result.festivalSlug === "polandrock" &&
+          candidate.festivalSlug === "polandrock" &&
+          candidate.attempt.requestedUrl === POLANDROCK_NEWSROOM &&
+          input.result.sourceUrl === POLANDROCK_NEWSROOM &&
+          Number.isFinite(at) &&
+          [admission, savedAdmission].every(
+            (c) =>
+              c &&
+              c.festivalSlug === "polandrock" &&
+              c.sourceUrl === POLANDROCK_NEWSROOM &&
+              c.fetchedAt === input.result.fetchedAt &&
+              c.ticketStatus === "free" &&
+              c.observedEditionYears?.length === 1 &&
+              c.observedEditionYears[0] === candidate.sourceYear &&
+              c.startDate === admission.startDate &&
+              c.endDate === admission.endDate &&
+              c.warnings?.length === 0 &&
+              ["lineup", "headliners", "ticketsUrl", "status"].every(
+                (f) => (c as unknown as Record<string, unknown>)[f] === undefined,
+              ) &&
+              ["startDate", "endDate", "ticketStatus"].every((field) =>
+                c.evidence?.some(
+                  (e) =>
+                    e.field === field &&
+                    e.sourceUrl === POLANDROCK_NEWSROOM &&
+                    Date.parse(e.observedAt) === at,
+                ),
+              ),
+          ) &&
+          input.result.changes.every(
+            (change) =>
+              ["startDate", "endDate", "ticketStatus"].includes(change.field) &&
+              same(change.after, (admission as unknown as Record<string, unknown>)[change.field]),
+          ) &&
+          ["startDate", "endDate", "ticketStatus"].every((field) =>
+            candidate.evidence.some(
+              (e) =>
+                e.field === field &&
+                e.sourceUrl === POLANDROCK_NEWSROOM &&
+                e.observedAt.getTime() === at &&
+                same(e.observedValue, (admission as unknown as Record<string, unknown>)[field]),
+            ),
+          );
+        if (!valid)
+          throw new Error(
+            "PolandRock admission publication requires matching persisted official edition evidence",
+          );
+      }
       const sourceId = `ingestion:${candidate.id}`;
       const existing = await db.catalogPublication.findUnique({
         where: { sourceId },
