@@ -20,7 +20,7 @@ export async function GET(request: Request, { params }: { params: Promise<Params
     return new Response(null, { status: 404 });
   }
   const card = await readSocialPreview(kind, slug, lang, year ? Number(year) : undefined);
-  if (!card) return new Response(null, { status: 404 });
+  if (!card) return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
 
   const validator = createHash("sha256")
     .update(JSON.stringify([1, card]))
