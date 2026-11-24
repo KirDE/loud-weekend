@@ -1,7 +1,11 @@
 import { alcatrazPrimaryUrl } from "./alcatraz-ticket-stock.ts";
 import { validateBarcelonaFetch } from "./adapters/barcelona-banner.ts";
 import { RFP_STOCK, reduceRfpStockDocument } from "./rfp-ticket-stock.ts";
-import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
+import {
+  matchesTicketPrimaryUrl,
+  ticketSupplementUrl,
+  TICKET_SUPPLEMENT,
+} from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import { isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS } from "./adapters/full-rewind.ts";
 import { isDownloadSource, DOWNLOAD_ARTISTS, DOWNLOAD_DOCUMENTS } from "./adapters/download.ts";
@@ -1107,10 +1111,8 @@ export async function fetchSource(
   let attempts = primary.attempts;
   try {
     if (
-      primary.response.url &&
-      !(source.festivalSlug === "alcatraz"
-        ? alcatrazPrimaryUrl(source.url, primary.response.url)
-        : primary.response.url === source.url)
+      !matchesTicketPrimaryUrl(source, primary.response.url) &&
+      !(source.festivalSlug === "alcatraz" && alcatrazPrimaryUrl(source.url, primary.response.url))
     )
       throw new Error("Official ticket primary source changed identity");
     const body = await boundedTicketText(primary.response);
