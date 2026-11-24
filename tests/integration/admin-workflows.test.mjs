@@ -23,6 +23,7 @@ let primaryOffersWithoutEdition = false;
 let primaryHasDatedFallback = false;
 let observedTicketsUrl = ticketsUrl;
 let includePerformer = false;
+let includeAnotherEvent = false;
 let observedCity = "Wacken Preview";
 const performer = "Example Metal Band";
 const replacementTicketsUrl = "https://tickets.example.test/replacement";
@@ -63,7 +64,17 @@ const sourceServer = createServer((request, response) => {
     request.url === "/primary" && primaryOffersWithoutEdition && primaryHasDatedFallback
       ? `<meta property="event:start_time" content="${startDate}">`
       : "";
-  response.end(`${fallback}<script type="application/ld+json">${JSON.stringify(event)}</script>`);
+  const otherEvent =
+    request.url === "/primary" && includeAnotherEvent
+      ? `<script type="application/ld+json">${JSON.stringify({
+          "@type": "MusicEvent",
+          name: "Another event",
+          startDate: "2027-08-01",
+        })}</script>`
+      : "";
+  response.end(
+    `${fallback}<script type="application/ld+json">${JSON.stringify(event)}</script>${otherEvent}`,
+  );
 });
 
 class Client {
@@ -1155,6 +1166,22 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   );
 
   primaryOffersWithoutEdition = false;
+  includeAnotherEvent = true;
+  const ambiguousCity = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(ambiguousCity.status, 201);
+  const ambiguousRun = await ambiguousCity.json();
+  assert.equal(ambiguousRun.queued, 0);
+  assert.equal(ambiguousRun.status, "PARTIAL");
+  const ambiguousLog = await (
+    await admin.json(`/api/admin/parser-runs/${ambiguousRun.id}/log`)
+  ).json();
+  assert.ok(
+    ambiguousLog.log.some(({ reviewReasons }) =>
+      reviewReasons?.some((reason) => reason.includes("Multiple JSON-LD Events")),
+    ),
+  );
+  includeAnotherEvent = false;
+
   const scopedCity = await admin.json(`${refreshPath}?year=2027`, "POST");
   assert.equal(scopedCity.status, 201);
   const scopedCityRun = await scopedCity.json();
