@@ -174,3 +174,24 @@ test("trip download decodes a multibyte character split across response chunks",
   );
   assert.deepEqual(await fetchOfflineTrip("", trip.slug, trip.year), trip);
 });
+
+test("a download with an invalid time zone cannot replace a valid saved schedule", async (t) => {
+  const trip = { ...fact, timetable: [{ ...fact.timetable[0], timeZone: "City/Unknown" }] };
+  t.mock.method(globalThis, "fetch", async () => Response.json(trip));
+  const storage = memoryStorage();
+  const saved = saveOfflineTrip(storage, fact, updatedAt);
+  await assert.rejects(async () => {
+    saveOfflineTrip(storage, await fetchOfflineTrip("", fact.slug, fact.year), updatedAt);
+  }, /Unexpected trip download/);
+  assert.deepEqual(readOfflineTrip(storage, fact.slug, fact.year), saved);
+
+  // Older stored copies still expose their public trip details, not the unusable time.
+  storage.setItem(
+    offlineTripKey(fact.slug, fact.year),
+    JSON.stringify({ trip, savedAt: updatedAt }),
+  );
+  assert.deepEqual(readOfflineTrip(storage, fact.slug, fact.year), {
+    savedAt: updatedAt,
+    trip: { ...fact, timetable: [] },
+  });
+});

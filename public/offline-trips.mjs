@@ -241,6 +241,7 @@ export function parseOfflineTrip(value) {
   )
     return null;
   const timetable = [];
+  const validTimeZones = new Set();
   for (const row of value.timetable) {
     if (
       !row ||
@@ -259,6 +260,15 @@ export function parseOfflineTrip(value) {
       (value.endDate && row.date > value.endDate)
     )
       continue;
+    if (!validTimeZones.has(row.timeZone)) {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: row.timeZone });
+      } catch {
+        // Keep legacy trip details, but never show a performance with an invalid time zone.
+        continue;
+      }
+      validTimeZones.add(row.timeZone);
+    }
     timetable.push({
       date: row.date,
       start: row.start,
