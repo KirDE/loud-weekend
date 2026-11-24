@@ -19,6 +19,15 @@ const sourceOrigin = "http://127.0.0.1:3250";
 const requests = [];
 const ticketsUrl = "https://tickets.example.test/integration";
 let primaryFails = false;
+let primaryOffersWithoutEdition = false;
+let primaryHasDatedFallback = false;
+let observedTicketsUrl = ticketsUrl;
+let includePerformer = false;
+let includeAnotherEvent = false;
+let primaryStartDate;
+let observedCity = "Wacken Preview";
+const performer = "Example Metal Band";
+const replacementTicketsUrl = "https://tickets.example.test/replacement";
 let originalStartDate = "2027-07-28";
 let datesChanged = false;
 const correctedStartDate = "2027-07-29";
@@ -31,22 +40,46 @@ const sourceServer = createServer((request, response) => {
   }
   assert.ok(request.url === "/primary" || request.url === "/dates");
   const startDate =
-    request.url === "/dates" && datesChanged ? correctedStartDate : originalStartDate;
+    request.url === "/primary"
+      ? (primaryStartDate ?? originalStartDate)
+      : datesChanged
+        ? correctedStartDate
+        : originalStartDate;
   const event = {
     "@context": "https://schema.org",
     "@type": "MusicEvent",
     name: "Wacken Open Air",
     startDate,
+    ...(includePerformer && { performer: [{ "@type": "MusicGroup", name: performer }] }),
     endDate: "2027-07-31",
-    location: { "@type": "Place", address: { addressLocality: "Wacken Preview" } },
+    location: { "@type": "Place", address: { addressLocality: observedCity } },
     offers: {
       "@type": "Offer",
-      url: ticketsUrl,
+      url: observedTicketsUrl,
       ...(request.url === "/primary" && { availability: "https://schema.org/SoldOut" }),
     },
   };
+  if (request.url === "/primary" && primaryOffersWithoutEdition) {
+    delete event.startDate;
+    delete event.endDate;
+    event.offers.availability = "https://schema.org/InStock";
+  }
   response.setHeader("content-type", "text/html");
-  response.end(`<script type="application/ld+json">${JSON.stringify(event)}</script>`);
+  const fallback =
+    request.url === "/primary" && primaryOffersWithoutEdition && primaryHasDatedFallback
+      ? `<meta property="event:start_time" content="${startDate}">`
+      : "";
+  const otherEvent =
+    request.url === "/primary" && includeAnotherEvent
+      ? `<script type="application/ld+json">${JSON.stringify({
+          "@type": "MusicEvent",
+          name: "Another event",
+          startDate: "2027-08-01",
+        })}</script>`
+      : "";
+  response.end(
+    `${fallback}<script type="application/ld+json">${JSON.stringify(event)}</script>${otherEvent}`,
+  );
 });
 
 class Client {
@@ -328,6 +361,18 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   );
   assert.equal(await db.adminDraft.count(), beforeForgedDrafts);
   assert.equal(await db.adminAuditEntry.count(), beforeForgedAudit);
+  const malformedDraft = await admin.json("/api/admin", "POST", {
+    resourceKind: "festival",
+    resourceKey: "wacken-open-air",
+    baseRevision: 0,
+    values: ["not a field map"],
+  });
+  assert.equal(malformedDraft.status, 409);
+  assert.equal((await malformedDraft.json()).error, "Invalid draft");
+  assert.equal(await db.adminDraft.count(), beforeForgedDrafts);
+  assert.equal(await db.adminChange.count({ where: { resourceKey: "wacken-open-air" } }), 0);
+  assert.equal(await db.adminAuditEntry.count(), beforeForgedAudit);
+
   const draftResponse = await admin.json("/api/admin", "POST", {
     resourceKind: "festival",
     resourceKey: "wacken-open-air",
@@ -535,21 +580,6 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   const noop = await db.adminChange.findFirstOrThrow({ where: { draftId: noopDraft.id } });
   assert.equal((await (await decideArtist(noop.id)).json()).artistPublication, "unchanged");
   assert.equal(await db.artistProvenance.count({ where: { artistId: originalArtist.id } }), 1);
-  const rejectedResponse = await admin.json("/api/admin", "POST", {
-    resourceKind: "artist",
-    resourceKey: artistSlug,
-    baseRevision: 3,
-    values: { canonicalName: "Unpublished Name" },
-  });
-  assert.equal(rejectedResponse.status, 201);
-  const rejectedDraft = await rejectedResponse.json();
-  const rejected = await db.adminChange.findFirstOrThrow({ where: { draftId: rejectedDraft.id } });
-  assert.equal((await decideArtist(rejected.id, "reject")).status, 200);
-  assert.equal(
-    (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
-    artistName,
-  );
-
   const socialUrl = "https://www.instagram.com/synthetic-artist/";
   const evidenceUrl = "https://artist.example.test/official-links/";
   const observedAt = "2026-01-01T00:00:00Z";
@@ -688,6 +718,55 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal(
     await db.artistProvenance.count({ where: { artistId: originalArtist.id, field: "biography" } }),
     1,
+  );
+
+  const rejectedResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist",
+    resourceKey: artistSlug,
+    baseRevision: 6,
+    values: { canonicalName: "Unpublished Name" },
+  });
+  assert.equal(rejectedResponse.status, 201);
+  const rejectedDraft = await rejectedResponse.json();
+  const rejected = await db.adminChange.findFirstOrThrow({ where: { draftId: rejectedDraft.id } });
+  assert.equal((await decideArtist(rejected.id, "reject")).status, 200);
+  assert.equal(
+    (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
+    artistName,
+  );
+
+  // A rejection does not change the live revision and must not prevent a
+  // corrected proposal from using that same base. Keep the old audit record.
+  const submitArtistCorrection = (canonicalName) =>
+    admin.json("/api/admin", "POST", {
+      resourceKind: "artist",
+      resourceKey: artistSlug,
+      baseRevision: 6,
+      values: { canonicalName },
+    });
+  const correctionResponse = await submitArtistCorrection("Integration Reviewer Correction");
+  assert.equal(correctionResponse.status, 201);
+  const correction = await correctionResponse.json();
+  assert.ok(correction.revision > rejectedDraft.revision);
+  assert.equal(correction.baseRevision, rejectedDraft.baseRevision);
+  const competingResponse = await submitArtistCorrection("Integration Competing Correction");
+  assert.equal(competingResponse.status, 201);
+  const competing = await competingResponse.json();
+  assert.ok(competing.revision > correction.revision);
+
+  const correctedName = await db.adminChange.findFirstOrThrow({
+    where: { draftId: correction.id },
+  });
+  const competingName = await db.adminChange.findFirstOrThrow({ where: { draftId: competing.id } });
+  assert.equal((await decideArtist(correctedName.id)).status, 200);
+  assert.equal((await decideArtist(competingName.id)).status, 409);
+  assert.equal(
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: rejectedDraft.id } })).status,
+    "REJECTED",
+  );
+  assert.equal(
+    (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
+    "Integration Reviewer Correction",
   );
 
   const logoBytes = await sharp({
@@ -892,6 +971,47 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     return event.offers?.availability;
   }
   assert.equal(await publicAvailability(), undefined);
+
+  // Legacy proposals could accidentally publish to a later edition whose prior
+  // value happened to match. Even an otherwise valid review cannot bind them.
+  const legacyRun = await db.adminParserRun.create({
+    data: {
+      festivalSlug: "wacken-open-air",
+      sourceId: sourceOrigin + "/primary",
+      adapter: "json_ld_event",
+      status: "SUCCEEDED",
+      startedAt: new Date("2026-01-01T10:00:00Z"),
+      finishedAt: new Date("2026-01-01T10:01:00Z"),
+      log: [],
+    },
+  });
+  const legacyChange = await db.adminChange.create({
+    data: {
+      resourceKind: "FESTIVAL",
+      resourceKey: "wacken-open-air",
+      field: "ticketStatus",
+      beforeValue: ticketChange.beforeValue,
+      afterValue: ticketChange.afterValue,
+      baseRevision: ticketChange.baseRevision,
+      parserRunId: legacyRun.id,
+      sourceEvidence: ticketChange.sourceEvidence.evidence,
+    },
+  });
+  const legacyPath = `/api/admin/changes/${legacyChange.id}`;
+  const unbound = await admin.json(legacyPath, "POST", { decision: "approve" });
+  assert.equal(unbound.status, 409);
+  assert.match(await unbound.text(), /missing its edition binding/);
+  assert.equal(
+    (await db.adminChange.findUniqueOrThrow({ where: { id: legacyChange.id } })).status,
+    "PENDING",
+  );
+  assert.equal(
+    await db.catalogPublication.count({ where: { sourceId: `admin:${legacyChange.id}` } }),
+    0,
+  );
+  assert.equal(await publicAvailability(), undefined);
+  assert.equal((await admin.json(legacyPath, "POST", { decision: "reject" })).status, 200);
+
   const attempts = requests.filter((path) => path === "/failing").length;
   const replay = await admin.json(`${refreshPath}?year=2027`, "POST");
   assert.equal(replay.status, 201);
@@ -942,6 +1062,178 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal((await admin.json(refreshPath, "POST")).status, 409);
   assert.equal(await db.adminParserRun.count(), beforeDisabledRuns);
   await db.festivalSource.update({ where: { id: configuredSource.id }, data: { enabled: true } });
+  // A current source configuration cannot establish the year of a dateless offer.
+  primaryOffersWithoutEdition = true;
+  observedTicketsUrl = replacementTicketsUrl;
+  const unscopedStock = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(unscopedStock.status, 201);
+  const stockRun = await unscopedStock.json();
+  assert.equal(stockRun.queued, 0);
+  assert.equal(stockRun.status, "PARTIAL");
+  const stockLog = await (await admin.json(`/api/admin/parser-runs/${stockRun.id}/log`)).json();
+  assert.ok(
+    stockLog.log.some(({ reviewReasons }) =>
+      reviewReasons?.includes(
+        "Ticket availability could not be verified for the selected edition.",
+      ),
+    ),
+  );
+  assert.equal(
+    await db.adminChange.count({ where: { parserRunId: stockRun.id, field: "ticketStatus" } }),
+    0,
+  );
+  assert.equal(await publicAvailability(), "https://schema.org/SoldOut");
+  assert.equal(
+    await db.adminChange.count({ where: { parserRunId: stockRun.id, field: "ticketsUrl" } }),
+    0,
+  );
+  assert.ok(
+    stockLog.log.some(({ reviewReasons }) =>
+      reviewReasons?.includes("Ticket URL could not be verified for the selected edition."),
+    ),
+  );
+  assert.equal(
+    (await db.festivalEdition.findUniqueOrThrow({ where: { id: configuredSource.editionId } }))
+      .ticketsUrl,
+    ticketsUrl,
+  );
+
+  // A separate parser can date the page without dating the offer it did not extract.
+  primaryHasDatedFallback = true;
+  const mixedOffer = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(mixedOffer.status, 201);
+  const mixedRun = await mixedOffer.json();
+  assert.equal(mixedRun.queued, 0);
+  assert.equal(mixedRun.status, "PARTIAL");
+
+  // The same link is eligible once the official event establishes the selected year.
+  primaryOffersWithoutEdition = false;
+  const scopedLink = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(scopedLink.status, 201);
+  const linkRun = await scopedLink.json();
+  assert.equal(linkRun.queued, 1);
+  const linkChange = await db.adminChange.findFirstOrThrow({
+    where: { parserRunId: linkRun.id, field: "ticketsUrl" },
+  });
+  assert.equal(linkChange.afterValue, replacementTicketsUrl);
+  assert.equal(
+    (await admin.json(`/api/admin/changes/${linkChange.id}`, "POST", { decision: "approve" }))
+      .status,
+    200,
+  );
+  assert.equal(
+    (await db.festivalEdition.findUniqueOrThrow({ where: { id: configuredSource.editionId } }))
+      .ticketsUrl,
+    replacementTicketsUrl,
+  );
+
+  // A date from the HTML parser does not establish the edition of a JSON-LD roster.
+  primaryOffersWithoutEdition = true;
+  includePerformer = true;
+  const unscopedLineup = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(unscopedLineup.status, 201);
+  const unscopedLineupRun = await unscopedLineup.json();
+  assert.equal(unscopedLineupRun.queued, 0);
+  assert.equal(unscopedLineupRun.status, "PARTIAL");
+  const lineupLog = await (
+    await admin.json(`/api/admin/parser-runs/${unscopedLineupRun.id}/log`)
+  ).json();
+  assert.ok(
+    lineupLog.log.some(({ reviewReasons }) =>
+      reviewReasons?.includes("Lineup could not be verified for the selected edition."),
+    ),
+  );
+
+  primaryOffersWithoutEdition = false;
+  const scopedLineup = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(scopedLineup.status, 201);
+  const scopedLineupRun = await scopedLineup.json();
+  assert.equal(scopedLineupRun.queued, 1);
+  const scopedLineupChange = await db.adminChange.findFirstOrThrow({
+    where: { parserRunId: scopedLineupRun.id, field: "lineup" },
+  });
+  assert.deepEqual(scopedLineupChange.afterValue, [performer]);
+  assert.equal(
+    (
+      await admin.json(`/api/admin/changes/${scopedLineupChange.id}`, "POST", {
+        decision: "approve",
+      })
+    ).status,
+    200,
+  );
+  assert.match(
+    await (await anonymous.json("/festivals/wacken-open-air/")).text(),
+    /Example Metal Band/,
+  );
+  includePerformer = false;
+
+  // A date from the HTML parser does not date a different parser's venue.
+  primaryOffersWithoutEdition = true;
+  observedCity = "Example Festival City";
+  const unscopedCity = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(unscopedCity.status, 201);
+  const unscopedCityRun = await unscopedCity.json();
+  assert.equal(unscopedCityRun.queued, 0);
+  assert.equal(unscopedCityRun.status, "PARTIAL");
+  const cityLog = await (
+    await admin.json(`/api/admin/parser-runs/${unscopedCityRun.id}/log`)
+  ).json();
+  assert.ok(
+    cityLog.log.some(({ reviewReasons }) =>
+      reviewReasons?.includes("City could not be verified for the selected edition."),
+    ),
+  );
+
+  primaryOffersWithoutEdition = false;
+  primaryStartDate = "2027-02-29";
+  const invalidDate = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(invalidDate.status, 201);
+  const invalidDateRun = await invalidDate.json();
+  assert.equal(invalidDateRun.queued, 0);
+  const invalidDateLog = await (
+    await admin.json(`/api/admin/parser-runs/${invalidDateRun.id}/log`)
+  ).json();
+  assert.ok(
+    invalidDateLog.log.some(({ reviewReasons }) =>
+      reviewReasons?.includes("JSON-LD Event contains an invalid start date"),
+    ),
+  );
+  primaryStartDate = undefined;
+
+  includeAnotherEvent = true;
+  const ambiguousCity = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(ambiguousCity.status, 201);
+  const ambiguousRun = await ambiguousCity.json();
+  assert.equal(ambiguousRun.queued, 0);
+  assert.equal(ambiguousRun.status, "PARTIAL");
+  const ambiguousLog = await (
+    await admin.json(`/api/admin/parser-runs/${ambiguousRun.id}/log`)
+  ).json();
+  assert.ok(
+    ambiguousLog.log.some(({ reviewReasons }) =>
+      reviewReasons?.some((reason) => reason.includes("Multiple JSON-LD Events")),
+    ),
+  );
+  includeAnotherEvent = false;
+
+  const scopedCity = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(scopedCity.status, 201);
+  const scopedCityRun = await scopedCity.json();
+  assert.equal(scopedCityRun.queued, 1);
+  const scopedCityChange = await db.adminChange.findFirstOrThrow({
+    where: { parserRunId: scopedCityRun.id, field: "city" },
+  });
+  assert.equal(scopedCityChange.afterValue, observedCity);
+  assert.equal(
+    (await admin.json(`/api/admin/changes/${scopedCityChange.id}`, "POST", { decision: "approve" }))
+      .status,
+    200,
+  );
+  assert.equal(
+    (await db.festival.findUniqueOrThrow({ where: { slug: "wacken-open-air" } })).city,
+    observedCity,
+  );
+
   primaryFails = true;
   assert.equal((await admin.json(refreshPath, "POST")).status, 502);
   const failedRun = await db.adminParserRun.findFirstOrThrow({ orderBy: { startedAt: "desc" } });

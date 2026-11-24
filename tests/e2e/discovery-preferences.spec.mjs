@@ -11,6 +11,11 @@ const legacyFilters = {
 };
 const activeFilters = {
   ...legacyFilters,
+  dateFrom: "",
+  dateTo: "",
+  weekendOnly: false,
+  maxDays: "all",
+  sort: "date",
   ticketsOnly: true,
   genre: "doom metal",
   origin: "cologne",
@@ -139,6 +144,27 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
     const invalidPayload = {
       json: { document: { ...previous, payload: { savedFilters: "invalid" } } },
     };
+    // A 409 followed by a malformed read must not offer a destructive choice.
+    await secondPage.route(filtersRoute, (route) =>
+      route.request().method() === "GET" ? route.fulfill(invalidPayload) : route.continue(),
+    );
+    await secondPage.getByRole("button", { name: "Sync now", exact: true }).click();
+    await expect(secondPage.getByText("Sync failed. Reconnect and try again.")).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(
+      secondPage.getByRole("button", { name: "Use other device", exact: true }),
+    ).toHaveCount(0);
+    await expect
+      .poll(() =>
+        secondPage.evaluate(
+          (key) => JSON.parse(localStorage.getItem(key)).savedFilters,
+          storageKey,
+        ),
+      )
+      .toEqual(activeFilters);
+    await secondPage.unroute(filtersRoute);
+
     for (const response of [{ status: 503 }, { json: {} }, invalidPayload]) {
       await secondPage.route(filtersRoute, (route) => route.fulfill(response));
       await pull.click();
@@ -172,6 +198,7 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
     favoriteArtists: ["local-artist"],
     attendance: { "local-festival": "going" },
     playlistFestivals: ["local-playlist"],
+    playlistExcludedArtists: ["local-excluded-artist"],
     savedFilters: activeFilters,
   };
   await page.addInitScript(
@@ -186,9 +213,16 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
     password: "synthetic conflict test password",
   };
   expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
+  // Establish the empty favorites baseline before simulating the second device.
+  const baseline = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      new URL(response.url()).pathname === "/api/sync/favorites/",
+  );
   await page.goto("/en/planner/");
-  const pull = page.getByRole("button", { name: "Use account data on this device", exact: true });
-  await expect(pull).toBeDisabled();
+  const favorites = await baseline;
+  expect(favorites.ok()).toBeTruthy();
+  expect((await favorites.json()).document).toBeNull();
 
   // Another device creates favorites before this one tries to sync its local version.
   const remote = { favoriteFestivals: ["remote-festival"], favoriteArtists: [] };
