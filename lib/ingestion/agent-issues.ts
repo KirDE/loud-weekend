@@ -1,4 +1,11 @@
+import { rosterFingerprint } from "../catalog/lineup-proof.ts";
 import { Prisma, type PrismaClient, type Prisma as PrismaTypes } from "@prisma/client";
+import { arrivalObservation } from "../catalog/arrival-import.ts";
+import {
+  ARRIVAL_ADAPTER,
+  allowedArrivalEvidenceUrl,
+  registeredArrivalSource,
+} from "./arrival-collector.ts";
 import { failureRetryAt } from "./failure-policy.ts";
 import { enqueueParserRepair } from "./parser-repairs.ts";
 import { randomUUID } from "node:crypto";
@@ -9,7 +16,10 @@ import {
   type AgentDecision,
 } from "./agent-contract.ts";
 import { mapSource, validateSource } from "../sources/repository.ts";
-import { publishAgentFestivalResolution } from "../catalog/publication.ts";
+import {
+  publishAgentArrivalResolution,
+  publishAgentFestivalResolution,
+} from "../catalog/publication.ts";
 
 type Database = PrismaClient | PrismaTypes.TransactionClient;
 const prefix = "ingestion-agent-";
@@ -93,6 +103,19 @@ export async function inspectSource(db: Database, sourceId: string) {
   if (!manual && !failed && !review) return null;
   const kind = failed ? "failure" : manual ? "manual_source" : "review";
   const normalized = (c?.normalized ?? {}) as Record<string, unknown>;
+  const parsedArrival = arrivalObservation.safeParse(normalized.arrival);
+  const arrival = parsedArrival.success ? parsedArrival.data : null;
+  const arrivalEvidence = (c?.evidence ?? [])
+    .filter((e) => e.field === "arrival" && e.adapter === ARRIVAL_ADAPTER)
+    .map((e) => ({
+      field: "arrival",
+      url: e.sourceUrl,
+      checkedAt: e.observedAt.toISOString(),
+      contentHash: e.contentHash,
+      excerpt: e.excerpt ?? "",
+    }))
+    .sort((a, b) => a.url.localeCompare(b.url));
+  const arrivalFingerprint = arrival ? fingerprint({ arrival, evidence: arrivalEvidence }) : null;
   const facts = Object.fromEntries(
     fields.filter((k) => Object.hasOwn(normalized, k)).map((k) => [k, normalized[k]]),
   );
@@ -122,6 +145,12 @@ export async function inspectSource(db: Database, sourceId: string) {
     source: config(s),
     kind,
     facts,
+    ...(arrival && {
+      arrival: {
+        ...arrival,
+        facts: arrival.facts.map(({ checkedOn: _checkedOn, ...fact }) => fact),
+      },
+    }),
     warnings: c?.warnings ?? [],
     diffs:
       c?.diffs
@@ -157,6 +186,13 @@ export async function inspectSource(db: Database, sourceId: string) {
     lineup: s.edition.lineup
       .filter((l) => l.billing === "LINEUP" && l.status === "ANNOUNCED")
       .map((l) => l.artist.name),
+    finalLineup: {
+      year: s.editionYear,
+      complete: Boolean(
+        s.edition.finalLineupFingerprint &&
+        s.edition.finalLineupFingerprint === rosterFingerprint(s.edition.id, s.edition.lineup),
+      ),
+    },
     entries: s.edition.lineup.map((l) => ({
       artistId: l.artistId,
       billing: l.billing,
@@ -170,6 +206,11 @@ export async function inspectSource(db: Database, sourceId: string) {
     candidateId: c?.id ?? null,
     attemptId: a?.id ?? null,
     current,
+    ...(arrival && {
+      arrivalFingerprint,
+      country: s.festival.countryCode,
+      officialUrl: s.festival.officialUrl,
+    }),
   });
   // Request headers, credentials and raw server errors never enter agent data.
   const error = s.lastError ?? a?.error ?? "";
@@ -206,9 +247,12 @@ export async function inspectSource(db: Database, sourceId: string) {
       ? {
           id: c.id,
           facts,
+          ...(arrival && { arrival, arrivalFingerprint }),
+          reviewState: c.reviewState,
           warnings: c.warnings,
           evidence: c.evidence.map((e) => ({
             field: e.field,
+            adapter: e.adapter,
             url: e.sourceUrl,
             observedAt: e.observedAt,
             contentHash: e.contentHash,
@@ -417,6 +461,20 @@ function allowedEvidence(
       !d.evidence.some((e) => e.field === "source" && e.url === d.source!.url))
   )
     throw new ImportAgentError("invalid");
+  if (d.facts?.finalLineup) {
+    const festivalHosts = new Set(
+      [i.source.officialUrl, i.source.url, i.source.fetchUrl]
+        .filter((url): url is string => Boolean(url))
+        .map((url) => new URL(url).hostname),
+    );
+    if (
+      d.facts.finalLineup.year !== i.current.year ||
+      d.evidence.some(
+        (e) => e.field === "finalLineup" && !festivalHosts.has(new URL(e.url).hostname),
+      )
+    )
+      throw new ImportAgentError("invalid");
+  }
   if (d.facts?.ticketsUrl && !valid(d.facts.ticketsUrl)) throw new ImportAgentError("invalid");
 }
 
@@ -465,16 +523,76 @@ TIME ZONE 'UTC')) FOR UPDATE
 `;
       if (sources.length !== 1) throw new ImportAgentError("busy");
       allowedEvidence(i, d, now);
+      const candidateArrival = i.candidate && "arrival" in i.candidate ? i.candidate.arrival : null;
+      const arrivalEvidence =
+        i.candidate?.evidence.filter(
+          (e) => e.field === "arrival" && e.adapter === ARRIVAL_ADAPTER,
+        ) ?? [];
+      const guidanceSource = registeredArrivalSource(i.source);
+      // An evidence-backed source-only repair must remain available after an import failure.
+      // It cannot also publish unrelated facts or approve a guidance candidate.
+      if (d.action === "apply" && guidanceSource && !d.arrival && (!d.source || d.facts))
+        throw new ImportAgentError("invalid");
+      if (d.arrival) {
+        const expectedUrls = candidateArrival?.facts.flatMap((fact) =>
+          fact.supportingSourceUrl ? [fact.sourceUrl, fact.supportingSourceUrl] : [fact.sourceUrl],
+        );
+        if (
+          !guidanceSource ||
+          !candidateArrival ||
+          i.candidate?.reviewState !== "PENDING" ||
+          i.kind === "failure" ||
+          i.attempt?.status !== "REVIEW" ||
+          i.candidate.arrivalFingerprint !== d.arrival ||
+          candidateArrival.editionId !== i.current.editionId ||
+          candidateArrival.editionYear !== i.current.year ||
+          candidateArrival.festivalSlug !== i.festivalSlug ||
+          !expectedUrls?.includes(i.source.url) ||
+          !expectedUrls.every((url) =>
+            arrivalEvidence.some((e) => e.url === url && e.contentHash),
+          ) ||
+          arrivalEvidence.some(
+            (e) =>
+              !expectedUrls.includes(e.url) ||
+              !allowedArrivalEvidenceUrl(i.festivalSlug, i.current.year, i.source.url, e.url) ||
+              !/^[a-f0-9]{64}$/.test(e.contentHash) ||
+              e.observedAt > now ||
+              e.observedAt.getTime() < now.getTime() - 86_400_000,
+          )
+        )
+          throw new ImportAgentError("invalid");
+      }
+      const publicationSourceId = "openclaw:" + i.issueId + ":" + i.snapshot;
+      const persistedArrivalEvidence = arrivalEvidence.map((e) => ({
+        ...e,
+        observedAt: e.observedAt.toISOString(),
+      }));
+      const arrivalPublication =
+        d.arrival && candidateArrival
+          ? await publishAgentArrivalResolution(tx, {
+              sourceId: publicationSourceId,
+              arrival: candidateArrival,
+              evidence: {
+                candidateId: i.candidate?.id,
+                fingerprint: d.arrival,
+                documents: persistedArrivalEvidence,
+              },
+            })
+          : null;
       // A stored candidate is not proof of a parser problem. In particular,
       // manual no-op reviews (including unchanged supplied facts/source) must
       // not manufacture repair tasks. Actual corrections and rejected/review
       // proposals still enqueue atomically with their audit.
-      const changedFacts =
+      const changedParserFacts =
         d.facts &&
         Object.entries(d.facts).some(
           ([field, value]) =>
+            field !== "finalLineup" &&
             fingerprint(value) !== fingerprint(i.current[field as keyof typeof i.current]),
         );
+      // An explicit review can renew or revoke stored proof even when the
+      // published artist names and the current display state have not changed.
+      const changedFacts = changedParserFacts || d.facts?.finalLineup !== undefined;
       const changedSource =
         d.source &&
         (d.source.url !== i.source.url ||
@@ -487,13 +605,13 @@ TIME ZONE 'UTC')) FOR UPDATE
           i.candidate.diffs.length > 0 ||
           !Array.isArray(i.candidate.warnings) ||
           i.candidate.warnings.length > 0);
-      let publication = null;
+      let publication = arrivalPublication;
       if (d.action === "apply") {
         if (d.facts && changedFacts)
           publication = await publishAgentFestivalResolution(tx, {
             editionId: i.current.editionId!,
             festivalSlug: i.festivalSlug,
-            sourceId: "openclaw:" + i.issueId + ":" + i.snapshot,
+            sourceId: publicationSourceId,
             reason: d.reason,
             facts: d.facts,
             evidence: d.evidence,
@@ -550,9 +668,14 @@ TIME ZONE 'UTC')) FOR UPDATE
           : i.kind === "manual_source" && !changedSource
             ? new Date(now.getTime() + 604800000).toISOString()
             : null;
+      // Raw fact differences may be spelling changes for the same artist.
+      // Only committed parser facts, not reviewed completeness metadata, count as correction feedback.
       const parserRepairId =
         ["apply", "dismiss"].includes(d.action) &&
-        (changedFacts || changedSource || candidateFeedback)
+        !d.arrival &&
+        (publication?.fields.some((field) => field !== "finalLineup") ||
+          changedSource ||
+          candidateFeedback)
           ? await enqueueParserRepair(tx, {
               sourceId: i.sourceId,
               festivalSlug: i.festivalSlug,
@@ -579,6 +702,7 @@ TIME ZONE 'UTC')) FOR UPDATE
         reason: d.reason,
         question: d.question ?? null,
         publicationId: publication?.id ?? null,
+        ...(d.arrival && { arrivalPublished: !!arrivalPublication }),
         parserRepairId,
         providerJobs: publication?.playlistRefreshRequested ? 1 : 0,
         at: now.toISOString(),
@@ -618,8 +742,9 @@ TIME ZONE 'UTC')) FOR UPDATE
             ...receipt,
             facts: d.facts ?? {},
             sourceChange: d.source ?? null,
+            ...(d.arrival && { arrival: candidateArrival, arrivalFingerprint: d.arrival }),
           },
-          evidence: d.evidence,
+          evidence: d.arrival ? persistedArrivalEvidence : d.evidence,
           metadata: {
             issueId: i.issueId,
             reason: d.reason,
