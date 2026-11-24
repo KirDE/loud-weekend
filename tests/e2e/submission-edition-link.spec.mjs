@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { expect, test } from "@playwright/test";
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
@@ -85,4 +86,300 @@ test("approved requests link exact known editions with a single actor audit and 
   const unchanged = await page.request.get("/api/offline/catalog");
   expect(unchanged.status()).toBe(200);
   expect(await unchanged.json()).toEqual(await before.json());
+});
+
+test("follow-on onboarding stages private proof then publishes exactly one tracked edition", async ({
+  page,
+  baseURL,
+}) => {
+  const headers = { origin: baseURL };
+  const year = 2029;
+  const slug = "synthetic-south";
+  const landing = `/festivals/${slug}/${year}/`;
+  const announcement = `https://festival.example.test/announcement-${year}/`;
+  const register = async (name) => {
+    const response = await page.request.post("/api/submissions/", {
+      headers,
+      data: {
+        name: name + " " + randomUUID().slice(0, 8),
+        year,
+        officialUrl: announcement,
+        notes: "Private submission note that must not become catalogue metadata",
+      },
+    });
+    expect(response.status()).toBe(201);
+    return (await response.json()).reference;
+  };
+  const first = await register("Synthetic follow-on review");
+  const duplicate = await register("Synthetic duplicate follow-on review");
+  const url = (reference) => `/api/admin/submissions/${reference}/follow-on/`;
+  const reviewed = {
+    action: "stage",
+    slug,
+    evidenceUrl: announcement,
+    excerpt: `Synthetic South ${year} announced by the organizer`,
+  };
+  const request = (reference, data) => page.request.post(url(reference), { headers, data });
+  expect((await request(first, reviewed)).status()).toBe(403);
+
+  const email = "browser-onboarding-editor@example.test";
+  const password = "synthetic onboarding browser password";
+  const passwordHash = await bcrypt.hash(password, 4);
+  await db.user.upsert({
+    where: { email },
+    create: { email, passwordHash, role: "EDITOR" },
+    update: { passwordHash, role: "EDITOR" },
+  });
+  expect(
+    (await page.request.post("/api/auth/login/", { data: { email, password } })).status(),
+  ).toBe(200);
+  expect((await request(first, reviewed)).status()).toBe(409);
+  for (const reference of [first, duplicate]) {
+    expect(
+      (
+        await page.request.post(`/api/admin/submissions/${reference}/`, {
+          headers,
+          data: { decision: "approve" },
+        })
+      ).status(),
+    ).toBe(200);
+  }
+  expect(
+    (
+      await request(first, { ...reviewed, evidenceUrl: "https://untrusted.example/announcement/" })
+    ).status(),
+  ).toBe(409);
+  expect(
+    (await request(first, { ...reviewed, excerpt: "Synthetic South 2028 announced" })).status(),
+  ).toBe(409);
+  expect(
+    (await request(first, { ...reviewed, excerpt: "Another festival 2029 announced" })).status(),
+  ).toBe(409);
+  expect((await page.request.get(landing)).status()).toBe(404);
+
+  const current = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug }, year: 2027 },
+  });
+  const priorSources = await db.festivalSource.count({ where: { festivalId: current.festivalId } });
+  const priorJobs = await db.catalogPlaylistRefresh.count({ where: { festivalSlug: slug } });
+  let editionId;
+  try {
+    const staged = await request(first, reviewed);
+    expect(staged.status()).toBe(200);
+    expect(staged.headers()["cache-control"]).toBe("private, no-store");
+    const { draft } = await staged.json();
+    expect((await (await request(first, reviewed)).json()).draft.id).toBe(draft.id);
+    const second = await request(duplicate, reviewed);
+    expect(second.status()).toBe(200);
+    const otherDraft = (await second.json()).draft;
+    expect((await request(first, { action: "publish", draftId: otherDraft.id })).status()).toBe(
+      409,
+    );
+    expect((await page.request.get(landing)).status()).toBe(404);
+
+    await page.goto("/admin/");
+    await page.getByRole("button", { name: "Festival submissions" }).click();
+    const card = page.locator("article.reviewCard").filter({ hasText: first });
+    await expect(card.locator("blockquote")).toHaveText(reviewed.excerpt);
+    const published = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" && new URL(response.url()).pathname === url(first),
+    );
+    const otherPublication = request(duplicate, { action: "publish", draftId: otherDraft.id });
+    await card.getByRole("button", { name: "Publish the tracked edition" }).click();
+    const responses = await Promise.all([published, otherPublication]);
+    for (const response of responses) expect(response.status()).toBe(200);
+    const link = (await responses[0].json()).link;
+    editionId = link.editionId;
+    expect((await responses[1].json()).link).toEqual(link);
+    expect(
+      (await (await request(first, { action: "publish", draftId: draft.id })).json()).link,
+    ).toEqual(link);
+
+    const edition = await db.festivalEdition.findUniqueOrThrow({
+      where: { id: editionId },
+      include: { provenance: true, lineup: true },
+    });
+    expect(edition).toMatchObject({
+      year,
+      recordState: "TRACKING",
+      ticketStatus: "UNKNOWN",
+      startDate: null,
+      endDate: null,
+      lineup: [],
+    });
+    expect(edition.provenance).toHaveLength(1);
+    expect(edition.provenance[0]).toMatchObject({ field: "edition", url: announcement });
+    expect(await db.festivalEdition.findUnique({ where: { id: current.id } })).toEqual(current);
+    expect(await db.festivalSource.count({ where: { festivalId: current.festivalId } })).toBe(
+      priorSources,
+    );
+    expect(await db.catalogPlaylistRefresh.count({ where: { festivalSlug: slug } })).toBe(
+      priorJobs,
+    );
+    await expect(card.getByRole("link", { name: `${slug} · ${year}` })).toHaveAttribute(
+      "href",
+      landing,
+    );
+    await page.goto(landing);
+    await expect(page.getByRole("heading", { name: `Synthetic South ${year}` })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Official source ↗" })).toHaveAttribute(
+      "href",
+      announcement,
+    );
+    await expect(page.getByText(reviewed.excerpt, { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Private submission note", { exact: false })).toHaveCount(0);
+  } finally {
+    if (editionId) await db.festivalEdition.delete({ where: { id: editionId } });
+  }
+});
+
+test("a new festival requires private reviewed identity and is published once without activating jobs", async ({
+  page,
+  baseURL,
+}) => {
+  const headers = { origin: baseURL };
+  const suffix = randomUUID().slice(0, 8);
+  const slug = `synthetic-new-reviewed-festival-${suffix}`;
+  const name = `Synthetic New Festival ${suffix}`;
+  const year = 2029;
+  const landing = `/festivals/${slug}/${year}/`;
+  const officialUrl = `https://new-reviewed-festival.example.test/${suffix}/`;
+  const evidence = {
+    action: "stage",
+    slug,
+    name,
+    countryCode: "DE",
+    officialUrl,
+    evidenceUrl: new URL("announcement/2029/", officialUrl).href,
+    excerpt: `The organizer announces ${name} 2029 in Germany.`,
+  };
+  const references = [];
+  let createdFestivalId;
+  try {
+    for (const status of ["PENDING", "APPROVED", "REJECTED"]) {
+      const publicReference = randomUUID();
+      const submission = await db.festivalSubmission.create({
+        data: {
+          publicReference,
+          fingerprint: randomUUID(),
+          name: "Unverified submitted name",
+          editionYear: year,
+          officialUrl: evidence.evidenceUrl,
+          notes: "Private submission note",
+          submitterHash: randomUUID(),
+          status,
+        },
+      });
+      references.push(submission.publicReference);
+    }
+    const [first, duplicate, rejected] = references;
+    const post = (reference, data) =>
+      page.request.post(`/api/admin/submissions/${reference}/new-festival/`, { headers, data });
+    expect((await post(first, evidence)).status()).toBe(403);
+    const email = "browser-onboarding-editor@example.test";
+    const password = "synthetic onboarding browser password";
+    const passwordHash = await bcrypt.hash(password, 4);
+    await db.user.upsert({
+      where: { email },
+      create: { email, passwordHash, role: "EDITOR" },
+      update: { passwordHash, role: "EDITOR" },
+    });
+    expect(
+      (await page.request.post("/api/auth/login/", { data: { email, password } })).status(),
+    ).toBe(200);
+
+    expect((await post(first, evidence)).status()).toBe(409);
+    expect((await post(rejected, evidence)).status()).toBe(409);
+    expect(
+      (
+        await page.request.post(`/api/admin/submissions/${first}/`, {
+          headers,
+          data: { decision: "approve" },
+        })
+      ).status(),
+    ).toBe(200);
+    expect(
+      (
+        await post(first, { ...evidence, excerpt: `${name} in Germany announced for 2028` })
+      ).status(),
+    ).toBe(409);
+    expect(
+      (
+        await post(first, { ...evidence, excerpt: `${name} in Sweden announced for 2029` })
+      ).status(),
+    ).toBe(409);
+    expect(
+      (
+        await post(first, {
+          ...evidence,
+          evidenceUrl: "https://different-organizer.example.test/announcement/",
+        })
+      ).status(),
+    ).toBe(409);
+    expect((await post(first, { ...evidence, slug: "synthetic-fest" })).status()).toBe(409);
+
+    const staged = await post(first, evidence);
+    expect(staged.status()).toBe(200);
+    expect(staged.headers()["cache-control"]).toBe("private, no-store");
+    const { draft } = await staged.json();
+    expect((await (await post(first, evidence)).json()).draft.id).toBe(draft.id);
+    const duplicateDraft = (await (await post(duplicate, evidence)).json()).draft;
+    expect((await post(first, { action: "publish", draftId: duplicateDraft.id })).status()).toBe(
+      409,
+    );
+    expect(await db.festival.findUnique({ where: { slug } })).toBeNull();
+    expect((await page.request.get(landing)).status()).toBe(404);
+
+    await page.goto("/admin/");
+    await page.getByRole("button", { name: "Festival submissions" }).click();
+    const card = page.locator("article.reviewCard").filter({ hasText: first });
+    await expect(card.locator("blockquote")).toHaveText(evidence.excerpt);
+    const fromBrowser = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname.endsWith(`/${first}/new-festival/`),
+    );
+    const sameIdentity = post(duplicate, { action: "publish", draftId: duplicateDraft.id });
+    await card.getByRole("button", { name: "Publish new festival for tracking" }).click();
+    const [saved, second] = await Promise.all([fromBrowser, sameIdentity]);
+    for (const response of [saved, second]) expect(response.status()).toBe(200);
+    const { link } = await saved.json();
+    expect((await second.json()).link).toEqual(link);
+    expect(
+      (await (await post(first, { action: "publish", draftId: draft.id })).json()).link,
+    ).toEqual(link);
+    const festival = await db.festival.findUniqueOrThrow({
+      where: { slug },
+      include: { editions: { include: { provenance: true } }, sources: true },
+    });
+    createdFestivalId = festival.id;
+    expect(festival).toMatchObject({
+      name: evidence.name,
+      countryCode: "DE",
+      officialUrl,
+      city: null,
+      genres: [],
+      sources: [],
+    });
+    expect(festival.editions).toHaveLength(1);
+    expect(festival.editions[0]).toMatchObject({
+      id: link.editionId,
+      year,
+      recordState: "TRACKING",
+      startDate: null,
+      ticketsUrl: null,
+    });
+    expect(festival.editions[0].provenance).toMatchObject([
+      { field: "edition", url: evidence.evidenceUrl },
+    ]);
+    expect(await db.catalogPlaylistRefresh.count({ where: { festivalSlug: slug } })).toBe(0);
+    await page.goto(landing);
+    await expect(page.getByRole("heading", { name: `${evidence.name} ${year}` })).toBeVisible();
+    await expect(page.getByText(evidence.excerpt, { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Private submission note", { exact: true })).toHaveCount(0);
+  } finally {
+    // Submission audit rows are append-only in this disposable test database.
+    if (createdFestivalId) await db.festival.delete({ where: { id: createdFestivalId } });
+  }
 });

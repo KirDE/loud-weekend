@@ -1,3 +1,5 @@
+import { readNewFestivalDraft } from "@/lib/submission-new-festival";
+import { readFollowOnDraft } from "@/lib/submission-follow-on-edition";
 import { readSubmissionEditionLink } from "@/lib/submission-edition-link";
 import { AdminConsole } from "@/components/AdminConsole";
 import { currentAdmin } from "@/lib/admin-access";
@@ -16,10 +18,11 @@ export default async function AdminPage() {
   ]);
   return (
     <AdminConsole
-      editionOptions={editions.map(({ slug, name, editionYear }) => ({
+      editionOptions={editions.map(({ slug, name, editionYear, recordState }) => ({
         slug,
         name,
         year: editionYear,
+        current: recordState === "current",
       }))}
       sourceHealth={snapshot.sourceHealth.map((s) => ({
         ...s,
@@ -36,18 +39,31 @@ export default async function AdminPage() {
         status: item.status.toLowerCase() as "pending" | "approved" | "rejected",
         submittedAt: item.submittedAt.toISOString(),
         editionLink: readSubmissionEditionLink(item.audit),
+        followOnDraft: readFollowOnDraft(item.audit),
+        newFestivalDraft: readNewFestivalDraft(item.audit),
         audit: item.audit.map((entry) => ({
           action: entry.action,
           at: entry.createdAt.toISOString(),
         })),
       }))}
       festivals={festivals}
-      artists={artists.map(({ slug, name, links }) => ({
+      artists={artists.map(({ slug, name, biography, links }) => ({
         slug,
         name,
+        biography,
+        verifiedOfficialSite: links.some(
+          ({ label, source, verified }) =>
+            label === "Official site" && source === "official" && verified,
+        ),
         officialUrl: links.find(
           ({ label, source }) => label === "Official site" && source === "official",
         )?.url,
+        socialCandidates: links
+          .filter(
+            ({ label, source, verified }) =>
+              label === "Social profile" && source === "musicbrainz" && !verified,
+          )
+          .map(({ url }) => url),
       }))}
       initialChanges={snapshot.changes.map((item) => ({
         id: item.id,
@@ -64,11 +80,17 @@ export default async function AdminPage() {
         festival: item.festivalSlug,
         source: item.adapter,
         status:
-          item.status === "SUCCEEDED" ? "healthy" : item.status === "FAILED" ? "failed" : "warning",
+          item.status === "SUCCEEDED"
+            ? "healthy"
+            : item.status === "FAILED"
+              ? "failed"
+              : item.status === "RUNNING"
+                ? "running"
+                : "warning",
         lastRun: item.startedAt.toISOString(),
         durationMs: item.durationMs ?? 0,
         extracted: item.extracted,
-        message: item.message ?? "Running",
+        message: item.message,
         log: item.log,
       }))}
       auditEntries={snapshot.audit.map((item) => ({
