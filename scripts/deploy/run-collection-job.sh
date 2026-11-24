@@ -10,7 +10,8 @@ install -d -m 0750 "$output"
 cd "$current"
 case "$job" in
   artist-identities)
-    IDENTITY_BATCH_SIZE="${IDENTITY_BATCH_SIZE:-20}" "$current/.runtime/node" scripts/resolve-artist-identities.mjs > "$output/latest.json.tmp"
+    IDENTITY_BATCH_SIZE="${IDENTITY_BATCH_SIZE:-20}" "$current/.runtime/node"\
+ scripts/resolve-artist-identities.mjs > "$output/latest.json.tmp"
     mv -f "$output/latest.json.tmp" "$output/latest.json" ;;
   spotify-stats)
     "$current/.runtime/node" --experimental-strip-types scripts/refresh-spotify-stats.mjs > "$output/latest.json.tmp"

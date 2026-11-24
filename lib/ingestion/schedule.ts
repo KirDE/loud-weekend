@@ -11,7 +11,9 @@ export function isSourceDue(source: FestivalSource, now = new Date()): boolean {
   if (!source.enabled) return false;
   if (!source.lastSuccessfulCheck) return true;
   const checkedAt = Date.parse(source.lastSuccessfulCheck);
-  return !Number.isFinite(checkedAt) || now.getTime() - checkedAt >= intervals[source.refreshPolicy];
+  return (
+    !Number.isFinite(checkedAt) || now.getTime() - checkedAt >= intervals[source.refreshPolicy]
+  );
 }
 
 export function dueFestivalSources(sources: FestivalSource[], now = new Date()): FestivalSource[] {
