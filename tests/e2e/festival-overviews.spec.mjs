@@ -137,7 +137,53 @@ test("only the current imported overview can be approved and replayed", async ({
 
   await page.reload();
   await expect(region.getByText(next.candidate.overview.summary.en)).toBeVisible();
-  const staleCity = await stage(9);
+  const edition = await db.festivalEdition.findUniqueOrThrow({
+    where: { festivalId_year: { festivalId, year } },
+  });
+  const sitemapLastModified = async () => {
+    const response = await page.request.get("/sitemap.xml");
+    expect(response.ok()).toBe(true);
+    const xml = await response.text();
+    const entry = xml.split("<url>").find((part) => part.includes(`/festivals/${slug}/</loc>`));
+    return entry?.match(/<lastmod>([^<]+)<\/lastmod>/)?.[1];
+  };
+  expect(await sitemapLastModified()).toBe(publication.createdAt.toISOString());
+  const changed = await stage(9);
+  const changedRequest = approve(await claimAgentIssue(db, changed.sourceId, changed.issueId));
+  const changedReceipt = await resolveAgentIssue(db, changedRequest);
+  expect(changedReceipt.overviewPublished).toBe(true);
+  const changedPublication = await db.catalogPublication.findUniqueOrThrow({
+    where: { id: changedReceipt.publicationId },
+  });
+  expect(changedPublication.createdAt.getTime()).toBeGreaterThan(publication.createdAt.getTime());
+  await page.reload();
+  await expect(region.getByText(changed.candidate.overview.summary.en)).toBeVisible();
+  expect(await sitemapLastModified()).toBe(changedPublication.createdAt.toISOString());
+
+  // Simulate a stored observation from a prior day, without changing its reviewed facts.
+  await db.editionOverview.update({
+    where: { editionId: edition.id },
+    data: { checkedOn: new Date("2026-10-01T00:00:00Z") },
+  });
+  const refreshed = await stage(9);
+  const delay = await db.operationalState.findUnique({ where: { key: refreshed.key } });
+  if (delay?.payload.retryAt) {
+    await db.operationalState.update({
+      where: { key: refreshed.key },
+      data: { payload: { ...delay.payload, retryAt: "2026-10-01T00:00:00.000Z" } },
+    });
+  }
+  const refreshRequest = approve(await claimAgentIssue(db, refreshed.sourceId, refreshed.issueId));
+  const refreshReceipt = await resolveAgentIssue(db, refreshRequest);
+  expect(refreshReceipt).toMatchObject({ overviewPublished: false, publicationId: null });
+  expect(await resolveAgentIssue(db, refreshRequest)).toEqual(refreshReceipt);
+  await page.reload();
+  await expect(region.locator("time")).toHaveAttribute(
+    "datetime",
+    refreshed.candidate.overview.checkedOn,
+  );
+  expect(await sitemapLastModified()).toBe(changedPublication.createdAt.toISOString());
+  const staleCity = await stage(10);
   const boundToCity = await claimAgentIssue(db, staleCity.sourceId, staleCity.issueId);
   await db.festival.update({ where: { id: festivalId }, data: { city: null } });
   try {

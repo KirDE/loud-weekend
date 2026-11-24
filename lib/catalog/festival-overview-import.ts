@@ -56,9 +56,8 @@ export async function publishOverviewObservation(
     summaryDe: record.summary.de,
     summaryRu: record.summary.ru,
   };
-  if (
+  const samePublicContent =
     previous &&
-    previous.checkedOn.getTime() === checkedOn.getTime() &&
     previous.city === data.city &&
     previous.countryCode === data.countryCode &&
     previous.organizerHost === data.organizerHost &&
@@ -66,14 +65,13 @@ export async function publishOverviewObservation(
     previous.summaryDe === data.summaryDe &&
     previous.summaryRu === data.summaryRu &&
     previous.sourceUrls.length === 1 &&
-    previous.sourceUrls[0] === record.sourceUrl
-  )
-    return false;
+    previous.sourceUrls[0] === record.sourceUrl;
+  if (samePublicContent && previous.checkedOn.getTime() === checkedOn.getTime()) return false;
 
   await tx.editionOverview.upsert({
     where: { editionId: edition.id },
     create: { editionId: edition.id, ...data },
     update: data,
   });
-  return true;
+  return !samePublicContent;
 }

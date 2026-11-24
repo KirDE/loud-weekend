@@ -120,7 +120,9 @@ export const adminTranslations = {
     playlistUrl: "Spotify / playlist URL",
     logoUrl: "Logo URL",
     saveAsset: "Save asset draft",
-    playlistPublicationUnavailable: "Playlist drafts can be saved, but cannot yet be published.",
+    playlistPublicationReview:
+      "A reviewer must approve changes before the link appears on this edition.",
+    removeReviewedPlaylist: "Queue removal of reviewed link",
     saveLogoDraft: "Save logo draft",
     reviewedLogoHash: "Reviewed logo SHA-256",
     validation: "Validation",
@@ -251,8 +253,9 @@ export const adminTranslations = {
     playlistUrl: "Spotify-/Playlist-URL",
     logoUrl: "Logo-URL",
     saveAsset: "Medienentwurf speichern",
-    playlistPublicationUnavailable:
-      "Playlist-Entwürfe können gespeichert, aber noch nicht veröffentlicht werden.",
+    playlistPublicationReview:
+      "Änderungen müssen geprüft und freigegeben werden, bevor der Link bei dieser Ausgabe erscheint.",
+    removeReviewedPlaylist: "Entfernung des geprüften Links zur Prüfung einreichen",
     saveLogoDraft: "Logoentwurf speichern",
     reviewedLogoHash: "SHA-256 des geprüften Logos",
     validation: "Validierung",
@@ -384,8 +387,9 @@ export const adminTranslations = {
     playlistUrl: "URL Spotify / плейлиста",
     logoUrl: "URL логотипа",
     saveAsset: "Сохранить черновик материалов",
-    playlistPublicationUnavailable:
-      "Черновики плейлистов можно сохранять, но пока нельзя публиковать.",
+    playlistPublicationReview:
+      "Ссылка появится на странице этого выпуска только после проверки и одобрения.",
+    removeReviewedPlaylist: "Отправить удаление проверенной ссылки на рассмотрение",
     saveLogoDraft: "Сохранить черновик логотипа",
     reviewedLogoHash: "SHA-256 проверенного логотипа",
     validation: "Проверка",
