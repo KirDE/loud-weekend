@@ -265,3 +265,54 @@ test(
     assert.equal(evaluateCandidate(current, blocked).publishable, false);
   },
 );
+
+async function redirectedPipeline(primaryUrl, ticketFinalUrl = url, festivalSource = source) {
+  const requested = [];
+  const result = await fetchSource(festivalSource, {
+    maxAttempts: 1,
+    fetchImpl: async (target) => {
+      requested.push(target);
+      const response = new Response(target === festivalSource.url ? home : fixture, {
+        headers: { "content-type": "text/html" },
+      });
+      Object.defineProperty(response, "url", {
+        value: target === festivalSource.url ? primaryUrl : ticketFinalUrl,
+      });
+      return response;
+    },
+  });
+  return { result, requested };
+}
+
+test("Wacken: real root-to-German-home redirect preserves ticket extraction and source identity", async () => {
+  const { result, requested } = await redirectedPipeline("https://www.wacken.com/de/");
+  assert.deepEqual(requested, [source.url, url]);
+  assert.equal(result.response.url, source.url);
+  const candidate = extractFestivalCandidate(await result.response.text(), source, at);
+  assert.equal(candidate.ticketStatus, "available");
+  assert.equal(candidate.ticketsUrl, url);
+  assert.deepEqual(candidate.warnings, []);
+});
+
+for (const destination of [
+  "https://evil.example/de/",
+  "http://www.wacken.com/de/",
+  "https://www.wacken.com/de/news/",
+  "https://www.wacken.com/de/?year=2026",
+  "https://www.wacken.com/de/#archive",
+  "https://wacken.com/de/",
+])
+  test(`Wacken: unreviewed primary redirect is rejected: ${destination}`, async () => {
+    await assert.rejects(redirectedPipeline(destination), /primary source changed identity/);
+  });
+
+test("Wacken: homepage exception never permits ticket document redirects or another festival", async () => {
+  await assert.rejects(
+    redirectedPipeline("https://www.wacken.com/de/", "https://www.wacken.com/de/"),
+    /destination changed identity/,
+  );
+  await assert.rejects(
+    redirectedPipeline("https://www.wacken.com/de/", undefined, download),
+    /primary source changed identity/,
+  );
+});

@@ -5,17 +5,22 @@ import type { PlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-rea
 import { useState } from "react";
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
+import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
+import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
+import { FestivalArrival } from "./FestivalArrival";
 import { PlanningTools } from "./PlanningTools";
 import { PlaylistCoverageLabel } from "./PlaylistCoverageLabel";
 import type { PlaylistStatus } from "@/lib/domain/festival";
 import { formatFreshnessDate } from "@/lib/freshness-date";
 import { ticketPresentation } from "@/lib/tickets";
 import { festivalSetlistHistoryUrl } from "@/lib/setlist-history";
+import { festivalDateInterval } from "@/lib/festival-dates";
 import {
   announcedArtists,
   hasAnnouncedLineup,
+  lineupPresentation,
   sortFestivalLineup,
   type LineupSort,
 } from "@/lib/festival-lineup";
@@ -28,12 +33,14 @@ export function FestivalDetail({
   playlist,
   playlistRefreshFailures,
   artistPopularity = {},
+  arrivalFacts = [],
 }: {
   item: Festival;
   festivals: Festival[];
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
   playlistRefreshFailures?: PlaylistRefreshFailures;
+  arrivalFacts?: readonly PublicArrivalFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
   const { locale, t } = useLanguage();
@@ -50,13 +57,14 @@ export function FestivalDetail({
     }).format(new Date(`${value}T12:00:00Z`));
   const setlistUrl = festivalSetlistHistoryUrl(item.slug);
   const tickets = ticketPresentation(item);
-  const status =
-    item.status === "tba"
-      ? t("datesLineupTba")
-      : t(item.status === "confirmed" ? "confirmedLineup" : "partialLineup");
-  const playlistUrl = playlist?.spotifyUrl || item.playlistUrl;
+  const reviewedSpotify = item.reviewedPlaylistLinks?.spotify;
+  const reviewedYoutube = item.reviewedPlaylistLinks?.youtube_music;
+  const playlistUrl = reviewedSpotify || playlist?.spotifyUrl || item.playlistUrl;
+  const youtubePlaylistUrl = reviewedYoutube || playlist?.youtubeMusicUrl;
   const artistCount = announcedArtists(item).length;
   const hasArtists = hasAnnouncedLineup(item);
+  const lineupStatus = lineupPresentation(item);
+  const dates = festivalDateInterval(item);
   return (
     <div className="detailPage">
       <Link className="back" href="/">
@@ -70,12 +78,12 @@ export function FestivalDetail({
           </div>
           <h1>{item.name}</h1>
           <p className="detailDate">
-            {item.startDate
+            {dates && item.startDate
               ? `${prettyDate(item.startDate)}` +
                 `${item.endDate && item.endDate !== item.startDate ? ` — ${prettyDate(item.endDate)}` : ""}`
               : t("datesTba")}
           </p>
-          <span className={`status ${item.status}`}>{status}</span>
+          <span className={`status ${lineupStatus.tone}`}>{t(lineupStatus.label)}</span>
           {item.sourceDeprecated && (
             <span className="status deprecated">{t("sourceDeprecated")}</span>
           )}
@@ -134,7 +142,9 @@ export function FestivalDetail({
             <small>{t("listen")}</small>
             <strong>{t("spotifyPlaylist")}</strong>
             <PlaylistCoverageLabel
-              coverage={playlist?.coverage?.spotify}
+              coverage={
+                playlistUrl === playlist?.spotifyUrl ? playlist.coverage?.spotify : undefined
+              }
               failed={playlistRefreshFailures?.spotify}
             />
           </a>
@@ -147,12 +157,16 @@ export function FestivalDetail({
             {playlistRefreshFailures?.spotify && <PlaylistCoverageLabel failed />}
           </div>
         )}
-        {playlist?.youtubeMusicUrl ? (
-          <a href={playlist.youtubeMusicUrl} target="_blank" rel="noreferrer">
+        {youtubePlaylistUrl ? (
+          <a href={youtubePlaylistUrl} target="_blank" rel="noreferrer">
             <small>{t("listen")}</small>
             <strong>{t("youtubeMusicPlaylist")}</strong>
             <PlaylistCoverageLabel
-              coverage={playlist.coverage?.youtubeMusic}
+              coverage={
+                youtubePlaylistUrl === playlist?.youtubeMusicUrl
+                  ? playlist.coverage?.youtubeMusic
+                  : undefined
+              }
               failed={playlistRefreshFailures?.youtubeMusic}
             />
           </a>
@@ -177,6 +191,13 @@ export function FestivalDetail({
           </div>
         )}
       </div>
+      {item.editionYear && (
+        <OfflineTripDownload
+          key={`${item.slug}:${item.editionYear}`}
+          slug={item.slug}
+          year={item.editionYear}
+        />
+      )}
       <section className="lineupSection">
         <div className="sectionHeading">
           <div>
@@ -232,6 +253,7 @@ export function FestivalDetail({
         )}
       </section>
       <PlanningTools item={item} festivals={festivals} />
+      <FestivalArrival facts={arrivalFacts} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
         <p>
