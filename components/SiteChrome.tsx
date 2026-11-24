@@ -4,10 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLanguage, type Language } from "./LanguageProvider";
 import { useTheme } from "./ThemeProvider";
+import { projectRepository } from "@/lib/site-information";
 import { AccountMenu } from "./AccountMenu";
 
 export function SiteHeader() {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const pathname = usePathname() ?? "";
   const browseSection =
     /^\/(?:en\/|de\/|ru\/)?(?:countries|months|editions|archive|artists)(?:\/|$)/.test(pathname);
@@ -29,7 +30,7 @@ export function SiteHeader() {
         <Link href="/browse/" aria-current={browseCurrent}>
           {t("browseCatalogue")}
         </Link>
-        <a href="https://github.com/KirDE/loud-weekend">{t("aboutData")}</a>
+        <Link href={`/${language}/about/`}>{t("aboutData")}</Link>
       </nav>
       <AccountMenu />
     </header>
@@ -46,7 +47,12 @@ export function SiteFooter() {
       <span>
         {t("footerNote")} · {t("privacy")}
       </span>
-      <Link href="/submit/">{t("submitFestival")}</Link>
+      <div className="siteFooterLinks">
+        <Link href="/submit/">{t("submitFestival")}</Link>
+        <Link href={`/${language}/about/`}>{t("aboutData")}</Link>
+        <Link href={`/${language}/faq/`}>{t("siteFaq")}</Link>
+        <a href={projectRepository}>{t("sourceCode")}</a>
+      </div>
       <div className="footerPreferences">
         <label className="languagePicker">
           <span>{t("language")}</span>
