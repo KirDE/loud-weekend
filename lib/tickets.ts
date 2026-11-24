@@ -1,9 +1,25 @@
 import type { Festival } from "@/lib/domain/festival";
 
-type TicketLabel = "officialTickets" | "ticketsLow" | "ticketsNotOnSale" | "ticketsSoldOut" | "ticketsSalesEnded" | "ticketsUnavailable" | "ticketsUnknown";
-export type TicketPresentation = { status: Festival["ticketStatus"]; href?: string; label: TicketLabel };
+type TicketLabel =
+  | "ticketsFree"
+  | "officialTickets"
+  | "ticketsLow"
+  | "ticketsNotOnSale"
+  | "ticketsSoldOut"
+  | "ticketsSalesEnded"
+  | "ticketsUnavailable"
+  | "ticketsUnknown";
+export type TicketPresentation = {
+  status: Festival["ticketStatus"];
+  href?: string;
+  label: TicketLabel;
+};
 
 export function ticketPresentation(item: Festival): TicketPresentation {
+  // Free, unticketed admission has no purchase flow. Ancillary camping/VIP
+  // ticket URLs must not become a misleading general-admission CTA.
+  if (item.ticketStatus === "free")
+    return { status: "free", href: item.officialUrl || undefined, label: "ticketsFree" };
   const href = item.ticketsUrl || undefined;
   // A missing link cannot prove a sellout. Keep known negative states truthful,
   // but do not advertise an actionable offer without an official destination.
@@ -11,13 +27,20 @@ export function ticketPresentation(item: Festival): TicketPresentation {
     return { status: "unknown", label: "ticketsUnknown" };
   }
   switch (item.ticketStatus) {
-    case "available": return { status: "available", href, label: "officialTickets" };
-    case "low": return { status: "low", href, label: "ticketsLow" };
-    case "not_on_sale": return { status: "not_on_sale", href, label: "ticketsNotOnSale" };
-    case "sold_out": return { status: "sold_out", href, label: "ticketsSoldOut" };
-    case "sales_ended": return { status: "sales_ended", href, label: "ticketsSalesEnded" };
-    case "unavailable": return { status: "unavailable", href, label: "ticketsUnavailable" };
-    default: return { status: "unknown", href, label: "ticketsUnknown" };
+    case "available":
+      return { status: "available", href, label: "officialTickets" };
+    case "low":
+      return { status: "low", href, label: "ticketsLow" };
+    case "not_on_sale":
+      return { status: "not_on_sale", href, label: "ticketsNotOnSale" };
+    case "sold_out":
+      return { status: "sold_out", href, label: "ticketsSoldOut" };
+    case "sales_ended":
+      return { status: "sales_ended", href, label: "ticketsSalesEnded" };
+    case "unavailable":
+      return { status: "unavailable", href, label: "ticketsUnavailable" };
+    default:
+      return { status: "unknown", href, label: "ticketsUnknown" };
   }
 }
 
