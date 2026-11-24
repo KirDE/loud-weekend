@@ -19,6 +19,7 @@ const labels = {
     sync: "Sync now",
     syncing: "Syncing…",
     current: "Everything is synchronized.",
+    resolved: "Conflict resolved. Sync again to send other local changes.",
     conflict: "A newer version exists on another device. Nothing was overwritten.",
     keepLocal: "Keep this device",
     keepRemote: "Use other device",
@@ -47,6 +48,7 @@ const labels = {
     sync: "Jetzt synchronisieren",
     syncing: "Synchronisiere…",
     current: "Alles ist synchronisiert.",
+    resolved: "Konflikt gelöst. Synchronisiere erneut, um weitere lokale Änderungen zu übertragen.",
     conflict: "Auf einem anderen Gerät gibt es eine neuere Version. Nichts wurde überschrieben.",
     keepLocal: "Dieses Gerät behalten",
     keepRemote: "Anderes Gerät verwenden",
@@ -74,6 +76,8 @@ const labels = {
     sync: "Синхронизировать",
     syncing: "Синхронизация…",
     current: "Всё синхронизировано.",
+    resolved:
+      "Конфликт решён. Запустите синхронизацию ещё раз, чтобы отправить остальные локальные изменения.",
     conflict: "На другом устройстве есть более новая версия. Ничего не перезаписано.",
     keepLocal: "Оставить данные устройства",
     keepRemote: "Взять данные другого устройства",
@@ -157,6 +161,38 @@ export function AccountSyncPanel({
     onBusyChange?.(value);
   }
   const syncHeaders = (accountId: string) => ({ "X-Sync-Account": accountId });
+  async function readDocuments(accountId: string, signal?: AbortSignal) {
+    const entries = await Promise.all(
+      kinds.map(async (kind) => {
+        const response = await fetch("/api/sync/" + kind, {
+          cache: "no-store",
+          headers: syncHeaders(accountId),
+          signal,
+        });
+        if (!response.ok) throw new Error(t.failed);
+        const { document } = (await response.json()) as { document?: Document | null };
+        if (
+          document !== null &&
+          (!document ||
+            typeof document.id !== "string" ||
+            !Number.isInteger(document.revision) ||
+            document.revision < 0 ||
+            document.payload === undefined)
+        )
+          throw new Error(t.failed);
+        if (kind === "collections" && document) readCollections(document.payload);
+        if (kind === "saved-filters" && document) {
+          const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
+          if (!filters || typeof filters !== "object" || Array.isArray(filters))
+            throw new Error(t.failed);
+        }
+        return [kind, document] as const;
+      }),
+    );
+    return Object.fromEntries(entries.filter(([, document]) => document)) as Partial<
+      Record<Kind, Document>
+    >;
+  }
 
   useEffect(() => {
     let active: AbortController | undefined;
@@ -172,21 +208,9 @@ export function AccountSyncPanel({
         const me = await fetch("/api/auth/me", { cache: "no-store", signal });
         if (!me.ok) return;
         const { user: account } = (await me.json()) as { user: { id: string; email: string } };
-        const entries = await Promise.all(
-          kinds.map(async (kind) => {
-            const response = await fetch("/api/sync/" + kind, {
-              cache: "no-store",
-              headers: syncHeaders(account.id),
-              signal,
-            });
-            if (!response.ok) throw new Error(t.failed);
-            const document = (await response.json()).document as Document | null;
-            if (kind === "collections" && document) readCollections(document.payload);
-            return [kind, document] as const;
-          }),
-        );
+        const documents = await readDocuments(account.id, signal);
         if (signal.aborted) return;
-        setDocs(Object.fromEntries(entries.filter(([, document]) => document)));
+        setDocs(documents);
         setUser(account);
       } catch {
         if (!signal.aborted) setStatus(t.failed);
@@ -230,7 +254,10 @@ export function AccountSyncPanel({
     setConflict(null);
     try {
       if (mode === "remote") {
-        planner.replace(plannerFrom(docs));
+        if (!user) throw new Error(t.failed);
+        const latest = await readDocuments(user.id);
+        planner.replace(plannerFrom(latest));
+        setDocs(latest);
         setStatus(t.current);
         return;
       }
@@ -258,45 +285,31 @@ export function AccountSyncPanel({
     if (!conflict) return;
     setBusy(true);
     try {
+      const { kind, local, remote } = conflict;
       if (useLocal) {
-        await put(conflict.kind, conflict.local, conflict.remote.revision);
+        await put(kind, local, remote.revision);
       } else {
-        const next = { ...docs, [conflict.kind]: conflict.remote };
-        setDocs(next);
-        if (conflict.kind === "season-attendance") {
-          planner.replace({
-            ...payloadFromDevice(),
-            seasonAttendance: plannerFrom(next).seasonAttendance,
-          });
-        } else if (conflict.kind === "collections") {
-          planner.replace({
-            ...payloadFromDevice(),
-            playlistFestivals: readCollections(conflict.remote.payload).playlistFestivals,
-          });
-        } else if (conflict.kind === "saved-filters") {
-          planner.setSavedFilters(plannerFrom(next).savedFilters);
-        } else {
-          planner.replace({ ...plannerFrom(next), seasonAttendance: undefined });
-        }
+        const state = plannerFrom({ [kind]: remote });
+        const fields = {
+          favorites: {
+            favoriteFestivals: state.favoriteFestivals,
+            favoriteArtists: state.favoriteArtists,
+          },
+          collections: { playlistFestivals: state.playlistFestivals },
+          "saved-filters": { savedFilters: state.savedFilters },
+          plans: { attendance: state.attendance },
+          "season-attendance": { seasonAttendance: state.seasonAttendance },
+        };
+        planner.replaceFields(fields[kind]);
+        setDocs((current) => ({ ...current, [kind]: remote }));
       }
       setConflict(null);
-      setStatus(t.current);
+      setStatus(t.resolved);
     } catch (reason) {
       setStatus(reason instanceof Error ? reason.message : t.failed);
     } finally {
       setBusy(false);
     }
-  }
-
-  function payloadFromDevice(): PlannerState {
-    return {
-      favoriteFestivals: planner.favoriteFestivals,
-      favoriteArtists: planner.favoriteArtists,
-      attendance: planner.attendance,
-      seasonAttendance: planner.seasonAttendance,
-      savedFilters: planner.savedFilters,
-      playlistFestivals: planner.playlistFestivals,
-    };
   }
 
   async function share() {

@@ -3,12 +3,20 @@ import { createPrismaClient } from "../../lib/prisma-client.mjs";
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 
 const copy = {
-  en: { nav: "Festival seasons", heading: "2028 festival editions", tba: "Lineup TBA" },
-  de: { nav: "Festivalsaisons", heading: "Festivalausgaben 2028", tba: "Line-up offen" },
+  en: {
+    nav: "Festival seasons",
+    heading: "2028 festival editions",
+    noArtists: "No current acts listed",
+  },
+  de: {
+    nav: "Festivalsaisons",
+    heading: "Festivalausgaben 2028",
+    noArtists: "Derzeit keine Acts gelistet",
+  },
   ru: {
     nav: "Фестивальные сезоны",
     heading: "Выпуски фестивалей 2028 года",
-    tba: "Лайнап уточняется",
+    noArtists: "Нет действующих анонсов",
   },
 };
 
@@ -98,7 +106,9 @@ test("season navigation and local attendance use verified editions without repla
           "aria-current",
           "page",
         );
-        await expect(page.getByText(t.tba, { exact: false })).toBeVisible();
+        await expect(
+          page.getByRole("article").filter({ hasText: "Synthetic Fest 2028" }),
+        ).toContainText(t.noArtists);
         await expect(page.getByText("Synthetic Alpine 2028")).toHaveCount(0);
         await expect(select(2028)).toHaveValue("");
         await select(2028).selectOption("maybe");
