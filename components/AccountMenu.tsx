@@ -8,6 +8,12 @@ import { authErrorMessage } from "@/lib/auth-error-copy";
 type User = { id: string; email: string };
 type Mode = "login" | "register";
 
+const exportLabel = {
+  en: "Download account data (JSON)",
+  de: "Kontodaten herunterladen (JSON)",
+  ru: "Скачать данные аккаунта (JSON)",
+} as const;
+
 const copy = {
   en: {
     account: "Account",
@@ -192,6 +198,11 @@ export function AccountMenu() {
               <button type="button" disabled={busy} onClick={logout}>
                 {busy ? t.loading : t.logout}
               </button>
+              <form action="/api/auth/export" method="post">
+                <button type="submit" disabled={busy}>
+                  {exportLabel[language]}
+                </button>
+              </form>
             </>
           ) : (
             <>
