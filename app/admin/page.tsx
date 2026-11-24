@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
   if (!(await currentAdmin())) redirect("/?admin=forbidden");
-  const [snapshot, { festivals }] = await Promise.all([adminSnapshot(), getCatalog()]);
+  const [snapshot, { festivals, artists }] = await Promise.all([adminSnapshot(), getCatalog()]);
   return (
     <AdminConsole
       sourceHealth={snapshot.sourceHealth.map((s) => ({
@@ -32,6 +32,13 @@ export default async function AdminPage() {
         })),
       }))}
       festivals={festivals}
+      artists={artists.map(({ slug, name, links }) => ({
+        slug,
+        name,
+        officialUrl: links.find(
+          ({ label, source }) => label === "Official site" && source === "official",
+        )?.url,
+      }))}
       initialChanges={snapshot.changes.map((item) => ({
         id: item.id,
         festival: item.resourceKey,
