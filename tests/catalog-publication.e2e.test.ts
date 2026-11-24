@@ -3558,6 +3558,18 @@ test("scoped refresh previews show observed headliners, not carried-forward manu
     await decideChange(manual.id, "approve", actor);
     assert.equal(await getHeadliners(), undefined);
 
+    const previouslyVerified = "Earlier Verified Headliner";
+    const prior = idaysResult(previouslyVerified);
+    const attempt = await persist(prior);
+    assert.ok(
+      await publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: prior,
+        sourceCommit: suffix,
+      }),
+    );
+    assert.deepEqual(await getHeadliners(), [previouslyVerified]);
+
     await db.festivalSource.create({
       data: {
         festivalSlug: slug,
@@ -3600,7 +3612,7 @@ test("scoped refresh previews show observed headliners, not carried-forward manu
 
     assert.deepEqual(
       (await getHeadliners())?.map((name) => name.toLowerCase()),
-      ["blink-182", "fontaines d.c."],
+      [previouslyVerified.toLowerCase(), "blink-182"],
     );
   } finally {
     await applicationDb.$disconnect();

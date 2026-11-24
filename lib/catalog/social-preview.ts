@@ -121,66 +121,44 @@ async function publishedHeadliners(
 ) {
   if (!roster.length) return [];
   const scope = { festivalSlug: slug, editionYear: edition.year, fields: { has: "headliners" } };
-  const replacement = await tx.catalogPublication.findFirst({
-    where: { ...scope, source: "ADMIN" },
+  const receipts = await tx.catalogPublication.findMany({
+    where: { ...scope, source: { in: ["ADMIN", "INGESTION"] } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { id: true, sourceId: true, createdAt: true, evidence: true },
+    select: { id: true, source: true, sourceId: true, evidence: true },
   });
+  const reviewedKind = (receipt: (typeof receipts)[number]) =>
+    receipt.source === "ADMIN" && receipt.sourceId.startsWith("admin:")
+      ? parserEvidenceKind(receipt.evidence, receipt.sourceId.slice(6), "headliners", edition)
+      : undefined;
+  // An unsupported replacement invalidates all earlier roster proof; a scoped
+  // refresh can carry independent proof only for names it actually retains.
+  const resetAt = receipts.findIndex(
+    (receipt) => receipt.source === "ADMIN" && reviewedKind(receipt) !== "scoped-refresh",
+  );
+  const active = resetAt < 0 ? receipts : receipts.slice(0, resetAt + 1);
+  const reset = resetAt < 0 ? undefined : receipts[resetAt];
+  const provenanceApplies = hasProvenance && (!reset || reset.sourceId.startsWith("openclaw:"));
+  const reviewed = active.filter(reviewedKind);
+  if (provenanceApplies && !reviewed.length) return roster.slice(0, 2).map(({ name }) => name);
 
-  // Admin edits replace the headliner list. Evidence for an older list cannot
-  // verify a name reintroduced by a later unsupported replacement.
-  if ((!replacement || replacement.sourceId.startsWith("openclaw:")) && hasProvenance) {
-    return roster.slice(0, 2).map(({ name }) => name);
-  }
-  const billingNames = new Set<string>();
-  if (replacement?.sourceId.startsWith("admin:")) {
-    const id = replacement.sourceId.slice("admin:".length);
-    const evidenceKind = parserEvidenceKind(replacement.evidence, id, "headliners", edition);
-    if (evidenceKind) {
-      const change = await tx.adminChange.findFirst({
+  const changes = reviewed.length
+    ? await tx.adminChange.findMany({
         where: {
-          id,
+          id: { in: reviewed.map(({ sourceId }) => sourceId.slice(6)) },
           resourceKind: "FESTIVAL",
           resourceKey: slug,
           field: "headliners",
           status: "APPROVED",
           parserRun: { festivalSlug: slug, status: { in: ["SUCCEEDED", "PARTIAL"] } },
         },
-        select: { beforeValue: true, afterValue: true },
-      });
-      if (Array.isArray(change?.afterValue)) {
-        // Scoped refresh merges observed differences into the saved list.
-        // Its field evidence does not attest to carried-forward billing.
-        const carried =
-          evidenceKind === "scoped-refresh" && Array.isArray(change.beforeValue)
-            ? change.beforeValue
-            : null;
-        if (evidenceKind === "legacy" || carried) {
-          const priorNames = new Set(carried);
-          for (const name of change.afterValue) {
-            if (typeof name === "string" && !priorNames.has(name)) billingNames.add(name);
-          }
-        }
-      }
-    }
-  }
-
-  const additions = await tx.catalogPublication.findMany({
-    where: {
-      ...scope,
-      source: "INGESTION",
-      ...(replacement && {
-        OR: [
-          { createdAt: { gt: replacement.createdAt } },
-          { createdAt: replacement.createdAt, id: { gt: replacement.id } },
-        ],
-      }),
-    },
-    select: { id: true, sourceId: true },
-  });
-
-  const receiptIds = new Map(additions.map(({ id, sourceId }) => [sourceId, id]));
-  const diffs = additions.length
+        select: { id: true, beforeValue: true, afterValue: true },
+      })
+    : [];
+  const changesBySource = new Map(changes.map((change) => [`admin:${change.id}`, change]));
+  const receiptIds = new Map(
+    active.filter(({ source }) => source === "INGESTION").map(({ id, sourceId }) => [sourceId, id]),
+  );
+  const diffs = receiptIds.size
     ? await tx.ingestionDiff.findMany({
         where: {
           field: "headliners",
@@ -188,31 +166,68 @@ async function publishedHeadliners(
           candidate: {
             festivalSlug: slug,
             reviewState: "PUBLISHED",
-            catalogueVersion: { in: additions.map(({ id }) => id) },
+            catalogueVersion: { in: [...receiptIds.values()] },
             evidence: { some: { field: "headliners" } },
           },
         },
         select: { afterValue: true, candidate: { select: { id: true, catalogueVersion: true } } },
       })
     : [];
+  const additions = new Map<string, string[]>();
   for (const { afterValue, candidate } of diffs) {
-    if (
-      typeof afterValue === "string" &&
-      receiptIds.get(`ingestion:${candidate.id}`) === candidate.catalogueVersion
-    ) {
-      billingNames.add(afterValue);
+    const sourceId = `ingestion:${candidate.id}`;
+    if (typeof afterValue === "string" && receiptIds.get(sourceId) === candidate.catalogueVersion) {
+      const names = additions.get(sourceId) ?? [];
+      names.push(afterValue);
+      additions.set(sourceId, names);
     }
   }
-  if (!billingNames.size) return [];
+  if (!changes.length && !additions.size) return [];
+
   const lookup = artistAliasIndex(
     await tx.artist.findMany({ select: { id: true, slug: true, name: true, aliases: true } }),
     { orthography: true },
   );
+  const artistIds = (names: readonly Prisma.JsonValue[]) =>
+    new Set(
+      names.flatMap((name) => {
+        if (typeof name !== "string") return [];
+        const matches = lookup(name);
+        return matches.length === 1 ? [matches[0].id] : [];
+      }),
+    );
   const verified = new Set<string>();
-  for (const billingName of billingNames) {
-    const matches = lookup(billingName);
-    if (matches.length === 1) verified.add(matches[0].id);
+  let eligible = new Set(roster.map(({ id }) => id));
+  let baselineAllowed = provenanceApplies;
+  for (const receipt of active) {
+    if (receipt.source === "INGESTION") {
+      for (const id of artistIds(additions.get(receipt.sourceId) ?? [])) {
+        if (eligible.has(id)) verified.add(id);
+      }
+      continue;
+    }
+    if (receipt.sourceId.startsWith("openclaw:")) break;
+
+    const change = changesBySource.get(receipt.sourceId);
+    const kind = reviewedKind(receipt);
+    if (!Array.isArray(change?.afterValue) || !kind) {
+      baselineAllowed = false;
+      break;
+    }
+    const after = artistIds(change.afterValue);
+    if (kind === "legacy") {
+      for (const id of after) if (eligible.has(id)) verified.add(id);
+      break;
+    }
+    if (!Array.isArray(change.beforeValue)) {
+      baselineAllowed = false;
+      break;
+    }
+    const before = artistIds(change.beforeValue);
+    for (const id of after) if (eligible.has(id) && !before.has(id)) verified.add(id);
+    eligible = new Set([...eligible].filter((id) => before.has(id) && after.has(id)));
   }
+  if (baselineAllowed) for (const id of eligible) verified.add(id);
   return roster
     .filter(({ id }) => verified.has(id))
     .slice(0, 2)
