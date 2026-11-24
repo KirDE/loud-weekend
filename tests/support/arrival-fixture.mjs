@@ -10,7 +10,7 @@ import {
 } from "../../lib/ingestion/repository.ts";
 import { mapSource } from "../../lib/sources/repository.ts";
 
-export async function stageArrivalFixture(
+export async function stageOrganizerFixture(
   db,
   festival,
   pages,
@@ -51,22 +51,29 @@ export async function stageArrivalFixture(
   const owner = randomUUID();
   const leases = await claimDueSources(db, { owner, now, limit: 100, ttlMs: 60_000 });
   const lease = leases.find(({ id }) => id === row.id);
-  assert.ok(lease, "arrival source is due");
+  assert.ok(lease, "organizer source is due");
   const sourceLease = { ...lease, owner };
   const run = await createIngestionRun(db, {
     trigger: "TEST",
     sourceCommit: "fixture",
     totalSources: 1,
   });
-  const result = await collect(mapSource({ ...row, edition }), async (requestUrl, init) => {
-    assert.equal(init.redirect, "error");
-    assert.ok(pages.has(requestUrl), "only adapter-bound documents may be fetched");
-    const response = new Response(pages.get(requestUrl), {
-      headers: { "content-type": "text/html" },
-    });
-    Object.defineProperty(response, "url", { value: requestUrl });
-    return response;
-  });
+  const result = await collect(
+    mapSource({ ...row, edition }),
+    async (requestUrl, init) => {
+      assert.equal(init.redirect, "error");
+      assert.ok(pages.has(requestUrl), "only adapter-bound documents may be fetched");
+      const response = new Response(pages.get(requestUrl), {
+        headers: { "content-type": "text/html" },
+      });
+      Object.defineProperty(response, "url", { value: requestUrl });
+      return response;
+    },
+    {
+      startDate: edition.startDate?.toISOString().slice(0, 10),
+      endDate: edition.endDate?.toISOString().slice(0, 10),
+    },
+  );
   await persistAttempt(db, {
     runId: run.id,
     festivalSlug: slug,
@@ -89,4 +96,12 @@ export async function stageArrivalFixture(
   const issue = await inspectSource(db, row.id);
   assert.ok(issue?.candidate?.[fingerprintField]);
   return issue;
+}
+
+export function stageArrivalFixture(db, festival, pages, options) {
+  return stageOrganizerFixture(db, festival, pages, {
+    ...options,
+    collect: collectArrivalCandidate,
+    fingerprintField: "arrivalFingerprint",
+  });
 }

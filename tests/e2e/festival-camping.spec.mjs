@@ -10,7 +10,7 @@ import {
   releaseAgentIssue,
   resolveAgentIssue,
 } from "../../lib/ingestion/agent-issues.ts";
-import { stageArrivalFixture } from "../support/arrival-fixture.mjs";
+import { stageOrganizerFixture } from "../support/arrival-fixture.mjs";
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 
 const year = 2027;
@@ -24,7 +24,7 @@ const inputs = await Promise.all(
 
 function stage(db, festivalId, input, html = input.html) {
   const url = campingSourceUrl(input.slug, year);
-  return stageArrivalFixture(db, { id: festivalId, slug: input.slug }, new Map([[url, html]]), {
+  return stageOrganizerFixture(db, { id: festivalId, slug: input.slug }, new Map([[url, html]]), {
     editionYear: year,
     collect: collectCampingCandidate,
     fingerprintField: "campingFingerprint",
@@ -67,6 +67,7 @@ test("validated edition camping facts are accessible in every locale", async ({ 
               status: "TBA",
               ticketStatus: "UNKNOWN",
               recordState: "CURRENT",
+              ...(record.slug === "wacken-open-air" && { endDate: new Date("2027-08-01") }),
               completeness: "TBA",
               sourceUpdatedAt: new Date(),
             },
@@ -80,6 +81,18 @@ test("validated edition camping facts are accessible in every locale", async ({ 
     const previews = [];
     for (const [index, input] of inputs.entries())
       previews.push(await stage(db, inserted[index], input));
+    const wackenIndex = inputs.findIndex(({ slug }) => slug === "wacken-open-air");
+    const wacken = inputs[wackenIndex];
+    const afterFestival = wacken.html.replace("Monday, July 26", "Thursday, September 2");
+    const late = await stage(db, inserted[wackenIndex], wacken, afterFestival);
+    const lateClaim = await claimAgentIssue(db, late.sourceId, late.issueId);
+    await expect(resolveAgentIssue(db, approve(lateClaim))).rejects.toThrow(
+      /end of the reviewed edition/,
+    );
+    expect(await db.editionCampingFact.count()).toBe(0);
+    await releaseAgentIssue(db, lateClaim.issueId, lateClaim.leaseToken);
+    previews[wackenIndex] = await stage(db, inserted[wackenIndex], wacken);
+
     const campingRecords = previews.map((item) => item.candidate.camping);
     const first = campingRecords[0];
     const route = `/en/festivals/${first.festivalSlug}/`;

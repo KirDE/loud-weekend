@@ -52,11 +52,26 @@ export const factsSchema = z
     ticketsUrl: z.string().url().max(2048).optional(),
     headliners: z.array(name).max(300).optional(),
     lineup: z.array(name).max(300).optional(),
+    finalLineup: z
+      .object({
+        year: z.number().int().min(2000).max(2099),
+        complete: z.boolean(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .refine(
     (v) => (v.headliners === undefined) === (v.lineup === undefined),
     "Both billing groups are required for a reviewed lineup",
+  )
+  .refine(
+    (v) =>
+      !v.finalLineup?.complete ||
+      (v.headliners !== undefined &&
+        v.lineup !== undefined &&
+        v.headliners.length + v.lineup.length > 0),
+    "A final lineup requires the complete reviewed roster",
   );
 export const evidenceSchema = z
   .object({
@@ -77,6 +92,10 @@ export const decisionSchema = z
       .regex(/^[a-f0-9]{64}$/)
       .optional(),
     arrival: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    overview: z
       .string()
       .regex(/^[a-f0-9]{64}$/)
       .optional(),
@@ -109,13 +128,18 @@ export const decisionSchema = z
       });
     if (
       v.camping &&
-      (v.action !== "apply" || v.facts || v.source || v.evidence.length || v.arrival)
+      (v.action !== "apply" || v.facts || v.source || v.evidence.length || v.arrival || v.overview)
     )
       c.addIssue({
         code: "custom",
         message: "Camping approval must reference only the persisted observation",
       });
-    if (v.action === "apply" && !v.evidence.length && !v.arrival && !v.camping)
+    if (v.overview && (v.action !== "apply" || v.facts || v.source || v.evidence.length))
+      c.addIssue({
+        code: "custom",
+        message: "Overview approval must reference only the persisted observation",
+      });
+    if (v.action === "apply" && !v.evidence.length && !v.arrival && !v.overview && !v.camping)
       c.addIssue({
         code: "custom",
         message: "Apply requires official evidence",

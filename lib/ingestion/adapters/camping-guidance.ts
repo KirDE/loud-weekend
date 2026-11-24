@@ -183,12 +183,28 @@ export function parseCampingGuidance(html: string, slug: CampingSlug, year: numb
       .siblings("p")
       .map((_, el) => plain($(el).text()))
       .get();
-    const corroborated = pass.some((item) =>
-      item.includes(
-        `The campsite is open from ${openingWeekday} ${+openingDay} ` +
-          `${months[+openingMonth - 1]} at `,
-      ),
-    );
+    const openingStatement = /\bthe (?:alcatraz )?campsite is open from\b/i;
+    const openings = pass
+      .flatMap((item) => item.split(/(?=\bthe (?:alcatraz )?campsite is open from\b)/i))
+      .filter((statement) => openingStatement.test(statement));
+    const corroborated =
+      openings.length > 0 &&
+      openings.every((statement) => {
+        const schedule = statement.match(
+          /^the (?:alcatraz )?campsite is open from (\w+) (\d{1,2}) (\w+) at (\d{1,2}) ([ap])\.m\.(?!\w)/i,
+        );
+        if (!schedule) return false;
+        const [, weekday, day, month, hour, meridiem] = schedule;
+        const hour24 = (+hour % 12) + (meridiem.toLowerCase() === "p" ? 12 : 0);
+        return (
+          weekday.toLowerCase() === openingWeekday.toLowerCase() &&
+          +day === +openingDay &&
+          month.toLowerCase() === months[+openingMonth - 1].toLowerCase() &&
+          +hour >= 1 &&
+          +hour <= 12 &&
+          hour24 === +openingTime
+        );
+      });
     if (
       !corroborated ||
       !singleMatch(

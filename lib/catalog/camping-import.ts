@@ -42,6 +42,7 @@ export async function publishCampingObservation(
     select: {
       year: true,
       recordState: true,
+      endDate: true,
       festival: { select: { slug: true, city: true, officialUrl: true, countryCode: true } },
       campingFacts: true,
     },
@@ -61,6 +62,10 @@ export async function publishCampingObservation(
   const checkedOn = new Date(record.checkedOn + "T00:00:00Z");
   let changed = false;
   for (const fact of record.facts) {
+    const earliestDate =
+      fact.field === "arrival" ? new Date(fact.earliestDate + "T00:00:00Z") : null;
+    if (earliestDate && edition.endDate && earliestDate > edition.endDate)
+      throw new Error("Camping arrival cannot be after the end of the reviewed edition");
     const existing = edition.campingFacts.find((row) => row.field === fact.field);
     if (existing && existing.checkedOn > checkedOn)
       throw new Error("The import cannot overwrite more recently reviewed guidance");
@@ -70,7 +75,7 @@ export async function publishCampingObservation(
       countryCode: record.countryCode,
       organizerHost: record.organizerHost,
       sourceUrl: record.sourceUrl,
-      earliestDate: fact.field === "arrival" ? new Date(fact.earliestDate + "T00:00:00Z") : null,
+      earliestDate,
       descriptionEn: fact.field === "arrival" ? null : fact.description.en,
       descriptionDe: fact.field === "arrival" ? null : fact.description.de,
       descriptionRu: fact.field === "arrival" ? null : fact.description.ru,
