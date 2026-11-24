@@ -126,6 +126,7 @@ enum TicketStatus {
   NOT_ON_SALE
   SOLD_OUT
   SALES_ENDED
+  FREE
   UNAVAILABLE
   UNKNOWN
 }
@@ -314,18 +315,45 @@ model FestivalEdition {
   recordState     EditionRecordState
   completeness    EditionCompleteness
   sourceUpdatedAt DateTime
+  finalLineupFingerprint String?
   snapshotAt      DateTime?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   festival        Festival               @relation(fields: [festivalId], references: [id], onDelete: Cascade)
   lineup          LineupEntry[]
   provenance      EditionProvenance[]
+  arrivalFacts    EditionArrivalFact[]
   timetable       TimetablePerformance[]
   playlists       FestivalPlaylist[]
+  playlistLinks   FestivalPlaylistLink[]
   sources         FestivalSource[]
 
   @@unique([festivalId, year])
   @@index([year, recordState])
+}
+
+enum EditionArrivalKind {
+  venue
+  shuttle
+  railShuttle
+  camper
+}
+
+model EditionArrivalFact {
+  editionId           String
+  kind                EditionArrivalKind
+  editionYear         Int
+  countryCode         String             @db.Char(2)
+  organizerHost       String
+  descriptionEn       String
+  descriptionDe       String
+  descriptionRu       String
+  sourceUrl           String
+  supportingSourceUrl String?
+  checkedOn           DateTime           @db.Date
+  edition             FestivalEdition    @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, kind])
 }
 
 model Artist {
@@ -458,6 +486,16 @@ model FestivalPlaylist {
 
   @@unique([editionId, provider])
   @@unique([provider, url])
+}
+
+/// Reviewed public links are not managed provider bindings or write targets.
+model FestivalPlaylistLink {
+  editionId String
+  provider  String
+  url       String
+  edition   FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, provider])
 }
 
 model FestivalSource {

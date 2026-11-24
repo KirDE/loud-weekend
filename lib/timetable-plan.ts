@@ -109,3 +109,18 @@ export function runningOrderCalendar(entries: TimetableEntry[], slug: string, ye
         .join("\r\n")
     : null;
 }
+
+export function orderPerformanceSelections(entries: readonly TimetableEntry[]) {
+  const localOrder = [...entries].sort(
+    (left, right) => left.date.localeCompare(right.date) || left.start.localeCompare(right.start),
+  );
+  const verified = localOrder
+    .flatMap((entry) =>
+      entry.window ? [{ entry, instant: Date.parse(entry.window.startsAt) }] : [],
+    )
+    .sort((left, right) => left.instant - right.instant);
+
+  // Keep start-only slots in local order without guessing which UTC offset they use.
+  let index = 0;
+  return localOrder.map((entry) => (entry.window ? verified[index++].entry : entry));
+}
