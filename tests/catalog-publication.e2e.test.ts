@@ -3075,3 +3075,71 @@ test("admin parser approval retains the source check time rather than the approv
     (error) => error === rollback,
   );
 });
+
+test("publishing a changed festival city advances the current edition's source freshness", async () => {
+  const slug = "synthetic-fest";
+  const source = "https://festival.example.test/";
+  const startedAt = new Date("2026-01-01T10:00:00Z");
+  const finishedAt = new Date("2026-01-01T10:01:00Z");
+  const rollback = new Error("rollback city freshness fixture");
+  await assert.rejects(
+    db.$transaction(async (tx) => {
+      const edition = await tx.festivalEdition.findFirstOrThrow({
+        where: { festival: { slug }, recordState: "CURRENT" },
+        include: { festival: true },
+      });
+      await tx.festivalEdition.update({
+        where: { id: edition.id },
+        data: { sourceUpdatedAt: startedAt },
+      });
+      const run = await tx.adminParserRun.create({
+        data: {
+          festivalSlug: slug,
+          sourceId: source,
+          adapter: "fixture",
+          status: "SUCCEEDED",
+          startedAt,
+          finishedAt,
+          log: [],
+        },
+      });
+      const change = {
+        id: randomUUID(),
+        resourceKey: slug,
+        field: "city",
+        beforeValue: edition.festival.city,
+        afterValue: "Synthetic Harbour",
+        sourceEvidence: [],
+        parserRunId: run.id,
+      };
+      const publication = await publishAdminFestivalChange(tx, {
+        actorLabel: "synthetic-review",
+        change,
+      });
+      assert.deepEqual(publication?.fields, ["city"]);
+      const current = await tx.festivalEdition.findUniqueOrThrow({
+        where: { id: edition.id },
+        include: { festival: true },
+      });
+      assert.equal(current.festival.city, change.afterValue);
+      assert.deepEqual(current.sourceUpdatedAt, finishedAt);
+      const noOp = await publishAdminFestivalChange(tx, {
+        actorLabel: "synthetic-review",
+        change: {
+          ...change,
+          id: randomUUID(),
+          beforeValue: change.afterValue,
+          afterValue: `  ${change.afterValue}  `,
+          parserRunId: null,
+        },
+      });
+      assert.equal(noOp, null);
+      assert.deepEqual(
+        (await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } })).sourceUpdatedAt,
+        finishedAt,
+      );
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
+});

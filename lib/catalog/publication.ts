@@ -318,9 +318,6 @@ async function applyFestivalChanges(
     if (problem) throw new Error(problem);
   }
 
-  // A delayed observation must not make the edition's latest source check appear older.
-  const sourceUpdatedAt =
-    input.observedAt > edition.sourceUpdatedAt ? input.observedAt : edition.sourceUpdatedAt;
   const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
   for (const change of input.changes) {
@@ -332,15 +329,12 @@ async function applyFestivalChanges(
       case "country":
       case "officialUrl": {
         current = festival[change.field];
-        if (input.strictBefore && !same(current, change.before) && !same(current, change.after))
+        const next = typeof change.after === "string" ? change.after.trim() : change.after;
+        if (input.strictBefore && !same(current, change.before) && !same(current, next))
           throw new Error(`Stale ${change.field} value for ${input.festivalSlug}`);
-        if (!same(current, change.after)) {
-          if (typeof change.after !== "string" || !change.after.trim())
-            throw new Error(`Invalid ${change.field}`);
-          await db.festival.update({
-            where: { id: festival.id },
-            data: { [change.field]: change.after.trim() },
-          });
+        if (!same(current, next)) {
+          if (typeof next !== "string" || !next) throw new Error(`Invalid ${change.field}`);
+          await db.festival.update({ where: { id: festival.id }, data: { [change.field]: next } });
           changed = true;
         }
         break;
@@ -353,7 +347,7 @@ async function applyFestivalChanges(
         if (!same(current, change.after)) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { [change.field]: dateOnly(change.after), sourceUpdatedAt },
+            data: { [change.field]: dateOnly(change.after) },
           });
           changed = true;
         }
@@ -372,10 +366,7 @@ async function applyFestivalChanges(
             throw new Error("Invalid ticketsUrl");
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: {
-              ticketsUrl: change.after as string | null | undefined,
-              sourceUpdatedAt,
-            },
+            data: { ticketsUrl: change.after as string | null | undefined },
           });
           changed = true;
         }
@@ -394,7 +385,7 @@ async function applyFestivalChanges(
         if (current !== change.after) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { completeness: "PARTIAL", sourceUpdatedAt },
+            data: { completeness: "PARTIAL" },
           });
           changed = true;
         }
@@ -410,10 +401,7 @@ async function applyFestivalChanges(
         if (input.strictBefore && !same(current, change.before) && !same(current, change.after))
           throw new Error(`Stale status value for ${input.festivalSlug}`);
         if (edition.status !== next) {
-          await db.festivalEdition.update({
-            where: { id: edition.id },
-            data: { status: next, sourceUpdatedAt },
-          });
+          await db.festivalEdition.update({ where: { id: edition.id }, data: { status: next } });
           changed = true;
         }
         break;
@@ -428,7 +416,7 @@ async function applyFestivalChanges(
         if (edition.ticketStatus !== next) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { ticketStatus: next, sourceUpdatedAt },
+            data: { ticketStatus: next },
           });
           changed = true;
         }
@@ -460,7 +448,9 @@ async function applyFestivalChanges(
     }
     if (changed) changedFields.push(change.field);
   }
-  if (changedFields.includes("lineup") || changedFields.includes("headliners")) {
+  // Public festival facts and edition details share this source clock.
+  // A delayed publication must not move it backwards.
+  if (changedFields.length) {
     await db.festivalEdition.updateMany({
       where: { id: edition.id, sourceUpdatedAt: { lt: input.observedAt } },
       data: { sourceUpdatedAt: input.observedAt },
