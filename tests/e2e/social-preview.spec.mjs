@@ -88,7 +88,7 @@ test("public festival and artist URLs advertise distinct localized, cacheable pr
       publishAgentFestivalResolution(tx, {
         editionId: fixtureFestival.editions[0].id,
         festivalSlug: slug,
-        sourceId: `social-preview-fixture:${slug}`,
+        sourceId: `openclaw:social-preview-fixture:${slug}`,
         reason: "Synthetic edition date proof",
         facts,
         observedAt: evidenceAt,
