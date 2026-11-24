@@ -12,6 +12,7 @@ import {
 import { DatabaseCatalogRepository } from "../lib/catalog/repository.ts";
 import { readOfflineCatalog, serveOfflineCatalog } from "../lib/catalog/offline.ts";
 import { readPublishedOfflineTrip } from "../lib/catalog/offline-trip.ts";
+import { issueCalendarKey, readCalendarFeed } from "../lib/calendar-subscription.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db = createPrismaClient();
 const html = readFileSync(new URL("./fixtures/rock-en-seine/hiatus.html", import.meta.url), "utf8");
@@ -343,6 +344,51 @@ test("concurrent exact-revision decisions replay once with immutable audit and N
   await db.user.update({ where: { id: actorId }, data: { role: "EDITOR" } });
   assert.deepEqual(await db.festivalEdition.findMany(), before);
 });
+
+test("a subscribed calendar drops only the approved hiatus without clearing attendance", async () => {
+  const user = await db.user.create({ data: { email: "lifecycle-calendar@example.invalid" } });
+  const other = await db.festival.create({
+    data: {
+      slug: "lifecycle-calendar-control",
+      name: "Calendar Control",
+      country: "France",
+      countryCode: "FR",
+      officialUrl: "https://example.invalid/",
+      genres: [],
+      editions: {
+        create: {
+          year: 2027,
+          recordState: "CURRENT",
+          status: "CONFIRMED",
+          ticketStatus: "UNKNOWN",
+          completeness: "COMPLETE",
+          sourceUpdatedAt: new Date(time),
+          startDate: new Date("2027-07-01"),
+        },
+      },
+    },
+  });
+  try {
+    const plans = await db.syncDocument.create({
+      data: {
+        userId: user.id,
+        kind: "FESTIVAL_PLANS",
+        payload: { attendance: { [slug]: "going", [other.slug]: "maybe" } },
+      },
+    });
+    const key = await issueCalendarKey(db, user.id);
+    assert.ok(key);
+    const feed = await readCalendarFeed(db, key);
+    assert.ok(feed);
+    assert.match(feed, /SUMMARY:Calendar Control/);
+    assert.doesNotMatch(feed, /Synthetic Rock en Seine|DTSTART;VALUE=DATE:20270825/);
+    assert.deepEqual(await db.syncDocument.findUniqueOrThrow({ where: { id: plans.id } }), plans);
+  } finally {
+    await db.user.delete({ where: { id: user.id } });
+    await db.festival.delete({ where: { id: other.id } });
+  }
+});
+
 test("stored decision or snapshot drift fails read and replay instead of fabricating approval", async () => {
   const row = await db.editionLifecycleReviewDecision.findUniqueOrThrow({
     where: { snapshotId: reviewed.id },
