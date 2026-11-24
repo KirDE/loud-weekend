@@ -2,6 +2,11 @@ import { RFP_STOCK, RFP_PURCHASE, observeRfpStock } from "./rfp-ticket-stock.ts"
 import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
+import {
+  VAINSTREAM_STOCK,
+  isVainstreamStockSource,
+  observeVainstreamStock,
+} from "./vainstream-ticket-stock.ts";
 
 import { observeRemainingTicket, remainingTicketUrl } from "./remaining-ticket-stock.ts";
 
@@ -35,6 +40,7 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
     url.hash
   )
     return;
+  if (isVainstreamStockSource(source)) return VAINSTREAM_STOCK;
   if (
     source.festivalSlug === "rock-for-people" &&
     source.editionYear === 2027 &&
@@ -180,6 +186,7 @@ export function observeTicketSupplement(
     }
   }
   if (remainingTicketUrl(source)) return observeRemainingTicket(html, source, dates);
+  if (url === VAINSTREAM_STOCK) return observeVainstreamStock(html, dates);
   const $ = load(html);
   const declaredEvents: Array<{
     name?: unknown;
