@@ -2,7 +2,22 @@ import { expect, test } from "@playwright/test";
 
 test("restored month stays visible and clearable on a catalogue subset", async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem("festival-radar-planner-v1", JSON.stringify({ favoriteFestivals: [], favoriteArtists: [], attendance: {}, playlistFestivals: [], savedFilters: { query: "", country: "all", month: "03", announcedOnly: false, ticketsOnly: false } }));
+    localStorage.setItem(
+      "festival-radar-planner-v1",
+      JSON.stringify({
+        favoriteFestivals: [],
+        favoriteArtists: [],
+        attendance: {},
+        playlistFestivals: [],
+        savedFilters: {
+          query: "",
+          country: "all",
+          month: "03",
+          announcedOnly: false,
+          ticketsOnly: false,
+        },
+      }),
+    );
   });
   await page.goto("/countries/es/");
   await expect(page.locator(".search")).toHaveAttribute("data-ready", "true");
