@@ -16,12 +16,19 @@ export type RockEnSeineHiatusProposal = {
   excerpt: string;
 };
 const heading = /^Le festival revient en (20\d{2}|21\d{2}|2200)$/;
-const pause =
-  /^C’est pourquoi nous faisons le choix difficile de faire une pause en (20\d{2}|21\d{2}) pour mieux se retrouver en (20\d{2}|21\d{2}|2200)\.$/;
-const alternative =
-  /^Mais comme on n’a pas l’intention de passer toute une année sans vous, on réfléchit à la possibilité de proposer en (20\d{2}|21\d{2}) un rendez-vous différent pour continuer à faire vivre l’esprit Rock en Seine ensemble\.$/;
+const pause = new RegExp(
+  "^C’est pourquoi nous faisons le choix difficile de faire une pause en " +
+    String.raw`(20\d{2}|21\d{2}) pour mieux se retrouver en (20\d{2}|21\d{2}|2200)\.$`,
+);
+const alternative = new RegExp(
+  "^Mais comme on n’a pas l’intention de passer toute une année sans vous, " +
+    String.raw`on réfléchit à la possibilité de proposer en (20\d{2}|21\d{2}) ` +
+    String.raw`un rendez-vous différent pour continuer à faire vivre l’esprit Rock en Seine ensemble\.$`,
+);
 const hiatusExcerpt = (paused: number, returning: number) =>
-  `Rock en Seine: festival pauses in ${paused} and announces a return in ${returning}. A different ${paused} event is only under consideration, not confirmed. No ordinary ${paused} ticket inventory assertion.`;
+  `Rock en Seine: festival pauses in ${paused} and announces a return in ${returning}. ` +
+  `A different ${paused} event is only under consideration, not confirmed. ` +
+  `No ordinary ${paused} ticket inventory assertion.`;
 const clean = (v: string) => v.replace(/\s+/gu, " ").trim();
 const fail = (): never => {
   throw new Error("Rock en Seine edition hiatus not verified");
