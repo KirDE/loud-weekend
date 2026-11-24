@@ -752,7 +752,7 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   const competingResponse = await admin.json("/api/admin", "POST", {
     resourceKind: "artist",
     resourceKey: artistSlug,
-    baseRevision: 3,
+    baseRevision: correction.baseRevision,
     values: {
       canonicalName: "Integration Competing Correction",
       officialUrl: "https://competing.example.test/",
@@ -800,8 +800,8 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal(conflictAudit.length, 1);
   assert.deepEqual(conflictAudit[0].metadata, {
     changeId: competingName.id,
-    baseRevision: 3,
-    currentRevision: 4,
+    baseRevision: correction.baseRevision,
+    currentRevision: correction.baseRevision + 1,
   });
   assert.equal(
     (await db.adminDraft.findUniqueOrThrow({ where: { id: rejectedDraft.id } })).status,
