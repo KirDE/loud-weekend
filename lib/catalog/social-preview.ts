@@ -246,7 +246,11 @@ export async function readSocialPreview(
     const publicBilling =
       artist &&
       (await db.lineupEntry.findFirst({
-        where: { artist: { name: artist.name }, edition: { recordState: "CURRENT" } },
+        where: {
+          artist: { name: artist.name },
+          edition: { recordState: "CURRENT" },
+          status: "ANNOUNCED",
+        },
         select: { id: true },
       }));
     return artist && publicBilling ? { kind, language, name: artist.name } : null;

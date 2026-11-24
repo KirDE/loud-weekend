@@ -49,6 +49,25 @@ test("public festival and artist URLs advertise distinct localized, cacheable pr
     expect(await festival.body()).not.toEqual(await artist.body());
     expect(await festival.body()).not.toEqual(await english.body());
 
+    const cancelled = await db.lineupEntry.findMany({
+      where: {
+        artist: { slug: "sample-artist" },
+        edition: { recordState: "CURRENT" },
+        status: "ANNOUNCED",
+      },
+      select: { id: true },
+    });
+    expect(cancelled.length).toBeGreaterThan(0);
+    const entries = { id: { in: cancelled.map(({ id }) => id) } };
+    await db.lineupEntry.updateMany({ where: entries, data: { status: "CANCELLED" } });
+    try {
+      const response = await request.get(artistPath);
+      expect(response.status()).toBe(404);
+      expect(response.headers()["cache-control"]).toContain("no-store");
+    } finally {
+      await db.lineupEntry.updateMany({ where: entries, data: { status: "ANNOUNCED" } });
+    }
+
     const tag = festival.headers().etag;
     expect(tag).toBeTruthy();
     expect(festival.headers()["cache-control"]).toContain("public, max-age=300");
