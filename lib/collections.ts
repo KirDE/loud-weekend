@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { maxPlaylistArtistPreferences, readPlaylistExclusions } from "./playlist-selection.ts";
 
 const names = z.array(z.string().trim().min(1).max(200)).max(1000);
 const instant = z.string().datetime({ offset: true });
@@ -39,14 +40,25 @@ const imported = z
       .refine((items) => new Set(items.map((p) => p.id)).size === items.length),
   })
   .strict();
+const exclusions = z
+  .array(z.string())
+  .max(maxPlaylistArtistPreferences)
+  .refine((value) => readPlaylistExclusions(value) !== undefined)
+  .optional();
 export const collectionsSchema = z
-  .object({ schemaVersion: z.literal(1), playlistFestivals: names, spotify: imported.nullable() })
+  .object({
+    schemaVersion: z.literal(1),
+    playlistFestivals: names,
+    playlistExcludedArtists: exclusions,
+    spotify: imported.nullable(),
+  })
   .strict();
 export type CollectionsDocument = z.infer<typeof collectionsSchema>;
 export type ImportedSpotifyCollections = NonNullable<CollectionsDocument["spotify"]>;
 const legacy = z
   .object({
     playlistFestivals: names.optional(),
+    playlistExcludedArtists: exclusions,
     source: z.literal("spotify").optional(),
     syncedAt: instant.optional(),
     playlists: z.array(playlist).max(500).optional(),
@@ -68,6 +80,9 @@ export function readCollections(value: unknown): CollectionsDocument {
   return collectionsSchema.parse({
     schemaVersion: 1,
     playlistFestivals: [...new Set(previous.playlistFestivals ?? [])],
+    ...(previous.playlistExcludedArtists === undefined
+      ? {}
+      : { playlistExcludedArtists: previous.playlistExcludedArtists }),
     spotify: hasImport ? { syncedAt: previous.syncedAt, playlists: previous.playlists } : null,
   });
 }
@@ -78,15 +93,33 @@ export function collectionsForSelection(
 ): CollectionsDocument {
   const remote = readCollections(previous),
     local = readCollections(selection);
-  return { ...remote, playlistFestivals: [...new Set(local.playlistFestivals)] };
+  return {
+    ...remote,
+    playlistFestivals: [...new Set(local.playlistFestivals)],
+    ...(local.playlistExcludedArtists === undefined
+      ? {}
+      : { playlistExcludedArtists: [...new Set(local.playlistExcludedArtists)] }),
+  };
 }
 export function mergeCollections(previous: unknown, local: unknown): CollectionsDocument {
   const remote = readCollections(previous),
     selection = readCollections(local);
-  return {
+  const exclusions =
+    remote.playlistExcludedArtists === undefined && selection.playlistExcludedArtists === undefined
+      ? {}
+      : {
+          playlistExcludedArtists: [
+            ...new Set([
+              ...(remote.playlistExcludedArtists ?? []),
+              ...(selection.playlistExcludedArtists ?? []),
+            ]),
+          ],
+        };
+  return collectionsSchema.parse({
     ...remote,
+    ...exclusions,
     playlistFestivals: [...new Set([...remote.playlistFestivals, ...selection.playlistFestivals])],
-  };
+  });
 }
 export function collectionsForImport(previous: unknown, value: unknown): CollectionsDocument {
   return { ...readCollections(previous), spotify: imported.parse(value) };
