@@ -1,14 +1,19 @@
+import { timetableEntrySchema } from "../timetables.ts";
+import { artistAliasIndex } from "./artist-aliases.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
 import type { PrismaClient } from "@prisma/client";
 import type { ArtistProfile } from "../domain/artist.ts";
 import type { FestivalEdition } from "../domain/edition.ts";
-import type { Festival, PlaylistStatus } from "../domain/festival.ts";
+import type { Festival, PlaylistStatus, TimetableEntry } from "../domain/festival.ts";
+import { editionKey, latestDate, readFreshnessEvidence } from "./freshness.ts";
+import type { CatalogFreshness } from "../domain/freshness.ts";
 
 export type CatalogSnapshot = Readonly<{
   festivals: Festival[];
   editions: readonly FestivalEdition[];
   artists: ArtistProfile[];
   playlists: Readonly<Record<string, PlaylistStatus>>;
+  freshness: CatalogFreshness;
 }>;
 export interface CatalogRepository {
   read(): Promise<CatalogSnapshot>;
@@ -25,13 +30,18 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     this.client = client;
   }
 
-  async read(): Promise<CatalogSnapshot> {
-    const [editionRows, artistRows] = await Promise.all([
+  async read({ includeFreshness = false } = {}): Promise<CatalogSnapshot> {
+    const now = new Date();
+    const [editionRows, artistRows, freshnessEvidence] = await Promise.all([
       this.client.festivalEdition.findMany({
         include: {
           festival: true,
           sources: { where: { enabled: true }, select: { deprecatedAt: true } },
-          lineup: { include: { artist: true }, orderBy: [{ billing: "asc" }, { position: "asc" }] },
+          lineup: {
+            where: { status: "ANNOUNCED" },
+            include: { artist: true },
+            orderBy: [{ billing: "asc" }, { position: "asc" }],
+          },
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
           timetable: { orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }] },
           playlists: { orderBy: { provider: "asc" } },
@@ -46,18 +56,41 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         },
         orderBy: { slug: "asc" },
       }),
+      includeFreshness ? readFreshnessEvidence(this.client, now) : undefined,
     ]);
     if (!editionRows.length || !artistRows.length)
       throw new Error("database catalogue is empty or incomplete");
 
-    const editions: FestivalEdition[] = editionRows.map((row) => {
+    const editions = editionRows.map((row) => {
       const headliners = row.lineup
         .filter(({ billing }) => billing === "HEADLINER")
         .map(({ artist }) => artist.name);
       const lineup = row.lineup
         .filter(({ billing }) => billing === "LINEUP")
         .map(({ artist }) => artist.name);
+      const checks = freshnessEvidence?.checksByEdition.get(row.id) ?? [];
+      const lastSuccessfulSourceCheckAt = latestDate(
+        checks.map(({ checkedAt }) => instant(checkedAt)),
+      );
+      const provenanceCheckedAt = latestDate(
+        row.provenance
+          .filter(({ checkedAt }) => checkedAt <= now)
+          .map(({ checkedAt }) => checkedAt.toISOString()),
+      );
+      const roster = row.lineup.map(({ artist }) => artist);
+      const aliases = row.timetable.length ? artistAliasIndex(roster) : undefined;
+      const rosterById = new Map(roster.map((artist) => [artist.id, artist.name]));
       return {
+        ...(freshnessEvidence && {
+          freshness: {
+            lastSuccessfulSourceCheckAt,
+            checkedAt: latestDate([lastSuccessfulSourceCheckAt, provenanceCheckedAt]),
+            lastPublishedAt: freshnessEvidence.publishedByEdition.get(
+              editionKey(row.festival.slug, row.year),
+            ),
+            sourceCheckStale: checks.some(({ stale }) => stale),
+          },
+        }),
         slug: row.festival.slug,
         name: row.festival.name,
         country: row.festival.country,
@@ -86,24 +119,29 @@ export class DatabaseCatalogRepository implements CatalogRepository {
             ? undefined
             : { latitude: row.festival.latitude, longitude: row.festival.longitude },
         timetable: row.timetable.length
-          ? row.timetable.map((performance) => ({
-              date: dateOnly(performance.date)!,
-              stage: performance.stage,
-              start: performance.start,
-              artist: performance.artistName,
-              timeZone: performance.timeZone ?? "UTC",
-              sourcePerformanceId: performance.sourcePerformanceId ?? undefined,
-              window:
-                performance.startsAt && performance.endsAt
-                  ? {
-                      startsAt: performance.startsAt.toISOString(),
-                      endsAt: performance.endsAt.toISOString(),
-                    }
-                  : undefined,
-              status: performance.status === "CANCELLED" ? "cancelled" : "scheduled",
-              sourceUrl: performance.sourceUrl ?? row.festival.officialUrl,
-              observedAt: instant(performance.observedAt) ?? row.sourceUpdatedAt.toISOString(),
-            }))
+          ? row.timetable.map((performance): TimetableEntry => {
+              const owners = performance.artistId ? [] : aliases!(performance.artistName);
+              const name =
+                (performance.artistId && rosterById.get(performance.artistId)) ||
+                (owners.length === 1 ? owners[0].name : performance.artistName);
+              const entry: TimetableEntry = {
+                date: dateOnly(performance.date)!,
+                stage: performance.stage,
+                start: performance.start,
+                artist: name,
+                timeZone: performance.timeZone ?? "UTC",
+                sourcePerformanceId: performance.sourcePerformanceId ?? undefined,
+                status: performance.status === "CANCELLED" ? "cancelled" : "scheduled",
+                sourceUrl: performance.sourceUrl ?? row.festival.officialUrl,
+                observedAt: instant(performance.observedAt) ?? row.sourceUpdatedAt.toISOString(),
+              };
+              const { startsAt, endsAt, timeZone, sourceUrl, observedAt } = performance;
+              if (!startsAt || !endsAt || !timeZone || !sourceUrl || !observedAt) return entry;
+              const window = { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
+              return timetableEntrySchema.safeParse({ ...entry, window }).success
+                ? { ...entry, window }
+                : entry;
+            })
           : undefined,
         recordState: lower(row.recordState),
         completeness: lower(row.completeness),
@@ -114,7 +152,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           checkedAt: source.checkedAt.toISOString(),
           note: source.note,
         })),
-      };
+      } satisfies FestivalEdition;
     });
     const currentEditions = editions.filter(({ recordState }) => recordState === "current");
     const currentArtistNames = new Set(
@@ -127,33 +165,10 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         provenance: _provenance,
         ...festival
       } = edition;
-      const row = editionRows.find(
-        ({ festival: item, year }) => item.slug === edition.slug && year === edition.editionYear,
-      )!;
       return {
         ...festival,
         headliners: [...festival.headliners],
         lineup: [...festival.lineup],
-        timetable: row.timetable.length
-          ? row.timetable.map((performance) => ({
-              date: dateOnly(performance.date)!,
-              stage: performance.stage,
-              start: performance.start,
-              artist: performance.artistName,
-              timeZone: performance.timeZone ?? "UTC",
-              sourcePerformanceId: performance.sourcePerformanceId ?? undefined,
-              window:
-                performance.startsAt && performance.endsAt
-                  ? {
-                      startsAt: performance.startsAt.toISOString(),
-                      endsAt: performance.endsAt.toISOString(),
-                    }
-                  : undefined,
-              status: performance.status === "CANCELLED" ? "cancelled" : "scheduled",
-              sourceUrl: performance.sourceUrl ?? row.festival.officialUrl,
-              observedAt: instant(performance.observedAt) ?? row.sourceUpdatedAt.toISOString(),
-            }))
-          : undefined,
       };
     });
     const artists: ArtistProfile[] = artistRows
@@ -223,17 +238,31 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         updatedAt: instant(spotify.syncedAt) ?? row.sourceUpdatedAt.toISOString(),
       };
     }
-    return Object.freeze({ festivals: festivalsFromDatabase, editions, artists, playlists });
+    const freshness = {
+      checkedAt: latestDate(currentEditions.map(({ freshness }) => freshness?.checkedAt)),
+      lastPublishedAt: latestDate(
+        currentEditions.map(({ freshness }) => freshness?.lastPublishedAt),
+      ),
+    };
+    return Object.freeze({
+      festivals: festivalsFromDatabase,
+      editions,
+      artists,
+      playlists,
+      freshness,
+    });
   }
 }
 
 export async function readCatalog(
-  options: { database?: PrismaClient } = {},
+  options: { database?: PrismaClient; includeFreshness?: boolean } = {},
 ): Promise<CatalogSnapshot> {
   const database = options.database ?? (await import("../db.ts")).db;
-  return new DatabaseCatalogRepository(database).read();
+  return new DatabaseCatalogRepository(database).read({
+    includeFreshness: options.includeFreshness,
+  });
 }
 
-export function getCatalog() {
-  return readCatalog();
+export function getCatalog(options?: { includeFreshness?: boolean }) {
+  return readCatalog(options);
 }
