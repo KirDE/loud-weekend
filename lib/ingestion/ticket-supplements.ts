@@ -3,6 +3,12 @@ import { RFP_STOCK, RFP_PURCHASE, observeRfpStock } from "./rfp-ticket-stock.ts"
 import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
+import {
+  ALCATRAZ_STOCK,
+  ALCATRAZ_PURCHASE,
+  isAlcatrazStockSource,
+  observeAlcatrazStock,
+} from "./alcatraz-ticket-stock.ts";
 
 import { observeRemainingTicket, remainingTicketUrl } from "./remaining-ticket-stock.ts";
 
@@ -47,6 +53,7 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
     url.hash
   )
     return;
+  if (isAlcatrazStockSource(source)) return ALCATRAZ_STOCK;
   if (
     source.festivalSlug === "rock-for-people" &&
     source.editionYear === 2027 &&
@@ -96,6 +103,7 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
 export function ticketSupplementPurchaseUrl(source: FestivalSource): string | undefined {
   const stockUrl = ticketSupplementUrl(source);
   if (!stockUrl) return;
+  if (stockUrl === ALCATRAZ_STOCK) return ALCATRAZ_PURCHASE;
   if (stockUrl === RFP_STOCK) return RFP_PURCHASE;
   return source.festivalSlug === "full-rewind"
     ? `https://full-rewind.de/collections/tickets-${source.editionYear}`
@@ -110,7 +118,9 @@ export function observeTicketSupplement(
   html: string,
   source: FestivalSource,
   url: string,
-  dates?: Partial<Pick<FestivalCandidate, "startDate" | "endDate" | "observedEditionYears">>,
+  dates?: Partial<Pick<FestivalCandidate, "startDate" | "endDate" | "observedEditionYears">> & {
+    fetchedAt?: string;
+  },
 ): TicketObservation {
   const fail = (reason: string): TicketObservation => ({
     excerpt: "",
@@ -197,6 +207,7 @@ export function observeTicketSupplement(
       return fail("invalid public weekend product JSON");
     }
   }
+  if (url === ALCATRAZ_STOCK) return observeAlcatrazStock(html, source.editionYear, dates);
   if (remainingTicketUrl(source)) return observeRemainingTicket(html, source, dates);
   const $ = load(html);
   const declaredEvents: Array<{
