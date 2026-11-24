@@ -304,6 +304,18 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
         readback,
       );
       assert.ok(![...afterRemoval.headliners, ...afterRemoval.lineup].includes(artist.name));
+      const corrected = {
+        ...input,
+        entries: [{ artistSlug: artist.slug, dates: ["2027-08-02"], status: "cancelled" }],
+        observedAt: "2026-10-03T12:00:00Z",
+      };
+      assert.equal((await importLineupDays(db, corrected, false)).changed, 1);
+      const afterCorrection = await read();
+      assert.deepEqual(
+        afterCorrection.lineupDays?.find((row) => row.artistSlug === artist.slug)?.dates,
+        ["2027-08-02"],
+      );
+      assert.ok(![...afterCorrection.headliners, ...afterCorrection.lineup].includes(artist.name));
     } finally {
       await db.lineupEntry.create({ data: removed });
     }

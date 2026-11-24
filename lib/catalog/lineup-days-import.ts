@@ -50,7 +50,11 @@ export async function importLineupDays(db: PrismaClient, document: unknown, chec
       await tx.$queryRaw`SELECT id FROM "FestivalEdition" WHERE id = ${target.id} FOR UPDATE`;
       const edition = await tx.festivalEdition.findUniqueOrThrow({
         where: { id: target.id },
-        include: { festival: true, lineup: { include: { artist: true } }, lineupDays: true },
+        include: {
+          festival: true,
+          lineup: { include: { artist: true } },
+          lineupDays: { include: { artist: { select: { slug: true } } } },
+        },
       });
       if (
         !edition.startDate ||
@@ -64,12 +68,14 @@ export async function importLineupDays(db: PrismaClient, document: unknown, chec
       if (source.origin !== new URL(edition.festival.officialUrl).origin) {
         throw new Error("Source must use the festival's official origin");
       }
-      const lineup = new Map(edition.lineup.map(({ artist }) => [artist.slug, artist.id]));
+      const editionArtists = new Map(edition.lineup.map(({ artist }) => [artist.slug, artist.id]));
+      for (const allocation of edition.lineupDays)
+        editionArtists.set(allocation.artist.slug, allocation.artistId);
       const existing = new Map(edition.lineupDays.map((record) => [record.artistId, record]));
       const seen = new Set<string>();
       let changed = 0;
       for (const entry of input.entries) {
-        const artistId = lineup.get(entry.artistSlug);
+        const artistId = editionArtists.get(entry.artistSlug);
         if (!artistId || seen.has(artistId))
           throw new Error("Every entry must resolve to a distinct artist in this edition");
         seen.add(artistId);
