@@ -116,20 +116,32 @@ const catalogDate = (value) =>
   new Date(value).toISOString().slice(0, 10) === value;
 const catalogText = (value) => typeof value === "string" && value.trim().length > 0;
 
-function catalogPerformance(row) {
+function catalogTimeZone(value, validTimeZones) {
+  if (!catalogText(value)) return false;
+  if (validTimeZones.has(value)) return true;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    validTimeZones.add(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function catalogPerformance(row, validTimeZones) {
   return (
     hasFields(row, ["date", "stage", "start", "artist", "timeZone", "status"]) &&
     catalogDate(row.date) &&
     catalogText(row.stage) &&
     catalogText(row.artist) &&
-    catalogText(row.timeZone) &&
+    catalogTimeZone(row.timeZone, validTimeZones) &&
     typeof row.start === "string" &&
     /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(row.start) &&
     (row.status === "scheduled" || row.status === "cancelled")
   );
 }
 
-function catalogFestival(row) {
+function catalogFestival(row, validTimeZones) {
   return (
     hasFields(row, ["slug", "name", "startDate", "endDate", "timetable"]) &&
     typeof row.slug === "string" &&
@@ -141,7 +153,7 @@ function catalogFestival(row) {
     Array.isArray(row.timetable) &&
     row.timetable.every(
       (performance) =>
-        catalogPerformance(performance) &&
+        catalogPerformance(performance, validTimeZones) &&
         (row.startDate === null || row.startDate <= performance.date) &&
         (row.endDate === null || performance.date <= row.endDate),
     )
@@ -150,6 +162,7 @@ function catalogFestival(row) {
 
 function validCatalog(body) {
   // Only persist the known public projection, never extra response fields.
+  const validTimeZones = new Set();
   if (
     !hasFields(body, [
       "schemaVersion",
@@ -167,7 +180,7 @@ function validCatalog(body) {
     body.generatedAt !== null ||
     !Array.isArray(body.festivals) ||
     !body.festivals.length ||
-    !body.festivals.every(catalogFestival)
+    !body.festivals.every((festival) => catalogFestival(festival, validTimeZones))
   )
     return false;
   const hasTimetable = body.festivals.some((festival) => festival.timetable.length);
