@@ -3,32 +3,49 @@ import { expect, test } from "@playwright/test";
 
 const copy = {
   en: {
-    search: "Search festivals, artists or cities", clear: "Clear search",
-    compare: name => `Compare ${name}`, remove: name => `Remove ${name} from comparison`,
-    save: "☆ Save", saved: "★ Saved", attendance: "Attendance for Synthetic Fest",
+    search: "Search festivals, artists or cities",
+    clear: "Clear search",
+    compare: (name) => `Compare ${name}`,
+    remove: (name) => `Remove ${name} from comparison`,
+    save: "☆ Save",
+    saved: "★ Saved",
+    attendance: "Attendance for Synthetic Fest",
     calendar: "Download calendar (.ics)",
   },
   de: {
-    search: "Festivals, Künstler oder Städte durchsuchen", clear: "Suche löschen",
-    compare: name => `${name} vergleichen`, remove: name => `${name} aus dem Vergleich entfernen`,
-    save: "☆ Speichern", saved: "★ Gespeichert", attendance: "Teilnahme an Synthetic Fest",
+    search: "Festivals, Künstler oder Städte durchsuchen",
+    clear: "Suche löschen",
+    compare: (name) => `${name} vergleichen`,
+    remove: (name) => `${name} aus dem Vergleich entfernen`,
+    save: "☆ Speichern",
+    saved: "★ Gespeichert",
+    attendance: "Teilnahme an Synthetic Fest",
     calendar: "Kalender herunterladen (.ics)",
   },
   ru: {
-    search: "Поиск по фестивалям, артистам и городам", clear: "Очистить поиск",
-    compare: name => `Сравнить ${name}`, remove: name => `Убрать ${name} из сравнения`,
-    save: "☆ Сохранить", saved: "★ Сохранено", attendance: "Посещение фестиваля Synthetic Fest",
+    search: "Поиск по фестивалям, артистам и городам",
+    clear: "Очистить поиск",
+    compare: (name) => `Сравнить ${name}`,
+    remove: (name) => `Убрать ${name} из сравнения`,
+    save: "☆ Сохранить",
+    saved: "★ Сохранено",
+    attendance: "Посещение фестиваля Synthetic Fest",
     calendar: "Скачать календарь (.ics)",
   },
 };
 
 for (const [lang, t] of Object.entries(copy)) {
-  test(`${lang}: find, compare, save and export a festival without account sync`, async ({ page, baseURL }) => {
+  test(`${lang}: find, compare, save and export a festival without account sync`, async ({
+    page,
+    baseURL,
+  }) => {
     const width = lang === "de" ? 390 : 320;
     await page.setViewportSize({ width, height: 780 });
-    await page.context().addCookies([{ name: "festival-radar-language", value: lang, url: baseURL }]);
+    await page
+      .context()
+      .addCookies([{ name: "festival-radar-language", value: lang, url: baseURL }]);
     const syncWrites = [];
-    page.on("request", request => {
+    page.on("request", (request) => {
       if (new URL(request.url()).pathname.startsWith("/api/sync/") && request.method() !== "GET") {
         syncWrites.push(request.method());
       }
@@ -39,7 +56,14 @@ for (const [lang, t] of Object.entries(copy)) {
     await expect(search.locator("..")).toHaveAttribute("data-ready", "true");
     await search.fill("Second Artist");
     await expect(grid.getByRole("heading")).toHaveText(["Synthetic Fest"]);
-    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("festival-radar-planner-v1") ?? "null")?.savedFilters?.query))
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem("festival-radar-planner-v1") ?? "null")?.savedFilters
+              ?.query,
+        ),
+      )
       .toBe("Second Artist");
     await page.reload();
     await expect(search).toHaveValue("Second Artist");
@@ -65,7 +89,9 @@ for (const [lang, t] of Object.entries(copy)) {
     for (const festival of selected) {
       await expect(table.getByRole("columnheader", { name: festival, exact: true })).toBeVisible();
     }
-    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true);
     await page.getByRole("button", { name: t.remove("Synthetic West"), exact: true }).click();
     await expect(fourth).toBeEnabled();
     await table.getByRole("link", { name: "Synthetic Fest", exact: true }).click();
