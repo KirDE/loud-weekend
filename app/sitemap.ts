@@ -76,7 +76,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const years = new Map<number, string | undefined>();
   const archiveDates: (string | undefined)[] = [];
-  for (const { slug, editionYear, snapshotAt, recordState } of editions) {
+  for (const { slug, editionYear, snapshotAt } of editions) {
     const publication = publications.get(editionKey(slug, editionYear));
     const nameDate = sharedNames.get(slug);
     const validSnapshot =
