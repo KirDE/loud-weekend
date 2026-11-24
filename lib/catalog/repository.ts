@@ -1,3 +1,4 @@
+import { rosterFingerprint } from "./lineup-proof.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
 import type { PrismaClient } from "@prisma/client";
@@ -124,6 +125,11 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         dateLabel: row.dateLabel ?? undefined,
         headliners,
         lineup,
+        ...(row.finalLineupFingerprint &&
+        announced.length &&
+        row.finalLineupFingerprint === rosterFingerprint(row.id, row.lineup)
+          ? { finalLineup: true as const }
+          : {}),
         officialUrl: row.festival.officialUrl,
         ticketsUrl: row.ticketsUrl ?? undefined,
         status: lower(row.status),
@@ -163,7 +169,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         completeness: lower(row.completeness),
         snapshotAt: instant(row.snapshotAt),
         provenance: row.provenance.map((source) => ({
-          field: source.field as "edition" | "dates" | "lineup",
+          field: source.field as FestivalEdition["provenance"][number]["field"],
           url: source.url,
           checkedAt: source.checkedAt.toISOString(),
           note: source.note,

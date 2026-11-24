@@ -14,9 +14,11 @@ import type { PlaylistStatus } from "@/lib/domain/festival";
 import { formatFreshnessDate } from "@/lib/freshness-date";
 import { ticketPresentation } from "@/lib/tickets";
 import { festivalSetlistHistoryUrl } from "@/lib/setlist-history";
+import { festivalDateInterval } from "@/lib/festival-dates";
 import {
   announcedArtists,
   hasAnnouncedLineup,
+  lineupPresentation,
   sortFestivalLineup,
   type LineupSort,
 } from "@/lib/festival-lineup";
@@ -53,13 +55,11 @@ export function FestivalDetail({
     }).format(new Date(`${value}T12:00:00Z`));
   const setlistUrl = festivalSetlistHistoryUrl(item.slug);
   const tickets = ticketPresentation(item);
-  const status =
-    item.status === "tba"
-      ? t("datesLineupTba")
-      : t(item.status === "confirmed" ? "confirmedLineup" : "partialLineup");
   const playlistUrl = playlist?.spotifyUrl || item.playlistUrl;
   const artistCount = announcedArtists(item).length;
   const hasArtists = hasAnnouncedLineup(item);
+  const lineupStatus = lineupPresentation(item);
+  const dates = festivalDateInterval(item);
   return (
     <div className="detailPage">
       <Link className="back" href="/">
@@ -73,12 +73,12 @@ export function FestivalDetail({
           </div>
           <h1>{item.name}</h1>
           <p className="detailDate">
-            {item.startDate
+            {dates && item.startDate
               ? `${prettyDate(item.startDate)}` +
                 `${item.endDate && item.endDate !== item.startDate ? ` — ${prettyDate(item.endDate)}` : ""}`
               : t("datesTba")}
           </p>
-          <span className={`status ${item.status}`}>{status}</span>
+          <span className={`status ${lineupStatus.tone}`}>{t(lineupStatus.label)}</span>
           {item.sourceDeprecated && (
             <span className="status deprecated">{t("sourceDeprecated")}</span>
           )}
