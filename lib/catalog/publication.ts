@@ -106,8 +106,9 @@ function artistResolver(db: Database, observedAt: Date) {
     };
   };
   let snapshot: ReturnType<typeof load> | undefined;
-  return async (name: string) => {
-    const { lookup, bySlug } = await (snapshot ??= load());
+  const index = () => (snapshot ??= load());
+  const ensure = async (name: string) => {
+    const { lookup, bySlug } = await index();
     const slug = artistSlug(name);
     const matches = lookup(name);
     if (matches.length > 1) throw new Error(`Ambiguous artist identity for ${name}`);
@@ -137,6 +138,20 @@ function artistResolver(db: Database, observedAt: Date) {
     bySlug.set(created.slug, created);
     return created;
   };
+  return Object.assign(ensure, {
+    async observedIn(name: string, roster: unknown) {
+      if (!Array.isArray(roster)) return false;
+      const { lookup } = await index();
+      const owners = lookup(name);
+      if (owners.length > 1) throw new Error(`Ambiguous artist identity for ${name}`);
+      if (!owners.length) return roster.includes(name);
+      return roster.some((entry) => {
+        if (typeof entry !== "string") return false;
+        const matches = lookup(entry);
+        return matches.length === 1 && matches[0].id === owners[0].id;
+      });
+    },
+  });
 }
 
 type EnsureArtist = ReturnType<typeof artistResolver>;
@@ -294,6 +309,7 @@ async function applyFestivalChanges(
     strictBefore: boolean;
     observedAt: Date;
   },
+  ensureArtist = artistResolver(db, input.observedAt),
 ) {
   const festival = await db.festival.findUnique({
     where: { slug: input.festivalSlug },
@@ -326,7 +342,6 @@ async function applyFestivalChanges(
     if (problem) throw new Error(problem);
   }
 
-  const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
   for (const change of input.changes) {
     let current: unknown;
@@ -625,17 +640,23 @@ export async function publishIngestionResult(
       const artistChanges = input.result.changes.filter(
         ({ field }) => field === "lineup" || field === "headliners",
       );
-      if (artistChanges.length && !expectedYear)
+      if (artistChanges.length && !stored.observedEditionYears[0])
         throw new Error("Cannot publish a lineup without one verified edition year");
-      if (
-        artistChanges.some(
-          ({ kind, field, after }) =>
-            kind !== (field === "headliners" ? "headliner_added" : "artist_added") ||
-            typeof after !== "string" ||
-            !after.trim(),
+      const ensureArtist = artistResolver(db, observedAt);
+      for (const { kind, field, after } of artistChanges) {
+        const billing = field === "headliners" ? "headliners" : "lineup";
+        if (
+          kind !== (billing === "headliners" ? "headliner_added" : "artist_added") ||
+          typeof after !== "string" ||
+          !after.trim()
         )
-      )
-        throw new Error("Invalid automatic lineup addition");
+          throw new Error("Invalid automatic lineup addition");
+        if (
+          !(await ensureArtist.observedIn(after, stored[billing])) ||
+          !(await ensureArtist.observedIn(after, observed[billing]))
+        )
+          throw new Error("Lineup addition is missing from the observed billing");
+      }
       // Secondary ticket observations are publishable only with the same exact
       // source, edition, value and durable evidence that passed the producer.
       // Do not extend the separate Impericon/I-Days publication paths here (#497).
@@ -776,13 +797,17 @@ export async function publishIngestionResult(
             "Ticket supplement publication requires matching persisted official ticket evidence",
           );
       }
-      const applied = await applyFestivalChanges(db, {
-        festivalSlug: input.result.festivalSlug,
-        expectedYear,
-        changes: input.result.changes,
-        strictBefore: true,
-        observedAt,
-      });
+      const applied = await applyFestivalChanges(
+        db,
+        {
+          festivalSlug: input.result.festivalSlug,
+          expectedYear,
+          changes: input.result.changes,
+          strictBefore: true,
+          observedAt,
+        },
+        ensureArtist,
+      );
       // Rockharz 2027 publications retain exact edition/source/field and persisted
       // evidence guards. Verified lineup changes use the normal provider queue.
       const sourceField =
