@@ -49,7 +49,7 @@ export default async function LocalizedFestivalPage({
     readArrivalFacts(db, item),
     readCampingFacts(db, item),
   ]);
-  const event = festivalMusicEvent(item);
+  const event = festivalMusicEvent(item, lang);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
     <>
