@@ -1,3 +1,4 @@
+import { SyncKind } from "@prisma/client";
 import { notFound } from "next/navigation";
 import { SharedPlanContent } from "@/components/PublicCatalogPages";
 import { db } from "@/lib/db";
@@ -10,6 +11,7 @@ export default async function SharedPlan({ params }: { params: Promise<{ slug: s
   if (
     !link ||
     link.document.kind === "SEASON_ATTENDANCE" ||
+    link.document.kind === SyncKind.TRIP_BUDGETS ||
     (link.expiresAt && link.expiresAt <= new Date())
   )
     notFound();

@@ -1,5 +1,8 @@
 "use client";
 import { useId, useRef, useState } from "react";
+import { maxTripBudgets } from "@/lib/trip-budget";
+import { serializePlannerState } from "@/lib/planner-storage";
+import { maxPlaylistArtistPreferences } from "@/lib/playlist-selection";
 import { useLanguage } from "./LanguageProvider";
 import { useLocalPlanner, type PlannerState } from "./LocalPlanner";
 
@@ -8,46 +11,50 @@ const labels = {
     clear: "Clear local data",
     title: "Reset this browser's plan?",
     scope:
-      "This removes local favorite festivals and artists, attendanc" +
-      "e, saved filters and playlist selections. It does not delete" +
-      " your account, account data, Spotify playlists or data on ot" +
-      "her devices. Nothing is automatically synced to your account" +
-      ".",
+      "This removes local favorite festivals and artists, attendance, saved filters, trip " +
+      "budgets and playlist selections. It does not delete your account, account data, " +
+      "Spotify playlists or data on other devices. Nothing is automatically synced to your " +
+      "account.",
     backup: "Download plan backup (.json)",
     cancel: "Cancel",
     confirm: "Reset local plan",
     done: "Local plan reset. Your account data has not changed.",
     undo: "Undo local reset",
+    overLimit:
+      "Undo would exceed the budget limit. Download the backup or remove a newer estimate, then try again.",
   },
   de: {
     clear: "Lokale Daten löschen",
     title: "Plan in diesem Browser zurücksetzen?",
     scope:
-      "Dies entfernt lokal gespeicherte Festivals und Künstler, Tei" +
-      "lnahmen, Filter und Playlist-Auswahl. Dein Konto, Kontodaten" +
-      ", Spotify-Playlists und Daten auf anderen Geräten werden nic" +
-      "ht gelöscht. Es wird nichts automatisch mit deinem Konto syn" +
-      "chronisiert.",
+      "Dies entfernt lokal gespeicherte Festivals und Künstler, Teilnahmen, Filter, " +
+      "Reisebudgets und Playlist-Auswahl. Dein Konto, Kontodaten, Spotify-Playlists und " +
+      "Daten auf anderen Geräten werden nicht gelöscht. Es wird nichts automatisch mit " +
+      "deinem Konto synchronisiert.",
     backup: "Plansicherung herunterladen (.json)",
     cancel: "Abbrechen",
     confirm: "Lokalen Plan zurücksetzen",
     done: "Lokaler Plan zurückgesetzt. Deine Kontodaten bleiben unverändert.",
     undo: "Lokales Zurücksetzen rückgängig machen",
+    overLimit:
+      "Dadurch würde das Budgetlimit überschritten. Lade die Sicherung herunter oder " +
+      "entferne eine neuere Schätzung und versuche es erneut.",
   },
   ru: {
     clear: "Удалить локальные данные",
     title: "Сбросить план в этом браузере?",
     scope:
-      "Будут удалены локальные избранные фестивали и артисты, участ" +
-      "ие, сохранённые фильтры и выбор фестивалей для плейлиста. Ак" +
-      "каунт, данные аккаунта, плейлисты Spotify и данные на других" +
-      " устройствах не удаляются. Автоматической синхронизации с ак" +
-      "каунтом не будет.",
+      "Будут удалены локальные избранные фестивали и артисты, участие, сохранённые фильтры, " +
+      "бюджеты и выбор фестивалей для плейлиста. Аккаунт, данные аккаунта, плейлисты Spotify " +
+      "и данные на других устройствах не удаляются. Автоматической синхронизации с аккаунтом " +
+      "не будет.",
     backup: "Скачать резервную копию плана (.json)",
     cancel: "Отмена",
     confirm: "Сбросить локальный план",
     done: "Локальный план сброшен. Данные аккаунта не изменились.",
     undo: "Отменить локальный сброс",
+    overLimit:
+      "Отмена превысит лимит бюджетов. Скачайте резервную копию или удалите новую оценку и повторите попытку.",
   },
 };
 
@@ -57,7 +64,9 @@ function snapshot(planner: PlannerState): PlannerState {
     favoriteArtists: planner.favoriteArtists,
     attendance: planner.attendance,
     seasonAttendance: planner.seasonAttendance,
+    tripBudgets: planner.tripBudgets,
     playlistFestivals: planner.playlistFestivals,
+    playlistExcludedArtists: planner.playlistExcludedArtists,
     savedFilters: planner.savedFilters,
   });
 }
@@ -77,6 +86,11 @@ export function PlannerReset({
   const title = useId(),
     description = useId();
   const [backup, setBackup] = useState<PlannerState | null>(null);
+  const [undoError, setUndoError] = useState(false);
+  const backupHref = (state: PlannerState) => {
+    const json = JSON.stringify(JSON.parse(serializePlannerState(state)), null, 2);
+    return `data:application/json;charset=utf-8,${encodeURIComponent(json)}`;
+  };
   function close() {
     onOpenChange(false);
     trigger.current?.focus();
@@ -106,7 +120,7 @@ export function PlannerReset({
         <p id={description}>{t.scope}</p>
         <a
           className="outlineButton"
-          href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(snapshot(planner), null, 2))}`}
+          href={backupHref(snapshot(planner))}
           download="loud-weekend-plan-backup.json"
         >
           {t.backup}
@@ -124,6 +138,7 @@ export function PlannerReset({
                 event.preventDefault();
                 return;
               }
+              setUndoError(false);
               setBackup(snapshot(planner));
               planner.clear();
             }}
@@ -133,18 +148,44 @@ export function PlannerReset({
         </form>
       </dialog>
       {backup && (
-        <div role="status">
-          <p>{t.done}</p>
+        <div>
+          <p role="status">{t.done}</p>
           <button
             type="button"
             disabled={disabled}
             onClick={() => {
-              planner.merge(backup);
+              if (
+                Object.keys({ ...backup.tripBudgets, ...planner.tripBudgets }).length >
+                maxTripBudgets
+              ) {
+                setUndoError(true);
+                return;
+              }
+              const current = planner.playlistExcludedArtists;
+              const saved = backup.playlistExcludedArtists;
+              const playlistExcludedArtists =
+                current && saved
+                  ? [...new Set([...current, ...saved])].slice(0, maxPlaylistArtistPreferences)
+                  : (current ?? saved);
+              planner.merge({ ...backup, playlistExcludedArtists });
               setBackup(null);
+              setUndoError(false);
             }}
           >
             {t.undo}
           </button>
+          {undoError && (
+            <>
+              <p role="alert">{t.overLimit}</p>
+              <a
+                className="outlineButton"
+                href={backupHref(backup)}
+                download="loud-weekend-plan-backup.json"
+              >
+                {t.backup}
+              </a>
+            </>
+          )}
         </div>
       )}
     </div>

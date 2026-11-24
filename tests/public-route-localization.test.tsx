@@ -77,7 +77,7 @@ for (const language of ["de", "ru"] as const) {
 
     const year = render(
       language,
-      <EditionYearContent year={2027} items={[current]} years={[2028, 2027, 2026]} />,
+      <EditionYearContent year={2027} items={[current]} years={[2028, 2027, 2026]} hasArchive />,
     );
     assert.ok(year.includes(t.edition) && !year.includes("provenance-aware"));
     const detail = render(language, <FestivalEditionContent item={current} />);

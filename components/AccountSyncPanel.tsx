@@ -1,14 +1,25 @@
 "use client";
+
+import { CalendarSubscription } from "./CalendarSubscription";
 import { useEffect, useState } from "react";
+import { readTripBudgets } from "@/lib/trip-budget";
 import { readDiscoveryPreferences } from "@/lib/discovery-preferences";
 import { readCollections, mergeCollections } from "@/lib/collections";
 import { readSeasonAttendance } from "@/lib/planner-storage";
 import { useLanguage } from "./LanguageProvider";
 import { emptyPlannerState, type PlannerState, useLocalPlanner } from "./LocalPlanner";
-type Kind = "favorites" | "collections" | "saved-filters" | "plans" | "season-attendance";
+type Kind =
+  "favorites" | "collections" | "saved-filters" | "plans" | "season-attendance" | "budgets";
 type Document = { id: string; payload: unknown; revision: number; updatedAt: string };
 type Conflict = { kind: Kind; local: unknown; remote: Document };
-const kinds: Kind[] = ["favorites", "collections", "saved-filters", "plans", "season-attendance"];
+const kinds: Kind[] = [
+  "favorites",
+  "collections",
+  "saved-filters",
+  "plans",
+  "season-attendance",
+  "budgets",
+];
 const labels = {
   en: {
     title: "Account sync",
@@ -97,13 +108,21 @@ const labels = {
     login: "Войдите через меню аккаунта, чтобы включить синхронизацию между устройствами.",
   },
 } as const;
+function playlistSelection(value: unknown) {
+  const { playlistFestivals, playlistExcludedArtists } = readCollections(value);
+  return { playlistFestivals, playlistExcludedArtists };
+}
 function payloads(p: ReturnType<typeof useLocalPlanner>): Record<Kind, unknown> {
   return {
     favorites: { favoriteFestivals: p.favoriteFestivals, favoriteArtists: p.favoriteArtists },
-    collections: readCollections({ playlistFestivals: p.playlistFestivals }),
+    collections: readCollections({
+      playlistFestivals: p.playlistFestivals,
+      playlistExcludedArtists: p.playlistExcludedArtists,
+    }),
     "saved-filters": { savedFilters: p.savedFilters },
     plans: { attendance: p.attendance },
     "season-attendance": { seasonAttendance: p.seasonAttendance ?? {} },
+    budgets: p.tripBudgets,
   };
 }
 function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
@@ -111,12 +130,13 @@ function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
   return {
     ...emptyPlannerState,
     ...value("favorites"),
-    playlistFestivals: readCollections(documents.collections?.payload).playlistFestivals,
+    ...playlistSelection(documents.collections?.payload),
     savedFilters: readDiscoveryPreferences(value("saved-filters").savedFilters),
     ...value("plans"),
     seasonAttendance: documents["season-attendance"]
       ? readSeasonAttendance(value("season-attendance").seasonAttendance)
       : undefined,
+    tripBudgets: readTripBudgets(documents.budgets?.payload),
   };
 }
 function mergePayload(kind: Kind, remote: unknown, local: unknown) {
@@ -140,6 +160,7 @@ function mergePayload(kind: Kind, remote: unknown, local: unknown) {
       },
     };
   if (kind === "plans") return { attendance: { ...a.attendance, ...b.attendance } };
+  if (kind === "budgets") return { ...readTripBudgets(remote), ...readTripBudgets(local) };
   return { ...a, ...b };
 }
 export function AccountSyncPanel({
@@ -161,33 +182,36 @@ export function AccountSyncPanel({
     onBusyChange?.(value);
   }
   const syncHeaders = (accountId: string) => ({ "X-Sync-Account": accountId });
+  async function readDocument(kind: Kind, accountId: string, signal?: AbortSignal) {
+    const response = await fetch("/api/sync/" + kind, {
+      cache: "no-store",
+      headers: syncHeaders(accountId),
+      signal,
+    });
+    if (!response.ok) throw new Error(t.failed);
+    const { document } = (await response.json()) as { document?: Document | null };
+    if (
+      document !== null &&
+      (!document ||
+        typeof document.id !== "string" ||
+        !Number.isInteger(document.revision) ||
+        document.revision < 0 ||
+        document.payload === undefined)
+    ) {
+      throw new Error(t.failed);
+    }
+    if (kind === "collections" && document) readCollections(document.payload);
+    if (kind === "saved-filters" && document) {
+      const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
+      if (!filters || typeof filters !== "object" || Array.isArray(filters))
+        throw new Error(t.failed);
+    }
+    return document;
+  }
+
   async function readDocuments(accountId: string, signal?: AbortSignal) {
     const entries = await Promise.all(
-      kinds.map(async (kind) => {
-        const response = await fetch("/api/sync/" + kind, {
-          cache: "no-store",
-          headers: syncHeaders(accountId),
-          signal,
-        });
-        if (!response.ok) throw new Error(t.failed);
-        const { document } = (await response.json()) as { document?: Document | null };
-        if (
-          document !== null &&
-          (!document ||
-            typeof document.id !== "string" ||
-            !Number.isInteger(document.revision) ||
-            document.revision < 0 ||
-            document.payload === undefined)
-        )
-          throw new Error(t.failed);
-        if (kind === "collections" && document) readCollections(document.payload);
-        if (kind === "saved-filters" && document) {
-          const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
-          if (!filters || typeof filters !== "object" || Array.isArray(filters))
-            throw new Error(t.failed);
-        }
-        return [kind, document] as const;
-      }),
+      kinds.map(async (kind) => [kind, await readDocument(kind, accountId, signal)] as const),
     );
     return Object.fromEntries(entries.filter(([, document]) => document)) as Partial<
       Record<Kind, Document>
@@ -235,18 +259,15 @@ export function AccountSyncPanel({
       body: JSON.stringify({ payload, revision, accountId }),
     });
     if (response.status === 409) {
-      const latest = await fetch(`/api/sync/${kind}`, {
-        cache: "no-store",
-        headers: syncHeaders(accountId),
-      });
-      if (!latest.ok) throw new Error(t.failed);
-      setConflict({ kind, local: payload, remote: (await latest.json()).document });
+      const latest = await readDocument(kind, accountId);
+      if (!latest) throw new Error(t.failed);
+      setConflict({ kind, local: payload, remote: latest });
       throw new Error("conflict");
     }
     if (!response.ok) throw new Error(t.failed);
-    const { document } = await response.json();
+    const { document } = (await response.json()) as { document: Document };
     setDocs((current) => ({ ...current, [kind]: document }));
-    return document as Document;
+    return document;
   }
   async function synchronize(mode: "merge" | "remote" | "normal" = "normal") {
     setBusy(true);
@@ -265,6 +286,8 @@ export function AccountSyncPanel({
         next = { ...docs };
       for (const kind of kinds) {
         if (kind === "season-attendance" && !next[kind] && !planner.seasonAttendance) continue;
+        if (kind === "budgets" && !next.budgets && !Object.keys(planner.tripBudgets).length)
+          continue;
         const content =
           mode === "merge" && next[kind]
             ? mergePayload(kind, next[kind]!.payload, local[kind])
@@ -295,10 +318,14 @@ export function AccountSyncPanel({
             favoriteFestivals: state.favoriteFestivals,
             favoriteArtists: state.favoriteArtists,
           },
-          collections: { playlistFestivals: state.playlistFestivals },
+          collections: {
+            playlistFestivals: state.playlistFestivals,
+            playlistExcludedArtists: state.playlistExcludedArtists,
+          },
           "saved-filters": { savedFilters: state.savedFilters },
           plans: { attendance: state.attendance },
           "season-attendance": { seasonAttendance: state.seasonAttendance },
+          budgets: { tripBudgets: state.tripBudgets },
         };
         planner.replaceFields(fields[kind]);
         setDocs((current) => ({ ...current, [kind]: remote }));
@@ -317,7 +344,7 @@ export function AccountSyncPanel({
     setStatus("");
     try {
       let plan = docs.plans;
-      if (!plan) plan = await put("plans", payloads(planner).plans, 0);
+      if (!plan) plan = await put("plans", { attendance: planner.attendance }, 0);
       const response = await fetch("/api/share", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -342,20 +369,23 @@ export function AccountSyncPanel({
     try {
       // Preserve unsynchronized device selection first, under the same revision
       // checks as normal sync. A conflict aborts before calling the provider.
-      const selection = mergeCollections(docs.collections?.payload, payloads(planner).collections);
+      const remoteCollections = readCollections(docs.collections?.payload);
+      const selection = {
+        ...mergeCollections(remoteCollections, { playlistFestivals: planner.playlistFestivals }),
+        playlistExcludedArtists:
+          planner.playlistExcludedArtists ?? remoteCollections.playlistExcludedArtists,
+      };
       const saved = await put("collections", selection, docs.collections?.revision ?? 0);
-      planner.merge({ playlistFestivals: readCollections(saved.payload).playlistFestivals });
+      planner.merge(playlistSelection(saved.payload));
       const response = await fetch("/api/spotify/sync", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ revision: saved.revision }),
       });
       if (response.status === 409) {
-        const latest = await fetch("/api/sync/collections", { cache: "no-store" });
-        if (!latest.ok) throw new Error(t.failed);
-        const document = (await latest.json()).document;
+        if (!user) throw new Error(t.failed);
+        const document = await readDocument("collections", user.id);
         if (!document) throw new Error(t.failed);
-        readCollections(document.payload);
         setConflict({ kind: "collections", local: selection, remote: document });
         setStatus(t.conflict);
         return;
@@ -486,6 +516,7 @@ export function AccountSyncPanel({
             <p>{t.empty}</p>
           )}
         </div>
+        <CalendarSubscription key={user.id} disabled={busy || disabled} />
       </div>
     </section>
   );

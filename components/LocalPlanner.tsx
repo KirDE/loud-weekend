@@ -8,23 +8,28 @@ import {
   type Attendance,
 } from "@/lib/planner-storage";
 export type { Attendance };
+import { type TripBudget, type TripBudgets, maxTripBudgets } from "@/lib/trip-budget";
 import {
   defaultDiscoveryPreferences,
   readDiscoveryPreferences,
   type DiscoveryPreferences,
 } from "@/lib/discovery-preferences";
+import { readPlaylistExclusions } from "@/lib/playlist-selection";
 export type PlannerState = {
   favoriteFestivals: string[];
   favoriteArtists: string[];
   attendance: Record<string, Attendance>;
   seasonAttendance?: Record<string, Attendance>;
+  tripBudgets: TripBudgets;
   playlistFestivals: string[];
+  playlistExcludedArtists?: string[];
   savedFilters: DiscoveryPreferences;
 };
 export const emptyPlannerState: PlannerState = {
   favoriteFestivals: [],
   favoriteArtists: [],
   attendance: {},
+  tripBudgets: {},
   playlistFestivals: [],
   savedFilters: defaultDiscoveryPreferences,
 };
@@ -33,9 +38,12 @@ const Context = createContext<
       ready: boolean;
       toggleFestival: (v: string) => void;
       toggleArtist: (v: string, legacyValues: readonly string[]) => void;
+      setTripBudget: (key: string, value?: TripBudget) => boolean;
       setAttendance: (v: string, a?: Attendance) => void;
       editionAttendance: (slug: string, year: number) => Attendance | undefined;
       setEditionAttendance: (slug: string, year: number, attendance?: Attendance) => void;
+      setPlaylistExclusions: (value: string[]) => void;
+      togglePlaylistArtist: (slug: string) => void;
       togglePlaylistFestival: (v: string) => void;
       setSavedFilters: (value: DiscoveryPreferences) => void;
       updateSavedFilters: (patch: Partial<DiscoveryPreferences>) => void;
@@ -109,6 +117,30 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           else delete selections[key];
           return { ...current, [field]: selections };
         }),
+      setTripBudget: (key: string, estimate?: TripBudget) => {
+        if (
+          estimate &&
+          !state.tripBudgets[key] &&
+          Object.keys(state.tripBudgets).length >= maxTripBudgets
+        )
+          return false;
+        setState((current) => {
+          const tripBudgets = { ...current.tripBudgets };
+          if (estimate) tripBudgets[key] = estimate;
+          else delete tripBudgets[key];
+          return { ...current, tripBudgets };
+        });
+        return true;
+      },
+      setPlaylistExclusions: (value: string[]) => {
+        const exclusions = readPlaylistExclusions(value);
+        if (exclusions) setState((s) => ({ ...s, playlistExcludedArtists: exclusions }));
+      },
+      togglePlaylistArtist: (slug: string) =>
+        setState((s) => {
+          const exclusions = readPlaylistExclusions(toggle(s.playlistExcludedArtists ?? [], slug));
+          return exclusions ? { ...s, playlistExcludedArtists: exclusions } : s;
+        }),
       togglePlaylistFestival: (v: string) =>
         setState((s) => ({
           ...s,
@@ -128,23 +160,33 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
       replaceFields: (fields: Partial<PlannerState>) =>
         setState((current) => ({ ...current, ...fields })),
       merge: (next: Partial<PlannerState>) =>
-        setState((current) => ({
-          favoriteFestivals: Array.from(
-            new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])]),
-          ),
-          favoriteArtists: Array.from(
-            new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])]),
-          ),
-          attendance: { ...next.attendance, ...current.attendance },
-          seasonAttendance: next.seasonAttendance
-            ? { ...next.seasonAttendance, ...current.seasonAttendance }
-            : current.seasonAttendance,
-          playlistFestivals: Array.from(
-            new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]),
-          ),
-          savedFilters: readDiscoveryPreferences({ ...current.savedFilters, ...next.savedFilters }),
-        })),
-      clear: () => setState(emptyPlannerState),
+        setState((current) => {
+          const tripBudgets = { ...next.tripBudgets, ...current.tripBudgets };
+          return {
+            favoriteFestivals: Array.from(
+              new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])]),
+            ),
+            favoriteArtists: Array.from(
+              new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])]),
+            ),
+            attendance: { ...next.attendance, ...current.attendance },
+            seasonAttendance: next.seasonAttendance
+              ? { ...next.seasonAttendance, ...current.seasonAttendance }
+              : current.seasonAttendance,
+            tripBudgets:
+              Object.keys(tripBudgets).length <= maxTripBudgets ? tripBudgets : current.tripBudgets,
+            playlistFestivals: Array.from(
+              new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]),
+            ),
+            playlistExcludedArtists:
+              next.playlistExcludedArtists ?? current.playlistExcludedArtists,
+            savedFilters: readDiscoveryPreferences({
+              ...current.savedFilters,
+              ...next.savedFilters,
+            }),
+          };
+        }),
+      clear: () => setState({ ...emptyPlannerState, playlistExcludedArtists: [] }),
     }),
     [ready, state],
   );

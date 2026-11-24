@@ -1,3 +1,7 @@
+import {
+  preparePlaylistDraft,
+  publishAdminPlaylistChange,
+} from "@/lib/catalog/admin-playlist-publication";
 import { prepareLogoDraft, publishAdminLogoChange } from "@/lib/catalog/admin-logo-publication";
 import {
   prepareArtistDraft,
@@ -131,9 +135,14 @@ async function draftChanges(
     resourceKind === AdminResourceKind.ASSET
       ? await prepareLogoDraft(tx, resourceKey, values)
       : null;
+  const playlistDraft =
+    resourceKind === AdminResourceKind.PLAYLIST
+      ? await preparePlaylistDraft(tx, resourceKey, values)
+      : null;
   const changes =
     artistDraft?.changes ??
     logoDraft?.changes ??
+    playlistDraft?.changes ??
     Object.entries(values).map(([field, afterValue]) => ({
       field,
       beforeValue: before[field] ?? null,
@@ -146,7 +155,9 @@ async function draftChanges(
       ? { kind: "artist-draft", artistId: artistDraft.artistId }
       : logoDraft
         ? { kind: "logo-draft", festivalId: logoDraft.festivalId }
-        : {}),
+        : playlistDraft
+          ? { kind: "playlist-draft", editionId: playlistDraft.editionId }
+          : {}),
   };
   await tx.adminChange.createMany({
     data: changes.map(({ field, beforeValue, afterValue }) => ({
@@ -344,10 +355,10 @@ export async function decideChange(
         });
         throw new Error(`Revision conflict: expected ${currentRevision}`);
       }
-      if (decision === "approve" && change.resourceKind === AdminResourceKind.PLAYLIST)
-        throw new Error(
-          "Playlist drafts are not publishable until canonical playlist review is supported",
-        );
+      const playlistPublication =
+        decision === "approve" && change.resourceKind === AdminResourceKind.PLAYLIST
+          ? await publishAdminPlaylistChange(tx, change)
+          : null;
       const artistPublication =
         decision === "approve" && change.resourceKind === AdminResourceKind.ARTIST
           ? await publishAdminArtistChange(tx, change)
@@ -461,6 +472,7 @@ export async function decideChange(
             field: change.field,
             artistPublication,
             logoPublication,
+            playlistPublication,
             catalogPublicationId: catalogPublication?.id ?? null,
             playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false,
           }),
@@ -471,6 +483,7 @@ export async function decideChange(
         ...decided,
         artistPublication,
         logoPublication,
+        playlistPublication,
         catalogPublicationId: catalogPublication?.id ?? null,
         playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false,
       };
@@ -546,25 +559,26 @@ async function refreshSource(
       throw new Error("Official source provided no supported evidence");
     if (candidate.observedEditionYears.some((year) => year !== active.editionYear))
       throw new Error("Official source returned another edition");
-    const fields = [
-      "startDate",
-      "endDate",
-      "city",
-      "headliners",
-      "lineup",
-      "ticketsUrl",
-      "ticketStatus",
-      "status",
-    ] as const;
-    const proposals = fields.flatMap((field) => {
+    const reviewReasons = [...result.reviewReasons];
+    const fields = {
+      startDate: "Start date",
+      endDate: "End date",
+      city: "City",
+      headliners: "Headliners",
+      lineup: "Lineup",
+      ticketsUrl: "Ticket URL",
+      ticketStatus: "Ticket availability",
+      status: "Status",
+    } as const;
+    const proposals = (Object.keys(fields) as (keyof typeof fields)[]).flatMap((field) => {
       const differences = result.changes.filter((item) => item.field === field);
       const evidence = candidate.evidence.filter((item) => item.field === field);
       if (!differences.length || !evidence.length) return [];
-      if (
-        (field === "lineup" || field === "headliners") &&
-        !candidate.observedEditionYears.includes(active.editionYear)
-      )
+      const observedYears = candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
+      if (!observedYears.includes(active.editionYear)) {
+        reviewReasons.push(`${fields[field]} could not be verified for the selected edition.`);
         return [];
+      }
       const afterValue =
         field === "lineup" || field === "headliners"
           ? [
@@ -641,7 +655,7 @@ async function refreshSource(
         const updated = await tx.adminParserRun.update({
           where: { id: run.id },
           data: {
-            status: result.reviewReasons.length ? AdminRunStatus.PARTIAL : AdminRunStatus.SUCCEEDED,
+            status: reviewReasons.length ? AdminRunStatus.PARTIAL : AdminRunStatus.SUCCEEDED,
             finishedAt,
             durationMs: finishedAt.getTime() - run.startedAt.getTime(),
             extracted: candidate.evidence.length,
@@ -651,7 +665,7 @@ async function refreshSource(
               {
                 at: finishedAt.toISOString(),
                 message: "Parse completed",
-                reviewReasons: result.reviewReasons,
+                reviewReasons,
                 queued,
               },
             ]),
