@@ -1,3 +1,11 @@
+import { isDeepStrictEqual } from "node:util";
+import { createHash } from "node:crypto";
+import {
+  isTolminatorStockRoute,
+  matchesTolminatorStockEdition,
+} from "../ingestion/adapters/tolminator-stock.ts";
+import { editionDateProblem } from "../domain/edition-dates.ts";
+import { publishArrivalObservation, type ArrivalObservation } from "./arrival-import.ts";
 import {
   ticketSupplementUrl,
   ticketSupplementPurchaseUrl,
@@ -38,6 +46,7 @@ const ticketStatuses = {
   not_on_sale: TicketStatus.NOT_ON_SALE,
   sold_out: TicketStatus.SOLD_OUT,
   sales_ended: TicketStatus.SALES_ENDED,
+  free: TicketStatus.FREE,
   unavailable: TicketStatus.UNAVAILABLE,
   unknown: TicketStatus.UNKNOWN,
 } as const;
@@ -290,6 +299,22 @@ async function applyFestivalChanges(
       `Candidate edition ${input.expectedYear} does not match catalogue edition ${edition.year}`,
     );
 
+  const dateChanges = input.changes.filter(
+    ({ field }) => field === "startDate" || field === "endDate",
+  );
+  if (dateChanges.length) {
+    const proposed = new Map(
+      dateChanges.map(({ field, after }) => [field, after === "" ? null : after]),
+    );
+    if (proposed.size !== dateChanges.length) throw new Error("Duplicate festival date changes");
+    const start = proposed.has("startDate")
+      ? proposed.get("startDate")
+      : isoDate(edition.startDate);
+    const end = proposed.has("endDate") ? proposed.get("endDate") : isoDate(edition.endDate);
+    const problem = editionDateProblem(edition.year, start, end);
+    if (problem) throw new Error(problem);
+  }
+
   const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
   for (const change of input.changes) {
@@ -507,16 +532,43 @@ export async function publishIngestionResult(
       }
       const candidate = await db.ingestionCandidate.findUnique({
         where: { attemptId: input.attemptId },
-        include: { diffs: true, evidence: true, attempt: { select: { requestedUrl: true } } },
+        include: {
+          diffs: true,
+          evidence: true,
+          attempt: {
+            select: {
+              festivalSlug: true,
+              requestedUrl: true,
+              finalUrl: true,
+              httpStatus: true,
+              endedAt: true,
+            },
+          },
+        },
       });
       if (!candidate || !candidate.publishable)
         throw new Error("Publishable ingestion candidate was not persisted");
+      const observed = input.result.candidate;
+      const stored = candidate.normalized as unknown as FestivalCandidate;
       if (
-        input.sourceLease &&
-        (candidate.festivalSlug !== input.result.festivalSlug ||
-          candidate.attempt.requestedUrl !== input.result.sourceUrl)
-      )
-        throw new Error("Leased candidate source does not match persisted attempt");
+        !stored ||
+        [
+          candidate.festivalSlug,
+          candidate.attempt.festivalSlug,
+          observed.festivalSlug,
+          stored.festivalSlug,
+        ].some((slug) => slug !== input.result.festivalSlug) ||
+        [candidate.attempt.requestedUrl, observed.sourceUrl, stored.sourceUrl].some(
+          (url) => url !== input.result.sourceUrl,
+        ) ||
+        !Array.isArray(stored.observedEditionYears) ||
+        !same(stored.observedEditionYears, observed.observedEditionYears) ||
+        stored.observedEditionYears.length > 1
+      ) {
+        throw new Error(
+          "Ingestion publication scope does not match the persisted festival, source and edition",
+        );
+      }
       const sourceId = `ingestion:${candidate.id}`;
       const existing = await db.catalogPublication.findUnique({
         where: { sourceId },
@@ -547,10 +599,7 @@ export async function publishIngestionResult(
       );
       if (!same(expected, persisted))
         throw new Error("Persisted ingestion diff does not match publication request");
-      const expectedYear =
-        input.result.candidate.observedEditionYears.length === 1
-          ? input.result.candidate.observedEditionYears[0]
-          : (candidate.sourceYear ?? undefined);
+      const expectedYear = stored.observedEditionYears[0] ?? candidate.sourceYear ?? undefined;
       if (
         !expectedYear &&
         input.result.changes.some(({ field }) => field === "lineup" || field === "headliners")
@@ -559,8 +608,85 @@ export async function publishIngestionResult(
       // Secondary ticket observations are publishable only with the same exact
       // source, edition, value and durable evidence that passed the producer.
       // Do not extend the separate Impericon/I-Days publication paths here (#497).
-      const observed = input.result.candidate;
-      const stored = candidate.normalized as unknown as FestivalCandidate;
+      // Scope this stock-only guard to the product route, never the festival
+      // slug: the primary homepage still publishes its independent date fields.
+      // Durable route identities keep caller slug/source stripping fail-closed.
+      if (
+        [
+          input.result.sourceUrl,
+          candidate.attempt.requestedUrl,
+          candidate.attempt.finalUrl,
+          observed.sourceUrl,
+          stored.sourceUrl,
+        ].some(isTolminatorStockRoute)
+      ) {
+        const time = Date.parse(observed.fetchedAt);
+        const allowed = new Set([
+          "schemaVersion",
+          "festivalSlug",
+          "sourceUrl",
+          "fetchedAt",
+          "observedEditionYears",
+          "warnings",
+          "ticketStatus",
+          "ticketsUrl",
+          "evidence",
+        ]);
+        const valid =
+          [input.result.festivalSlug, candidate.festivalSlug, observed.festivalSlug].every((slug) =>
+            matchesTolminatorStockEdition(slug, observed.observedEditionYears),
+          ) &&
+          [
+            input.result.sourceUrl,
+            observed.sourceUrl,
+            candidate.attempt.requestedUrl,
+            candidate.attempt.finalUrl,
+            observed.ticketsUrl,
+          ].every(isTolminatorStockRoute) &&
+          candidate.attempt.httpStatus === 200 &&
+          isDeepStrictEqual(stored, observed) &&
+          Object.keys(observed).every((key) => allowed.has(key)) &&
+          observed.schemaVersion === 1 &&
+          observed.warnings.length === 0 &&
+          observed.ticketStatus === "available" &&
+          Number.isFinite(time) &&
+          time <= Date.now() + 60_000 &&
+          time >= Date.now() - 86_400_000 &&
+          input.result.fetchedAt === observed.fetchedAt &&
+          Math.abs(candidate.attempt.endedAt.getTime() - time) <= 60_000 &&
+          input.result.changes.every(
+            (change) =>
+              ["ticketStatus", "ticketsUrl"].includes(change.field) &&
+              same(change.after, observed[change.field as "ticketStatus" | "ticketsUrl"]),
+          ) &&
+          observed.evidence.length === 2 &&
+          candidate.evidence.length === 2 &&
+          ["ticketStatus", "ticketsUrl"].every((field) => {
+            const proof = observed.evidence.filter((e) => e.field === field);
+            return (
+              proof.length === 1 &&
+              isTolminatorStockRoute(proof[0].sourceUrl) &&
+              proof[0].observedAt === observed.fetchedAt &&
+              typeof proof[0].excerpt === "string" &&
+              proof[0].excerpt.length > 0 &&
+              proof[0].excerpt.length <= 1800 &&
+              candidate.evidence.some(
+                (saved) =>
+                  saved.field === field &&
+                  isTolminatorStockRoute(saved.sourceUrl) &&
+                  saved.excerpt === proof[0].excerpt &&
+                  saved.observedAt.getTime() === time &&
+                  saved.contentHash ===
+                    createHash("sha256").update(proof[0].excerpt!).digest("hex") &&
+                  same(saved.observedValue, observed[field as "ticketStatus" | "ticketsUrl"]),
+              )
+            );
+          });
+        if (!valid)
+          throw new Error(
+            "Tolminator stock publication requires matching persisted ticket-only proof",
+          );
+      }
       if (observed.ticketSupplement || stored.ticketSupplement) {
         const registeredSource = {
           festivalSlug: input.result.festivalSlug,
@@ -1036,6 +1162,22 @@ export async function publishAdminFestivalChange(
   });
 }
 
+export async function publishAgentArrivalResolution(
+  db: Prisma.TransactionClient,
+  input: { sourceId: string; arrival: ArrivalObservation; evidence: unknown },
+) {
+  if (!(await publishArrivalObservation(db, input.arrival))) return null;
+  return createPublication(db, {
+    source: CatalogPublicationSource.INGESTION,
+    sourceId: input.sourceId,
+    festivalSlug: input.arrival.festivalSlug,
+    editionYear: input.arrival.editionYear,
+    actorLabel: "OpenClaw import-conflict agent",
+    fields: ["arrival"],
+    evidence: input.evidence,
+  });
+}
+
 /** Authenticated agent review: caller holds the issue/source lease and has
  * compared the exact current snapshot. No weakening of the automatic parser
  * policy, and no provider activity is implied by resolving an import conflict. */
@@ -1064,14 +1206,12 @@ export async function publishAgentFestivalResolution(
   });
   if (edition.festival.slug !== input.festivalSlug || edition.recordState !== "CURRENT")
     throw new Error("Reviewed edition mismatch");
-  const dateStart = input.facts.startDate ?? isoDate(edition.startDate),
-    dateEnd = input.facts.endDate ?? isoDate(edition.endDate);
-  if (
-    (dateStart && Number(dateStart.slice(0, 4)) !== edition.year) ||
-    (dateEnd && Number(dateEnd.slice(0, 4)) !== edition.year) ||
-    (dateStart && dateEnd && dateStart > dateEnd)
-  )
-    throw new Error("Reviewed dates mismatch");
+  const dateProblem = editionDateProblem(
+    edition.year,
+    input.facts.startDate ?? isoDate(edition.startDate),
+    input.facts.endDate ?? isoDate(edition.endDate),
+  );
+  if (dateProblem) throw new Error(`Reviewed dates mismatch: ${dateProblem}`);
   // Only a genuinely new edition's first reviewed roster enters the native
   // provider queue. Existing/cancelled rosters and prior generations stay gated.
   const initialPlaylistGeneration =

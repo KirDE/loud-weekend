@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { legacyFavoriteNames } from "@/lib/favorite-artist";
 import { ArtistDetail } from "@/components/ArtistDetail";
 import { getCatalog } from "@/lib/catalog/repository";
 
@@ -26,6 +27,12 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
   const appearances = festivals.filter((festival) =>
     [...festival.headliners, ...festival.lineup].includes(artist.name),
   );
-  return <ArtistDetail artist={artist} appearances={appearances} />;
+  return (
+    <ArtistDetail
+      artist={artist}
+      appearances={appearances}
+      legacyFavoriteNames={legacyFavoriteNames(artist, artists)}
+    />
+  );
 }
 import type { Metadata } from "next";
