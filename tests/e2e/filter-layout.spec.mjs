@@ -14,7 +14,7 @@ for (const locale of ["en", "de", "ru"]) {
         return {
           search: rect(".search"),
           clear: rect(".clearFilters"),
-          selects: [...node.querySelectorAll("select")].map((el) =>
+          selects: [...node.querySelectorAll(":scope > select")].map((el) =>
             el.getBoundingClientRect().toJSON(),
           ),
           toggles: [...node.querySelectorAll(".toggle")].map((el) =>

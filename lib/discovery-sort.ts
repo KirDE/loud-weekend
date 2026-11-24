@@ -9,6 +9,7 @@ type ArtistKey = { slug: string; name: string; aliases: readonly string[] };
 export type DiscoveryLineups = {
   artistSlugsByFestival: Readonly<Record<string, readonly string[]>>;
   legacyFavoriteSlugs: Readonly<Record<string, string>>;
+  artistNamesBySlug?: Readonly<Record<string, string>>;
 };
 
 export function uniqueFavoriteSlugs(artists: readonly ArtistKey[], current: ReadonlySet<string>) {
@@ -26,6 +27,17 @@ export function uniqueFavoriteSlugs(artists: readonly ArtistKey[], current: Read
   );
 }
 
+export function discoveryFavoriteSlugs(favorites: readonly string[], lineups?: DiscoveryLineups) {
+  return new Set(
+    favorites.flatMap((key) => {
+      if (key.startsWith("artist:")) return [key.slice("artist:".length)];
+      if (lineups && Object.hasOwn(lineups.legacyFavoriteSlugs, key))
+        return [lineups.legacyFavoriteSlugs[key]];
+      return [];
+    }),
+  );
+}
+
 export function sortDiscoveryFestivals(
   festivals: Festival[],
   sort: DiscoverySort,
@@ -37,15 +49,7 @@ export function sortDiscoveryFestivals(
   },
 ) {
   const collator = new Intl.Collator(options.locale, { sensitivity: "base" });
-  const favoriteSlugs = new Set(
-    options.favorites.map((key) =>
-      key.startsWith("artist:")
-        ? key.slice("artist:".length)
-        : options.lineups && Object.hasOwn(options.lineups.legacyFavoriteSlugs, key)
-          ? options.lineups.legacyFavoriteSlugs[key]
-          : null,
-    ),
-  );
+  const favoriteSlugs = discoveryFavoriteSlugs(options.favorites, options.lineups);
 
   return festivals
     .map((festival) => {

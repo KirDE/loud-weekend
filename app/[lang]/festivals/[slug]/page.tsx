@@ -1,3 +1,6 @@
+import { EditionHistory } from "@/components/EditionHistory";
+import { db } from "@/lib/db";
+import { readEditionHistory } from "@/lib/catalog/public-history";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { Language } from "@/components/LanguageProvider";
@@ -5,7 +8,6 @@ import { FestivalDetail } from "@/components/FestivalDetail";
 import { supportedLanguages } from "@/lib/catalog/public";
 import { readCampingFacts } from "@/lib/catalog/camping-facts";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
-import { db } from "@/lib/db";
 import { getCatalog } from "@/lib/catalog/repository";
 import { festivalMusicEvent } from "@/lib/seo";
 
@@ -42,13 +44,17 @@ export default async function LocalizedFestivalPage({
 }) {
   const { lang, slug } = await params;
   if (!supportedLanguages.includes(lang as Language)) notFound();
-  const { festivals, artists, playlists } = await getCatalog({ includeFreshness: true });
+  const { festivals, artists, playlists, discoveryLineups } = await getCatalog({
+    includeFreshness: true,
+  });
   const item = festivals.find((festival) => festival.slug === slug);
   if (!item) notFound();
   const [arrivalFacts, campingFacts] = await Promise.all([
     readArrivalFacts(db, item),
     readCampingFacts(db, item),
   ]);
+  const history =
+    item.editionYear === undefined ? [] : await readEditionHistory(db, item.slug, item.editionYear);
   const event = festivalMusicEvent(item, lang);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
@@ -62,12 +68,14 @@ export default async function LocalizedFestivalPage({
         arrivalFacts={arrivalFacts}
         campingFacts={campingFacts}
         festivals={festivals}
+        discoveryLineups={discoveryLineups}
         artistSlugs={artistSlugs}
         artistPopularity={Object.fromEntries(
           artists.map((artist) => [artist.name, artist.spotifyStats?.popularity ?? null]),
         )}
         playlist={playlists[item.slug]}
       />
+      <EditionHistory entries={history} officialUrl={item.officialUrl} />
     </>
   );
 }

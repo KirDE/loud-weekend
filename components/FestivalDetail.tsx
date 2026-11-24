@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
 import type { PublicCampingFact } from "@/lib/catalog/camping-facts";
@@ -29,6 +31,7 @@ import { FavoriteButton, useLocalPlanner, type Attendance } from "./LocalPlanner
 export function FestivalDetail({
   item,
   festivals,
+  discoveryLineups,
   artistSlugs,
   playlist,
   artistPopularity = {},
@@ -37,6 +40,7 @@ export function FestivalDetail({
 }: {
   item: Festival;
   festivals: Festival[];
+  discoveryLineups?: DiscoveryLineups;
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
   arrivalFacts?: readonly PublicArrivalFact[];
@@ -239,7 +243,12 @@ export function FestivalDetail({
           </>
         )}
       </section>
-      <PlanningTools item={item} festivals={festivals} />
+      <PlanningTools
+        item={item}
+        festivals={festivals}
+        discoveryLineups={discoveryLineups}
+        favorites={planner.favoriteArtists}
+      />
       <FestivalArrival facts={arrivalFacts} />
       <FestivalCamping facts={campingFacts} />
       <section className="sourceNote">
@@ -270,6 +279,11 @@ export function FestivalDetail({
           {t("primarySource")}
         </a>
       </section>
+      {item.editionYear !== undefined && (
+        <CorrectionReportForm
+          identity={{ target: "edition", slug: item.slug, year: item.editionYear }}
+        />
+      )}
     </div>
   );
 }
