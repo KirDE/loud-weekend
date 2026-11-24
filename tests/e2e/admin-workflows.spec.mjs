@@ -393,12 +393,16 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
       await expect(page.getByLabel(copy.log)).toContainText('"message": "fixture"');
       await page.getByRole("button", { name: copy.showLog }).click();
       await open(copy.sections[5]);
-      await expect(
-        page
+      for (const [target, field] of [
+        ["synthetic-fest", "city"],
+        ["sample-artist", "biography"],
+      ]) {
+        const approved = page
           .locator(".auditTable article")
-          .filter({ hasText: cityApprovalTarget })
-          .getByText("CHANGE_APPROVED", { exact: true }),
-      ).toBeVisible();
+          .filter({ hasText: target === "synthetic-fest" ? cityApprovalTarget : target })
+          .filter({ hasText: `"field":"${field}"` });
+        await expect(approved.getByText("CHANGE_APPROVED", { exact: true })).toBeVisible();
+      }
 
       for (const section of copy.sections) {
         await open(section);
