@@ -132,3 +132,156 @@ export function parseWackenArrival(html: string, year: number) {
     },
   } as const;
 }
+
+const railOrganizerUrl = "https://www.graspop.be/en/info/shuttles";
+const railOperatorUrl = "https://www.event-shuttle.be/en/GMM_Airport-rail-shuttle-c89443cc";
+
+export function graspopRailSources(slug: ArrivalSlug) {
+  return slug === "graspop" ? ([railOrganizerUrl, railOperatorUrl] as const) : undefined;
+}
+
+const railStations = [
+  {
+    organizer: "Brussels South railway station",
+    inbound: "Brussels Midi Station",
+    outbound: "Station Brussels South (Gare du Midi)",
+    label: "Brussels-Midi",
+  },
+  {
+    organizer: "Eindhoven Central Station",
+    inbound: "Eindhoven Railway station",
+    outbound: "Eindhoven Railway station",
+    label: "Eindhoven Centraal",
+  },
+];
+
+const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+export function graspopRailOrganizerStations(organizerHtml: string) {
+  const organizer = visiblePage(organizerHtml);
+  const details = organizer("details.faq-item").filter(
+    (_, el) => plain(organizer(el).children("summary").text()) === "AIRPORT / RAILWAY SHUTTLES",
+  );
+  const link = details.closest(".pagecontent-row-container").find(`a[href="${railOperatorUrl}"]`);
+  if (
+    details.length !== 1 ||
+    link.length !== 1 ||
+    plain(link.text()).toLowerCase() !== "airport / railway shuttles tickets"
+  )
+    return;
+  const policy = singleMatch(
+    details
+      .find("p")
+      .map((_, el) => plain(organizer(el).text()))
+      .get(),
+    new RegExp(
+      String.raw`^On the Monday after the festival, you can take a shuttle straight back to the ` +
+        String.raw`airports or railway stations\. A separate ticket is required for this journey\.$`,
+    ),
+  );
+  if (!policy) return;
+
+  return details
+    .find("li")
+    .map((_, el) => plain(organizer(el).text()))
+    .get();
+}
+
+export function parseGraspopRailShuttle(
+  organizerHtml: string,
+  timetableHtml: string,
+  year: number,
+  interval: { startDate: string; endDate: string },
+) {
+  const listed = graspopRailOrganizerStations(organizerHtml);
+  if (!listed) return;
+  const start = Date.parse(interval.startDate);
+  const end = Date.parse(interval.endDate);
+  const dayMs = 86_400_000;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) return;
+  const daysToMonday = (8 - new Date(end).getUTCDay()) % 7 || 7;
+  const mondayReturn = end + daysToMonday * dayMs;
+  const timetable = visiblePage(timetableHtml);
+  const tables = timetable("table").filter((_, el) =>
+    timetable(el)
+      .find("td")
+      .toArray()
+      .some((cell) => /one-way (?:inbound|outbound) transfer$/.test(plain(timetable(cell).text()))),
+  );
+  if (tables.length !== 1) return;
+  const inbound = new Map<string, number>();
+  const outbound = new Map<string, number>();
+  let section: { direction: "inbound" | "outbound"; date: number } | undefined;
+  let dateCount = 0;
+  let badSection = false;
+  tables.find("tr").each((_, row) => {
+    const cells = timetable(row)
+      .children("td,th")
+      .map((_, el) => plain(timetable(el).text()))
+      .get();
+    if (cells.length === 1) {
+      section = undefined;
+      const match =
+        /^(\w+) - (\d{2})\/(\d{2})\/(20\d{2}) - one-way (inbound|outbound) transfer$/.exec(
+          cells[0],
+        );
+      if (!match) return;
+      const [, weekday, day, month, edition, kind] = match;
+      const date = new Date(Date.UTC(year, Number(month) - 1, Number(day)));
+      if (
+        Number(edition) !== year ||
+        date.getUTCFullYear() !== year ||
+        date.getUTCMonth() + 1 !== Number(month) ||
+        date.getUTCDate() !== Number(day) ||
+        days[date.getUTCDay()] !== weekday
+      ) {
+        badSection = true;
+        return;
+      }
+      dateCount++;
+      const timestamp = date.getTime();
+      if (
+        kind === "inbound"
+          ? timestamp >= start - 2 * dayMs && timestamp <= end
+          : timestamp === mondayReturn
+      ) {
+        section = { direction: kind === "inbound" ? "inbound" : "outbound", date: timestamp };
+      }
+      return;
+    }
+    if (cells.length !== 4 || !/^\d{1,2}h\d{2}$/.test(cells[1])) return;
+    if (section?.direction === "inbound" && cells[2] === "GMM Dessel") {
+      inbound.set(cells[0], Math.max(section.date, inbound.get(cells[0]) ?? -Infinity));
+    }
+    if (section?.direction === "outbound" && cells[0] === "GMM busparking") {
+      outbound.set(cells[2], Math.min(section.date, outbound.get(cells[2]) ?? Infinity));
+    }
+  });
+  if (badSection || dateCount === 0) return;
+  const stations = railStations.filter((station) => {
+    const arrival = inbound.get(station.inbound);
+    const departure = outbound.get(station.outbound);
+    return (
+      listed.includes(station.organizer) &&
+      arrival !== undefined &&
+      departure !== undefined &&
+      arrival < departure
+    );
+  });
+  if (!stations.length) return;
+  const names = stations.map((station) => station.label).join(", ");
+  return {
+    kind: "railShuttle",
+    sourceUrl: railOrganizerUrl,
+    supportingSourceUrl: railOperatorUrl,
+    description: {
+      en: `Verified rail shuttle stops: ${names}. Monday return trips require a separate ticket. Check the timetable.`,
+      de:
+        `Bestätigte Bahnhaltestellen: ${names}. ` +
+        "Für die Rückfahrt am Montag ist ein separates Ticket nötig. Fahrplan beachten.",
+      ru:
+        `Подтверждённые остановки у вокзалов: ${names}. ` +
+        "На обратный рейс в понедельник нужен отдельный билет. Сверьтесь с расписанием.",
+    },
+  } as const;
+}

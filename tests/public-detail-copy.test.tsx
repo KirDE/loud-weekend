@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { StageTimetable } from "../components/StageTimetable";
 import { ArtistDetail } from "../components/ArtistDetail";
 import { artist } from "./support/catalog";
+import { FestivalExplorer } from "../components/FestivalExplorer";
 import { FestivalDetail } from "../components/FestivalDetail";
 import { HomeContent } from "../components/HomeContent";
-import { FestivalExplorer } from "../components/FestivalExplorer";
 import { LanguageProvider, translate, type Language } from "../components/LanguageProvider";
 import { LocalPlannerProvider } from "../components/LocalPlanner";
 import { festival } from "./support/catalog";
@@ -343,3 +344,64 @@ for (const language of ["en", "de", "ru"] as const) {
     assert.deepEqual(appearances, before);
   });
 }
+
+for (const language of ["en", "de", "ru"] as const) {
+  test(`festival cards and details separate dates from announced acts in ${language}`, () => {
+    const announced = {
+      ...festival,
+      status: "tba" as const,
+      startDate: undefined,
+      endDate: undefined,
+      lineup: Array.from({ length: 47 }, (_, index) => `Other Act ${index + 1}`),
+    };
+    const noActs = { ...festival, status: "partial" as const, headliners: [], lineup: [] };
+    const verified = { ...announced, finalLineup: true as const };
+    for (const item of [announced, verified, noActs]) {
+      const hasActs = item !== noActs;
+      const html = renderToStaticMarkup(
+        <LanguageProvider initialLanguage={language}>
+          <LocalPlannerProvider>
+            <FestivalExplorer festivals={[item]} />
+            <FestivalDetail item={item} festivals={[item]} artistSlugs={{}} />
+          </LocalPlannerProvider>
+        </LanguageProvider>,
+      );
+      const badge = translate(
+        language,
+        item === verified ? "finalLineup" : hasActs ? "actsAnnounced" : "noCurrentActs",
+      );
+      assert.equal(html.split(`>${badge}</span>`).length - 1, 2);
+      assert.equal(html.includes(translate(language, "datesTba")), hasActs);
+      if (hasActs) assert.ok(html.includes(`48 ${translate(language, "announcedActs")}`));
+    }
+  });
+}
+
+test("the public timetable distinguishes both occurrences of a repeated local time", () => {
+  const shared = {
+    date: "2027-10-31",
+    start: "02:30",
+    stage: "Main stage",
+    timeZone: "Europe/Berlin",
+    status: "scheduled" as const,
+    sourceUrl: "https://festival.example.test/",
+    observedAt: "2027-10-01T10:00:00Z",
+  };
+  const entries = ["+02:00", "+01:00"].map((offset, index) => ({
+    ...shared,
+    artist: `Fixture ${index + 1}`,
+    window: {
+      startsAt: `2027-10-31T02:30:00${offset}`,
+      endsAt: `2027-10-31T02:50:00${offset}`,
+    },
+  }));
+  const html = renderToStaticMarkup(
+    <LanguageProvider initialLanguage="en">
+      <StageTimetable entries={entries} />
+    </LanguageProvider>,
+  );
+  for (const offset of ["02:00", "01:00"]) {
+    assert.ok(html.includes(`>02:30 GMT+${offset}</time>`));
+    assert.ok(html.includes(`>02:50 GMT+${offset}</time>`));
+  }
+});
