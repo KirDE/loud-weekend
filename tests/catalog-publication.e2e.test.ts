@@ -3251,3 +3251,63 @@ test("blank ticket links do not publish a change unless a known link was cleared
     (error) => error === rollback,
   );
 });
+
+test("a parser proposal compares festival facts using their canonical whitespace", async () => {
+  const slug = "synthetic-fest";
+  const rollback = new Error("rollback padded festival facts");
+  await assert.rejects(
+    db.$transaction(async (tx) => {
+      const edition = await tx.festivalEdition.findFirstOrThrow({
+        where: { festival: { slug }, recordState: "CURRENT" },
+      });
+      const observedAt = new Date("2026-01-02T10:00:00Z");
+      await tx.festival.update({ where: { slug }, data: { city: "  Synthetic Harbour  " } });
+      await tx.festivalEdition.update({
+        where: { id: edition.id },
+        data: { sourceUpdatedAt: observedAt },
+      });
+      const run = await tx.adminParserRun.create({
+        data: {
+          festivalSlug: slug,
+          sourceId: "https://festival.example.test/",
+          adapter: "fixture",
+          status: "SUCCEEDED",
+          startedAt: observedAt,
+          finishedAt: new Date("2026-01-02T10:01:00Z"),
+          log: [],
+        },
+      });
+      const change = {
+        id: randomUUID(),
+        resourceKey: slug,
+        field: "city",
+        beforeValue: "Synthetic Harbour",
+        afterValue: "  Synthetic Harbour",
+        sourceEvidence: [],
+        parserRunId: run.id,
+      };
+      const publish = (patch: Partial<typeof change>) =>
+        publishAdminFestivalChange(tx, {
+          actorLabel: "synthetic-review",
+          change: { ...change, ...patch },
+        });
+      assert.equal(await publish({}), null);
+      assert.deepEqual(
+        (await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } })).sourceUpdatedAt,
+        observedAt,
+      );
+      await assert.rejects(
+        publish({ beforeValue: "Old City", afterValue: " New City " }),
+        /Stale city/,
+      );
+      const result = await publish({
+        beforeValue: "  Synthetic Harbour",
+        afterValue: " New City ",
+      });
+      assert.deepEqual(result?.fields, ["city"]);
+      assert.equal((await tx.festival.findUniqueOrThrow({ where: { slug } })).city, "New City");
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
+});
