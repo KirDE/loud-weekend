@@ -3304,6 +3304,10 @@ select:not(:disabled) {
   cursor: pointer;
 }
 
+.discoveryOrder select {
+  max-width: 100%;
+}
+
 select:not(:disabled):is(:hover, :focus-visible) {
   background: var(--acid);
   color: var(--solid);
@@ -3313,6 +3317,14 @@ select option,
 select optgroup {
   background: var(--paper);
   color: var(--ink);
+}
+
+.discoveryOrder label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 summary:is(:hover, :focus-visible),
@@ -3452,6 +3464,70 @@ summary:focus-visible {
 
 .plannerReset [role="status"] {
   max-width: 28rem;
+}
+
+.discoveryDates {
+  grid-column: 1 / -1;
+  flex: 1 1 100%;
+  color: white;
+}
+
+.discoveryDates summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.discoveryDates fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.filterBar .discoveryDates label {
+  flex: 1 1 140px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.discoveryDates input:not([type="checkbox"]) {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  padding: 8px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.filterBar .discoveryDates label.discoveryWeekend {
+  display: flex;
+  flex: 1 1 200px;
+  align-items: center;
+}
+
+.filterBar .discoveryDates p {
+  font-size: 13px;
+  margin: 6px 0;
+}
+
+.discoveryDates .dateShareFallback {
+  display: block;
+  margin-top: 6px;
+}
+
+.discoveryDates [role="status"] {
+  margin-inline-start: 6px;
+}
+
+.discoveryOrder {
+  display: flex;
+  justify-content: flex-end;
+  margin-block: 12px 0;
 }
 
 .personalCalendar li {

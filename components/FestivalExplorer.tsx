@@ -1,12 +1,27 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CatalogFreshness } from "@/lib/domain/freshness";
 import { formatFreshnessDate } from "@/lib/freshness-date";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
+import {
+  discoverySorts,
+  sortDiscoveryFestivals,
+  type DiscoveryLineups,
+  type DiscoverySort,
+} from "@/lib/discovery-sort";
+import { DiscoveryDateFilters } from "./DiscoveryDateFilters";
+import {
+  datesFromQuery,
+  hasDiscoveryDates,
+  matchesDiscoveryDates,
+  removeDateQuery,
+  type DiscoveryDates,
+} from "@/lib/discovery-dates";
 import { lineupOverlap } from "@/lib/planning";
 import { useLocalPlanner } from "./LocalPlanner";
 import { hasAvailableTickets, ticketPresentation } from "@/lib/tickets";
@@ -20,7 +35,12 @@ import {
   festivalOverlapsMonth,
   formatFestivalDateRange,
 } from "@/lib/festival-dates";
-import { announcedArtists, hasAnnouncedLineup, lineupPreviewArtists } from "@/lib/festival-lineup";
+import {
+  announcedArtists,
+  hasAnnouncedLineup,
+  lineupPresentation,
+  lineupPreviewArtists,
+} from "@/lib/festival-lineup";
 
 import {
   defaultDiscoveryPreferences,
@@ -50,15 +70,24 @@ export function FestivalComparisonTicket({ item }: { item: Festival }) {
 export function FestivalExplorer({
   festivals,
   freshness,
+  discoveryLineups,
 }: {
   festivals: Festival[];
   freshness?: CatalogFreshness;
+  discoveryLineups?: DiscoveryLineups;
 }) {
   const { language, locale, t } = useLanguage();
   const planner = useLocalPlanner();
-  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance } =
+  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance, sort } =
     planner.savedFilters;
   const filtersReady = planner.ready;
+  const queryParams = useSearchParams();
+  const linkedDates = useMemo(
+    () => (queryParams ? datesFromQuery(queryParams) : null),
+    [queryParams],
+  );
+  const dateFilters = linkedDates ?? planner.savedFilters;
+  const dateFiltersActive = hasDiscoveryDates(dateFilters);
   const updateFilters = planner.updateSavedFilters;
   const searchRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -95,27 +124,26 @@ export function FestivalExplorer({
     return genre === "all" || available.includes(genre) ? available : [...available, genre].sort();
   }, [festivals, genre]);
   const originCoordinates = origins[origin].coordinates;
-  const visible = useMemo(
+  const filtered = useMemo(
     () =>
-      festivals
-        .filter((item) => {
-          const haystack = [item.name, item.country, item.city, ...item.headliners, ...item.lineup]
-            .join(" ")
-            .toLowerCase();
-          return (
-            haystack.includes(query.toLowerCase()) &&
-            (country === "all" || item.countryCode === country) &&
-            (!announcedOnly || hasAnnouncedLineup(item)) &&
-            (month === "all" || festivalOverlapsMonth(item, Number(month))) &&
-            (!ticketsOnly || hasAvailableTickets(item)) &&
-            festivalMatchesDiscoveryFilters(item, {
-              genre: genre === "all" ? undefined : genre,
-              origin: originCoordinates,
-              maxDistanceKm: maxDistance === "all" ? undefined : Number(maxDistance),
-            })
-          );
-        })
-        .sort((a, b) => (a.startDate || "9999").localeCompare(b.startDate || "9999")),
+      festivals.filter((item) => {
+        const haystack = [item.name, item.country, item.city, ...item.headliners, ...item.lineup]
+          .join(" ")
+          .toLowerCase();
+        return (
+          haystack.includes(query.toLowerCase()) &&
+          (country === "all" || item.countryCode === country) &&
+          (!announcedOnly || hasAnnouncedLineup(item)) &&
+          (month === "all" || festivalOverlapsMonth(item, Number(month))) &&
+          (!ticketsOnly || hasAvailableTickets(item)) &&
+          matchesDiscoveryDates(item, dateFilters) &&
+          festivalMatchesDiscoveryFilters(item, {
+            genre: genre === "all" ? undefined : genre,
+            origin: originCoordinates,
+            maxDistanceKm: maxDistance === "all" ? undefined : Number(maxDistance),
+          })
+        );
+      }),
     [
       festivals,
       query,
@@ -126,7 +154,18 @@ export function FestivalExplorer({
       genre,
       originCoordinates,
       maxDistance,
+      dateFilters,
     ],
+  );
+  const visible = useMemo(
+    () =>
+      sortDiscoveryFestivals(filtered, sort, {
+        locale,
+        origin: originCoordinates,
+        favorites: planner.favoriteArtists,
+        lineups: discoveryLineups,
+      }),
+    [filtered, sort, locale, originCoordinates, planner.favoriteArtists, discoveryLineups],
   );
   const cardLimit = expanded?.results === visible ? expanded.limit : RESULT_BATCH_SIZE;
   const shownCount = Math.min(cardLimit, visible.length);
@@ -159,7 +198,17 @@ export function FestivalExplorer({
       setComparisonStatus(t("comparisonSelected", { festival: item.name, count: next.length }));
       return next;
     });
+  const clearLinkedDates = () => {
+    const url = new URL(window.location.href);
+    removeDateQuery(url);
+    window.history.replaceState(null, "", url);
+  };
+  const updateDates = (patch: Partial<DiscoveryDates>) => {
+    updateFilters({ ...linkedDates, ...patch });
+    if (linkedDates) clearLinkedDates();
+  };
   const clearFilters = () => {
+    if (linkedDates) clearLinkedDates();
     planner.setSavedFilters(defaultDiscoveryPreferences);
     searchRef.current?.focus();
   };
@@ -260,6 +309,7 @@ export function FestivalExplorer({
         >
           {t("clearAllFilters")}
         </button>
+        <DiscoveryDateFilters filters={dateFilters} onChange={updateDates} />
         <div className="filterToggles">
           <label className="toggle">
             <input
@@ -268,7 +318,7 @@ export function FestivalExplorer({
               onChange={(event) => updateFilters({ announcedOnly: event.target.checked })}
             />
             <span />
-            {t("lineupAnnounced")}
+            {t("onlyAnnouncedActs")}
           </label>
           <label className="toggle">
             <input
@@ -361,6 +411,22 @@ export function FestivalExplorer({
           )}
         </div>
       )}
+      <div className="discoveryOrder">
+        <label>
+          {t("discoverySort")}{" "}
+          <select
+            value={sort}
+            disabled={!filtersReady}
+            onChange={(event) => updateFilters({ sort: event.target.value as DiscoverySort })}
+          >
+            {discoverySorts.map((value) => (
+              <option key={value} value={value}>
+                {t(`discoverySort_${value}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="resultMeta">
         <span>
           {shownCount < visible.length && `${shownCount} / `}
@@ -395,6 +461,7 @@ export function FestivalExplorer({
           const isSelected = selected.includes(item.slug);
           const previewArtists = lineupPreviewArtists(item);
           const artistCount = announcedArtists(item).length;
+          const lineupStatus = lineupPresentation(item);
           return (
             <article className="festivalCard" key={item.slug}>
               <button
@@ -411,9 +478,7 @@ export function FestivalExplorer({
               <Link href={`/festivals/${item.slug}/`}>
                 <div className="cardTop">
                   <FestivalLogo slug={item.slug} name={item.name} />
-                  <span className={`status ${item.status}`}>
-                    {t(item.status === "tba" ? "tba" : item.status)}
-                  </span>
+                  <span className={`status ${lineupStatus.tone}`}>{t(lineupStatus.label)}</span>
                 </div>
                 {item.sourceDeprecated && (
                   <span className="status deprecated">{t("sourceDeprecated")}</span>
@@ -425,11 +490,9 @@ export function FestivalExplorer({
                   {item.city || displayNames.of(item.countryCode) || item.country}
                 </div>
                 <div className="artists">
-                  {previewArtists.length ? (
-                    previewArtists.slice(0, 4).map((artist) => <span key={artist}>{artist}</span>)
-                  ) : (
-                    <span className="muted">{t("lineupNotAnnounced")}</span>
-                  )}
+                  {previewArtists.length
+                    ? previewArtists.slice(0, 4).map((artist) => <span key={artist}>{artist}</span>)
+                    : null}
                 </div>
                 <div className="cardFoot">
                   <span>
@@ -452,7 +515,7 @@ export function FestivalExplorer({
       {!visible.length && (
         <div className="empty">
           <strong>{t("noMatches")}</strong>
-          <p>{t("noDiscoveryMatches")}</p>
+          <p>{t(dateFiltersActive ? "noDateMatches" : "noDiscoveryMatches")}</p>
         </div>
       )}
     </section>

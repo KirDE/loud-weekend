@@ -45,7 +45,7 @@ test("large catalogue keeps comparison and search across rendered batches", asyn
     await grid.getByRole("button", { name: "Compare Synthetic Fest", exact: true }).click();
     await page.getByRole("button", { name: "Show more festivals (2)" }).click();
     await expect(headers).toHaveCount(50);
-    const link = grid.getByRole("link", { name: /Batch Fixture 45/ });
+    const link = grid.getByRole("article").nth(48).getByRole("link");
     await expect(link).toBeFocused();
     await grid.getByRole("button", { name: "Compare Batch Fixture 46", exact: true }).click();
     const table = page.getByRole("table");
