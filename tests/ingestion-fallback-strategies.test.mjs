@@ -135,3 +135,42 @@ test("JSON-LD-only strategy still reports its own absent format", () => {
     "No JSON-LD Event was found",
   ]);
 });
+
+test("conflicting date claims require review even when the selected date is unchanged", () => {
+  const event = {
+    "@type": "MusicEvent",
+    startDate: current.startDate,
+    endDate: current.endDate,
+  };
+  const structured = `<script type="application/ld+json">${JSON.stringify(event)}</script>`;
+  for (const [field, property, conflictingDate] of [
+    ["startDate", "event:start_time", "2027-07-29"],
+    ["endDate", "event:end_time", "2027-08-01"],
+  ]) {
+    const html = `${structured}<meta property="${property}" content="${conflictingDate}">${ticket}`;
+    const candidate = extract(html);
+    assert.equal(candidate[field], current[field]);
+    const result = evaluateCandidate(current, candidate);
+    assert.deepEqual(
+      result.changes.map((change) => change.field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [
+      `Conflicting extraction claims for ${field}: ${current[field]} versus ${conflictingDate}`,
+    ]);
+  }
+});
+
+test("equivalent date claims and independently supplied missing dates still combine", () => {
+  const html = `
+    <script type="application/ld+json">{"@type":"MusicEvent","startDate":"2027-07-28"}</script>
+    <meta property="event:start_time" content="2027-07-28T12:00:00+02:00">
+    <meta property="event:end_time" content="2027-07-31">
+    ${ticket}
+  `;
+  const candidate = extract(html);
+  assert.equal(candidate.startDate, current.startDate);
+  assert.equal(candidate.endDate, current.endDate);
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
+});

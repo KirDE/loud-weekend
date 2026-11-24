@@ -203,8 +203,17 @@ function extractConfiguredCandidate(
     if (candidate.artistListMode) merged.artistListMode = candidate.artistListMode;
     const suppliedFields = new Set<FieldEvidence["field"]>();
     for (const field of supportedFields) {
-      if (merged[field] !== undefined || candidate[field] === undefined) continue;
-      Object.assign(merged, { [field]: candidate[field] });
+      const value = candidate[field];
+      if (value === undefined) continue;
+      const selectedValue = merged[field];
+      if (selectedValue !== undefined) {
+        if ((field === "startDate" || field === "endDate") && selectedValue !== value)
+          merged.warnings.push(
+            `Conflicting extraction claims for ${field}: ${selectedValue} versus ${value}`,
+          );
+        continue;
+      }
+      Object.assign(merged, { [field]: value });
       suppliedFields.add(field);
       (merged.fieldEditionYears ??= {})[field] =
         candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
