@@ -621,6 +621,10 @@
   box-shadow: 7px 7px 0 #17171244;
 }
 
+.personalCalendar a:where(:not(.primaryButton)) {
+  text-decoration: underline;
+}
+
 .mapMarker > div a {
   display: flex;
   flex-direction: column;
@@ -3415,4 +3419,18 @@ summary:focus-visible {
   margin-block-start: 8px;
   overflow-wrap: anywhere;
   font-size: 13px;
+}
+
+.personalCalendar li {
+  margin-block: 8px;
+}
+
+.personalCalendarConflicts {
+  margin-block: 16px;
+  padding: 12px 16px;
+  border-inline-start: 4px solid var(--orange);
+}
+
+.personalCalendarConflicts h3 {
+  margin: 0;
 }
