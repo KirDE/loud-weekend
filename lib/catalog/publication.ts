@@ -1289,8 +1289,8 @@ export async function publishAgentFestivalResolution(
         ...rosterPositions("LINEUP", artistIds.slice(headliners.length), cancelled),
       ]);
       changedFields.push("headliners", "lineup");
-      await db.festivalEdition.update({
-        where: { id: edition.id },
+      await db.festivalEdition.updateMany({
+        where: { id: edition.id, sourceUpdatedAt: { lt: input.observedAt } },
         data: { sourceUpdatedAt: input.observedAt },
       });
     }
