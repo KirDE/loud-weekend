@@ -36,6 +36,7 @@ const editions = Array.from({ length: 550 }, (_, index) => {
         ? []
         : Array.from({ length: 12 }, (_, position) => ({
             billing: position < 2 ? "HEADLINER" : "LINEUP",
+            status: "ANNOUNCED",
             position,
             artist: artists[(index * 7 + position) % artists.length],
           }));
