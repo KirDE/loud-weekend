@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import type { AuditEntry, ParserRun, ReviewChange } from "@/lib/admin";
+import { SubmissionEditionLink } from "./SubmissionEditionLink";
+import type { SubmissionEditionLink as LinkedEdition } from "@/lib/submission-edition-link";
 import { useLanguage, type Language } from "./LanguageProvider";
 
 type Section = "content" | "review" | "submissions" | "assets" | "diagnostics" | "audit";
@@ -14,6 +16,7 @@ type Submission = {
   notes: string | null;
   status: "pending" | "approved" | "rejected";
   submittedAt: string;
+  editionLink?: LinkedEdition | null;
   audit: { action: string; at: string }[];
 };
 type EditableArtist = { slug: string; name: string; officialUrl?: string };
@@ -26,6 +29,7 @@ export function AdminConsole({
   parserRuns,
   auditEntries,
   submissions: initialSubmissions,
+  editionOptions = [],
   sourceHealth = [],
 }: {
   festivals: Festival[];
@@ -34,6 +38,7 @@ export function AdminConsole({
   parserRuns: ParserRun[];
   auditEntries: AuditEntry[];
   submissions: Submission[];
+  editionOptions?: { slug: string; name: string; year: number }[];
   sourceHealth?: {
     id: string;
     festivalSlug: string;
@@ -303,6 +308,23 @@ export function AdminConsole({
                       Approve submission
                     </button>
                   </div>
+                )}
+                {item.status === "approved" && (
+                  <SubmissionEditionLink
+                    reference={item.reference}
+                    year={item.year}
+                    editions={editionOptions}
+                    link={item.editionLink}
+                    onLinked={(editionLink) =>
+                      setSubmissions((items) =>
+                        items.map((submission) =>
+                          submission.reference === item.reference
+                            ? { ...submission, editionLink }
+                            : submission,
+                        ),
+                      )
+                    }
+                  />
                 )}
               </article>
             ))}
