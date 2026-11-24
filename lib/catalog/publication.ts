@@ -1354,7 +1354,6 @@ export async function publishAgentFestivalResolution(
     const announced = edition.lineup.filter((entry) => entry.status === "ANNOUNCED");
     const oldHeadliners = announced.filter((entry) => entry.billing === "HEADLINER");
     const oldLineup = announced.filter((entry) => entry.billing === "LINEUP");
-    const previousIds = [...oldHeadliners, ...oldLineup].map((entry) => entry.artistId);
     const rosterNamesChanged =
       !same(
         oldHeadliners.map((entry) => entry.artist.name),
@@ -1364,26 +1363,37 @@ export async function publishAgentFestivalResolution(
         oldLineup.map((entry) => entry.artist.name),
         lineup,
       );
-    const artistIds = [];
     if (rosterNamesChanged) {
+      const artistIds: string[] = [];
       for (const name of [...headliners, ...lineup]) artistIds.push((await ensureArtist(name)).id);
       if (new Set(artistIds).size !== artistIds.length)
         throw new Error("Ambiguous reviewed billing or duplicate alias identities");
-    }
 
-    // A reviewed spelling or alias does not change the published roster.
-    if (
-      rosterNamesChanged &&
-      (headliners.length !== oldHeadliners.length || !same(previousIds, artistIds))
-    ) {
-      const cancelled = edition.lineup.filter((l) => l.status === "CANCELLED");
-      if (artistIds.some((id) => cancelled.some((l) => l.artistId === id)))
-        throw new Error("Cancellation requires separate explicit review");
-      await updateAnnouncedRoster(db, edition.id, announced, cancelled, [
-        ...rosterPositions("HEADLINER", artistIds.slice(0, headliners.length), cancelled),
-        ...rosterPositions("LINEUP", artistIds.slice(headliners.length), cancelled),
-      ]);
-      changedFields.push("headliners", "lineup");
+      // Compare canonical IDs per billing group so that alias spellings and
+      // unchanged corroborating evidence do not change the published facts.
+      const headlinerIds = artistIds.slice(0, headliners.length);
+      const lineupIds = artistIds.slice(headliners.length);
+      const headlinersChanged = !same(
+        oldHeadliners.map(({ artistId }) => artistId),
+        headlinerIds,
+      );
+      const lineupChanged = !same(
+        oldLineup.map(({ artistId }) => artistId),
+        lineupIds,
+      );
+      if (headlinersChanged || lineupChanged) {
+        const cancelled = edition.lineup.filter((entry) => entry.status === "CANCELLED");
+        if (artistIds.some((id) => cancelled.some((entry) => entry.artistId === id)))
+          throw new Error("Cancellation requires separate explicit review");
+        await updateAnnouncedRoster(db, edition.id, announced, cancelled, [
+          ...(headlinersChanged
+            ? rosterPositions("HEADLINER", headlinerIds, cancelled)
+            : oldHeadliners),
+          ...(lineupChanged ? rosterPositions("LINEUP", lineupIds, cancelled) : oldLineup),
+        ]);
+        if (headlinersChanged) changedFields.push("headliners");
+        if (lineupChanged) changedFields.push("lineup");
+      }
     }
   }
   // A reviewed edition status is not evidence about catalogue completeness.

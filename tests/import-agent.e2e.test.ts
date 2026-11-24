@@ -199,6 +199,47 @@ test("reviewed catalogue freshness uses only evidence for committed facts", asyn
     checkedAt,
   );
 });
+for (const changedField of ["headliners", "lineup"] as const) {
+  test(`reviewed ${changedField} freshness excludes the unchanged billing group`, async () => {
+    const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
+    const where = { id: source.editionId! };
+    const checkedAt = new Date(Date.now() - 3_600_000);
+    await db.festivalEdition.update({
+      where,
+      data: { sourceUpdatedAt: new Date(checkedAt.getTime() - 3_600_000) },
+    });
+    const unchangedField = changedField === "lineup" ? "headliners" : "lineup";
+    const unchangedProvenance = { editionId: where.id, field: unchangedField };
+    const provenanceBefore = await db.editionProvenance.count({ where: unchangedProvenance });
+    const c = await claim();
+    const receipt = await resolveCase(c, {
+      ...checked,
+      facts: {
+        headliners: c.current.headliners,
+        lineup: c.current.lineup,
+        [changedField]: [...c.current[changedField], "Reviewed Additional Artist"],
+      },
+      evidence: [
+        { ...evidence(changedField), checkedAt: checkedAt.toISOString() },
+        evidence(unchangedField),
+      ],
+    });
+    assert.ok(receipt.publicationId);
+    assert.deepEqual(
+      (await db.festivalEdition.findUniqueOrThrow({ where })).sourceUpdatedAt,
+      checkedAt,
+    );
+    const publication = await db.catalogPublication.findUniqueOrThrow({
+      where: { id: String(receipt.publicationId) },
+    });
+    assert.deepEqual(publication.fields, [changedField]);
+    assert.equal(publication.lineupChanged, true);
+    assert.equal(
+      await db.editionProvenance.count({ where: unchangedProvenance }),
+      provenanceBefore,
+    );
+  });
+}
 for (const [before, after, completeness] of [
   ["TBA", "confirmed", "PARTIAL"],
   ["CONFIRMED", "partial", "COMPLETE"],
