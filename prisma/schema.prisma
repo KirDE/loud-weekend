@@ -325,6 +325,7 @@ model FestivalEdition {
   arrivalFacts    EditionArrivalFact[]
   timetable       TimetablePerformance[]
   playlists       FestivalPlaylist[]
+  playlistLinks   FestivalPlaylistLink[]
   sources         FestivalSource[]
 
   @@unique([festivalId, year])
@@ -483,6 +484,16 @@ model FestivalPlaylist {
 
   @@unique([editionId, provider])
   @@unique([provider, url])
+}
+
+/// Reviewed public links are not managed provider bindings or write targets.
+model FestivalPlaylistLink {
+  editionId String
+  provider  String
+  url       String
+  edition   FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, provider])
 }
 
 model FestivalSource {
