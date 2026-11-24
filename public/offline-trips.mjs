@@ -185,7 +185,26 @@ export async function fetchOfflineTrip(basePath, slug, year) {
   ) {
     throw new Error("Trip download unavailable");
   }
-  const data = await response.json();
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Trip download unavailable");
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let bytes = 0;
+  let body = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maximumBytes) throw new Error("Trip download too large");
+      body += decoder.decode(value, { stream: true });
+    }
+  } catch (error) {
+    void reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+  const data = JSON.parse(body + decoder.decode());
   const trip = parseOfflineTrip(data);
   if (
     !trip ||

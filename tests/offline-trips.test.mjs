@@ -120,3 +120,57 @@ test("a fresh trip response with an out-of-range performance is not usable as an
   );
   await assert.rejects(fetchOfflineTrip("", fact.slug, fact.year), /Unexpected trip download/);
 });
+
+test("trip download cancels an oversized response even without Content-Length", async (t) => {
+  let cancelled = false;
+  const chunks = [
+    new TextEncoder().encode(JSON.stringify(fact)),
+    new Uint8Array(192 * 1024).fill(32),
+  ];
+  const body = new ReadableStream(
+    {
+      pull(controller) {
+        const chunk = chunks.shift();
+        if (chunk) controller.enqueue(chunk);
+        else controller.close();
+      },
+      cancel() {
+        cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(body, {
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
+  await assert.rejects(fetchOfflineTrip("", fact.slug, fact.year), /Trip download too large/);
+  assert.ok(cancelled);
+  assert.equal(body.locked, false);
+});
+
+test("trip download decodes a multibyte character split across response chunks", async (t) => {
+  const trip = { ...fact, name: "Sample Festival 🎸" };
+  const bytes = new TextEncoder().encode(JSON.stringify(trip));
+  const split = bytes.indexOf(0xf0) + 1;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes.subarray(0, split));
+      controller.enqueue(bytes.subarray(split));
+      controller.close();
+    },
+  });
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(body, {
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
+  assert.deepEqual(await fetchOfflineTrip("", trip.slug, trip.year), trip);
+});
