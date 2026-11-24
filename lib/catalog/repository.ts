@@ -4,12 +4,15 @@ import type { PrismaClient } from "@prisma/client";
 import type { ArtistProfile } from "../domain/artist.ts";
 import type { FestivalEdition } from "../domain/edition.ts";
 import type { Festival, PlaylistStatus } from "../domain/festival.ts";
+import { editionKey, latestDate, readFreshnessEvidence } from "./freshness.ts";
+import type { CatalogFreshness } from "../domain/freshness.ts";
 
 export type CatalogSnapshot = Readonly<{
   festivals: Festival[];
   editions: readonly FestivalEdition[];
   artists: ArtistProfile[];
   playlists: Readonly<Record<string, PlaylistStatus>>;
+  freshness: CatalogFreshness;
 }>;
 export interface CatalogRepository {
   read(): Promise<CatalogSnapshot>;
@@ -26,8 +29,9 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     this.client = client;
   }
 
-  async read(): Promise<CatalogSnapshot> {
-    const [editionRows, artistRows] = await Promise.all([
+  async read({ includeFreshness = false } = {}): Promise<CatalogSnapshot> {
+    const now = new Date();
+    const [editionRows, artistRows, freshnessEvidence] = await Promise.all([
       this.client.festivalEdition.findMany({
         include: {
           festival: true,
@@ -50,6 +54,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         },
         orderBy: { slug: "asc" },
       }),
+      includeFreshness ? readFreshnessEvidence(this.client, now) : undefined,
     ]);
     if (!editionRows.length || !artistRows.length)
       throw new Error("database catalogue is empty or incomplete");
@@ -62,7 +67,26 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       const lineup = announced
         .filter(({ billing }) => billing === "LINEUP")
         .map(({ artist }) => artist.name);
+      const checks = freshnessEvidence?.checksByEdition.get(row.id) ?? [];
+      const lastSuccessfulSourceCheckAt = latestDate(
+        checks.map(({ checkedAt }) => instant(checkedAt)),
+      );
+      const provenanceCheckedAt = latestDate(
+        row.provenance
+          .filter(({ checkedAt }) => checkedAt <= now)
+          .map(({ checkedAt }) => checkedAt.toISOString()),
+      );
       return {
+        ...(freshnessEvidence && {
+          freshness: {
+            lastSuccessfulSourceCheckAt,
+            checkedAt: latestDate([lastSuccessfulSourceCheckAt, provenanceCheckedAt]),
+            lastPublishedAt: freshnessEvidence.publishedByEdition.get(
+              editionKey(row.festival.slug, row.year),
+            ),
+            sourceCheckStale: checks.some(({ stale }) => stale),
+          },
+        }),
         slug: row.festival.slug,
         name: row.festival.name,
         country: row.festival.country,
@@ -217,17 +241,31 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         updatedAt: instant(spotify.syncedAt) ?? row.sourceUpdatedAt.toISOString(),
       };
     }
-    return Object.freeze({ festivals: festivalsFromDatabase, editions, artists, playlists });
+    const freshness = {
+      checkedAt: latestDate(currentEditions.map(({ freshness }) => freshness?.checkedAt)),
+      lastPublishedAt: latestDate(
+        currentEditions.map(({ freshness }) => freshness?.lastPublishedAt),
+      ),
+    };
+    return Object.freeze({
+      festivals: festivalsFromDatabase,
+      editions,
+      artists,
+      playlists,
+      freshness,
+    });
   }
 }
 
 export async function readCatalog(
-  options: { database?: PrismaClient } = {},
+  options: { database?: PrismaClient; includeFreshness?: boolean } = {},
 ): Promise<CatalogSnapshot> {
   const database = options.database ?? (await import("../db.ts")).db;
-  return new DatabaseCatalogRepository(database).read();
+  return new DatabaseCatalogRepository(database).read({
+    includeFreshness: options.includeFreshness,
+  });
 }
 
-export function getCatalog() {
-  return readCatalog();
+export function getCatalog(options?: { includeFreshness?: boolean }) {
+  return readCatalog(options);
 }

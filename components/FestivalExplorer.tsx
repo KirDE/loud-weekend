@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CatalogFreshness } from "@/lib/domain/freshness";
+import { formatFreshnessDate } from "@/lib/freshness-date";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import { lineupOverlap } from "@/lib/planning";
 import { emptyPlannerState, useLocalPlanner } from "./LocalPlanner";
-import { hasAvailableTickets } from "@/lib/tickets";
+import { hasAvailableTickets, ticketPresentation } from "@/lib/tickets";
 import {
   distanceKm,
   festivalGenres,
@@ -40,7 +42,29 @@ const origins: Record<string, { label: string; coordinates: Coordinates }> = {
   prague: { label: "Prague, Czechia", coordinates: { latitude: 50.0755, longitude: 14.4378 } },
 };
 
-export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
+export function FestivalComparisonTicket({ item }: { item: Festival }) {
+  const { t } = useLanguage();
+  const tickets = ticketPresentation(item);
+  return (
+    <td data-ticket-status={tickets.status}>
+      {tickets.href ? (
+        <a href={tickets.href} rel="noreferrer" target="_blank">
+          {t(tickets.label)}
+        </a>
+      ) : (
+        t(tickets.label)
+      )}
+    </td>
+  );
+}
+
+export function FestivalExplorer({
+  festivals,
+  freshness,
+}: {
+  festivals: Festival[];
+  freshness?: CatalogFreshness;
+}) {
   const { locale, t } = useLanguage();
   const planner = useLocalPlanner();
   const [query, setQuery] = useState(planner.savedFilters.query);
@@ -323,17 +347,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
                   <tr>
                     <th scope="row">{t("tickets")}</th>
                     {compared.map((item) => (
-                      <td key={item.slug}>
-                        {item.ticketsUrl ? (
-                          <a href={item.ticketsUrl} rel="noreferrer" target="_blank">
-                            {t("officialTickets")}
-                          </a>
-                        ) : item.ticketStatus === "unavailable" ? (
-                          t("unavailable")
-                        ) : (
-                          t("availabilityNotConfirmed")
-                        )}
-                      </td>
+                      <FestivalComparisonTicket key={item.slug} item={item} />
                     ))}
                   </tr>
                   <tr>
@@ -360,7 +374,29 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         <span>
           {visible.length} {t("festivals")}
         </span>
-        <span>{t("lastReview")}</span>
+        {freshness && (
+          <span>
+            {freshness.checkedAt ? (
+              <>
+                {t("latestSourceCheck")} ·{" "}
+                <time dateTime={freshness.checkedAt}>
+                  {formatFreshnessDate(freshness.checkedAt, locale)}
+                </time>
+              </>
+            ) : (
+              t("sourceCheckUnavailable")
+            )}
+            {freshness.lastPublishedAt && (
+              <>
+                {" "}
+                · {t("latestCatalogPublication")} ·{" "}
+                <time dateTime={freshness.lastPublishedAt}>
+                  {formatFreshnessDate(freshness.lastPublishedAt, locale)}
+                </time>
+              </>
+            )}
+          </span>
+        )}
       </div>
       <div className="festivalGrid">
         {visible.map((item) => {

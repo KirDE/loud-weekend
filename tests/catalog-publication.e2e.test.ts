@@ -248,6 +248,104 @@ test("commits catalog rows, candidate state, audit snapshot and playlist request
   );
 });
 
+test("ingestion saves a compound billing as one addition without replacing existing artists", async () => {
+  const compound = `Synthetic, Compound Act ${suffix}`;
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+  });
+  const before = await db.lineupEntry.findMany({ where: { editionId: edition.id } });
+  const facts = result(compound);
+  const attempt = await persist(facts);
+  const publication = await publishIngestionResult(db, {
+    attemptId: attempt.id,
+    result: facts,
+    sourceCommit: suffix,
+  });
+  assert.ok(publication);
+  const after = await db.lineupEntry.findMany({
+    where: { editionId: edition.id },
+    include: { artist: true },
+  });
+  const inserted = after.find((row) => row.artist.name === compound);
+  assert.ok(inserted);
+  createdArtists.push(inserted.artist.slug);
+  assert.equal(after.length, before.length + 1);
+  assert.ok(before.every((row) => after.some((saved) => saved.id === row.id)));
+  const snapshot = await readCatalog({ database: db });
+  assert.ok(
+    snapshot.festivals.find((item) => item.slug === "synthetic-fest")?.lineup.includes(compound),
+  );
+  assert.equal(
+    (
+      await publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: facts,
+        sourceCommit: suffix,
+      })
+    )?.id,
+    publication.id,
+  );
+});
+
+test("automatic ingestion and ordinary admin edits cannot reinstate a cancelled identity", async () => {
+  const cancelled = await db.lineupEntry.findFirstOrThrow({
+    where: {
+      edition: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+      billing: "LINEUP",
+    },
+    include: { artist: true },
+  });
+  await db.lineupEntry.update({ where: { id: cancelled.id }, data: { status: "CANCELLED" } });
+  try {
+    const facts = result(cancelled.artist.name);
+    const attempt = await persist(facts);
+    await assert.rejects(
+      publishIngestionResult(db, { attemptId: attempt.id, result: facts, sourceCommit: suffix }),
+      /Cancellation requires separate explicit review/,
+    );
+    assert.equal(
+      (await db.ingestionCandidate.findUniqueOrThrow({ where: { attemptId: attempt.id } }))
+        .reviewState,
+      "PENDING",
+    );
+
+    const edit = (afterValue: string[]) =>
+      db.$transaction((tx) =>
+        publishAdminFestivalChange(tx, {
+          change: {
+            id: randomUUID(),
+            resourceKey: "synthetic-fest",
+            field: "lineup",
+            beforeValue: null,
+            afterValue,
+            sourceEvidence: null,
+            parserRunId: null,
+          },
+          actorLabel: "test reviewer",
+        }),
+      );
+    await assert.rejects(
+      edit([cancelled.artist.name]),
+      /Cancellation requires separate explicit review/,
+    );
+    // Build the edit from the same catalogue roster the Admin Console loads.
+    const before = (await readCatalog({ database: db })).festivals.find(
+      (item) => item.slug === "synthetic-fest",
+    );
+    assert.ok(before);
+    assert.ok(!before.lineup.includes(cancelled.artist.name));
+    const name = `Synthetic Reviewed Replacement ${suffix}`;
+    assert.ok(await edit([...before.lineup, name]));
+    const inserted = await db.artist.findFirstOrThrow({ where: { name } });
+    createdArtists.push(inserted.slug);
+    const retained = await db.lineupEntry.findUniqueOrThrow({ where: { id: cancelled.id } });
+    assert.equal(retained.status, "CANCELLED");
+    assert.equal(retained.position, cancelled.position);
+  } finally {
+    await db.lineupEntry.update({ where: { id: cancelled.id }, data: { status: "ANNOUNCED" } });
+  }
+});
+
 test("fails closed and rolls back every catalog row when artist identity is ambiguous", async () => {
   const requestedName = `Ambiguous Artist ${suffix}`;
   const slug = encodeURIComponent(
@@ -1803,6 +1901,103 @@ test("Provinssi provenance drift rolls back catalogue, completeness and provider
   }
 });
 
+test("free admission survives ingestion/replay and stale rollback without ticket offers", async () => {
+  const { ticketPresentation, hasAvailableTickets } = await import("../lib/tickets.ts");
+  const { festivalMusicEvent } = await import("../lib/seo.ts");
+  const { notificationEventsForChanges } = await import("../lib/ingestion/notification-events.ts");
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+  });
+  const current = async () =>
+    (await readCatalog({ database: db })).festivals.find((f) => f.slug === "synthetic-fest")!;
+  const make = async () => {
+    const c = result("unused").candidate;
+    delete c.lineup;
+    c.ticketStatus = "free";
+    c.evidence = [
+      {
+        field: "ticketStatus",
+        sourceUrl: c.sourceUrl,
+        observedAt: c.fetchedAt,
+        excerpt: "Synthetic current-edition statement: free unticketed general admission",
+      },
+    ];
+    return evaluateCandidate(await current(), c);
+  };
+  try {
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: { ticketStatus: "UNKNOWN", ticketsUrl: "https://festival.example.test/camping" },
+    });
+    const value = await make();
+    assert.equal(value.publishable, true);
+    const attempt = await persist(value);
+    const jobs = await db.catalogPlaylistRefresh.count();
+    const pub = await publishIngestionResult(db, {
+      attemptId: attempt.id,
+      result: value,
+      sourceCommit: suffix,
+    });
+    assert.ok(pub);
+    assert.equal(pub.playlistRefreshRequested, false);
+    const item = await current();
+    assert.equal(item.ticketStatus, "free");
+    assert.equal(ticketPresentation(item).href, item.officialUrl);
+    assert.equal(hasAvailableTickets(item), false);
+    assert.equal(festivalMusicEvent(item).isAccessibleForFree, true);
+    assert.equal(festivalMusicEvent(item).offers, undefined);
+    assert.deepEqual(notificationEventsForChanges(item, value.changes, value.fetchedAt), []);
+    const stored = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    assert.equal((stored.normalized as any).ticketStatus, "free");
+    assert.equal(stored.reviewState, "PUBLISHED");
+    assert.equal(
+      (
+        await publishIngestionResult(db, {
+          attemptId: attempt.id,
+          result: value,
+          sourceCommit: suffix,
+        })
+      )?.id,
+      pub.id,
+    );
+    assert.deepEqual((await make()).changes, []);
+    assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: { ticketStatus: "UNKNOWN" },
+    });
+    const stale = await make();
+    const staleAttempt = await persist(stale);
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: { ticketStatus: "SOLD_OUT" },
+    });
+    const publications = await db.catalogPublication.count();
+    await assert.rejects(
+      publishIngestionResult(db, {
+        attemptId: staleAttempt.id,
+        result: stale,
+        sourceCommit: suffix,
+      }),
+      /Stale ticketStatus/,
+    );
+    assert.equal((await current()).ticketStatus, "sold_out");
+    assert.equal(await db.catalogPublication.count(), publications);
+    assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
+  } finally {
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: {
+        ticketStatus: edition.ticketStatus,
+        ticketsUrl: edition.ticketsUrl,
+        sourceUpdatedAt: edition.sourceUpdatedAt,
+      },
+    });
+  }
+});
+
 test("explicit ticket states survive reviewed publication and canonical public readback", async () => {
   const { ticketPresentation } = await import("../lib/tickets.ts");
   const { festivalMusicEvent } = await import("../lib/seo.ts");
@@ -1817,6 +2012,7 @@ test("explicit ticket states survive reviewed publication and canonical public r
       "low",
       "sold_out",
       "sales_ended",
+      "free",
       "unavailable",
       "unknown",
     ] as const) {
