@@ -220,6 +220,34 @@ test("sold-out, early-bird exhaustion and generic gateway CTA never prove pass a
   e.documents.pop();
   assert.equal(extract(e).ticketStatus, undefined);
 });
+
+test("visible singular and plural unavailable notices override an enabled general pass", () => {
+  const current = {
+    slug: source.festivalSlug,
+    editionYear: source.editionYear,
+    startDate: "2027-07-02",
+    endDate: "2027-07-04",
+    ticketsUrl: source.url,
+    ticketStatus: "unknown",
+    headliners: [],
+    lineup: [],
+  };
+  assert.equal(evaluateCandidate(current, extract()).publishable, true);
+
+  for (const notice of ["No disponible", "No disponibles", "Entradas no disponibles"]) {
+    const docs = envelope();
+    docs.documents[2].html += `<span id="product-availability">${notice}</span>`;
+    const candidate = extract(docs);
+    const result = evaluateCandidate(current, candidate);
+    assert.equal(candidate.ticketStatus, undefined, notice);
+    assert.equal(result.publishable, false, notice);
+    assert.equal(
+      result.changes.some(({ field }) => field === "ticketStatus"),
+      false,
+      notice,
+    );
+  }
+});
 test("stale title or wrong general-pass edition fails closed", () => {
   const e = envelope();
   e.home = e.home.replaceAll("2027", "2026");

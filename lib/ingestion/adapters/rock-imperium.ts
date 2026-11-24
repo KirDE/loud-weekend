@@ -408,7 +408,7 @@ export function extractRockImperiumCandidate(
     );
   });
   const negativeStock =
-    /\b(?:agotad[oa]s?|sin stock|fuera de stock|out of stock|sold\s*out|no disponible)\b/i;
+    /\b(?:agotad[oa]s?|sin stock|fuera de stock|out of stock|sold\s*out|no disponibles?)\b/i;
   const contradictory =
     negativeStock.test(text(form.text())) ||
     negativeStock.test(text($("#product-availability").text()));
