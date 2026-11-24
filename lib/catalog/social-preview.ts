@@ -4,14 +4,30 @@ import { db } from "../db.ts";
 import type { Language } from "../language-preference.ts";
 import { festivalPreviewDate, type PreviewCard, type PreviewKind } from "../social-preview.ts";
 
-function hasParserEvidence(evidence: Prisma.JsonValue, id: string, field: string) {
+type EditionScope = { id: string; year: number };
+
+function hasParserEvidence(
+  evidence: Prisma.JsonValue,
+  id: string,
+  field: string,
+  edition: EditionScope,
+) {
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return false;
+  if (evidence.adminChangeId !== id) return false;
+
+  let entries = evidence.sourceEvidence;
+  if (entries && typeof entries === "object" && !Array.isArray(entries)) {
+    if (
+      entries.kind !== "scoped-refresh" ||
+      entries.editionId !== edition.id ||
+      entries.editionYear !== edition.year
+    )
+      return false;
+    entries = entries.evidence;
+  }
   return (
-    evidence &&
-    typeof evidence === "object" &&
-    !Array.isArray(evidence) &&
-    evidence.adminChangeId === id &&
-    Array.isArray(evidence.sourceEvidence) &&
-    evidence.sourceEvidence.some(
+    Array.isArray(entries) &&
+    entries.some(
       (item) =>
         item &&
         typeof item === "object" &&
@@ -26,14 +42,14 @@ function hasParserEvidence(evidence: Prisma.JsonValue, id: string, field: string
 async function hasPublishedDate(
   tx: Prisma.TransactionClient,
   slug: string,
-  year: number,
+  edition: EditionScope,
   field: "startDate" | "endDate",
   value: string | undefined,
   hasProvenance: boolean,
 ) {
   if (!value) return false;
   const receipt = await tx.catalogPublication.findFirst({
-    where: { festivalSlug: slug, editionYear: year, fields: { has: field } },
+    where: { festivalSlug: slug, editionYear: edition.year, fields: { has: field } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { source: true, sourceId: true, evidence: true },
   });
@@ -42,7 +58,7 @@ async function hasPublishedDate(
   if (receipt.source === "ADMIN" && receipt.sourceId.startsWith("admin:")) {
     const id = receipt.sourceId.slice("admin:".length);
     const evidence = receipt.evidence;
-    if (!hasParserEvidence(evidence, id, field)) return false;
+    if (!hasParserEvidence(evidence, id, field, edition)) return false;
 
     const change = await tx.adminChange.findFirst({
       where: {
@@ -97,12 +113,12 @@ async function hasPublishedDate(
 async function publishedHeadliners(
   tx: Prisma.TransactionClient,
   slug: string,
-  year: number,
+  edition: EditionScope,
   roster: { id: string; name: string }[],
   hasProvenance: boolean,
 ) {
   if (!roster.length) return [];
-  const scope = { festivalSlug: slug, editionYear: year, fields: { has: "headliners" } };
+  const scope = { festivalSlug: slug, editionYear: edition.year, fields: { has: "headliners" } };
   const replacement = await tx.catalogPublication.findFirst({
     where: { ...scope, source: "ADMIN" },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -117,7 +133,7 @@ async function publishedHeadliners(
   const billingNames = new Set<string>();
   if (replacement?.sourceId.startsWith("admin:")) {
     const id = replacement.sourceId.slice("admin:".length);
-    if (hasParserEvidence(replacement.evidence, id, "headliners")) {
+    if (hasParserEvidence(replacement.evidence, id, "headliners", edition)) {
       const change = await tx.adminChange.findFirst({
         where: {
           id,
@@ -214,6 +230,7 @@ export async function readSocialPreview(
       const edition = await tx.festivalEdition.findFirst({
         where: { festival: { slug }, year, recordState: { in: ["CURRENT", "ARCHIVED"] } },
         select: {
+          id: true,
           year: true,
           startDate: true,
           endDate: true,
@@ -239,7 +256,7 @@ export async function readSocialPreview(
         hasPublishedDate(
           tx,
           slug,
-          edition.year,
+          edition,
           "startDate",
           startDate,
           evidence.has("dates") || evidence.has("startDate"),
@@ -247,7 +264,7 @@ export async function readSocialPreview(
         hasPublishedDate(
           tx,
           slug,
-          edition.year,
+          edition,
           "endDate",
           endDate,
           evidence.has("dates") || evidence.has("endDate"),
@@ -255,7 +272,7 @@ export async function readSocialPreview(
         publishedHeadliners(
           tx,
           slug,
-          edition.year,
+          edition,
           edition.lineup.map(({ artist }) => artist),
           evidence.has("headliners") || evidence.has("lineup"),
         ),

@@ -3025,7 +3025,7 @@ test("invalid dates cannot publish or replace the last verified edition range", 
   }
 });
 
-test("social previews show parser-backed approved dates but not unsupported edits", async () => {
+test("social previews show parser-backed approved dates but not unsupported edits", async (t) => {
   const slug = `preview-admin-${suffix}`;
   await seedCatalog(db, {
     ...catalogSeed,
@@ -3054,12 +3054,11 @@ test("social previews show parser-backed approved dates but not unsupported edit
       log: [],
     },
   });
-  const { decideChange } = await import("../lib/admin-store.ts");
+  const { decideChange, refreshFestival } = await import("../lib/admin-store.ts");
   const { db: applicationDb } = await import("../lib/db.ts");
   const { readSocialPreview } = await import("../lib/catalog/social-preview.ts");
   const { festivalPreviewDate } = await import("../lib/social-preview.ts");
   const preview = async () => (await readSocialPreview("festivals", slug, "en", 2027))?.detail;
-  const evidence = [{ field: "startDate", sourceUrl, excerpt: "2027-06-11" }];
   const approve = async (baseRevision: number, beforeValue: string, afterValue: string) => {
     const change = await db.adminChange.create({
       data: {
@@ -3069,8 +3068,7 @@ test("social previews show parser-backed approved dates but not unsupported edit
         beforeValue,
         afterValue,
         baseRevision,
-        sourceEvidence: baseRevision === 0 ? evidence : [],
-        parserRunId: baseRevision === 0 ? run.id : null,
+        sourceEvidence: [],
       },
     });
     await decideChange(change.id, "approve", actor);
@@ -3080,7 +3078,7 @@ test("social previews show parser-backed approved dates but not unsupported edit
     assert.equal(await preview(), festivalPreviewDate(2027, "en", null));
     const edition = await db.festivalEdition.findFirstOrThrow({
       where: { festival: { slug }, year: 2027 },
-      select: { id: true },
+      select: { id: true, festivalId: true },
     });
     const observedAt = new Date();
     await db.$transaction((tx) =>
@@ -3103,7 +3101,42 @@ test("social previews show parser-backed approved dates but not unsupported edit
       }),
     );
     assert.equal(await preview(), festivalPreviewDate(2027, "en", { startDate: "2027-06-09" }));
-    await approve(0, "2027-06-09", "2027-06-11");
+    await db.festivalSource.create({
+      data: {
+        festivalSlug: slug,
+        festivalId: edition.festivalId,
+        editionId: edition.id,
+        editionYear: 2027,
+        url: sourceUrl,
+        strategies: ["html_fallback"],
+        parserKey: "html_fallback",
+        enabled: true,
+        refreshPolicy: "daily",
+        cadenceSeconds: 86400,
+        configurationBackfilledAt: new Date(),
+      },
+    });
+    const fetchFixture = t.mock.method(globalThis, "fetch", async (url: string) => {
+      assert.equal(url, sourceUrl);
+      return new Response('<meta property="event:start_time" content="2027-06-11">');
+    });
+    try {
+      const refresh = await refreshFestival(slug, actor, 2027);
+      assert.equal(refresh.queued, 1);
+      assert.equal(fetchFixture.mock.callCount(), 1);
+      const change = await db.adminChange.findFirstOrThrow({
+        where: {
+          parserRunId: refresh.id,
+          resourceKey: slug,
+          field: "startDate",
+          status: "PENDING",
+        },
+      });
+      assert.equal(change.afterValue, "2027-06-11");
+      await decideChange(change.id, "approve", actor);
+    } finally {
+      fetchFixture.mock.restore();
+    }
     assert.equal(await preview(), festivalPreviewDate(2027, "en", { startDate: "2027-06-11" }));
     await approve(1, "2027-06-11", "2027-06-12");
     assert.equal(await preview(), festivalPreviewDate(2027, "en", null));
