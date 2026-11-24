@@ -108,6 +108,8 @@ test("invalid or incomplete JSON-LD dates cannot establish an event edition", ()
     "2027-13-01",
     "2027-01-01garbage",
     "2027-07-01T99:00:00Z",
+    "2027-12-31T24:00:00Z",
+    { name: "2027-07-01" },
     "2027",
   ]) {
     const html = `<script type="application/ld+json">${JSON.stringify({
