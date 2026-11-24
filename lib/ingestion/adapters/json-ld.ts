@@ -44,10 +44,10 @@ function text(value: unknown): string | undefined {
 }
 
 function date(value: unknown): string | undefined {
-  const valueText = text(value);
-  if (!valueText) return undefined;
+  if (typeof value !== "string") return undefined;
+  const valueText = value.trim();
   const plainDate = valueText.match(
-    /^(\d{4}-\d{2}-\d{2})(?:[Tt ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})?)?$/,
+    /^(\d{4}-\d{2}-\d{2})(?:[Tt ](?:[01]\d|2[0-3]):\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})?)?$/,
   )?.[1];
   if (
     !plainDate ||
