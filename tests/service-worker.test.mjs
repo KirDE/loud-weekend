@@ -466,7 +466,28 @@ test("unsafe network responses are never saved and HTTP errors do not become sta
 });
 
 test("an invalid public-looking catalogue cannot replace or revalidate a good offline copy", async () => {
+  const festival = { ...payload().festivals[0], startDate: "2027-06-04", endDate: "2027-06-05" };
   const invalid = [
+    { ...payload(), festivals: [{ ...festival, endDate: "2027-06-03" }] },
+    {
+      ...payload(),
+      timetableStatus: "published",
+      festivals: [
+        {
+          ...festival,
+          timetable: [
+            {
+              date: "2027-06-06",
+              stage: "Main",
+              start: "20:00",
+              artist: "Example",
+              timeZone: "Europe/Berlin",
+              status: "scheduled",
+            },
+          ],
+        },
+      ],
+    },
     { ...payload(), dataVersion: "different-edition" },
     { ...payload(), editionYear: 2029 },
     { ...payload(), privateNote: "not part of the public projection" },

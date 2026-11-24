@@ -137,8 +137,14 @@ function catalogFestival(row) {
     catalogText(row.name) &&
     (row.startDate === null || catalogDate(row.startDate)) &&
     (row.endDate === null || catalogDate(row.endDate)) &&
+    (row.startDate === null || row.endDate === null || row.startDate <= row.endDate) &&
     Array.isArray(row.timetable) &&
-    row.timetable.every(catalogPerformance)
+    row.timetable.every(
+      (performance) =>
+        catalogPerformance(performance) &&
+        (row.startDate === null || row.startDate <= performance.date) &&
+        (row.endDate === null || performance.date <= row.endDate),
+    )
   );
 }
 
