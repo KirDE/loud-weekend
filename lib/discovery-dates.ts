@@ -9,30 +9,42 @@ export type DiscoveryDates = {
 };
 
 export const defaultDiscoveryDates: DiscoveryDates = {
-  dateFrom: "", dateTo: "", weekendOnly: false, maxDays: "all",
+  dateFrom: "",
+  dateTo: "",
+  weekendOnly: false,
+  maxDays: "all",
 };
 
 const dayMs = 86_400_000;
 
 export function readDiscoveryDates(fields: Record<string, unknown>): DiscoveryDates {
-  const readDate = (value: unknown) => typeof value === "string" && parseFestivalDate(value) ? value : "";
+  const readDate = (value: unknown) =>
+    typeof value === "string" && parseFestivalDate(value) ? value : "";
   return {
     dateFrom: readDate(fields.dateFrom),
     dateTo: readDate(fields.dateTo),
     weekendOnly: fields.weekendOnly === true,
-    maxDays: typeof fields.maxDays === "string" && /^(?:[1-9]|[1-9]\d)$/.test(fields.maxDays) ? fields.maxDays : "all",
+    maxDays:
+      typeof fields.maxDays === "string" && /^(?:[1-9]|[1-9]\d)$/.test(fields.maxDays)
+        ? fields.maxDays
+        : "all",
   };
 }
 
 export function hasDiscoveryDates(filters: DiscoveryDates) {
-  return Boolean(filters.dateFrom || filters.dateTo || filters.weekendOnly || filters.maxDays !== "all");
+  return Boolean(
+    filters.dateFrom || filters.dateTo || filters.weekendOnly || filters.maxDays !== "all",
+  );
 }
 
 export function reversedDiscoveryDates({ dateFrom, dateTo }: DiscoveryDates) {
   return Boolean(dateFrom && dateTo && dateFrom > dateTo);
 }
 
-export function matchesDiscoveryDates(festival: Pick<Festival, "startDate" | "endDate">, filters: DiscoveryDates) {
+export function matchesDiscoveryDates(
+  festival: Pick<Festival, "startDate" | "endDate">,
+  filters: DiscoveryDates,
+) {
   if (!hasDiscoveryDates(filters)) return true;
   if (reversedDiscoveryDates(filters)) return false;
   const interval = festivalDateInterval(festival);
@@ -48,7 +60,11 @@ export function matchesDiscoveryDates(festival: Pick<Festival, "startDate" | "en
   if (filters.maxDays !== "all" && totalDays > Number(filters.maxDays)) return false;
 
   const daysUntilSaturday = (6 - start.getUTCDay() + 7) % 7;
-  return !filters.weekendOnly || start.getUTCDay() === 0 || start.valueOf() + daysUntilSaturday * dayMs <= end.valueOf();
+  return (
+    !filters.weekendOnly ||
+    start.getUTCDay() === 0 ||
+    start.valueOf() + daysUntilSaturday * dayMs <= end.valueOf()
+  );
 }
 
 const dateQueryKeys = ["dateFrom", "dateTo", "weekend", "maxDays"] as const;

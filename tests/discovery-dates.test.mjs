@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  dateShareQuery, datesFromQuery, matchesDiscoveryDates, readDiscoveryDates, removeDateQuery,
+  dateShareQuery,
+  datesFromQuery,
+  matchesDiscoveryDates,
+  readDiscoveryDates,
+  removeDateQuery,
 } from "../lib/discovery-dates.ts";
 
 const event = { startDate: "2027-06-30", endDate: "2027-07-03" };
@@ -30,12 +34,20 @@ test("unknown dates are visible only without date constraints; malformed link va
   assert.equal(matches({}, { weekendOnly: true }), false);
   assert.equal(matches({}, { maxDays: "7" }), false);
   assert.equal(matches({ startDate: "2027-02-29" }, { maxDays: "7" }), false);
-  assert.equal(datesFromQuery(new URLSearchParams("dateFrom=2027-02-29&weekend=true&maxDays=0")), null);
+  assert.equal(
+    datesFromQuery(new URLSearchParams("dateFrom=2027-02-29&weekend=true&maxDays=0")),
+    null,
+  );
   assert.equal(datesFromQuery(new URLSearchParams("dateFrom=2027-06-30&dateTo=2027-06-01")), null);
 });
 
 test("date links round-trip only date controls and can be removed without disturbing other parameters", () => {
-  const filters = readDiscoveryDates({ dateFrom: "2028-02-29", dateTo: "2028-03-05", weekendOnly: true, maxDays: "10" });
+  const filters = readDiscoveryDates({
+    dateFrom: "2028-02-29",
+    dateTo: "2028-03-05",
+    weekendOnly: true,
+    maxDays: "10",
+  });
   const query = dateShareQuery({ ...filters, query: "private search" });
   assert.deepEqual(datesFromQuery(new URLSearchParams(query)), filters);
   assert.equal(query.includes("private"), false);

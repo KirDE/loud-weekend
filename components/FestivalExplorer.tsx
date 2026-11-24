@@ -6,27 +6,64 @@ import { useMemo, useRef, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
+import {
+  discoverySorts,
+  sortDiscoveryFestivals,
+  type DiscoveryLineups,
+  type DiscoverySort,
+} from "@/lib/discovery-sort";
+import { DiscoveryShare } from "./DiscoveryShare";
+import {
+  discoveryFromQuery,
+  removeDiscoveryQuery,
+  shareableFavoriteSlugs,
+} from "@/lib/discovery-share";
+import { DiscoveryDateFilters } from "./DiscoveryDateFilters";
+import {
+  datesFromQuery,
+  hasDiscoveryDates,
+  matchesDiscoveryDates,
+  removeDateQuery,
+  type DiscoveryDates,
+} from "@/lib/discovery-dates";
 import { lineupOverlap } from "@/lib/planning";
 import { useLocalPlanner } from "./LocalPlanner";
 import { hasAvailableTickets } from "@/lib/tickets";
-import { distanceKm, festivalGenres, festivalMatchesDiscoveryFilters } from "@/lib/festival-discovery";
-import { availableFestivalMonths, festivalOverlapsMonth, formatFestivalDateRange } from "@/lib/festival-dates";
+import {
+  distanceKm,
+  festivalGenres,
+  festivalMatchesDiscoveryFilters,
+} from "@/lib/festival-discovery";
+import {
+  availableFestivalMonths,
+  festivalOverlapsMonth,
+  formatFestivalDateRange,
+} from "@/lib/festival-dates";
 import { announcedArtists, hasAnnouncedLineup, lineupPreviewArtists } from "@/lib/festival-lineup";
 
-import { datesFromQuery, hasDiscoveryDates, matchesDiscoveryDates, removeDateQuery, type DiscoveryDates } from "@/lib/discovery-dates";
-import { discoverySorts, sortDiscoveryFestivals, type DiscoveryLineups, type DiscoverySort } from "@/lib/discovery-sort";
-import { DiscoveryDateFilters } from "./DiscoveryDateFilters";
+import {
+  festivalArtistMatch,
+  matchesArtistMode,
+  type DiscoveryArtist,
+} from "@/lib/discovery-artists";
 import { DiscoveryArtistPicker } from "./DiscoveryArtistPicker";
-import { festivalArtistMatch, matchesArtistMode, type DiscoveryArtist } from "@/lib/discovery-artists";
 import { DiscoverySearch } from "./DiscoverySearch";
 import type { SuggestionArtist } from "@/lib/discovery-suggestions";
-import { DiscoveryShare } from "./DiscoveryShare";
-import { discoveryFromQuery, shareableFavoriteSlugs } from "@/lib/discovery-share";
-import { defaultDiscoveryPreferences, discoveryDistances, discoveryOrigins as origins, type DiscoveryPreferences } from "@/lib/discovery-preferences";
+import {
+  defaultDiscoveryPreferences,
+  discoveryDistances,
+  discoveryOrigins as origins,
+  type DiscoveryPreferences,
+} from "@/lib/discovery-preferences";
 
 const emptyArtistSelection: string[] = [];
 
-export function FestivalExplorer({ festivals, discoveryLineups, matchingArtists, suggestionArtists }: {
+export function FestivalExplorer({
+  festivals,
+  discoveryLineups,
+  matchingArtists,
+  suggestionArtists,
+}: {
   festivals: Festival[];
   discoveryLineups?: DiscoveryLineups;
   matchingArtists?: readonly DiscoveryArtist[];
@@ -37,31 +74,55 @@ export function FestivalExplorer({ festivals, discoveryLineups, matchingArtists,
   const filtersReady = planner.ready;
   const queryParams = useSearchParams();
   const linkKey = queryParams?.toString() ?? "";
-  const shared = useMemo(() => queryParams ? discoveryFromQuery(queryParams, discoveryLineups) : null, [queryParams, discoveryLineups]);
-  const linkedDates = useMemo(() => queryParams ? datesFromQuery(queryParams) : null, [queryParams]);
+  const shared = useMemo(
+    () => (queryParams ? discoveryFromQuery(queryParams, discoveryLineups) : null),
+    [queryParams, discoveryLineups],
+  );
   const [draft, setDraft] = useState<{ key: string; patch: Partial<DiscoveryPreferences> }>();
   const activeFilters = shared
     ? { ...shared.filters, ...(draft?.key === linkKey ? draft.patch : {}) }
     : planner.savedFilters;
-  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance, sort } = activeFilters;
-  const artistSelection = matchingArtists ? activeFilters.artistSelection ?? emptyArtistSelection : emptyArtistSelection;
+  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance, sort } =
+    activeFilters;
+  const linkedDates = useMemo(
+    () => (queryParams ? datesFromQuery(queryParams) : null),
+    [queryParams],
+  );
+  const artistSelection = matchingArtists
+    ? (activeFilters.artistSelection ?? emptyArtistSelection)
+    : emptyArtistSelection;
   const artistMatch = activeFilters.artistMatch ?? "all";
-  const dateFilters = shared ? activeFilters : linkedDates ?? activeFilters;
+  const dateFilters = shared ? activeFilters : (linkedDates ?? activeFilters);
   const dateFiltersActive = hasDiscoveryDates(dateFilters);
   const favoriteKeys = shared?.favorites ?? planner.favoriteArtists;
-  const shareFavorites = useMemo(() => shareableFavoriteSlugs(favoriteKeys, discoveryLineups), [favoriteKeys, discoveryLineups]);
+  const shareFavorites = useMemo(
+    () => shareableFavoriteSlugs(favoriteKeys, discoveryLineups),
+    [favoriteKeys, discoveryLineups],
+  );
   const updateFilters = (patch: Partial<DiscoveryPreferences>) => {
     if (!shared) {
       planner.updateSavedFilters(patch);
       return;
     }
-    setDraft(current => ({ key: linkKey, patch: { ...(current?.key === linkKey ? current.patch : {}), ...patch } }));
+    setDraft((current) => ({
+      key: linkKey,
+      patch: { ...(current?.key === linkKey ? current.patch : {}), ...patch },
+    }));
   };
   const searchRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [comparisonStatus, setComparisonStatus] = useState("");
   const displayNames = useMemo(() => new Intl.DisplayNames([locale], { type: "region" }), [locale]);
-  const countries = useMemo(() => Array.from(new Set([...festivals.map((item) => item.countryCode), ...(country === "all" ? [] : [country])])).sort((a, b) => (displayNames.of(a) || a).localeCompare(displayNames.of(b) || b, locale)), [festivals, country, displayNames, locale]);
+  const countries = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...festivals.map((item) => item.countryCode),
+          ...(country === "all" ? [] : [country]),
+        ]),
+      ).sort((a, b) => (displayNames.of(a) || a).localeCompare(displayNames.of(b) || b, locale)),
+    [festivals, country, displayNames, locale],
+  );
   const months = useMemo(() => {
     const available = availableFestivalMonths(festivals);
     // Keep a restored choice visible on country/month subsets with no matching
@@ -75,53 +136,111 @@ export function FestivalExplorer({ festivals, discoveryLineups, matchingArtists,
     return genre === "all" || available.includes(genre) ? available : [...available, genre].sort();
   }, [festivals, genre]);
   const originCoordinates = origins[origin].coordinates;
-  const filtered = useMemo(() => festivals.filter((item) => {
-    const haystack = [item.name, item.country, item.city, ...item.headliners, ...item.lineup].join(" ").toLowerCase();
-    return haystack.includes(query.toLowerCase()) && (country === "all" || item.countryCode === country) && (!announcedOnly || hasAnnouncedLineup(item)) && (month === "all" || festivalOverlapsMonth(item, Number(month))) && (!ticketsOnly || hasAvailableTickets(item)) && matchesDiscoveryDates(item, dateFilters) && festivalMatchesDiscoveryFilters(item, { genre: genre === "all" ? undefined : genre, origin: originCoordinates, maxDistanceKm: maxDistance === "all" ? undefined : Number(maxDistance) });
-  }), [festivals, query, country, announcedOnly, month, ticketsOnly, genre, originCoordinates, maxDistance, dateFilters]);
-  const artistMatches = useMemo(() => new Map(filtered.map(festival => [
-    festival.slug, festivalArtistMatch(festival, artistSelection, discoveryLineups),
-  ])), [filtered, artistSelection, discoveryLineups]);
-  const withoutRoster = artistSelection.length > 0
-    ? [...artistMatches.values()].filter(match => !match.known).length : 0;
-  const artistNames = useMemo(() => new Map(matchingArtists?.map(({ slug, name }) => [slug, name])), [matchingArtists]);
+  const filtered = useMemo(
+    () =>
+      festivals.filter((item) => {
+        const haystack = [item.name, item.country, item.city, ...item.headliners, ...item.lineup]
+          .join(" ")
+          .toLowerCase();
+        return (
+          haystack.includes(query.toLowerCase()) &&
+          (country === "all" || item.countryCode === country) &&
+          (!announcedOnly || hasAnnouncedLineup(item)) &&
+          (month === "all" || festivalOverlapsMonth(item, Number(month))) &&
+          (!ticketsOnly || hasAvailableTickets(item)) &&
+          matchesDiscoveryDates(item, dateFilters) &&
+          festivalMatchesDiscoveryFilters(item, {
+            genre: genre === "all" ? undefined : genre,
+            origin: originCoordinates,
+            maxDistanceKm: maxDistance === "all" ? undefined : Number(maxDistance),
+          })
+        );
+      }),
+    [
+      festivals,
+      query,
+      country,
+      announcedOnly,
+      month,
+      ticketsOnly,
+      genre,
+      originCoordinates,
+      maxDistance,
+      dateFilters,
+    ],
+  );
+  const artistMatches = useMemo(
+    () =>
+      new Map(
+        filtered.map((festival) => [
+          festival.slug,
+          festivalArtistMatch(festival, artistSelection, discoveryLineups),
+        ]),
+      ),
+    [filtered, artistSelection, discoveryLineups],
+  );
+  const withoutRoster =
+    artistSelection.length > 0
+      ? [...artistMatches.values()].filter((match) => !match.known).length
+      : 0;
+  const artistNames = useMemo(
+    () => new Map(matchingArtists?.map(({ slug, name }) => [slug, name])),
+    [matchingArtists],
+  );
   const visible = useMemo(() => {
-    const candidates = filtered.filter(festival => matchesArtistMode(artistMatches.get(festival.slug)!, artistSelection.length, artistMatch));
+    const candidates = filtered.filter((festival) =>
+      matchesArtistMode(artistMatches.get(festival.slug)!, artistSelection.length, artistMatch),
+    );
     return sortDiscoveryFestivals(candidates, sort, {
-      locale, origin: originCoordinates, favorites: favoriteKeys, lineups: discoveryLineups,
-    }).sort((a, b) => artistMatches.get(b.slug)!.matched.length - artistMatches.get(a.slug)!.matched.length);
-  }, [filtered, artistMatches, artistSelection.length, artistMatch, sort, locale, originCoordinates, favoriteKeys, discoveryLineups]);
+      locale,
+      origin: originCoordinates,
+      favorites: favoriteKeys,
+      lineups: discoveryLineups,
+    }).sort(
+      (a, b) =>
+        artistMatches.get(b.slug)!.matched.length - artistMatches.get(a.slug)!.matched.length,
+    );
+  }, [
+    filtered,
+    artistMatches,
+    artistSelection.length,
+    artistMatch,
+    sort,
+    locale,
+    originCoordinates,
+    favoriteKeys,
+    discoveryLineups,
+  ]);
   const compared = festivals.filter((item) => selected.includes(item.slug));
   const overlap = lineupOverlap(compared);
-  const toggleSelected = (item: Festival) => setSelected((current) => {
-    if (current.includes(item.slug)) {
-      const next = current.filter((value) => value !== item.slug);
-      setComparisonStatus(t("comparisonRemoved", { festival: item.name, count: next.length }));
+  const toggleSelected = (item: Festival) =>
+    setSelected((current) => {
+      if (current.includes(item.slug)) {
+        const next = current.filter((value) => value !== item.slug);
+        setComparisonStatus(t("comparisonRemoved", { festival: item.name, count: next.length }));
+        return next;
+      }
+      if (current.length >= 3) {
+        setComparisonStatus(t("comparisonLimit", { festival: item.name }));
+        return current;
+      }
+      const next = [...current, item.slug];
+      setComparisonStatus(t("comparisonSelected", { festival: item.name, count: next.length }));
       return next;
-    }
-    if (current.length >= 3) {
-      setComparisonStatus(t("comparisonLimit", { festival: item.name }));
-      return current;
-    }
-    const next = [...current, item.slug];
-    setComparisonStatus(t("comparisonSelected", { festival: item.name, count: next.length }));
-    return next;
-  });
+    });
   const clearLinkedDates = () => {
     const url = new URL(window.location.href);
     removeDateQuery(url);
     window.history.replaceState(null, "", url);
   };
-
   const updateDates = (patch: Partial<DiscoveryDates>) => {
     updateFilters(shared ? patch : { ...linkedDates, ...patch });
     if (!shared && linkedDates) clearLinkedDates();
   };
-
   const clearFilters = () => {
     if (shared) {
       const url = new URL(window.location.href);
-      url.search = "";
+      removeDiscoveryQuery(url);
       setDraft(undefined);
       window.history.pushState(null, "", url);
     } else {
@@ -131,48 +250,310 @@ export function FestivalExplorer({ festivals, discoveryLineups, matchingArtists,
     searchRef.current?.focus();
   };
 
-  return <section className="explorer">
-    <div className="filterBar">
-      <DiscoverySearch query={query} ready={filtersReady} festivals={festivals} artists={suggestionArtists}
-        inputRef={searchRef} onChange={query => updateFilters({ query })} />
-      <select aria-label={t("countries")} value={country} onChange={(event) => updateFilters({ country: event.target.value })}><option value="all">{t("allCountries")}</option>{countries.map((value) => <option value={value} key={value}>{displayNames.of(value) || value}</option>)}</select>
-      <select aria-label={t("filterMonth")} value={month} onChange={(event) => updateFilters({ month: event.target.value })}><option value="all">{t("allMonths")}</option>{months.map((value) => <option key={value} value={String(value).padStart(2, "0")}>{new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2027, value - 1, 1)))}</option>)}</select>
-      <select aria-label={t("filterGenre")} value={genre} onChange={(event) => updateFilters({ genre: event.target.value })}><option value="all">{t("allGenres")}</option>{genres.map((value) => <option key={value} value={value}>{value}</option>)}</select>
-      <select aria-label={t("filterOrigin")} value={origin} onChange={(event) => updateFilters({ origin: event.target.value as DiscoveryPreferences["origin"] })}>{Object.entries(origins).map(([value, item]) => <option key={value} value={value}>{t("fromOrigin", { origin: item.label })}</option>)}</select>
-      <select aria-label={t("filterDistance")} value={maxDistance} onChange={(event) => updateFilters({ maxDistance: event.target.value })}><option value="all">{t("anyDistance")}</option>{discoveryDistances.map((value) => <option key={value} value={value}>{t("withinDistance", { distance: Number(value).toLocaleString(locale) })}</option>)}</select>
-      <button type="button" className="outlineButton clearFilters" onClick={clearFilters} disabled={!filtersReady}>{t("clearAllFilters")}</button>
-      <DiscoveryDateFilters filters={dateFilters} onChange={updateDates} />
-      {matchingArtists && <DiscoveryArtistPicker artists={matchingArtists} selected={artistSelection} mode={artistMatch}
-        favorites={new Set(shareableFavoriteSlugs(planner.favoriteArtists, discoveryLineups))}
-        onChange={(artistSelection, artistMatch) => updateFilters({ artistSelection, artistMatch })} />}
-      <DiscoveryShare filters={{ ...activeFilters, ...dateFilters, artistSelection }} favorites={shareFavorites} />
-      <div className="filterToggles">
-        <label className="toggle"><input type="checkbox" checked={announcedOnly} onChange={(event) => updateFilters({ announcedOnly: event.target.checked })} /><span/>{t("lineupAnnounced")}</label>
-        <label className="toggle"><input type="checkbox" checked={ticketsOnly} onChange={(event) => updateFilters({ ticketsOnly: event.target.checked })} /><span aria-hidden="true"/>{t("officialTicketsOnly")}</label>
+  return (
+    <section className="explorer">
+      <div className="filterBar">
+        <DiscoverySearch
+          query={query}
+          ready={filtersReady}
+          festivals={festivals}
+          artists={suggestionArtists}
+          inputRef={searchRef}
+          onChange={(query) => updateFilters({ query })}
+        />
+        <select
+          aria-label={t("countries")}
+          value={country}
+          onChange={(event) => updateFilters({ country: event.target.value })}
+        >
+          <option value="all">{t("allCountries")}</option>
+          {countries.map((value) => (
+            <option value={value} key={value}>
+              {displayNames.of(value) || value}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={t("filterMonth")}
+          value={month}
+          onChange={(event) => updateFilters({ month: event.target.value })}
+        >
+          <option value="all">{t("allMonths")}</option>
+          {months.map((value) => (
+            <option key={value} value={String(value).padStart(2, "0")}>
+              {new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(
+                new Date(Date.UTC(2027, value - 1, 1)),
+              )}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={t("filterGenre")}
+          value={genre}
+          onChange={(event) => updateFilters({ genre: event.target.value })}
+        >
+          <option value="all">{t("allGenres")}</option>
+          {genres.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={t("filterOrigin")}
+          value={origin}
+          onChange={(event) =>
+            updateFilters({ origin: event.target.value as DiscoveryPreferences["origin"] })
+          }
+        >
+          {Object.entries(origins).map(([value, item]) => (
+            <option key={value} value={value}>
+              {t("fromOrigin", { origin: item.label })}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={t("filterDistance")}
+          value={maxDistance}
+          onChange={(event) => updateFilters({ maxDistance: event.target.value })}
+        >
+          <option value="all">{t("anyDistance")}</option>
+          {discoveryDistances.map((value) => (
+            <option key={value} value={value}>
+              {t("withinDistance", { distance: Number(value).toLocaleString(locale) })}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="outlineButton clearFilters"
+          onClick={clearFilters}
+          disabled={!filtersReady}
+        >
+          {t("clearAllFilters")}
+        </button>
+        <DiscoveryDateFilters filters={dateFilters} onChange={updateDates} />
+        {matchingArtists && (
+          <DiscoveryArtistPicker
+            artists={matchingArtists}
+            selected={artistSelection}
+            mode={artistMatch}
+            favorites={new Set(shareableFavoriteSlugs(planner.favoriteArtists, discoveryLineups))}
+            onChange={(artistSelection, artistMatch) =>
+              updateFilters({ artistSelection, artistMatch })
+            }
+          />
+        )}
+        <DiscoveryShare
+          filters={{ ...activeFilters, ...dateFilters, artistSelection }}
+          favorites={shareFavorites}
+        />
+        <div className="filterToggles">
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={announcedOnly}
+              onChange={(event) => updateFilters({ announcedOnly: event.target.checked })}
+            />
+            <span />
+            {t("lineupAnnounced")}
+          </label>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={ticketsOnly}
+              onChange={(event) => updateFilters({ ticketsOnly: event.target.checked })}
+            />
+            <span aria-hidden="true" />
+            {t("officialTicketsOnly")}
+          </label>
+        </div>
       </div>
-    </div>
-    <p className="srOnly" role="status" aria-live="polite" aria-atomic="true">{comparisonStatus}</p>
-    {compared.length > 0 && <div className="compareTray"><div className="compareHeading"><strong>{t("compare")} ({compared.length}/3)</strong>{compared.map((item) => <button aria-label={t("removeFestivalComparison", { festival: item.name })} onClick={() => toggleSelected(item)} key={item.slug}>{item.name} <span aria-hidden="true">×</span></button>)}</div>{compared.length < 2 ? <p className="compareHint">{t("comparisonInstructions")}</p> : <div className="comparisonScroll" tabIndex={0}><table className="comparisonTable"><thead><tr><th scope="col">{t("planningDetail")}</th>{compared.map((item) => <th scope="col" key={item.slug}><Link href={`/festivals/${item.slug}/`}>{item.name}</Link></th>)}</tr></thead><tbody><tr><th scope="row">{t("dates")}</th>{compared.map((item) => <td key={item.slug}>{formatFestivalDateRange(item, locale, t("datesTba"))}</td>)}</tr><tr><th scope="row">{t("locationDistance", { origin: origins[origin].label })}</th>{compared.map((item) => <td key={item.slug}>{item.city || item.country}{item.coordinates ? ` · ${distanceKm(originCoordinates, item.coordinates).toLocaleString(locale)} km` : ` · ${t("distanceUnavailable")}`}</td>)}</tr><tr><th scope="row">{t("tickets")}</th>{compared.map((item) => <td key={item.slug}>{item.ticketsUrl ? <a href={item.ticketsUrl} rel="noreferrer" target="_blank">{t("officialTickets")}</a> : item.ticketStatus === "unavailable" ? t("unavailable") : t("availabilityNotConfirmed")}</td>)}</tr><tr><th scope="row">{t("lineupOverlap")}</th><td colSpan={compared.length}>{overlap.length ? <><strong>{t("sharedActs", { count: overlap.length })}</strong><br/>{overlap.join(", ")}</> : t("noLineupOverlap")}</td></tr></tbody></table></div>}</div>}
-    <div className="discoveryOrder">
-      <label>{t("discoverySort")} <select value={sort} disabled={!filtersReady}
-        onChange={event => updateFilters({ sort: event.target.value as DiscoverySort })}>
-        {discoverySorts.map(value => <option key={value} value={value}>{t(`discoverySort_${value}`)}</option>)}
-      </select></label>
-    </div>
-    <div className="resultMeta"><span aria-live="polite">{visible.length} {t("festivals")}</span><span>{t("lastReview")}</span></div>
-    {withoutRoster > 0 && <p className="compareHint">{t("artistMatchesUnknown", { count: withoutRoster })}</p>}
-    <div className="festivalGrid">{visible.map((item) => { const isSelected = selected.includes(item.slug); const previewArtists = lineupPreviewArtists(item); const artistCount = announcedArtists(item).length; return <article className="festivalCard" key={item.slug}><button type="button" className={`compareButton ${isSelected ? "active" : ""}`} aria-pressed={isSelected} aria-label={t("compareFestival", { festival: item.name })} onClick={() => toggleSelected(item)} disabled={!isSelected && selected.length >= 3}><span aria-hidden="true">{isSelected ? "✓ " : "+ "}</span>{t("compare")}</button><Link href={`/festivals/${item.slug}/`}>
-      {artistSelection.length > 0 && <p className="artistMatchSummary">
-        {t("artistMatchSummary", { count: artistMatches.get(item.slug)!.matched.length })}: {artistMatches.get(item.slug)!.matched.map(slug => artistNames.get(slug) ?? slug).join(", ")}
-      </p>}
-      <div className="cardTop"><FestivalLogo slug={item.slug} name={item.name}/><span className={`status ${item.status}`}>{t(item.status === "tba" ? "tba" : item.status)}</span></div>
-      {item.sourceDeprecated && <span className="status deprecated">{t("sourceDeprecated")}</span>}
-      <div className="date">{formatFestivalDateRange(item, locale, t("datesTba"))}</div>
-      <h2>{item.name}</h2>
-      <div className="location">{item.countryCode} · {item.city || displayNames.of(item.countryCode) || item.country}</div>
-      <div className="artists">{previewArtists.length ? previewArtists.slice(0, 4).map((artist) => <span key={artist}>{artist}</span>) : <span className="muted">{t("lineupNotAnnounced")}</span>}</div>
-      <div className="cardFoot"><span>{artistCount ? `${artistCount} ${t("announcedActs")}` : t("followUpdates")}</span><b>{t("explore")} →</b></div>
-    </Link></article>; })}</div>
-    {!visible.length && <div className="empty"><strong>{t("noMatches")}</strong><p>{t(dateFiltersActive ? "noDateMatches" : "noDiscoveryMatches")}</p></div>}
-  </section>;
+      <p className="srOnly" role="status" aria-live="polite" aria-atomic="true">
+        {comparisonStatus}
+      </p>
+      {compared.length > 0 && (
+        <div className="compareTray">
+          <div className="compareHeading">
+            <strong>
+              {t("compare")} ({compared.length}/3)
+            </strong>
+            {compared.map((item) => (
+              <button
+                aria-label={t("removeFestivalComparison", { festival: item.name })}
+                onClick={() => toggleSelected(item)}
+                key={item.slug}
+              >
+                {item.name} <span aria-hidden="true">×</span>
+              </button>
+            ))}
+          </div>
+          {compared.length < 2 ? (
+            <p className="compareHint">{t("comparisonInstructions")}</p>
+          ) : (
+            <div className="comparisonScroll" tabIndex={0}>
+              <table className="comparisonTable">
+                <thead>
+                  <tr>
+                    <th scope="col">{t("planningDetail")}</th>
+                    {compared.map((item) => (
+                      <th scope="col" key={item.slug}>
+                        <Link href={`/festivals/${item.slug}/`}>{item.name}</Link>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">{t("dates")}</th>
+                    {compared.map((item) => (
+                      <td key={item.slug}>
+                        {formatFestivalDateRange(item, locale, t("datesTba"))}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th scope="row">{t("locationDistance", { origin: origins[origin].label })}</th>
+                    {compared.map((item) => (
+                      <td key={item.slug}>
+                        {item.city || item.country}
+                        {item.coordinates
+                          ? ` · ${distanceKm(originCoordinates, item.coordinates).toLocaleString(locale)} km`
+                          : ` · ${t("distanceUnavailable")}`}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th scope="row">{t("tickets")}</th>
+                    {compared.map((item) => (
+                      <td key={item.slug}>
+                        {item.ticketsUrl ? (
+                          <a href={item.ticketsUrl} rel="noreferrer" target="_blank">
+                            {t("officialTickets")}
+                          </a>
+                        ) : item.ticketStatus === "unavailable" ? (
+                          t("unavailable")
+                        ) : (
+                          t("availabilityNotConfirmed")
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th scope="row">{t("lineupOverlap")}</th>
+                    <td colSpan={compared.length}>
+                      {overlap.length ? (
+                        <>
+                          <strong>{t("sharedActs", { count: overlap.length })}</strong>
+                          <br />
+                          {overlap.join(", ")}
+                        </>
+                      ) : (
+                        t("noLineupOverlap")
+                      )}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="discoveryOrder">
+        <label>
+          {t("discoverySort")}{" "}
+          <select
+            value={sort}
+            disabled={!filtersReady}
+            onChange={(event) => updateFilters({ sort: event.target.value as DiscoverySort })}
+          >
+            {discoverySorts.map((value) => (
+              <option key={value} value={value}>
+                {t(`discoverySort_${value}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="resultMeta">
+        <span>
+          {visible.length} {t("festivals")}
+        </span>
+        <span>{t("lastReview")}</span>
+      </div>
+      {withoutRoster > 0 && (
+        <p className="compareHint">{t("artistMatchesUnknown", { count: withoutRoster })}</p>
+      )}
+      <div className="festivalGrid">
+        {visible.map((item) => {
+          const isSelected = selected.includes(item.slug);
+          const previewArtists = lineupPreviewArtists(item);
+          const artistCount = announcedArtists(item).length;
+          return (
+            <article className="festivalCard" key={item.slug}>
+              <button
+                type="button"
+                className={`compareButton ${isSelected ? "active" : ""}`}
+                aria-pressed={isSelected}
+                aria-label={t("compareFestival", { festival: item.name })}
+                onClick={() => toggleSelected(item)}
+                disabled={!isSelected && selected.length >= 3}
+              >
+                <span aria-hidden="true">{isSelected ? "✓ " : "+ "}</span>
+                {t("compare")}
+              </button>
+              <Link href={`/festivals/${item.slug}/`}>
+                {artistSelection.length > 0 && (
+                  <p className="artistMatchSummary">
+                    {t("artistMatchSummary", {
+                      count: artistMatches.get(item.slug)!.matched.length,
+                    })}
+                    :{" "}
+                    {artistMatches
+                      .get(item.slug)!
+                      .matched.map((slug) => artistNames.get(slug) ?? slug)
+                      .join(", ")}
+                  </p>
+                )}
+                <div className="cardTop">
+                  <FestivalLogo slug={item.slug} name={item.name} />
+                  <span className={`status ${item.status}`}>
+                    {t(item.status === "tba" ? "tba" : item.status)}
+                  </span>
+                </div>
+                {item.sourceDeprecated && (
+                  <span className="status deprecated">{t("sourceDeprecated")}</span>
+                )}
+                <div className="date">{formatFestivalDateRange(item, locale, t("datesTba"))}</div>
+                <h2>{item.name}</h2>
+                <div className="location">
+                  {item.countryCode} ·{" "}
+                  {item.city || displayNames.of(item.countryCode) || item.country}
+                </div>
+                <div className="artists">
+                  {previewArtists.length ? (
+                    previewArtists.slice(0, 4).map((artist) => <span key={artist}>{artist}</span>)
+                  ) : (
+                    <span className="muted">{t("lineupNotAnnounced")}</span>
+                  )}
+                </div>
+                <div className="cardFoot">
+                  <span>
+                    {artistCount ? `${artistCount} ${t("announcedActs")}` : t("followUpdates")}
+                  </span>
+                  <b>{t("explore")} →</b>
+                </div>
+              </Link>
+            </article>
+          );
+        })}
+      </div>
+      {!visible.length && (
+        <div className="empty">
+          <strong>{t("noMatches")}</strong>
+          <p>{t(dateFiltersActive ? "noDateMatches" : "noDiscoveryMatches")}</p>
+        </div>
+      )}
+    </section>
+  );
 }

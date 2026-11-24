@@ -4,11 +4,17 @@ const labels = { en: "Sort festivals", de: "Festivals sortieren", ru: "Сорт�
 const alphabetical = ["Synthetic Alpine", "Synthetic Fest", "Synthetic South", "Synthetic West"];
 
 for (const [locale, name] of Object.entries(labels)) {
-  test(`sort festival cards with a keyboard and restore the order (${locale})`, async ({ page }) => {
+  test(`sort festival cards with a keyboard and restore the order (${locale})`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 375, height: 850 });
     await page.addInitScript(() => {
       const key = "festival-radar-planner-v1";
-      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ favoriteArtists: ["artist:second-artist", "Second Artist"] }));
+      if (!localStorage.getItem(key))
+        localStorage.setItem(
+          key,
+          JSON.stringify({ favoriteArtists: ["artist:second-artist", "Second Artist"] }),
+        );
     });
     await page.goto(`/${locale}/`);
     const sort = page.getByRole("combobox", { name });
@@ -28,7 +34,9 @@ for (const [locale, name] of Object.entries(labels)) {
     await expect(cards.first()).toHaveText("Synthetic Fest");
     await sort.selectOption("acts");
     await expect(cards.first()).toHaveText("Synthetic Fest");
-    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(375);
     await page.locator(".clearFilters").click();
     await expect(sort).toHaveValue("date");
   });
