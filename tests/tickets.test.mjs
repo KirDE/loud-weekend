@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ticketPresentation, hasAvailableTickets } from "../lib/tickets.ts";
 import { festivalMusicEvent } from "../lib/seo.ts";
 import { factsSchema } from "../lib/ingestion/agent-contract.ts";
-import { FestivalComparisonTicket } from "../components/FestivalExplorer.tsx";
+import { FestivalComparisonTicket } from "../components/FestivalComparison.tsx";
 import { FestivalDetail } from "../components/FestivalDetail.tsx";
 import { LanguageProvider, translate } from "../components/LanguageProvider.tsx";
 import { LocalPlannerProvider } from "../components/LocalPlanner.tsx";

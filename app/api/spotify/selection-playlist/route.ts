@@ -2,12 +2,18 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { error, requireUser } from "@/lib/api";
 import { spotifyAccessToken, spotifyEndpoints } from "@/lib/spotify";
-import { createSelectionPlaylist } from "@/lib/selection-playlist";
+import {
+  createSelectionPlaylist,
+  SelectionPlaylistRateLimit,
+  SelectionPlaylistWriteUnconfirmed,
+} from "@/lib/selection-playlist";
+import { playlistDepths } from "@/lib/playlist-depth";
 import { selectionArtists } from "@/lib/catalog/selection-artists";
 import { rejectUntrustedOrigin } from "@/lib/request-origin";
 
 const payload = z.object({
   artists: z.array(z.string().trim().min(1).max(200)).min(1).max(250),
+  depth: z.enum(playlistDepths).optional(),
   festivals: z.array(z.string().trim().min(1).max(200)).min(1).max(50),
 });
 
@@ -38,6 +44,16 @@ export async function POST(request: Request) {
       }),
     );
   } catch (cause) {
+    if (cause instanceof SelectionPlaylistRateLimit)
+      return error("Spotify request limit reached before creation.", 429);
+    if (cause instanceof SelectionPlaylistWriteUnconfirmed)
+      return Response.json(
+        {
+          error: "Check Spotify before retrying; the playlist may already exist.",
+          code: "write_unconfirmed",
+        },
+        { status: 502 },
+      );
     console.error("selection_playlist_failed", {
       userId: user.id,
       message: cause instanceof Error ? cause.message : "unknown",

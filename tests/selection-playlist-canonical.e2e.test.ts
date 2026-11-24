@@ -77,8 +77,8 @@ test("canonical DB identity/verified link and alias drive selection without fuzz
         });
       if (url.includes("/users/"))
         return Response.json({
-          id: "synthetic",
-          external_urls: { spotify: "https://open.spotify.com/playlist/synthetic" },
+          id: "P".repeat(22),
+          external_urls: { spotify: "https://open.spotify.com/playlist/" + "P".repeat(22) },
         });
       if (init?.method === "POST") return Response.json({ snapshot_id: "synthetic" });
       throw new Error("Unexpected Spotify request");
