@@ -1,8 +1,11 @@
 "use client";
 
+import { AdminSocialLinkReview } from "./AdminSocialLinkReview";
 import { useEffect, useMemo, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import type { AuditEntry, ParserRun, ReviewChange } from "@/lib/admin";
+import { SubmissionEditionLink } from "./SubmissionEditionLink";
+import type { SubmissionEditionLink as LinkedEdition } from "@/lib/submission-edition-link";
 import { useLanguage, type Language } from "./LanguageProvider";
 
 type Section = "content" | "review" | "submissions" | "assets" | "diagnostics" | "audit";
@@ -14,9 +17,15 @@ type Submission = {
   notes: string | null;
   status: "pending" | "approved" | "rejected";
   submittedAt: string;
+  editionLink?: LinkedEdition | null;
   audit: { action: string; at: string }[];
 };
-type EditableArtist = { slug: string; name: string; officialUrl?: string };
+type EditableArtist = {
+  slug: string;
+  name: string;
+  officialUrl?: string;
+  socialCandidates: string[];
+};
 type Operator = { email: string; role: "USER" | "EDITOR" | "ADMIN" };
 
 export function AdminConsole({
@@ -26,6 +35,7 @@ export function AdminConsole({
   parserRuns,
   auditEntries,
   submissions: initialSubmissions,
+  editionOptions = [],
   sourceHealth = [],
 }: {
   festivals: Festival[];
@@ -34,6 +44,7 @@ export function AdminConsole({
   parserRuns: ParserRun[];
   auditEntries: AuditEntry[];
   submissions: Submission[];
+  editionOptions?: { slug: string; name: string; year: number }[];
   sourceHealth?: {
     id: string;
     festivalSlug: string;
@@ -122,7 +133,7 @@ export function AdminConsole({
   const save = async (
     resourceKind: "festival" | "artist" | "link" | "asset" | "playlist",
     resourceKey: string,
-    values: Record<string, string | null>,
+    values: Record<string, unknown>,
   ) => {
     const snapshotResponse = await fetch("/api/admin");
     const snapshot = await snapshotResponse.json();
@@ -306,6 +317,23 @@ export function AdminConsole({
                     </button>
                   </div>
                 )}
+                {item.status === "approved" && (
+                  <SubmissionEditionLink
+                    reference={item.reference}
+                    year={item.year}
+                    editions={editionOptions}
+                    link={item.editionLink}
+                    onLinked={(editionLink) =>
+                      setSubmissions((items) =>
+                        items.map((submission) =>
+                          submission.reference === item.reference
+                            ? { ...submission, editionLink }
+                            : submission,
+                        ),
+                      )
+                    }
+                  />
+                )}
               </article>
             ))}
           </div>
@@ -473,6 +501,15 @@ export function AdminConsole({
                     >
                       Save artist draft
                     </button>
+                    {selectedArtist.socialCandidates.length > 0 && (
+                      <AdminSocialLinkReview
+                        key={selectedArtist.slug}
+                        candidates={selectedArtist.socialCandidates}
+                        onSave={(proof) =>
+                          save("artist", selectedArtist.slug, { socialProfile: proof })
+                        }
+                      />
+                    )}
                   </div>
                 )}
               </div>
