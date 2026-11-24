@@ -28,7 +28,7 @@ test("explicit mobile trip download keeps only public proof and works offline", 
     timeZone: "Europe/Berlin",
     status: "scheduled",
     sourceUrl: "https://festival.example.test/timetable",
-    observedAt: "2027-01-01T10:00:00.000Z",
+    observedAt: "2026-11-12T10:00:00.000Z",
   };
   const api = "/api/offline/trips/synthetic-fest/2027/";
   try {
@@ -103,7 +103,7 @@ test("explicit mobile trip download keeps only public proof and works offline", 
       {
         festivalSlug: "synthetic-fest",
         editionYear: 2027,
-        entries: [{ ...entry, status: "cancelled", observedAt: "2027-01-02T10:00:00.000Z" }],
+        entries: [{ ...entry, status: "cancelled", observedAt: "2026-11-13T10:00:00.000Z" }],
       },
       false,
     );

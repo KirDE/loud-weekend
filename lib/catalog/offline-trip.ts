@@ -25,7 +25,7 @@ async function readSnapshot(tx: Prisma.TransactionClient, slug: string, year: nu
       editionId: edition.id,
       date: { gte: edition.startDate ?? undefined, lte: edition.endDate ?? undefined },
       // Older rows without explicit evidence cannot inherit a default zone or checked time.
-      ...offlineTimetableWhere,
+      ...offlineTimetableWhere(),
     },
     take: maximumScheduleRows + 1,
     orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }],

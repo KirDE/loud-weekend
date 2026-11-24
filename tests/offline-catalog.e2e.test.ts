@@ -143,7 +143,7 @@ test("offline catalogue and trip omit performances outside the edition dates", a
           start: "20:00",
           timeZone: "Europe/Berlin",
           sourceUrl: "https://festival.example.test/timetable/",
-          observedAt: new Date("2027-11-12T10:00:00Z"),
+          observedAt: new Date("2026-11-12T10:00:00Z"),
         };
         await tx.timetablePerformance.createMany({
           data: [
@@ -172,6 +172,56 @@ test("offline catalogue and trip omit performances outside the edition dates", a
   );
 });
 
+test("offline catalogue and trip omit schedules checked in the future", async () => {
+  const rollback = new Error("rollback future observation test");
+  await assert.rejects(
+    db.$transaction(
+      async (tx) => {
+        const edition = await tx.festivalEdition.findFirstOrThrow({
+          where: { festival: { slug: "synthetic-fest" }, year: 2027, recordState: "CURRENT" },
+        });
+        const proof = {
+          editionId: edition.id,
+          date: new Date("2027-06-11"),
+          stage: "Official stage",
+          start: "20:00",
+          timeZone: "Europe/Berlin",
+          sourceUrl: "https://festival.example.test/timetable/",
+        };
+        await tx.timetablePerformance.createMany({
+          data: [
+            {
+              ...proof,
+              artistName: "Verified observation",
+              observedAt: new Date("2026-11-12T10:00:00Z"),
+            },
+            {
+              ...proof,
+              start: "21:00",
+              artistName: "Future observation",
+              observedAt: new Date("2099-01-01T10:00:00Z"),
+            },
+          ],
+        });
+        const catalogue = await readOfflineCatalog(tx);
+        const trip = await readPublishedOfflineTrip("synthetic-fest", 2027, tx);
+        for (const timetable of [
+          catalogue.festivals.find(({ slug }) => slug === "synthetic-fest")?.timetable,
+          trip?.timetable,
+        ]) {
+          assert.deepEqual(
+            timetable?.map(({ artist }) => artist),
+            ["Verified observation"],
+          );
+        }
+        throw rollback;
+      },
+      { timeout: 15_000 },
+    ),
+    (error) => error === rollback,
+  );
+});
+
 test("trip download refuses a bounded query that could hide valid performances", async () => {
   const rollback = new Error("rollback trip test");
   await assert.rejects(
@@ -186,7 +236,7 @@ test("trip download refuses a bounded query that could hide valid performances",
           stage: "Oversize fixture stage",
           start: "20:00",
           sourceUrl: "https://festival.example.test/timetable/",
-          observedAt: new Date("2027-05-01T10:00:00Z"),
+          observedAt: new Date("2026-11-12T10:00:00Z"),
         };
         await tx.timetablePerformance.createMany({
           data: Array.from({ length: 800 }, (_, index) => ({

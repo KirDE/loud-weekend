@@ -138,7 +138,9 @@ test("public content changes invalidate old validators without timestamp updates
   assert.equal(projectOfflineCatalog([row], 2027).timetableStatus, "not-published");
 });
 
-test("offline reads use current-season public fields and fail closed", async () => {
+test("Offline query uses current-season public fields and fails closed", async (t) => {
+  const now = new Date("2026-11-23T12:00:00.000Z");
+  t.mock.timers.enable({ apis: ["Date"], now });
   let query;
   const findFirst = async (args) => {
     assert.deepEqual(args, {
@@ -165,7 +167,7 @@ test("offline reads use current-season public fields and fail closed", async () 
   assert.deepEqual(query.select.timetable.where, {
     timeZone: { not: null },
     sourceUrl: { not: null },
-    observedAt: { not: null },
+    observedAt: { lte: now },
   });
   for (const findMany of [
     async () => [],
