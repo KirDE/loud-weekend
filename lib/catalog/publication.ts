@@ -59,14 +59,21 @@ const ticketStatuses = {
   unknown: TicketStatus.UNKNOWN,
 } as const;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
-const dateOnly = (value: unknown) =>
-  typeof value === "string" && value ? new Date(`${value}T00:00:00.000Z`) : null;
 const isoDate = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 const same = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 const trimFact = (value: unknown) => (typeof value === "string" ? value.trim() : value);
 const normalizeTicketLink = (value: unknown) =>
   typeof value === "string" ? value.trim() || null : value;
+
+function dateOnly(value: unknown) {
+  if (value == null || value === "") return null;
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isFinite(date.getTime()) && isoDate(date) === value) return date;
+  }
+  throw new Error("Invalid catalogue date");
+}
 
 function artistSlug(name: string) {
   return encodeURIComponent(
@@ -301,6 +308,13 @@ async function addLineupArtist(
   return true;
 }
 
+async function advanceEditionSourceClock(db: Database, editionId: string, observedAt: Date) {
+  await db.festivalEdition.updateMany({
+    where: { id: editionId, sourceUpdatedAt: { lt: observedAt } },
+    data: { sourceUpdatedAt: observedAt },
+  });
+}
+
 async function applyFestivalChanges(
   db: Database,
   input: {
@@ -309,9 +323,8 @@ async function applyFestivalChanges(
     expectedEditionId?: string;
     changes: CatalogChange[];
     strictBefore: boolean;
-    observedAt: Date;
   },
-  ensureArtist = artistResolver(db, input.observedAt),
+  ensureArtist: EnsureArtist,
 ) {
   const festival = await db.festival.findUnique({
     where: { slug: input.festivalSlug },
@@ -477,14 +490,6 @@ async function applyFestivalChanges(
     }
     if (changed) changedFields.push(change.field);
   }
-  // Public festival facts and edition details share this source clock.
-  // A delayed publication must not move it backwards.
-  if (changedFields.length) {
-    await db.festivalEdition.updateMany({
-      where: { id: edition.id, sourceUpdatedAt: { lt: input.observedAt } },
-      data: { sourceUpdatedAt: input.observedAt },
-    });
-  }
   return { edition, changedFields: [...new Set(changedFields)] };
 }
 
@@ -617,6 +622,11 @@ export async function publishIngestionResult(
         stored.fetchedAt !== input.result.fetchedAt
       ) {
         throw new Error("Ingestion publication does not match the persisted observation time");
+      }
+      if (observedAt > candidate.attempt.endedAt || observedAt.getTime() > Date.now()) {
+        throw new Error(
+          "Ingestion observation time is later than the completed attempt or current time",
+        );
       }
       if (candidate.diffs.some(({ reviewRequired }) => reviewRequired))
         throw new Error("Persisted candidate requires review");
@@ -819,10 +829,11 @@ export async function publishIngestionResult(
           expectedYear,
           changes: input.result.changes,
           strictBefore: true,
-          observedAt,
         },
         ensureArtist,
       );
+      if (applied.changedFields.length)
+        await advanceEditionSourceClock(db, applied.edition.id, observedAt);
       // Rockharz 2027 publications retain exact edition/source/field and persisted
       // evidence guards. Verified lineup changes use the normal provider queue.
       const sourceField =
@@ -1315,14 +1326,19 @@ export async function publishAdminFestivalChange(
       "Refresh proposal is missing its edition binding. Run an edition-scoped refresh and review the new proposal.",
     );
   }
-  const applied = await applyFestivalChanges(db, {
-    festivalSlug: input.change.resourceKey,
-    expectedYear: scoped?.editionYear,
-    expectedEditionId: scoped?.editionId,
-    changes: [{ field: input.change.field, before: input.change.beforeValue, after: afterValue }],
-    strictBefore: Boolean(input.change.parserRunId),
-    observedAt,
-  });
+  const applied = await applyFestivalChanges(
+    db,
+    {
+      festivalSlug: input.change.resourceKey,
+      expectedYear: scoped?.editionYear,
+      expectedEditionId: scoped?.editionId,
+      changes: [{ field: input.change.field, before: input.change.beforeValue, after: afterValue }],
+      strictBefore: Boolean(input.change.parserRunId),
+    },
+    artistResolver(db, observedAt),
+  );
+  if (applied.changedFields.length)
+    await advanceEditionSourceClock(db, applied.edition.id, observedAt);
   return createPublication(db, {
     source: CatalogPublicationSource.ADMIN,
     sourceId,
@@ -1378,7 +1394,7 @@ export async function publishAgentFestivalResolution(
     reason: string;
     facts: NonNullable<AgentDecision["facts"]>;
     evidence: AgentDecision["evidence"];
-    observedAt: Date;
+    reviewedAt: Date;
   },
 ) {
   const replay = await db.catalogPublication.findUnique({
@@ -1418,7 +1434,7 @@ export async function publishAgentFestivalResolution(
         lineupChanged: true,
       },
     })) === 0;
-  const ensureArtist = artistResolver(db, input.observedAt);
+  const ensureArtist = artistResolver(db, input.reviewedAt);
   const changedFields: string[] = [];
   if (input.facts.headliners !== undefined && input.facts.lineup !== undefined) {
     const headliners = stringList(input.facts.headliners, "headliners"),
@@ -1431,7 +1447,6 @@ export async function publishAgentFestivalResolution(
     const announced = edition.lineup.filter((entry) => entry.status === "ANNOUNCED");
     const oldHeadliners = announced.filter((entry) => entry.billing === "HEADLINER");
     const oldLineup = announced.filter((entry) => entry.billing === "LINEUP");
-    const previousIds = [...oldHeadliners, ...oldLineup].map((entry) => entry.artistId);
     const rosterNamesChanged =
       !same(
         oldHeadliners.map((entry) => entry.artist.name),
@@ -1441,30 +1456,37 @@ export async function publishAgentFestivalResolution(
         oldLineup.map((entry) => entry.artist.name),
         lineup,
       );
-    const artistIds = [];
     if (rosterNamesChanged) {
+      const artistIds: string[] = [];
       for (const name of [...headliners, ...lineup]) artistIds.push((await ensureArtist(name)).id);
       if (new Set(artistIds).size !== artistIds.length)
         throw new Error("Ambiguous reviewed billing or duplicate alias identities");
-    }
 
-    // A reviewed spelling or alias does not change the published roster.
-    if (
-      rosterNamesChanged &&
-      (headliners.length !== oldHeadliners.length || !same(previousIds, artistIds))
-    ) {
-      const cancelled = edition.lineup.filter((l) => l.status === "CANCELLED");
-      if (artistIds.some((id) => cancelled.some((l) => l.artistId === id)))
-        throw new Error("Cancellation requires separate explicit review");
-      await updateAnnouncedRoster(db, edition.id, announced, cancelled, [
-        ...rosterPositions("HEADLINER", artistIds.slice(0, headliners.length), cancelled),
-        ...rosterPositions("LINEUP", artistIds.slice(headliners.length), cancelled),
-      ]);
-      changedFields.push("headliners", "lineup");
-      await db.festivalEdition.updateMany({
-        where: { id: edition.id, sourceUpdatedAt: { lt: input.observedAt } },
-        data: { sourceUpdatedAt: input.observedAt },
-      });
+      // Compare canonical IDs per billing group so that alias spellings and
+      // unchanged corroborating evidence do not change the published facts.
+      const headlinerIds = artistIds.slice(0, headliners.length);
+      const lineupIds = artistIds.slice(headliners.length);
+      const headlinersChanged = !same(
+        oldHeadliners.map(({ artistId }) => artistId),
+        headlinerIds,
+      );
+      const lineupChanged = !same(
+        oldLineup.map(({ artistId }) => artistId),
+        lineupIds,
+      );
+      if (headlinersChanged || lineupChanged) {
+        const cancelled = edition.lineup.filter((entry) => entry.status === "CANCELLED");
+        if (artistIds.some((id) => cancelled.some((entry) => entry.artistId === id)))
+          throw new Error("Cancellation requires separate explicit review");
+        await updateAnnouncedRoster(db, edition.id, announced, cancelled, [
+          ...(headlinersChanged
+            ? rosterPositions("HEADLINER", headlinerIds, cancelled)
+            : oldHeadliners),
+          ...(lineupChanged ? rosterPositions("LINEUP", lineupIds, cancelled) : oldLineup),
+        ]);
+        if (headlinersChanged) changedFields.push("headliners");
+        if (lineupChanged) changedFields.push("lineup");
+      }
     }
   }
   // A reviewed edition status is not evidence about catalogue completeness.
@@ -1472,13 +1494,16 @@ export async function publishAgentFestivalResolution(
     .filter(([field]) => field !== "headliners" && field !== "lineup" && field !== "finalLineup")
     .map(([field, after]) => ({ field, after }));
   if (scalar.length) {
-    const applied = await applyFestivalChanges(db, {
-      festivalSlug: input.festivalSlug,
-      expectedYear: edition.year,
-      changes: scalar,
-      strictBefore: false,
-      observedAt: input.observedAt,
-    });
+    const applied = await applyFestivalChanges(
+      db,
+      {
+        festivalSlug: input.festivalSlug,
+        expectedYear: edition.year,
+        changes: scalar,
+        strictBefore: false,
+      },
+      ensureArtist,
+    );
     changedFields.push(...applied.changedFields);
   }
   if (finalLineup) {
@@ -1500,19 +1525,31 @@ export async function publishAgentFestivalResolution(
     });
     changedFields.push("finalLineup");
   }
+  let latestObservation = -Infinity;
   for (const field of new Set(changedFields)) {
     const evidence = input.evidence.find((e) => e.field === field);
     if (!evidence) throw new Error("Reviewed field has no official evidence");
+    const checkedAt = new Date(evidence.checkedAt);
+    if (field !== "finalLineup")
+      latestObservation = Math.max(latestObservation, checkedAt.getTime());
     await db.editionProvenance.create({
       data: {
         editionId: edition.id,
         field,
         url: evidence.url,
-        checkedAt: new Date(evidence.checkedAt),
+        checkedAt,
         note: evidence.excerpt,
       },
     });
   }
+  // Keep the existing clock-skew allowance for review evidence without
+  // displaying future freshness or counting unchanged facts as new data.
+  if (Number.isFinite(latestObservation))
+    await advanceEditionSourceClock(
+      db,
+      edition.id,
+      new Date(Math.min(latestObservation, input.reviewedAt.getTime())),
+    );
   return createPublication(db, {
     source: CatalogPublicationSource.ADMIN,
     sourceId: input.sourceId,

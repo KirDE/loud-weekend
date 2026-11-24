@@ -8,7 +8,7 @@ export type ReviewChange = {
   detected: string;
   source: string;
   confidence: number;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "conflict";
   conflict?: boolean;
 };
 
