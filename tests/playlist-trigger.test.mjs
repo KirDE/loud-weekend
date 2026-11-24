@@ -24,15 +24,27 @@ async function runScript(script, ...payloads) {
 }
 
 test("selects only uniquely published ingestion festivals", async () => {
-  const response = { summary: { published: 3, playlistRefreshRequested: 2, results: [
-    { festivalSlug: "rock-im-park", outcome: "published", playlistRefreshRequested: true },
-    { festivalSlug: "wacken-open-air", outcome: "published", playlistRefreshRequested: false },
-    { festivalSlug: "rock-am-ring", outcome: "published", playlistRefreshRequested: true },
-  ] } };
-  assert.equal(await runScript("scripts/select-published-festivals.mjs", response), "rock-am-ring,rock-im-park");
+  const response = {
+    summary: {
+      published: 3,
+      playlistRefreshRequested: 2,
+      results: [
+        { festivalSlug: "rock-im-park", outcome: "published", playlistRefreshRequested: true },
+        { festivalSlug: "wacken-open-air", outcome: "published", playlistRefreshRequested: false },
+        { festivalSlug: "rock-am-ring", outcome: "published", playlistRefreshRequested: true },
+      ],
+    },
+  };
+  assert.equal(
+    await runScript("scripts/select-published-festivals.mjs", response),
+    "rock-am-ring,rock-im-park",
+  );
 });
 
 test("rejects inconsistent ingestion publication counts", async () => {
   const response = { summary: { published: 1, playlistRefreshRequested: 1, results: [] } };
-  await assert.rejects(runScript("scripts/select-published-festivals.mjs", response), /playlist refresh count mismatch/);
+  await assert.rejects(
+    runScript("scripts/select-published-festivals.mjs", response),
+    /playlist refresh count mismatch/,
+  );
 });
