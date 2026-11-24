@@ -10,7 +10,7 @@ import {
   releaseAgentIssue,
   resolveAgentIssue,
 } from "../../lib/ingestion/agent-issues.ts";
-import { stageArrivalFixture } from "../support/arrival-fixture.mjs";
+import { stageOrganizerFixture } from "../support/arrival-fixture.mjs";
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 
 const year = 2027;
@@ -24,7 +24,7 @@ const inputs = await Promise.all(
 
 function stage(db, festivalId, input, html = input.html) {
   const url = campingSourceUrl(input.slug, year);
-  return stageArrivalFixture(db, { id: festivalId, slug: input.slug }, new Map([[url, html]]), {
+  return stageOrganizerFixture(db, { id: festivalId, slug: input.slug }, new Map([[url, html]]), {
     editionYear: year,
     collect: collectCampingCandidate,
     fingerprintField: "campingFingerprint",
