@@ -290,16 +290,18 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         .filter((row) => row.recordState === "CURRENT")
         .map((row) => [
           row.festival.slug,
-          [
-            ...new Set(
-              row.lineup
-                .filter(
-                  ({ status, billing }) =>
-                    status === "ANNOUNCED" && (billing === "HEADLINER" || billing === "LINEUP"),
-                )
-                .map((entry) => entry.artist.slug),
-            ),
-          ],
+          lifecycles.has(row.id)
+            ? []
+            : [
+                ...new Set(
+                  row.lineup
+                    .filter(
+                      ({ status, billing }) =>
+                        status === "ANNOUNCED" && (billing === "HEADLINER" || billing === "LINEUP"),
+                    )
+                    .map((entry) => entry.artist.slug),
+                ),
+              ],
         ]),
     );
     const visibleSlugs = new Set(Object.values(artistSlugsByFestival).flat());

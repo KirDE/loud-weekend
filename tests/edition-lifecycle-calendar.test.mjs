@@ -1,3 +1,4 @@
+import { personalCalendar } from "../lib/personal-calendar.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
@@ -198,3 +199,19 @@ for (const locale of ["en", "de", "ru"])
     assert.doesNotMatch(mixed, /Paused Only/);
     assert.equal((mixed.match(/type="checkbox" checked=""/g) || []).length, 2);
   });
+
+test("an approved hiatus cannot create a personal-calendar conflict or erase attendance", () => {
+  const current = { ...active, startDate: paused.startDate, endDate: paused.endDate };
+  const attendance = Object.freeze({ [paused.slug]: "going", [current.slug]: "maybe" });
+  assert.equal(
+    personalCalendar([{ ...paused, editionLifecycle: undefined }, current], attendance).conflicts
+      .length,
+    1,
+  );
+  assert.deepEqual(personalCalendar([paused, current], attendance), {
+    dated: [current],
+    undated: [],
+    conflicts: [],
+  });
+  assert.equal(attendance[paused.slug], "going");
+});

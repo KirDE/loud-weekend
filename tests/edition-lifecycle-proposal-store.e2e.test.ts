@@ -694,6 +694,7 @@ test(
       assert.equal(f.startDate, "2027-08-25");
       assert.equal(f.ticketStatus, "unknown");
       assert.deepEqual(f.headliners, ["Lifecycle Synthetic Artist"]);
+      assert.deepEqual(result.discoveryLineups.artistSlugsByFestival[slug], []);
       assert.equal(
         result.artists.some((a) => a.name === "Lifecycle Synthetic Artist"),
         false,
