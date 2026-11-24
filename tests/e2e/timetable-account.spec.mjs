@@ -85,6 +85,19 @@ test("running order account copies are explicit, revisioned and isolated by acco
       revision: 0,
       performanceIds: [],
     });
+    const ownerExport = await second.request.post("/api/auth/export/", options);
+    expect(ownerExport.status()).toBe(200);
+    expect(ownerExport.headers()["cache-control"]).toBe("private, no-store");
+    expect((await ownerExport.json()).account.runningOrders).toEqual([
+      {
+        revision: copy.revision,
+        performanceIds: copy.performanceIds,
+        edition: { year: 2027, festival: { slug: "synthetic-west" } },
+      },
+    ]);
+    const otherExport = await other.request.post("/api/auth/export/", options);
+    expect(otherExport.status()).toBe(200);
+    expect((await otherExport.json()).account.runningOrders).toEqual([]);
     const write = { accountId: account.id, revision: 1, performanceIds: copy.performanceIds };
     expect((await other.request.put(url, { ...options, data: write })).status()).toBe(409);
     expect((await second.request.put(url, { data: write })).status()).toBe(403);
