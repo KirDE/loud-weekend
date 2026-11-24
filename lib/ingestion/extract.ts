@@ -37,7 +37,7 @@ const supplementalFormatWarnings = new Set([
   "Sweden Rock current ticket summary was not found",
 ]);
 
-const supportedFields: FieldEvidence["field"][] = [
+const supportedFields: Exclude<FieldEvidence["field"], "timetable">[] = [
   "startDate",
   "endDate",
   "city",
@@ -207,13 +207,19 @@ function extractConfiguredCandidate(
   };
   for (const candidate of candidates) {
     if (candidate.artistListMode) merged.artistListMode = candidate.artistListMode;
+    const suppliedFields = new Set<FieldEvidence["field"]>();
     for (const field of supportedFields) {
-      if (merged[field] === undefined && candidate[field] !== undefined)
-        Object.assign(merged, { [field]: candidate[field] });
+      if (merged[field] !== undefined || candidate[field] === undefined) continue;
+      Object.assign(merged, { [field]: candidate[field] });
+      suppliedFields.add(field);
+      (merged.fieldEditionYears ??= {})[field] =
+        candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
+    }
+    for (const evidence of candidate.evidence) {
+      if (suppliedFields.delete(evidence.field)) merged.evidence.push(evidence);
     }
     if (candidate.lineupScope && merged.lineup === candidate.lineup)
       merged.lineupScope = candidate.lineupScope;
-    merged.evidence.push(...candidate.evidence.filter(({ field }) => merged[field] !== undefined));
     merged.observedEditionYears.push(...candidate.observedEditionYears);
     merged.warnings.push(...candidate.warnings);
   }
@@ -223,10 +229,6 @@ function extractConfiguredCandidate(
   if (merged.evidence.length > 0) {
     merged.warnings = merged.warnings.filter((warning) => !missingFormatWarnings.has(warning));
   }
-  merged.evidence = merged.evidence.filter(
-    ({ field }, index, values) =>
-      values.findIndex((evidence) => evidence.field === field) === index,
-  );
   merged.observedEditionYears = [...new Set(merged.observedEditionYears)];
   merged.warnings = [...new Set(merged.warnings)];
   // The JSON-LD format is optional for the verified Rock Werchter homepage.
@@ -281,6 +283,7 @@ export function extractFestivalCandidate(
   // A failed current ticket check must not publish an older stock assertion
   // from another format as if the current inventory had been verified.
   delete candidate.ticketStatus;
+  if (candidate.fieldEditionYears) delete candidate.fieldEditionYears.ticketStatus;
   candidate.evidence = candidate.evidence.filter((evidence) => evidence.field !== "ticketStatus");
   if (ticket.warning) candidate.warnings.push(ticket.warning);
   if (ticket.status) {
@@ -291,6 +294,16 @@ export function extractFestivalCandidate(
     };
     candidate.ticketStatus = ticket.status;
     candidate.ticketsUrl = ticket.ticketsUrl ?? envelope.ticket.url;
+    candidate.fieldEditionYears = {
+      ...Object.fromEntries(
+        supportedFields.map((field) => [
+          field,
+          candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears,
+        ]),
+      ),
+      ticketStatus: [source.editionYear],
+      ticketsUrl: [source.editionYear],
+    };
     candidate.observedEditionYears = [
       ...new Set([...candidate.observedEditionYears, source.editionYear]),
     ];

@@ -536,6 +536,8 @@ const translations = {
     shareDiscoveryPrivacy:
       "Search text and favorite artists are left out unless you include them. " +
       "Anyone with the link can see what you include.",
+    shareCustomOriginExcluded:
+      "Custom origins and distance-based filters or sorting are not shared.",
     shareDiscoveryText: "Include search text",
     shareDiscoveryArtists: "Include artists used for sorting",
     copyDiscoveryLink: "Copy filter link",
@@ -752,6 +754,8 @@ const translations = {
     shareDiscoveryPrivacy:
       "Suchtext und Lieblingskünstler werden nur auf Wunsch geteilt. " +
       "Alle mit dem Link können die ausgewählten Angaben sehen.",
+    shareCustomOriginExcluded:
+      "Benutzerdefinierte Startorte sowie Entfernungsfilter und -sortierung werden nicht geteilt.",
     shareDiscoveryText: "Suchtext einschließen",
     shareDiscoveryArtists: "Künstler für die Sortierung einschließen",
     copyDiscoveryLink: "Filterlink kopieren",
@@ -970,6 +974,8 @@ const translations = {
     shareDiscoveryPrivacy:
       "Текст поиска и избранные исполнители не передаются без вашего выбора. " +
       "Выбранные данные увидит любой, у кого есть ссылка.",
+    shareCustomOriginExcluded:
+      "Пользовательская точка отправления, фильтр и сортировка по расстоянию не передаются.",
     shareDiscoveryText: "Добавить текст поиска",
     shareDiscoveryArtists: "Добавить исполнителей для сортировки",
     copyDiscoveryLink: "Скопировать ссылку на фильтры",
