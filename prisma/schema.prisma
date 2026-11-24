@@ -965,6 +965,22 @@ model OperationalState {
   updatedAt      DateTime @updatedAt
 }
 
+
+model GeographicOrigin {
+  id          String  @id
+  countryCode String
+  name        String
+  searchName  String
+  region      String?
+  postalCode  String?
+  postalKey   String?
+  latitude    Float
+  longitude   Float
+
+  @@index([searchName(ops: raw("text_pattern_ops"))], map: "GeographicOrigin_searchName_prefix_idx")
+  @@index([postalKey])
+}
+
 enum CorrectionKind {
   DATE
   LINEUP
