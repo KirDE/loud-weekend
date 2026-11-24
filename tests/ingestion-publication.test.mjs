@@ -12,7 +12,6 @@ test("ingestion response validation accepts durable partial runs", async () => {
   assert.match(validation, /summary\.status == "COMPLETED" or \.summary\.status == "PARTIAL"/);
 });
 
-
 test("ingestion requires DB-backed sources even with explicit local HTML", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "ingestion-no-db-"));
   const output = path.join(dir, "output");
@@ -20,10 +19,19 @@ test("ingestion requires DB-backed sources even with explicit local HTML", async
   try {
     await writeFile(fixture, "<h1>Synthetic festival</h1>");
     for (const fixtureArgs of [[], [`--fixture=${fixture}`]]) {
-      await assert.rejects(execute(process.execPath, ["scripts/ingest-festivals.mjs", `--output=${output}`, ...fixtureArgs], {
-        env: { ...process.env, DATABASE_URL: "" },
-      }), error => /Database-backed sources require DATABASE_URL/.test(error.stderr));
+      await assert.rejects(
+        execute(
+          process.execPath,
+          ["scripts/ingest-festivals.mjs", `--output=${output}`, ...fixtureArgs],
+          {
+            env: { ...process.env, DATABASE_URL: "" },
+          },
+        ),
+        (error) => /Database-backed sources require DATABASE_URL/.test(error.stderr),
+      );
       await assert.rejects(readFile(path.join(output, "summary.json"), "utf8"), { code: "ENOENT" });
     }
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

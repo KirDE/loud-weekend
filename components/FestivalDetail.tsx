@@ -10,12 +10,13 @@ import type { PlaylistStatus } from "@/lib/domain/festival";
 import { formatFreshnessDate } from "@/lib/freshness-date";
 import { ticketPresentation } from "@/lib/tickets";
 import { festivalSetlistHistoryUrl } from "@/lib/setlist-history";
-import { announcedArtists, hasAnnouncedLineup, sortFestivalLineup, type LineupSort } from "@/lib/festival-lineup";
 import {
-  FavoriteButton,
-  useLocalPlanner,
-  type Attendance,
-} from "./LocalPlanner";
+  announcedArtists,
+  hasAnnouncedLineup,
+  sortFestivalLineup,
+  type LineupSort,
+} from "@/lib/festival-lineup";
+import { FavoriteButton, useLocalPlanner, type Attendance } from "./LocalPlanner";
 
 export function FestivalDetail({
   item,
@@ -60,17 +61,19 @@ export function FestivalDetail({
         <FestivalLogo slug={item.slug} name={item.name} large />
         <div>
           <div className="eyebrow">
-            {item.countryCode} ·{" "}
-            {item.city || displayNames.of(item.countryCode) || item.country}
+            {item.countryCode} · {item.city || displayNames.of(item.countryCode) || item.country}
           </div>
           <h1>{item.name}</h1>
           <p className="detailDate">
             {item.startDate
-              ? `${prettyDate(item.startDate)}${item.endDate && item.endDate !== item.startDate ? ` — ${prettyDate(item.endDate)}` : ""}`
+              ? `${prettyDate(item.startDate)}` +
+                `${item.endDate && item.endDate !== item.startDate ? ` — ${prettyDate(item.endDate)}` : ""}`
               : t("datesTba")}
           </p>
           <span className={`status ${item.status}`}>{status}</span>
-          {item.sourceDeprecated && <span className="status deprecated">{t("sourceDeprecated")}</span>}
+          {item.sourceDeprecated && (
+            <span className="status deprecated">{t("sourceDeprecated")}</span>
+          )}
         </div>
       </section>
       <section className="localActions">
@@ -98,7 +101,12 @@ export function FestivalDetail({
           <strong>{t("festivalWebsite")}</strong>
         </a>
         {tickets.href ? (
-          <a href={tickets.href} target="_blank" rel="noreferrer" data-ticket-status={tickets.status}>
+          <a
+            href={tickets.href}
+            target="_blank"
+            rel="noreferrer"
+            data-ticket-status={tickets.status}
+          >
             <small>{t(tickets.status === "available" ? "passes" : tickets.label)}</small>
             <strong>{t(tickets.status === "available" ? tickets.label : "ticketsInfo")}</strong>
           </a>
@@ -128,7 +136,8 @@ export function FestivalDetail({
           <a href={playlist.youtubeMusicUrl} target="_blank" rel="noreferrer">
             <small>
               {t("listen")}
-              {playlist.youtubeMusicArtists !== undefined && playlist.youtubeMusicTracks !== undefined
+              {playlist.youtubeMusicArtists !== undefined &&
+              playlist.youtubeMusicTracks !== undefined
                 ? ` · ${playlist.youtubeMusicArtists} ${t("artists")} · ${playlist.youtubeMusicTracks} ${t("tracks")}`
                 : ""}
             </small>
@@ -181,7 +190,10 @@ export function FestivalDetail({
             <h3>{t(item.headliners.length > 0 ? "alsoAnnounced" : "announcedActs")}</h3>
             <label className="lineupSort">
               {t("lineupSort")}
-              <select value={lineupSort} onChange={(event) => setLineupSort(event.target.value as LineupSort)}>
+              <select
+                value={lineupSort}
+                onChange={(event) => setLineupSort(event.target.value as LineupSort)}
+              >
                 <option value="official">{t("lineupOfficial")}</option>
                 <option value="alphabetical">{t("lineupAlphabetical")}</option>
                 <option value="chronological">{t("lineupChronological")}</option>
@@ -201,13 +213,27 @@ export function FestivalDetail({
       <PlanningTools item={item} festivals={festivals} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
-        <p>{item.freshness?.checkedAt
-          ? <>{t("latestSourceCheck")} · <time dateTime={item.freshness.checkedAt}>{formatFreshnessDate(item.freshness.checkedAt, locale)}</time></>
-          : t("sourceCheckUnavailable")}</p>
+        <p>
+          {item.freshness?.checkedAt ? (
+            <>
+              {t("latestSourceCheck")} ·{" "}
+              <time dateTime={item.freshness.checkedAt}>
+                {formatFreshnessDate(item.freshness.checkedAt, locale)}
+              </time>
+            </>
+          ) : (
+            t("sourceCheckUnavailable")
+          )}
+        </p>
         {item.freshness?.sourceCheckStale && <p>{t("sourceCheckStale")}</p>}
-        {item.freshness?.lastPublishedAt && <p>
-          {t("latestCatalogPublication")} · <time dateTime={item.freshness.lastPublishedAt}>{formatFreshnessDate(item.freshness.lastPublishedAt, locale)}</time>
-        </p>}
+        {item.freshness?.lastPublishedAt && (
+          <p>
+            {t("latestCatalogPublication")} ·{" "}
+            <time dateTime={item.freshness.lastPublishedAt}>
+              {formatFreshnessDate(item.freshness.lastPublishedAt, locale)}
+            </time>
+          </p>
+        )}
         <p>{item.sourceDeprecated ? t("sourceDeprecatedHelp") : t("sourceText")}</p>
         <a href={item.officialUrl} target="_blank" rel="noreferrer">
           {t("primarySource")}

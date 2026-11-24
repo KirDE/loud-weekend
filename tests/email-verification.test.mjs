@@ -16,7 +16,12 @@ test("email delivery has a durable fail-closed verification contract", async () 
   assert.match(verification, /30 \* 60 \* 1000/);
   assert.match(preferences, /channel === "EMAIL" && parsed\.data\.enabled && !user\.emailVerified/);
   assert.match(notifications, /Email address is not verified/);
-  for (const copy of ["Verify your account email", "Bestätige deine Konto-Adresse", "Подтвердите адрес аккаунта"]) assert.match(component, new RegExp(copy));
+  for (const copy of [
+    "Verify your account email",
+    "Bestätige deine Konto-Adresse",
+    "Подтвердите адрес аккаунта",
+  ])
+    assert.match(component, new RegExp(copy));
   assert.match(component, /channel === "EMAIL" && !emailVerified/);
   assert.match(component, /t\.verificationSent/);
 });

@@ -7,18 +7,30 @@ import { checkIndexing, inspectSitemap } from "../scripts/check-indexing.mjs";
 const site = "https://loudweekend.eu";
 const languages = ["x-default", "en", "de", "ru"];
 
-function cluster(path, targets = Object.fromEntries(languages.map(lang => [lang, lang === "x-default" ? path : `/${lang}${path}`]))) {
-  const links = languages.map(lang =>
-    `<xhtml:link rel="alternate" hreflang="${lang}" href="${site}${targets[lang]}"/>`,
-  ).join("");
-  return Object.values(targets).map(target => `<url><loc>${site}${target}</loc>${links}</url>`).join("");
+function cluster(
+  path,
+  targets = Object.fromEntries(
+    languages.map((lang) => [lang, lang === "x-default" ? path : `/${lang}${path}`]),
+  ),
+) {
+  const links = languages
+    .map(
+      (lang) => `<xhtml:link rel="alternate" hreflang="${lang}" href="${site}${targets[lang]}"/>`,
+    )
+    .join("");
+  return Object.values(targets)
+    .map((target) => `<url><loc>${site}${target}</loc>${links}</url>`)
+    .join("");
 }
 
-const sitemap = contents =>
-  `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${contents}</urlset>`;
+const sitemap = (contents) =>
+  `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" ` +
+  `xmlns:xhtml="http://www.w3.org/1999/xhtml">${contents}</urlset>`;
 
 test("accepts reciprocal alternate links to the same page in the declared languages", () => {
-  const urls = sitemap(cluster("/") + cluster("/festivals/synthetic/") + cluster("/artists/synthetic/"));
+  const urls = sitemap(
+    cluster("/") + cluster("/festivals/synthetic/") + cluster("/artists/synthetic/"),
+  );
   assert.equal(inspectSitemap(urls).size, 12);
 });
 
@@ -28,20 +40,37 @@ test("rejects reciprocal alternate links whose language targets are swapped", ()
 });
 
 test("rejects a reciprocal cluster that points to a different festival in another language", () => {
-  const urls = sitemap(cluster("/") + cluster("/festivals/synthetic/", {
-    "x-default": "/festivals/synthetic/",
-    en: "/en/festivals/synthetic/",
-    de: "/de/festivals/different/",
-    ru: "/ru/festivals/synthetic/",
-  }));
+  const urls = sitemap(
+    cluster("/") +
+      cluster("/festivals/synthetic/", {
+        "x-default": "/festivals/synthetic/",
+        en: "/en/festivals/synthetic/",
+        de: "/de/festivals/different/",
+        ru: "/ru/festivals/synthetic/",
+      }),
+  );
   assert.throws(() => inspectSitemap(urls), /incorrect hreflang de/);
 });
 
 test("the HTTP smoke check validates crawl access and indexing directives", async (t) => {
-  const clusterPaths = ["/", "/festivals/synthetic/", "/festivals/unsampled/", "/artists/synthetic/"];
-  const otherPaths = ["/submit/", "/archive/", "/festivals/synthetic/2027/", "/editions/2027/", "/countries/de/", "/months/07/"];
-  const xml = sitemap(clusterPaths.map(path => cluster(path)).join("") +
-    otherPaths.map(path => `<url><loc>${site}${path}</loc></url>`).join(""));
+  const clusterPaths = [
+    "/",
+    "/festivals/synthetic/",
+    "/festivals/unsampled/",
+    "/artists/synthetic/",
+  ];
+  const otherPaths = [
+    "/submit/",
+    "/archive/",
+    "/festivals/synthetic/2027/",
+    "/editions/2027/",
+    "/countries/de/",
+    "/months/07/",
+  ];
+  const xml = sitemap(
+    clusterPaths.map((path) => cluster(path)).join("") +
+      otherPaths.map((path) => `<url><loc>${site}${path}</loc></url>`).join(""),
+  );
   const entries = inspectSitemap(xml);
   const openRobots = `User-agent: *\nAllow: /\nSitemap: ${site}/sitemap.xml\n`;
   let sitemapBody = xml;
@@ -58,20 +87,31 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
     } else if (path === "/sitemap.xml") {
       response.writeHead(200, { "content-type": "application/xml" }).end(sitemapBody);
     } else if (entries.has(path)) {
-      const lang = /^\/(en|de|ru)\//.exec(path)?.[1] ?? "en";
-      const links = [...entries.get(path)].map(([code, target]) =>
-        `<link rel="alternate" hreflang="${code}" href="${site}${target}">`).join("");
       if (path === "/de/" && robotsHeader) response.setHeader("X-Robots-Tag", robotsHeader);
+      const lang = /^\/(en|de|ru)\//.exec(path)?.[1] ?? "en";
+      const links = [...entries.get(path)]
+        .map(
+          ([code, target]) => `<link rel="alternate" hreflang="${code}" href="${site}${target}">`,
+        )
+        .join("");
+      const metadata = (value, wrap) =>
+        wrap && path === "/de/" ? `<template>${value}</template>` : value;
       const canonical = `<link rel="canonical" href="${site}${path}">`;
-      const metadata = (value, wrap) => wrap && path === "/de/" ? `<template>${value}</template>` : value;
       const misplaced = path === "/de/" ? bodyLinks : "";
-      response.writeHead(200, { "content-type": "text/html" }).end(
-        `<!doctype html><html lang="${lang}"><head>${misplaced === "canonical" ? "" : metadata(canonical, wrapCanonical)}${misplaced === "alternate" ? "" : metadata(links, wrapAlternates)}${path === "/de/" ? robotsMeta : ""}</head><body>${misplaced === "canonical" ? canonical : misplaced === "alternate" ? links : ""}</body></html>`);
+      const body = misplaced === "canonical" ? canonical : misplaced === "alternate" ? links : "";
+      const head = [
+        misplaced === "canonical" ? "" : metadata(canonical, wrapCanonical),
+        misplaced === "alternate" ? "" : metadata(links, wrapAlternates),
+        path === "/de/" ? robotsMeta : "",
+      ].join("");
+      response
+        .writeHead(200, { "content-type": "text/html" })
+        .end(`<!doctype html><html lang="${lang}"><head>${head}</head><body>${body}</body></html>`);
     } else {
       response.writeHead(404).end();
     }
   });
-  t.after(() => new Promise(resolve => server.close(resolve)));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const origin = `http://127.0.0.1:${server.address().port}`;
@@ -92,7 +132,10 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
       await assert.rejects(checkIndexing(origin), /expected a single canonical on \/de\//);
       wrapCanonical = false;
       wrapAlternates = true;
-      await assert.rejects(checkIndexing(origin), /missing\/duplicate x-default alternate on \/de\//);
+      await assert.rejects(
+        checkIndexing(origin),
+        /missing\/duplicate x-default alternate on \/de\//,
+      );
     } finally {
       wrapCanonical = false;
       wrapAlternates = false;
@@ -103,7 +146,10 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
       bodyLinks = "canonical";
       await assert.rejects(checkIndexing(origin), /expected a single canonical on \/de\//);
       bodyLinks = "alternate";
-      await assert.rejects(checkIndexing(origin), /missing\/duplicate x-default alternate on \/de\//);
+      await assert.rejects(
+        checkIndexing(origin),
+        /missing\/duplicate x-default alternate on \/de\//,
+      );
     } finally {
       bodyLinks = "";
     }
@@ -131,29 +177,52 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
   await t.test("rejects robots restrictions on sitemap URLs outside the HTTP sample", async () => {
     robotsBody = `User-agent: *\nDisallow: /de/festivals/unsampled/\nSitemap: ${site}/sitemap.xml\n`;
     try {
-      await assert.rejects(checkIndexing(origin), /robots\.txt blocks Googlebot on \/de\/festivals\/unsampled\//);
+      await assert.rejects(
+        checkIndexing(origin),
+        /robots\.txt blocks Googlebot on \/de\/festivals\/unsampled\//,
+      );
     } finally {
       robotsBody = openRobots;
     }
   });
-  await t.test("does not accept a sitemap declaration without the expected default crawler group", async () => {
-    robotsBody = `Sitemap: ${site}/sitemap.xml\n`;
-    await assert.rejects(checkIndexing(origin), /missing default robots.txt group/);
-    robotsBody = openRobots;
-  });
+  await t.test(
+    "does not accept a sitemap declaration without the expected default crawler group",
+    async () => {
+      robotsBody = `Sitemap: ${site}/sitemap.xml\n`;
+      await assert.rejects(checkIndexing(origin), /missing default robots.txt group/);
+      robotsBody = openRobots;
+    },
+  );
   await t.test("allows unrelated crawler blocks and more specific public exceptions", async () => {
-    robotsBody = `User-agent: *\nDisallow: /api/\nDisallow: /de/\nAllow: /de/\n\nUser-agent: ExampleBot\nDisallow: /\nSitemap: ${site}/sitemap.xml\n`;
+    robotsBody = [
+      "User-agent: *",
+      "Disallow: /api/",
+      "Disallow: /de/",
+      "Allow: /de/",
+      "",
+      "User-agent: ExampleBot",
+      "Disallow: /",
+      `Sitemap: ${site}/sitemap.xml`,
+      "",
+    ].join("\n");
     assert.deepEqual(await checkIndexing(origin), { entries: 22, sampled: 18 });
     robotsBody = openRobots;
   });
   await t.test("allows response headers that only suppress image previews", async () => {
-    for (const header of ["max-image-preview: none", "Googlebot: MAX-IMAGE-PREVIEW:none, nofollow"]) {
+    for (const header of [
+      "max-image-preview: none",
+      "Googlebot: MAX-IMAGE-PREVIEW:none, nofollow",
+    ]) {
       robotsHeader = header;
       assert.deepEqual(await checkIndexing(origin), { entries: 22, sampled: 18 });
     }
   });
   await t.test("rejects bare and crawler-scoped HTTP indexing blocks", async () => {
-    for (const header of ["NOINDEX", "googlebot: None", ["max-image-preview:none", "bingbot: noindex, nofollow"]]) {
+    for (const header of [
+      "NOINDEX",
+      "googlebot: None",
+      ["max-image-preview:none", "bingbot: noindex, nofollow"],
+    ]) {
       robotsHeader = header;
       await assert.rejects(checkIndexing(origin), /X-Robots-Tag disallows indexing/);
     }
