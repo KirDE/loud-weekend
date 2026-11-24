@@ -1,12 +1,14 @@
 # Organizer camping guidance
 
 The site reads reviewed camping guidance from the matching festival edition in PostgreSQL. It does not
-use shipped guidance or copy it across years.
+ship guidance with the application or reuse it across years.
 
-Run `npm run camping:import -- --festival=<slug> --edition=YYYY` to fetch and preview the parsed
-organizer guidance. Review the facts, source and edition. Apply by repeating the command with
-`--apply=<fingerprint> --actor=<label>`. Apply re-fetches the page and rejects changed, incomplete or mismatched
-evidence. The collector supports Alcatraz and Wacken camping and Graspop accessibility.
+The leased due-source worker recognizes the exact Alcatraz and Wacken camping URLs and the Graspop accessibility URL
+configured for an edition with the `manual_review` strategy. It stores a review-only candidate and the organizer response
+digest. The protected importer exposes the candidate and its `campingFingerprint`. To publish, claim
+the issue and submit an `apply` decision whose `camping` field equals that fingerprint, using the
+current snapshot and lease token. Do not submit editable guidance facts or caller-supplied evidence.
 
-The apply transaction records the reviewer label, exact edition, approved facts, source links, document digest,
-preview fingerprint, and observation time in the append-only audit. An identical replay does not add an audit entry.
+Publication checks the current edition, location, source and observation age again. The transaction
+updates only the evidenced camping fields and records the provenance and approval. Replaying the same
+approval does not create another publication. This change does not register or enable any source.

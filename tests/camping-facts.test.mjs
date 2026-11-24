@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { campingSourceHost } from "../lib/catalog/camping-facts.ts";
-import { importReviewedCamping } from "../lib/catalog/camping-import.ts";
+import { campingObservation, publishCampingObservation } from "../lib/catalog/camping-import.ts";
 
 test("camping source identity requires credential-free HTTPS on the normal port", () => {
   assert.equal(campingSourceHost("https://www.organizer.example/camping"), "organizer.example");
@@ -18,6 +18,7 @@ test("camping source identity requires credential-free HTTPS on the normal port"
 test("camping rejects foreign sources, invalid dates and duplicate fields before DB access", async () => {
   const arrival = { field: "arrival", earliestDate: "2027-08-05" };
   const record = {
+    editionId: "edition",
     festivalSlug: "fixture",
     editionYear: 2027,
     city: "Fixture City",
@@ -28,15 +29,16 @@ test("camping rejects foreign sources, invalid dates and duplicate fields before
     facts: [arrival],
   };
   await assert.rejects(
-    importReviewedCamping(null, { ...record, sourceUrl: "https://unrelated.example" }),
+    publishCampingObservation(null, { ...record, sourceUrl: "https://unrelated.example" }),
     /primary source/,
   );
-  await assert.rejects(
-    importReviewedCamping(null, { ...record, facts: [{ ...arrival, earliestDate: "2027-02-29" }] }),
+  assert.throws(
+    () =>
+      campingObservation.parse({ ...record, facts: [{ ...arrival, earliestDate: "2027-02-29" }] }),
     /Invalid ISO date/,
   );
   await assert.rejects(
-    importReviewedCamping(null, { ...record, facts: [arrival, arrival] }),
+    publishCampingObservation(null, { ...record, facts: [arrival, arrival] }),
     /appear once/,
   );
 });

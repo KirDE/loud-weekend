@@ -34,7 +34,18 @@ export async function prepareImportEvent(
   if (source.leaseExpiresAt && source.leaseExpiresAt > now) return { defer: source.leaseExpiresAt };
   const state = await db.operationalState.findUnique({ where: { key: issue.key } });
   const p = (state?.payload ?? {}) as any;
-  if (p.status === "needs_user" || p.status === "resolved") return {};
+  if (p.status === "needs_user") return {};
+  if (
+    p.status === "resolved" &&
+    !(
+      issue.kind === "manual_source" &&
+      p.retryAt &&
+      issue.attempt.status === "REVIEW" &&
+      issue.candidate?.reviewState === "PENDING" &&
+      (issue.candidate.arrival || issue.candidate.camping)
+    )
+  )
+    return {};
   if (state?.leaseExpiresAt && state.leaseExpiresAt > now) return { defer: state.leaseExpiresAt };
   if (p.retryAt && new Date(p.retryAt) > now) return { defer: new Date(p.retryAt) };
   if (issue.kind === "failure" && p.attempts > 0 && source.nextRunAt && source.nextRunAt > now)

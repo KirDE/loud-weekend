@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
-import { importReviewedCamping } from "../catalog/camping-import.ts";
+import { campingObservation } from "../catalog/camping-import.ts";
 import {
   campingSources,
   campingSourceUrl,
@@ -41,41 +40,76 @@ async function readCampingPage(url: string, fetchImpl: typeof fetch) {
   return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
 }
 
-/** Re-read the organizer before applying the exact observation previewed. */
-export async function collectReviewedCamping(
-  db: PrismaClient,
-  festivalSlug: string,
-  editionYear: number,
-  options: { approval?: string; actorLabel?: string; fetchImpl?: typeof fetch } = {},
-) {
+import { INGESTION_SCHEMA_VERSION, type IngestionResult } from "./types.ts";
+import type { ConfiguredSource } from "../sources/repository.ts";
+
+export const CAMPING_ADAPTER = "camping-guidance-v1";
+
+export function registeredCampingSource(source: {
+  slug: string;
+  year: number;
+  url: string;
+  parserKey: string | null;
+}) {
+  return (
+    source.parserKey === "manual_review" &&
+    Object.hasOwn(campingSources, source.slug) &&
+    campingSourceUrl(source.slug as CampingSlug, source.year) === source.url
+  );
+}
+
+export async function collectCampingCandidate(
+  source: ConfiguredSource,
+  fetchImpl: typeof fetch = fetch,
+): Promise<IngestionResult> {
+  const { festivalSlug, editionYear, editionId, url, parserKey } = source;
   if (
-    !Object.hasOwn(campingSources, festivalSlug) ||
-    !Number.isInteger(editionYear) ||
-    editionYear < 2000 ||
-    editionYear > 2099
+    !editionId ||
+    !registeredCampingSource({ slug: festivalSlug, year: editionYear, url, parserKey })
   )
-    throw new Error("A supported festival and edition year are required");
+    throw new Error("Camping source is not registered for this edition");
+
   const slug = festivalSlug as CampingSlug;
-  const sourceUrl = campingSourceUrl(slug, editionYear);
-  const html = await readCampingPage(sourceUrl, options.fetchImpl ?? fetch);
+  const html = await readCampingPage(url, fetchImpl);
+  const fetchedAt = new Date().toISOString();
   const facts = parseCampingGuidance(html, slug, editionYear);
   if (!facts) throw new Error("No complete organizer camping evidence for this edition");
-  const observation = { festivalSlug, editionYear, ...campingSources[slug], sourceUrl, facts };
-  const fingerprint = createHash("sha256").update(JSON.stringify(observation)).digest("hex");
-  if (options.approval !== undefined && options.approval !== fingerprint)
-    throw new Error("Organizer camping evidence changed since preview");
-  const checkOnly = options.approval === undefined;
-  const observedAt = new Date().toISOString();
-  const checkedOn = observedAt.slice(0, 10);
-  const record = { ...observation, checkedOn };
-  const receipt = checkOnly
-    ? undefined
-    : {
-        actorLabel: options.actorLabel,
-        fingerprint,
-        contentHash: createHash("sha256").update(html).digest("hex"),
-        observedAt,
-      };
-  await importReviewedCamping(db, record, receipt);
-  return { record, fingerprint, checkOnly };
+  const camping = campingObservation.parse({
+    ...campingSources[slug],
+    editionId,
+    festivalSlug,
+    editionYear,
+    sourceUrl: url,
+    checkedOn: fetchedAt.slice(0, 10),
+    facts,
+  });
+  const schemaVersion = INGESTION_SCHEMA_VERSION;
+  return {
+    schemaVersion,
+    festivalSlug,
+    sourceUrl: url,
+    fetchedAt,
+    candidate: {
+      schemaVersion,
+      festivalSlug,
+      sourceUrl: url,
+      fetchedAt,
+      camping,
+      warnings: [],
+      observedEditionYears: [editionYear],
+      evidence: [
+        {
+          field: "camping",
+          sourceUrl: url,
+          observedAt: fetchedAt,
+          contentHash: createHash("sha256").update(html).digest("hex"),
+          excerpt: "Organizer camping guidance",
+          adapter: CAMPING_ADAPTER,
+        },
+      ],
+    },
+    changes: [],
+    publishable: false,
+    reviewReasons: ["Festival camping requires protected importer review"],
+  };
 }

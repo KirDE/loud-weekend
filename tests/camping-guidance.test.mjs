@@ -41,3 +41,15 @@ test("Graspop adopts updated application dates and withholds missing or foreign 
   assert.equal(parse(page.replace("THE INTER CAMPSITE", "A DIFFERENT CAMPSITE")), undefined);
   assert.equal(parse(page.replaceAll("<details", "<details hidden")), undefined);
 });
+
+test("alcatraz: both camping endpoints must be valid and ordered", () => {
+  const page = fixture("alcatraz");
+  for (const ending of ["Monday 2/8", "Sunday 9/8", "Monday 32/8", "Monday 9/13"]) {
+    assert.equal(
+      parseCampingGuidance(page.replace("Monday 9/8", ending), "alcatraz", 2027),
+      undefined,
+    );
+  }
+  const reversedHours = page.replace("Monday 9/8 (noon)", "Thursday 5/8 (8h)");
+  assert.equal(parseCampingGuidance(reversedHours, "alcatraz", 2027), undefined);
+});
