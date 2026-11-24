@@ -1,3 +1,4 @@
+import { rosterFingerprint } from "./lineup-proof.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
 import type { PrismaClient } from "@prisma/client";
@@ -37,13 +38,13 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           festival: true,
           sources: { where: { enabled: true }, select: { deprecatedAt: true } },
           lineup: {
-            where: { status: "ANNOUNCED" },
             include: { artist: true },
             orderBy: [{ billing: "asc" }, { position: "asc" }],
           },
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
           timetable: { orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }] },
           playlists: { orderBy: { provider: "asc" } },
+          playlistLinks: { select: { provider: true, url: true } },
         },
         orderBy: [{ year: "asc" }, { festival: { catalogOrder: "asc" } }],
       }),
@@ -61,10 +62,11 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       throw new Error("database catalogue is empty or incomplete");
 
     const editions = editionRows.map((row) => {
-      const headliners = row.lineup
+      const announced = row.lineup.filter(({ status }) => status === "ANNOUNCED");
+      const headliners = announced
         .filter(({ billing }) => billing === "HEADLINER")
         .map(({ artist }) => artist.name);
-      const lineup = row.lineup
+      const lineup = announced
         .filter(({ billing }) => billing === "LINEUP")
         .map(({ artist }) => artist.name);
       const checks = freshnessEvidence?.checksByEdition.get(row.id) ?? [];
@@ -76,7 +78,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           .filter(({ checkedAt }) => checkedAt <= now)
           .map(({ checkedAt }) => checkedAt.toISOString()),
       );
-      const roster = row.lineup.map(({ artist }) => artist);
+      const roster = announced.map(({ artist }) => artist);
       const aliases = row.timetable.length ? artistAliasIndex(roster) : undefined;
       const rosterById = new Map(roster.map((artist) => [artist.id, artist.name]));
       return {
@@ -98,8 +100,22 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         startDate: dateOnly(row.startDate),
         endDate: dateOnly(row.endDate),
         dateLabel: row.dateLabel ?? undefined,
+        reviewedPlaylistLinks:
+          row.recordState === "CURRENT" && row.playlistLinks.length
+            ? {
+                spotify: row.playlistLinks.find(({ provider }) => provider === "spotify")?.url,
+                youtube_music: row.playlistLinks.find(
+                  ({ provider }) => provider === "youtube_music",
+                )?.url,
+              }
+            : undefined,
         headliners,
         lineup,
+        ...(row.finalLineupFingerprint &&
+        announced.length &&
+        row.finalLineupFingerprint === rosterFingerprint(row.id, row.lineup)
+          ? { finalLineup: true as const }
+          : {}),
         officialUrl: row.festival.officialUrl,
         ticketsUrl: row.ticketsUrl ?? undefined,
         status: lower(row.status),
@@ -139,12 +155,12 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         completeness: lower(row.completeness),
         snapshotAt: instant(row.snapshotAt),
         provenance: row.provenance.map((source) => ({
-          field: source.field as "edition" | "dates" | "lineup",
+          field: source.field as FestivalEdition["provenance"][number]["field"],
           url: source.url,
           checkedAt: source.checkedAt.toISOString(),
           note: source.note,
         })),
-      } satisfies FestivalEdition;
+      } satisfies FestivalEdition & Pick<Festival, "reviewedPlaylistLinks">;
     });
     const currentEditions = editions.filter(({ recordState }) => recordState === "current");
     const currentArtistNames = new Set(
@@ -225,7 +241,8 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         youtubeMusicUrl: youtube?.url,
         youtubeMusicArtists: youtube?.artistCount ?? undefined,
         youtubeMusicTracks: youtube?.trackCount ?? undefined,
-        artists: spotify.artistCount ?? row.lineup.length,
+        artists:
+          spotify.artistCount ?? row.lineup.filter(({ status }) => status === "ANNOUNCED").length,
         tracks: spotify.trackCount ?? 0,
         updatedAt: instant(spotify.syncedAt) ?? row.sourceUpdatedAt.toISOString(),
       };

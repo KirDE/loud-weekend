@@ -7,7 +7,7 @@ import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 import { extractMastersOfRockCandidate } from "./masters-of-rock.ts";
 import { extractSummerBreezeCandidate } from "./summer-breeze.ts";
 import { extractEurockeennesCandidate } from "./eurockeennes.ts";
-import { applyBarcelonaBanner } from "./barcelona-banner.ts";
+import { applyBarcelonaBanner, isBarcelonaSource } from "./barcelona-banner.ts";
 import { extractOfficialMarkupCandidate } from "./official-markup.ts";
 import { extractResurrectionCandidate } from "./resurrection.ts";
 import { extractSwedenRockCandidate } from "./sweden-rock.ts";
@@ -194,6 +194,10 @@ export function extractHtmlFallbackCandidate(
     warnings: [],
     observedEditionYears: [],
   };
+  if (source.festivalSlug === "barcelona-rock-fest" && !isBarcelonaSource(source)) {
+    candidate.warnings.push("Barcelona source identity is not the reviewed homepage");
+    return candidate;
+  }
   const start =
     metaContent(html, ["event:start_time", "event:start_date", "festival:start_date"]) ??
     timeValue(html, "start");
