@@ -1,6 +1,8 @@
+import { hasArchiveRecords } from "@/lib/catalog/browse";
 import { availableFestivalMonths } from "@/lib/festival-dates";
 import type { MetadataRoute } from "next";
 import { supportedLanguages } from "@/lib/catalog/public";
+import { publicSeasonEditions, seasonYears } from "@/lib/catalog/seasons";
 import { getCatalog } from "@/lib/catalog/repository";
 import { SITE_ORIGIN } from "@/lib/seo";
 
@@ -8,7 +10,8 @@ export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const { festivals, artists, editions, freshness } = await getCatalog({ includeFreshness: true });
-  const editionYears = [...new Set(editions.map(({ editionYear }) => editionYear))];
+  const publicEditions = publicSeasonEditions(editions);
+  const editionYears = seasonYears(publicEditions);
   const countries = [...new Set(festivals.map((item) => item.countryCode.toLowerCase()))];
   const months = availableFestivalMonths(festivals).map((month) => String(month).padStart(2, "0"));
   return [
@@ -45,19 +48,38 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly" as const,
       priority: 0.8,
     })),
-    ...editionYears.map((year) => ({
-      url: `${SITE_ORIGIN}/editions/${year}/`,
-      changeFrequency: "monthly" as const,
-      priority: 0.6,
-    })),
+    ...editionYears.flatMap((year) =>
+      ["", "/en", "/de", "/ru"].map((prefix) => ({
+        url: `${SITE_ORIGIN}${prefix}/editions/${year}/`,
+        changeFrequency: "monthly" as const,
+        priority: 0.6,
+      })),
+    ),
     ...editions.map(({ slug, editionYear, snapshotAt }) => ({
       url: `${SITE_ORIGIN}/festivals/${slug}/${editionYear}/`,
       lastModified: snapshotAt,
       changeFrequency: editionYear < 2027 ? ("yearly" as const) : ("weekly" as const),
       priority: 0.6,
     })),
-    { url: `${SITE_ORIGIN}/archive/`, changeFrequency: "monthly", priority: 0.5 },
-    { url: `${SITE_ORIGIN}/submit/`, changeFrequency: "monthly", priority: 0.4 },
+    {
+      url: `${SITE_ORIGIN}/browse/`,
+      changeFrequency: "weekly",
+      priority: 0.6,
+    },
+    ...(hasArchiveRecords(publicEditions)
+      ? [
+          {
+            url: `${SITE_ORIGIN}/archive/`,
+            changeFrequency: "monthly" as const,
+            priority: 0.5,
+          },
+        ]
+      : []),
+    {
+      url: `${SITE_ORIGIN}/submit/`,
+      changeFrequency: "monthly",
+      priority: 0.4,
+    },
     ...supportedLanguages.flatMap((lang) =>
       ["about", "faq"].map((page) => ({ url: `${SITE_ORIGIN}/${lang}/${page}/` })),
     ),
