@@ -58,5 +58,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
     { url: `${SITE_ORIGIN}/archive/`, changeFrequency: "monthly", priority: 0.5 },
     { url: `${SITE_ORIGIN}/submit/`, changeFrequency: "monthly", priority: 0.4 },
+    ...supportedLanguages.flatMap((lang) =>
+      ["about", "faq"].map((page) => ({ url: `${SITE_ORIGIN}/${lang}/${page}/` })),
+    ),
   ];
 }
