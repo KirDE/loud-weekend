@@ -99,6 +99,75 @@ function publicCatalogHeaders(response) {
   );
 }
 
+function hasFields(value, fields) {
+  return (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === fields.length &&
+    fields.every((field) => Object.hasOwn(value, field))
+  );
+}
+
+const catalogDate = (value) =>
+  typeof value === "string" &&
+  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  Number.isFinite(Date.parse(value)) &&
+  new Date(value).toISOString().slice(0, 10) === value;
+const catalogText = (value) => typeof value === "string" && value.trim().length > 0;
+
+function catalogPerformance(row) {
+  return (
+    hasFields(row, ["date", "stage", "start", "artist", "timeZone", "status"]) &&
+    catalogDate(row.date) &&
+    catalogText(row.stage) &&
+    catalogText(row.artist) &&
+    catalogText(row.timeZone) &&
+    typeof row.start === "string" &&
+    /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(row.start) &&
+    (row.status === "scheduled" || row.status === "cancelled")
+  );
+}
+
+function catalogFestival(row) {
+  return (
+    hasFields(row, ["slug", "name", "startDate", "endDate", "timetable"]) &&
+    typeof row.slug === "string" &&
+    /^[a-z0-9-]+$/.test(row.slug) &&
+    catalogText(row.name) &&
+    (row.startDate === null || catalogDate(row.startDate)) &&
+    (row.endDate === null || catalogDate(row.endDate)) &&
+    Array.isArray(row.timetable) &&
+    row.timetable.every(catalogPerformance)
+  );
+}
+
+function validCatalog(body) {
+  // Only persist the known public projection, never extra response fields.
+  if (
+    !hasFields(body, [
+      "schemaVersion",
+      "dataVersion",
+      "editionYear",
+      "generatedAt",
+      "timetableStatus",
+      "festivals",
+    ]) ||
+    body.schemaVersion !== 1 ||
+    !Number.isInteger(body.editionYear) ||
+    body.editionYear < 1000 ||
+    body.editionYear > 9999 ||
+    body.dataVersion !== `festivals-${body.editionYear}-v1` ||
+    body.generatedAt !== null ||
+    !Array.isArray(body.festivals) ||
+    !body.festivals.length ||
+    !body.festivals.every(catalogFestival)
+  )
+    return false;
+  const hasTimetable = body.festivals.some((festival) => festival.timetable.length);
+  return body.timetableStatus === (hasTimetable ? "published" : "not-published");
+}
+
 async function usableCatalog(response) {
   if (
     !response ||
@@ -108,13 +177,7 @@ async function usableCatalog(response) {
   )
     return false;
   try {
-    const body = await response.clone().json();
-    return (
-      body.schemaVersion === 1 &&
-      body.editionYear === 2027 &&
-      Array.isArray(body.festivals) &&
-      body.festivals.length > 0
-    );
+    return validCatalog(await response.clone().json());
   } catch {
     return false;
   }
@@ -169,9 +232,10 @@ async function catalogResponse() {
     if (cached) return cached;
     throw error;
   }
-  if (response.status === 304)
+  if (await usableCatalog(response)) return save(response);
+  if (response.ok || response.status === 304) {
     return new Response(null, { status: 502, headers: { "Cache-Control": "no-store" } });
-  if (await usableCatalog(response)) await save(response);
+  }
   return response;
 }
 
