@@ -3,7 +3,9 @@ import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ArtistDetail } from "../components/ArtistDetail";
 import { artist } from "./support/catalog";
+import { FestivalExplorer } from "../components/FestivalExplorer";
 import { FestivalDetail } from "../components/FestivalDetail";
+import { HomeContent } from "../components/HomeContent";
 import { LanguageProvider, translate, type Language } from "../components/LanguageProvider";
 import { LocalPlannerProvider } from "../components/LocalPlanner";
 import { festival } from "./support/catalog";
@@ -216,53 +218,52 @@ for (const language of ["de", "ru"] as const) {
   });
 }
 
-const updateDates = {
-  en: "Catalogue data updated on October 10, 2026.",
-  de: "Katalogdaten aktualisiert am 10. Oktober 2026.",
-  ru: "Данные каталога обновлены: 10 октября 2026 г.",
+const checkedAt = "2026-10-10T23:45:00.000Z";
+const lastPublishedAt = "2026-10-12T00:05:00.000Z";
+const dates = {
+  en: ["October 10, 2026", "October 12, 2026"],
+  de: ["10. Oktober 2026", "12. Oktober 2026"],
+  ru: ["10 октября 2026 г.", "12 октября 2026 г."],
 };
 
 for (const language of ["en", "de", "ru"] as const) {
-  test("transparency renders this festival's catalogue update in " + language, () => {
-    for (const sourceDeprecated of [false, true]) {
-      const item = { ...festival, updatedAt: "2026-10-10T23:24:25.585Z", sourceDeprecated };
-      const before = structuredClone(item);
-      const html = renderToStaticMarkup(
+  test(`home and festival distinguish check and publication dates in ${language} (UTC)`, () => {
+    const freshness = { checkedAt, lastPublishedAt, sourceCheckStale: true };
+    const item = { ...festival, updatedAt: "2026-09-03T00:00:00Z", freshness };
+    const wrap = (content: React.ReactNode) =>
+      renderToStaticMarkup(
         <LanguageProvider initialLanguage={language}>
-          <LocalPlannerProvider>
-            <FestivalDetail
-              item={item}
-              festivals={[item]}
-              artistSlugs={{ "Sample Artist": "sample-artist" }}
-            />
-          </LocalPlannerProvider>
+          <LocalPlannerProvider>{content}</LocalPlannerProvider>
         </LanguageProvider>,
       );
-      assert.ok(html.includes(updateDates[language]));
-      assert.doesNotMatch(html, /28 August 2026|28\. August 2026|28 августа 2026|Seed data/);
-      if (sourceDeprecated) assert.ok(html.includes(translate(language, "sourceDeprecatedHelp")));
-      else assert.ok(html.includes(translate(language, "sourceText")));
-      assert.deepEqual(item, before);
+    const home = wrap(<HomeContent festivals={[item]} freshness={freshness} />);
+    const detail = wrap(<FestivalDetail item={item} festivals={[item]} artistSlugs={{}} />);
+    for (const html of [home, detail]) {
+      assert.ok(html.includes(translate(language, "latestSourceCheck")));
+      assert.ok(html.includes(translate(language, "latestCatalogPublication")));
+      assert.ok(html.includes(`<time dateTime="${checkedAt}">${dates[language][0]}</time>`));
+      assert.ok(html.includes(`<time dateTime="${lastPublishedAt}">${dates[language][1]}</time>`));
+      assert.doesNotMatch(html, /2026-09-03|Last dataset review/);
     }
+    assert.ok(detail.includes(translate(language, "sourceCheckStale")));
+
+    const withoutEvidence = wrap(
+      <FestivalDetail item={festival} festivals={[festival]} artistSlugs={{}} />,
+    );
+    assert.ok(withoutEvidence.includes(translate(language, "sourceCheckUnavailable")));
+    assert.doesNotMatch(withoutEvidence, /<time /);
+    assert.ok(
+      wrap(<HomeContent festivals={[festival]} freshness={{}} />).includes(
+        translate(language, "sourceCheckUnavailable"),
+      ),
+    );
+    assert.ok(
+      !wrap(<FestivalExplorer festivals={[item]} />).includes(
+        translate(language, "latestSourceCheck"),
+      ),
+    );
   });
 }
-
-test("transparency follows an older catalogue record without claiming a fresh review", () => {
-  const item = { ...festival, updatedAt: "2026-09-03T00:00:00Z" };
-  const html = renderToStaticMarkup(
-    <LanguageProvider initialLanguage="en">
-      <LocalPlannerProvider>
-        <FestivalDetail
-          item={item}
-          festivals={[item]}
-          artistSlugs={{ "Sample Artist": "sample-artist" }}
-        />
-      </LocalPlannerProvider>
-    </LanguageProvider>,
-  );
-  assert.ok(html.includes("Catalogue data updated on September 3, 2026."));
-  assert.doesNotMatch(html, /October 10|Seed data|data reviewed/);
-});
 
 for (const language of ["en", "de", "ru"] as const) {
   test("playlist links show their own provider counts in " + language, () => {
@@ -327,7 +328,11 @@ for (const language of ["en", "de", "ru"] as const) {
     const html = renderToStaticMarkup(
       <LanguageProvider initialLanguage={language}>
         <LocalPlannerProvider>
-          <ArtistDetail artist={artist} appearances={appearances} />
+          <ArtistDetail
+            artist={artist}
+            appearances={appearances}
+            legacyFavoriteNames={[artist.name]}
+          />
         </LocalPlannerProvider>
       </LanguageProvider>,
     );
@@ -336,5 +341,37 @@ for (const language of ["en", "de", "ru"] as const) {
       ["early-a", "early-b", "late", "unknown"],
     );
     assert.deepEqual(appearances, before);
+  });
+}
+
+for (const language of ["en", "de", "ru"] as const) {
+  test(`festival cards and details separate dates from announced acts in ${language}`, () => {
+    const announced = {
+      ...festival,
+      status: "tba" as const,
+      startDate: undefined,
+      endDate: undefined,
+      lineup: Array.from({ length: 47 }, (_, index) => `Other Act ${index + 1}`),
+    };
+    const noActs = { ...festival, status: "partial" as const, headliners: [], lineup: [] };
+    const verified = { ...announced, finalLineup: true as const };
+    for (const item of [announced, verified, noActs]) {
+      const hasActs = item !== noActs;
+      const html = renderToStaticMarkup(
+        <LanguageProvider initialLanguage={language}>
+          <LocalPlannerProvider>
+            <FestivalExplorer festivals={[item]} />
+            <FestivalDetail item={item} festivals={[item]} artistSlugs={{}} />
+          </LocalPlannerProvider>
+        </LanguageProvider>,
+      );
+      const badge = translate(
+        language,
+        item === verified ? "finalLineup" : hasActs ? "actsAnnounced" : "noCurrentActs",
+      );
+      assert.equal(html.split(`>${badge}</span>`).length - 1, 2);
+      assert.equal(html.includes(translate(language, "datesTba")), hasActs);
+      if (hasActs) assert.ok(html.includes(`48 ${translate(language, "announcedActs")}`));
+    }
   });
 }

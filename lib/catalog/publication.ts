@@ -1,3 +1,12 @@
+import { isDeepStrictEqual } from "node:util";
+import { createHash } from "node:crypto";
+import {
+  isTolminatorStockRoute,
+  matchesTolminatorStockEdition,
+} from "../ingestion/adapters/tolminator-stock.ts";
+import { rosterFingerprint } from "./lineup-proof.ts";
+import { editionDateProblem } from "../domain/edition-dates.ts";
+import { publishArrivalObservation, type ArrivalObservation } from "./arrival-import.ts";
 import {
   ticketSupplementUrl,
   ticketSupplementPurchaseUrl,
@@ -7,6 +16,7 @@ import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { isDownloadAnnouncement } from "../ingestion/adapters/download.ts";
 import {
+  AdminRunStatus,
   ArtistIdentityState,
   CatalogPublicationSource,
   FestivalStatus,
@@ -38,6 +48,7 @@ const ticketStatuses = {
   not_on_sale: TicketStatus.NOT_ON_SALE,
   sold_out: TicketStatus.SOLD_OUT,
   sales_ended: TicketStatus.SALES_ENDED,
+  free: TicketStatus.FREE,
   unavailable: TicketStatus.UNAVAILABLE,
   unknown: TicketStatus.UNKNOWN,
 } as const;
@@ -47,6 +58,9 @@ const dateOnly = (value: unknown) =>
 const isoDate = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 const same = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+const trimFact = (value: unknown) => (typeof value === "string" ? value.trim() : value);
+const normalizeTicketLink = (value: unknown) =>
+  typeof value === "string" ? value.trim() || null : value;
 
 function artistSlug(name: string) {
   return encodeURIComponent(
@@ -58,14 +72,16 @@ function artistSlug(name: string) {
 }
 
 function stringList(value: unknown, field: string) {
-  const values = Array.isArray(value)
+  // A structured roster is a full replacement, so dropping an invalid slot
+  // could silently remove existing artists. Only text accepts blank separators.
+  if (Array.isArray(value) && value.some((item) => typeof item !== "string" || !item.trim()))
+    throw new Error(`Invalid ${field} list`);
+  const values: string[] = Array.isArray(value)
     ? value
     : typeof value === "string"
       ? value.split(/\r?\n|,/)
       : [];
-  const cleaned = values
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter(Boolean);
+  const cleaned = values.map((item) => item.trim()).filter(Boolean);
   if (!cleaned.length && value !== "" && (!Array.isArray(value) || value.length))
     throw new Error(`Invalid ${field} list`);
   const keys = cleaned.map((item) => item.toLocaleLowerCase());
@@ -121,6 +137,65 @@ function artistResolver(db: Database, observedAt: Date) {
 
 type EnsureArtist = ReturnType<typeof artistResolver>;
 
+type RosterEntry = {
+  artistId: string;
+  billing: LineupBilling;
+  position: number;
+};
+
+function rosterPositions(
+  billing: LineupBilling,
+  artistIds: string[],
+  cancelled: RosterEntry[],
+): RosterEntry[] {
+  const occupied = new Set(
+    cancelled.filter((entry) => entry.billing === billing).map((entry) => entry.position),
+  );
+  let position = 0;
+  return artistIds.map((artistId) => {
+    while (occupied.has(position)) position++;
+    return { artistId, billing, position: position++ };
+  });
+}
+
+async function updateAnnouncedRoster(
+  db: Database,
+  editionId: string,
+  announced: (RosterEntry & { id: string })[],
+  cancelled: RosterEntry[],
+  next: RosterEntry[],
+) {
+  const byArtist = new Map(announced.map((entry) => [entry.artistId, entry]));
+  const nextIds = new Set(next.map((entry) => entry.artistId));
+  const removed = announced.filter((entry) => !nextIds.has(entry.artistId));
+  if (removed.length)
+    await db.lineupEntry.deleteMany({ where: { id: { in: removed.map((entry) => entry.id) } } });
+
+  const additions: RosterEntry[] = [];
+  const moves: { id: string; billing: LineupBilling; position: number }[] = [];
+  for (const { artistId, billing, position } of next) {
+    const existing = byArtist.get(artistId);
+    if (!existing) additions.push({ artistId, billing, position });
+    else if (existing.billing !== billing || existing.position !== position)
+      moves.push({ id: existing.id, billing, position });
+  }
+
+  // Move surviving rows temporarily out of occupied positions before swaps
+  // or billing changes. The caller's transaction hides intermediate positions.
+  const occupied = new Set([...announced, ...cancelled, ...next].map((entry) => entry.position));
+  let temporary = -1;
+  for (const { id } of moves) {
+    while (occupied.has(temporary)) temporary--;
+    await db.lineupEntry.update({ where: { id }, data: { position: temporary-- } });
+  }
+  for (const { id, billing, position } of moves) {
+    await db.lineupEntry.update({ where: { id }, data: { billing, position } });
+  }
+
+  if (additions.length)
+    await db.lineupEntry.createMany({ data: additions.map((entry) => ({ ...entry, editionId })) });
+}
+
 async function replaceLineup(
   db: Database,
   editionId: string,
@@ -135,9 +210,11 @@ async function replaceLineup(
     include: { artist: true },
     orderBy: { position: "asc" },
   });
+  const announced = existing.filter(({ status }) => status === "ANNOUNCED");
+  const cancelled = existing.filter(({ status }) => status === "CANCELLED");
   if (
     same(
-      existing.map(({ artist }) => artist.name),
+      announced.map(({ artist }) => artist.name),
       names,
     )
   )
@@ -156,23 +233,26 @@ async function replaceLineup(
     artists.some((a) => other.some((entry) => entry.artistId === a.id))
   )
     throw new Error("Artist cannot have ambiguous lineup billing or duplicate alias identities");
+  if (artists.some((artist) => cancelled.some((entry) => entry.artistId === artist.id)))
+    throw new Error("Cancellation requires separate explicit review");
   if (
     same(
-      existing.map((entry) => entry.artistId),
+      announced.map((entry) => entry.artistId),
       artists.map((a) => a.id),
     )
   )
     return false;
-  await db.lineupEntry.deleteMany({ where: { editionId, billing } });
-  if (artists.length)
-    await db.lineupEntry.createMany({
-      data: artists.map((artist, position) => ({
-        editionId,
-        artistId: artist.id,
-        billing,
-        position,
-      })),
-    });
+  await updateAnnouncedRoster(
+    db,
+    editionId,
+    announced,
+    cancelled,
+    rosterPositions(
+      billing,
+      artists.map((a) => a.id),
+      cancelled,
+    ),
+  );
   return true;
 }
 
@@ -188,6 +268,8 @@ async function addLineupArtist(
     where: { editionId_artistId: { editionId, artistId: artist.id } },
   });
   if (existing) {
+    if (existing.status === "CANCELLED")
+      throw new Error("Cancellation requires separate explicit review");
     if (existing.billing !== billing) throw new Error(`Ambiguous billing change for ${name}`);
     return false;
   }
@@ -224,6 +306,22 @@ async function applyFestivalChanges(
       `Candidate edition ${input.expectedYear} does not match catalogue edition ${edition.year}`,
     );
 
+  const dateChanges = input.changes.filter(
+    ({ field }) => field === "startDate" || field === "endDate",
+  );
+  const proposed = new Map(
+    dateChanges.map(({ field, after }) => [field, after === "" ? null : after]),
+  );
+  if (dateChanges.length) {
+    if (proposed.size !== dateChanges.length) throw new Error("Duplicate festival date changes");
+    const start = proposed.has("startDate")
+      ? proposed.get("startDate")
+      : isoDate(edition.startDate);
+    const end = proposed.has("endDate") ? proposed.get("endDate") : isoDate(edition.endDate);
+    const problem = editionDateProblem(edition.year, start, end);
+    if (problem) throw new Error(problem);
+  }
+
   const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
   for (const change of input.changes) {
@@ -234,16 +332,14 @@ async function applyFestivalChanges(
       case "name":
       case "country":
       case "officialUrl": {
-        current = festival[change.field];
-        if (input.strictBefore && !same(current, change.before) && !same(current, change.after))
+        current = trimFact(festival[change.field]);
+        const before = trimFact(change.before);
+        const next = trimFact(change.after);
+        if (typeof next !== "string" || !next) throw new Error(`Invalid ${change.field}`);
+        if (input.strictBefore && !same(current, before) && !same(current, next))
           throw new Error(`Stale ${change.field} value for ${input.festivalSlug}`);
-        if (!same(current, change.after)) {
-          if (typeof change.after !== "string" || !change.after.trim())
-            throw new Error(`Invalid ${change.field}`);
-          await db.festival.update({
-            where: { id: festival.id },
-            data: { [change.field]: change.after.trim() },
-          });
+        if (!same(current, next)) {
+          await db.festival.update({ where: { id: festival.id }, data: { [change.field]: next } });
           changed = true;
         }
         break;
@@ -251,34 +347,33 @@ async function applyFestivalChanges(
       case "startDate":
       case "endDate": {
         current = isoDate(edition[change.field]);
-        if (input.strictBefore && !same(current, change.before) && !same(current, change.after))
+        const next = proposed.get(change.field);
+        const before = change.before === "" ? null : change.before;
+        if (input.strictBefore && !same(current, before) && !same(current, next))
           throw new Error(`Stale ${change.field} value for ${input.festivalSlug}`);
-        if (!same(current, change.after)) {
+        if (!same(current, next)) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { [change.field]: dateOnly(change.after), sourceUpdatedAt: input.observedAt },
+            data: { [change.field]: dateOnly(next) },
           });
           changed = true;
         }
         break;
       }
       case "ticketsUrl": {
-        current = edition.ticketsUrl;
-        if (input.strictBefore && !same(current, change.before) && !same(current, change.after))
+        current = normalizeTicketLink(edition.ticketsUrl);
+        const next = normalizeTicketLink(change.after);
+        if (next !== null && typeof next !== "string") throw new Error("Invalid ticketsUrl");
+        if (
+          input.strictBefore &&
+          !same(current, normalizeTicketLink(change.before)) &&
+          !same(current, next)
+        )
           throw new Error(`Stale ticketsUrl value for ${input.festivalSlug}`);
-        if (!same(current, change.after)) {
-          if (
-            change.after !== undefined &&
-            change.after !== null &&
-            typeof change.after !== "string"
-          )
-            throw new Error("Invalid ticketsUrl");
+        if (!same(current, next)) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: {
-              ticketsUrl: change.after as string | null | undefined,
-              sourceUpdatedAt: input.observedAt,
-            },
+            data: { ticketsUrl: next },
           });
           changed = true;
         }
@@ -297,7 +392,7 @@ async function applyFestivalChanges(
         if (current !== change.after) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { completeness: "PARTIAL", sourceUpdatedAt: input.observedAt },
+            data: { completeness: "PARTIAL" },
           });
           changed = true;
         }
@@ -313,10 +408,7 @@ async function applyFestivalChanges(
         if (input.strictBefore && !same(current, change.before) && !same(current, change.after))
           throw new Error(`Stale status value for ${input.festivalSlug}`);
         if (edition.status !== next) {
-          await db.festivalEdition.update({
-            where: { id: edition.id },
-            data: { status: next, sourceUpdatedAt: input.observedAt },
-          });
+          await db.festivalEdition.update({ where: { id: edition.id }, data: { status: next } });
           changed = true;
         }
         break;
@@ -331,7 +423,7 @@ async function applyFestivalChanges(
         if (edition.ticketStatus !== next) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { ticketStatus: next, sourceUpdatedAt: input.observedAt },
+            data: { ticketStatus: next },
           });
           changed = true;
         }
@@ -341,23 +433,35 @@ async function applyFestivalChanges(
       case "headliners": {
         const billing =
           change.field === "headliners" ? LineupBilling.HEADLINER : LineupBilling.LINEUP;
-        changed =
-          Array.isArray(change.after) ||
-          (typeof change.after === "string" && /\r?\n|,/.test(change.after))
-            ? await replaceLineup(
-                db,
-                edition.id,
-                billing,
-                stringList(change.after, change.field),
-                ensureArtist,
-              )
-            : await addLineupArtist(db, edition.id, billing, String(change.after), ensureArtist);
+        // Admin replacements arrive as arrays; an ingestion diff adds one
+        // artist verbatim, including commas in an official billing name.
+        if (Array.isArray(change.after)) {
+          changed = await replaceLineup(
+            db,
+            edition.id,
+            billing,
+            stringList(change.after, change.field),
+            ensureArtist,
+          );
+        } else {
+          if (typeof change.after !== "string" || !change.after.trim())
+            throw new Error("Invalid announced artist");
+          changed = await addLineupArtist(db, edition.id, billing, change.after, ensureArtist);
+        }
         break;
       }
       default:
         throw new Error(`Unsupported catalogue publication field: ${change.field}`);
     }
     if (changed) changedFields.push(change.field);
+  }
+  // Public festival facts and edition details share this source clock.
+  // A delayed publication must not move it backwards.
+  if (changedFields.length) {
+    await db.festivalEdition.updateMany({
+      where: { id: edition.id, sourceUpdatedAt: { lt: input.observedAt } },
+      data: { sourceUpdatedAt: input.observedAt },
+    });
   }
   return { edition, changedFields: [...new Set(changedFields)] };
 }
@@ -437,16 +541,43 @@ export async function publishIngestionResult(
       }
       const candidate = await db.ingestionCandidate.findUnique({
         where: { attemptId: input.attemptId },
-        include: { diffs: true, evidence: true, attempt: { select: { requestedUrl: true } } },
+        include: {
+          diffs: true,
+          evidence: true,
+          attempt: {
+            select: {
+              festivalSlug: true,
+              requestedUrl: true,
+              finalUrl: true,
+              httpStatus: true,
+              endedAt: true,
+            },
+          },
+        },
       });
       if (!candidate || !candidate.publishable)
         throw new Error("Publishable ingestion candidate was not persisted");
+      const observed = input.result.candidate;
+      const stored = candidate.normalized as unknown as FestivalCandidate;
       if (
-        input.sourceLease &&
-        (candidate.festivalSlug !== input.result.festivalSlug ||
-          candidate.attempt.requestedUrl !== input.result.sourceUrl)
-      )
-        throw new Error("Leased candidate source does not match persisted attempt");
+        !stored ||
+        [
+          candidate.festivalSlug,
+          candidate.attempt.festivalSlug,
+          observed.festivalSlug,
+          stored.festivalSlug,
+        ].some((slug) => slug !== input.result.festivalSlug) ||
+        [candidate.attempt.requestedUrl, observed.sourceUrl, stored.sourceUrl].some(
+          (url) => url !== input.result.sourceUrl,
+        ) ||
+        !Array.isArray(stored.observedEditionYears) ||
+        !same(stored.observedEditionYears, observed.observedEditionYears) ||
+        stored.observedEditionYears.length > 1
+      ) {
+        throw new Error(
+          "Ingestion publication scope does not match the persisted festival, source and edition",
+        );
+      }
       const sourceId = `ingestion:${candidate.id}`;
       const existing = await db.catalogPublication.findUnique({
         where: { sourceId },
@@ -457,6 +588,14 @@ export async function publishIngestionResult(
         return { ...existing, playlistRefreshRequested: Boolean(existing.playlistRefresh) };
       if (candidate.reviewState !== "PENDING")
         throw new Error(`Candidate is not pending: ${candidate.reviewState}`);
+      const observedAt = new Date(stored.fetchedAt);
+      if (
+        !Number.isFinite(observedAt.getTime()) ||
+        stored.fetchedAt !== observed.fetchedAt ||
+        stored.fetchedAt !== input.result.fetchedAt
+      ) {
+        throw new Error("Ingestion publication does not match the persisted observation time");
+      }
       if (candidate.diffs.some(({ reviewRequired }) => reviewRequired))
         throw new Error("Persisted candidate requires review");
       const normalizedDiffs = (values: { field: string; before: unknown; after: unknown }[]) =>
@@ -477,10 +616,7 @@ export async function publishIngestionResult(
       );
       if (!same(expected, persisted))
         throw new Error("Persisted ingestion diff does not match publication request");
-      const expectedYear =
-        input.result.candidate.observedEditionYears.length === 1
-          ? input.result.candidate.observedEditionYears[0]
-          : (candidate.sourceYear ?? undefined);
+      const expectedYear = stored.observedEditionYears[0] ?? candidate.sourceYear ?? undefined;
       if (
         !expectedYear &&
         input.result.changes.some(({ field }) => field === "lineup" || field === "headliners")
@@ -489,8 +625,85 @@ export async function publishIngestionResult(
       // Secondary ticket observations are publishable only with the same exact
       // source, edition, value and durable evidence that passed the producer.
       // Do not extend the separate Impericon/I-Days publication paths here (#497).
-      const observed = input.result.candidate;
-      const stored = candidate.normalized as unknown as FestivalCandidate;
+      // Scope this stock-only guard to the product route, never the festival
+      // slug: the primary homepage still publishes its independent date fields.
+      // Durable route identities keep caller slug/source stripping fail-closed.
+      if (
+        [
+          input.result.sourceUrl,
+          candidate.attempt.requestedUrl,
+          candidate.attempt.finalUrl,
+          observed.sourceUrl,
+          stored.sourceUrl,
+        ].some(isTolminatorStockRoute)
+      ) {
+        const time = Date.parse(observed.fetchedAt);
+        const allowed = new Set([
+          "schemaVersion",
+          "festivalSlug",
+          "sourceUrl",
+          "fetchedAt",
+          "observedEditionYears",
+          "warnings",
+          "ticketStatus",
+          "ticketsUrl",
+          "evidence",
+        ]);
+        const valid =
+          [input.result.festivalSlug, candidate.festivalSlug, observed.festivalSlug].every((slug) =>
+            matchesTolminatorStockEdition(slug, observed.observedEditionYears),
+          ) &&
+          [
+            input.result.sourceUrl,
+            observed.sourceUrl,
+            candidate.attempt.requestedUrl,
+            candidate.attempt.finalUrl,
+            observed.ticketsUrl,
+          ].every(isTolminatorStockRoute) &&
+          candidate.attempt.httpStatus === 200 &&
+          isDeepStrictEqual(stored, observed) &&
+          Object.keys(observed).every((key) => allowed.has(key)) &&
+          observed.schemaVersion === 1 &&
+          observed.warnings.length === 0 &&
+          observed.ticketStatus === "available" &&
+          Number.isFinite(time) &&
+          time <= Date.now() + 60_000 &&
+          time >= Date.now() - 86_400_000 &&
+          input.result.fetchedAt === observed.fetchedAt &&
+          Math.abs(candidate.attempt.endedAt.getTime() - time) <= 60_000 &&
+          input.result.changes.every(
+            (change) =>
+              ["ticketStatus", "ticketsUrl"].includes(change.field) &&
+              same(change.after, observed[change.field as "ticketStatus" | "ticketsUrl"]),
+          ) &&
+          observed.evidence.length === 2 &&
+          candidate.evidence.length === 2 &&
+          ["ticketStatus", "ticketsUrl"].every((field) => {
+            const proof = observed.evidence.filter((e) => e.field === field);
+            return (
+              proof.length === 1 &&
+              isTolminatorStockRoute(proof[0].sourceUrl) &&
+              proof[0].observedAt === observed.fetchedAt &&
+              typeof proof[0].excerpt === "string" &&
+              proof[0].excerpt.length > 0 &&
+              proof[0].excerpt.length <= 1800 &&
+              candidate.evidence.some(
+                (saved) =>
+                  saved.field === field &&
+                  isTolminatorStockRoute(saved.sourceUrl) &&
+                  saved.excerpt === proof[0].excerpt &&
+                  saved.observedAt.getTime() === time &&
+                  saved.contentHash ===
+                    createHash("sha256").update(proof[0].excerpt!).digest("hex") &&
+                  same(saved.observedValue, observed[field as "ticketStatus" | "ticketsUrl"]),
+              )
+            );
+          });
+        if (!valid)
+          throw new Error(
+            "Tolminator stock publication requires matching persisted ticket-only proof",
+          );
+      }
       if (observed.ticketSupplement || stored.ticketSupplement) {
         const registeredSource = {
           festivalSlug: input.result.festivalSlug,
@@ -554,7 +767,7 @@ export async function publishIngestionResult(
         expectedYear,
         changes: input.result.changes,
         strictBefore: true,
-        observedAt: new Date(input.result.fetchedAt),
+        observedAt,
       });
       // Rockharz 2027 publications retain exact edition/source/field and persisted
       // evidence guards. Verified lineup changes use the normal provider queue.
@@ -945,6 +1158,20 @@ export async function publishAdminFestivalChange(
   const sourceId = `admin:${input.change.id}`;
   const existing = await db.catalogPublication.findUnique({ where: { sourceId } });
   if (existing) return { ...existing, playlistRefreshRequested: existing.lineupChanged };
+  let observedAt = new Date();
+  if (input.change.parserRunId) {
+    const run = await db.adminParserRun.findUnique({ where: { id: input.change.parserRunId } });
+    if (
+      !run?.finishedAt ||
+      run.festivalSlug !== input.change.resourceKey ||
+      (run.status !== AdminRunStatus.SUCCEEDED && run.status !== AdminRunStatus.PARTIAL) ||
+      run.finishedAt < run.startedAt ||
+      run.finishedAt > observedAt
+    ) {
+      throw new Error("Admin change has no completed source check for this festival");
+    }
+    observedAt = run.finishedAt;
+  }
   const afterValue =
     input.change.field === "lineup" || input.change.field === "headliners"
       ? stringList(input.change.afterValue, input.change.field)
@@ -953,7 +1180,7 @@ export async function publishAdminFestivalChange(
     festivalSlug: input.change.resourceKey,
     changes: [{ field: input.change.field, before: input.change.beforeValue, after: afterValue }],
     strictBefore: Boolean(input.change.parserRunId),
-    observedAt: new Date(),
+    observedAt,
   });
   return createPublication(db, {
     source: CatalogPublicationSource.ADMIN,
@@ -963,6 +1190,22 @@ export async function publishAdminFestivalChange(
     actorLabel: input.actorLabel,
     fields: applied.changedFields,
     evidence: { adminChangeId: input.change.id, sourceEvidence: input.change.sourceEvidence },
+  });
+}
+
+export async function publishAgentArrivalResolution(
+  db: Prisma.TransactionClient,
+  input: { sourceId: string; arrival: ArrivalObservation; evidence: unknown },
+) {
+  if (!(await publishArrivalObservation(db, input.arrival))) return null;
+  return createPublication(db, {
+    source: CatalogPublicationSource.INGESTION,
+    sourceId: input.sourceId,
+    festivalSlug: input.arrival.festivalSlug,
+    editionYear: input.arrival.editionYear,
+    actorLabel: "OpenClaw import-conflict agent",
+    fields: ["arrival"],
+    evidence: input.evidence,
   });
 }
 
@@ -994,14 +1237,15 @@ export async function publishAgentFestivalResolution(
   });
   if (edition.festival.slug !== input.festivalSlug || edition.recordState !== "CURRENT")
     throw new Error("Reviewed edition mismatch");
-  const dateStart = input.facts.startDate ?? isoDate(edition.startDate),
-    dateEnd = input.facts.endDate ?? isoDate(edition.endDate);
-  if (
-    (dateStart && Number(dateStart.slice(0, 4)) !== edition.year) ||
-    (dateEnd && Number(dateEnd.slice(0, 4)) !== edition.year) ||
-    (dateStart && dateEnd && dateStart > dateEnd)
-  )
-    throw new Error("Reviewed dates mismatch");
+  const finalLineup = input.facts.finalLineup;
+  if (finalLineup && finalLineup.year !== edition.year)
+    throw new Error("Reviewed lineup edition mismatch");
+  const dateProblem = editionDateProblem(
+    edition.year,
+    input.facts.startDate ?? isoDate(edition.startDate),
+    input.facts.endDate ?? isoDate(edition.endDate),
+  );
+  if (dateProblem) throw new Error(`Reviewed dates mismatch: ${dateProblem}`);
   // Only a genuinely new edition's first reviewed roster enters the native
   // provider queue. Existing/cancelled rosters and prior generations stay gated.
   const initialPlaylistGeneration =
@@ -1027,53 +1271,48 @@ export async function publishAgentFestivalResolution(
       headliners.length + lineup.length
     )
       throw new Error("Ambiguous reviewed billing");
-    const oldHeadliners = edition.lineup
-      .filter((l) => l.billing === "HEADLINER" && l.status === "ANNOUNCED")
-      .map((l) => l.artist.name);
-    const oldLineup = edition.lineup
-      .filter((l) => l.billing === "LINEUP" && l.status === "ANNOUNCED")
-      .map((l) => l.artist.name);
-    if (!same(oldHeadliners, headliners) || !same(oldLineup, lineup)) {
-      const artists = [];
-      for (const name of [...headliners, ...lineup]) artists.push(await ensureArtist(name));
+    const announced = edition.lineup.filter((entry) => entry.status === "ANNOUNCED");
+    const oldHeadliners = announced.filter((entry) => entry.billing === "HEADLINER");
+    const oldLineup = announced.filter((entry) => entry.billing === "LINEUP");
+    const previousIds = [...oldHeadliners, ...oldLineup].map((entry) => entry.artistId);
+    const rosterNamesChanged =
+      !same(
+        oldHeadliners.map((entry) => entry.artist.name),
+        headliners,
+      ) ||
+      !same(
+        oldLineup.map((entry) => entry.artist.name),
+        lineup,
+      );
+    const artistIds = [];
+    if (rosterNamesChanged) {
+      for (const name of [...headliners, ...lineup]) artistIds.push((await ensureArtist(name)).id);
+      if (new Set(artistIds).size !== artistIds.length)
+        throw new Error("Ambiguous reviewed billing or duplicate alias identities");
+    }
+
+    // A reviewed spelling or alias does not change the published roster.
+    if (
+      rosterNamesChanged &&
+      (headliners.length !== oldHeadliners.length || !same(previousIds, artistIds))
+    ) {
       const cancelled = edition.lineup.filter((l) => l.status === "CANCELLED");
-      if (artists.some((a) => cancelled.some((l) => l.artistId === a.id)))
+      if (artistIds.some((id) => cancelled.some((l) => l.artistId === id)))
         throw new Error("Cancellation requires separate explicit review");
-      // Replace both billing classes together so promotion/demotion cannot
-      // collide with an artist temporarily present in the opposite class.
-      await db.lineupEntry.deleteMany({
-        where: { editionId: edition.id, status: "ANNOUNCED" },
-      });
-      for (const [billing, names, offset] of [
-        ["HEADLINER", headliners, 0],
-        ["LINEUP", lineup, headliners.length],
-      ] as const) {
-        const occupied = new Set(
-          cancelled.filter((l) => l.billing === billing).map((l) => l.position),
-        );
-        let position = 0;
-        for (let n = 0; n < names.length; n++) {
-          while (occupied.has(position)) position++;
-          await db.lineupEntry.create({
-            data: {
-              editionId: edition.id,
-              artistId: artists[offset + n].id,
-              billing,
-              position: position++,
-              status: "ANNOUNCED",
-            },
-          });
-        }
-      }
+      await updateAnnouncedRoster(db, edition.id, announced, cancelled, [
+        ...rosterPositions("HEADLINER", artistIds.slice(0, headliners.length), cancelled),
+        ...rosterPositions("LINEUP", artistIds.slice(headliners.length), cancelled),
+      ]);
       changedFields.push("headliners", "lineup");
-      await db.festivalEdition.update({
-        where: { id: edition.id },
+      await db.festivalEdition.updateMany({
+        where: { id: edition.id, sourceUpdatedAt: { lt: input.observedAt } },
         data: { sourceUpdatedAt: input.observedAt },
       });
     }
   }
+  // A reviewed edition status is not evidence about catalogue completeness.
   const scalar = Object.entries(input.facts)
-    .filter(([field]) => field !== "headliners" && field !== "lineup")
+    .filter(([field]) => field !== "headliners" && field !== "lineup" && field !== "finalLineup")
     .map(([field, after]) => ({ field, after }));
   if (scalar.length) {
     const applied = await applyFestivalChanges(db, {
@@ -1085,24 +1324,27 @@ export async function publishAgentFestivalResolution(
     });
     changedFields.push(...applied.changedFields);
   }
-  if (input.facts.status) {
-    const completeness = {
-      confirmed: "COMPLETE",
-      partial: "PARTIAL",
-      tba: "TBA",
-    } as const;
-    if (edition.completeness !== completeness[input.facts.status]) {
-      await db.festivalEdition.update({
-        where: { id: edition.id },
-        data: { completeness: completeness[input.facts.status] },
-      });
-      changedFields.push("completeness");
-    }
+  if (finalLineup) {
+    const entries = finalLineup.complete
+      ? await db.lineupEntry.findMany({
+          where: { editionId: edition.id },
+          select: { artistId: true, billing: true, status: true },
+        })
+      : [];
+    if (finalLineup.complete && !entries.some((entry) => entry.status === "ANNOUNCED"))
+      throw new Error("A final lineup requires announced artists");
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: {
+        finalLineupFingerprint: finalLineup.complete
+          ? rosterFingerprint(edition.id, entries)
+          : null,
+      },
+    });
+    changedFields.push("finalLineup");
   }
   for (const field of new Set(changedFields)) {
-    const evidence = input.evidence.find(
-      (e) => e.field === field || (field === "completeness" && e.field === "status"),
-    );
+    const evidence = input.evidence.find((e) => e.field === field);
     if (!evidence) throw new Error("Reviewed field has no official evidence");
     await db.editionProvenance.create({
       data: {
