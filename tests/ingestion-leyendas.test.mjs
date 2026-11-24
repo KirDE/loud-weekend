@@ -282,3 +282,130 @@ test("incomplete HTTP200 news template cannot silently ignore future lineup upda
     /index markup is missing/,
   );
 });
+
+test("only visible unique ordinary-pass sections and enabled controls establish stock", () => {
+  for (const mutate of [
+    (d) => {
+      d.tickets = "<div hidden>" + d.tickets + "</div>";
+    },
+    (d) => {
+      d.tickets = d.tickets.replace("<h2 style=", "<h2 hidden style=");
+    },
+    (d) => {
+      d.tickets = d.tickets.replace(
+        'class="vc_btn3-container',
+        'aria-disabled="true" class="vc_btn3-container',
+      );
+    },
+    (d) => {
+      d.tickets = d.tickets.replace(
+        'href="https://www.enterticket.es',
+        'href="https://user@www.enterticket.es',
+      );
+    },
+    (d) => {
+      d.tickets = d.tickets.replace(
+        "www.enterticket.es/eventos",
+        "www.enterticket.es:8443/eventos",
+      );
+    },
+    (d) => {
+      d.tickets += "<h2>ABONO LEYENDAS DEL ROCK</h2><p>Another admission product</p>";
+    },
+    (d) => {
+      d.tickets = d.tickets.replace(
+        "COMPRAR ABONO</a>",
+        'COMPRAR ABONO</a><a href="https://www.enterticket.es/eventos/leyendas-del-rock-273483">COMPRAR ABONO</a>',
+      );
+    },
+  ]) {
+    const d = copy();
+    mutate(d);
+    const c = parse(d);
+    assert.equal(c.ticketStatus, undefined);
+    assert(c.warnings.some((w) => w.includes("ordinary admission stock requires review")));
+    assert.equal(evaluateCandidate(current, c).publishable, false);
+    assert(
+      !evaluateCandidate(current, c).changes.some((change) => change.field === "ticketStatus"),
+    );
+  }
+});
+test("footer copies and other product sellouts cannot override the current ordinary pass", () => {
+  const d = copy();
+  d.tickets +=
+    "<h2>CAMPING</h2><p>Agotado</p><footer><h2>ABONO LEYENDAS DEL ROCK</h2><p>Abonos agotados en 2026</p></footer>";
+  assert.equal(parse(d).ticketStatus, "available");
+  const hidden = copy();
+  hidden.tickets +=
+    '<div style="display:none"><h2>ABONO LEYENDAS DEL ROCK</h2><p>Abonos agotados</p></div>';
+  assert.equal(parse(hidden).ticketStatus, "available");
+  assert.deepEqual(evaluateCandidate(current, parse(d)).changes, []);
+});
+
+test("nested subsequent product headings end ordinary admission scope in document order", () => {
+  const d = copy();
+  d.tickets += "<section><div><h2>CAMPING</h2><p>Agotado</p></div></section>";
+  assert.equal(parse(d).ticketStatus, "available");
+  const missing = copy();
+  missing.tickets = missing.tickets.replace("COMPRAR ABONO", "Información");
+  missing.tickets +=
+    "<section><div><h2>CAMPING</h2><p>Ya se pueden adquirir los abonos para la XXI edición de Leyendas del Rock</p>" +
+    '<a href="https://www.enterticket.es/eventos/leyendas-del-rock-999">COMPRAR ABONO</a></div></section>';
+  assert.equal(parse(missing).ticketStatus, undefined);
+  const disabled = copy();
+  disabled.tickets = '<section aria-disabled="true">' + disabled.tickets + "</section>";
+  assert.equal(parse(disabled).ticketStatus, undefined);
+});
+
+test("a visible disabled sold-out notice still contradicts an ordinary purchase link", () => {
+  const sourceWithNotice = copy();
+  sourceWithNotice.tickets = sourceWithNotice.tickets.replace(
+    "Ya se pueden adquirir",
+    '<span aria-disabled="true">Abonos agotados.</span> Ya se pueden adquirir',
+  );
+  const candidate = parse(sourceWithNotice);
+  assert.equal(candidate.ticketStatus, undefined);
+  assert.equal(evaluateCandidate(current, candidate).publishable, false);
+});
+
+test("block boundaries preserve contradictory ordinary-admission notices", () => {
+  const unknownStock = { ...current, ticketStatus: "unknown" };
+  assert.equal(evaluateCandidate(unknownStock, parse()).publishable, true);
+
+  for (const notice of [
+    "<div>No</div><div>disponibles</div>",
+    "<div>Sold</div><div>out</div>",
+    '<span style="display: block">Sold</span><span style="display: block">out</span>',
+  ]) {
+    const fixture = copy();
+    fixture.tickets = fixture.tickets.replace(
+      "Ya se pueden adquirir",
+      notice + "Ya se pueden adquirir",
+    );
+    const candidate = parse(fixture);
+    const result = evaluateCandidate(unknownStock, candidate);
+    assert.equal(candidate.ticketStatus, undefined, notice);
+    assert.equal(result.publishable, false, notice);
+    assert.equal(
+      result.changes.some(({ field }) => field === "ticketStatus"),
+      false,
+      notice,
+    );
+  }
+});
+
+test("commented purchase sections and headings do not affect live admission stock", () => {
+  const { tickets } = copy();
+  const heading = '<h2 style="text-align:center">ABONO LEYENDAS DEL ROCK</h2>';
+  assert.ok(tickets.includes(heading));
+  const hiddenOffer = [
+    heading,
+    "<p>Ya se pueden adquirir los abonos para la XXI edición de Leyendas del Rock</p>",
+    '<a href="https://www.enterticket.es/eventos/leyendas-del-rock-999">COMPRAR ABONO</a>',
+  ].join("");
+  const soldOut = tickets.replace(heading, `<!--${hiddenOffer}-->${heading}<p>Agotado</p>`);
+  assert.equal(parse({ ...copy(), tickets: soldOut }).ticketStatus, undefined);
+
+  const liveOffer = tickets.replace(heading, `${heading}<!--<h2>CAMPING</h2>-->`);
+  assert.equal(parse({ ...copy(), tickets: liveOffer }).ticketStatus, "available");
+});
