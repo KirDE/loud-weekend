@@ -41,6 +41,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
             orderBy: [{ billing: "asc" }, { position: "asc" }],
           },
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
+          lineupDays: true,
           timetable: { orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }] },
           playlists: { orderBy: { provider: "asc" } },
         },
@@ -75,7 +76,28 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           .filter(({ checkedAt }) => checkedAt <= now)
           .map(({ checkedAt }) => checkedAt.toISOString()),
       );
+      const allocations = new Map(
+        row.lineupDays
+          .filter(
+            (allocation) =>
+              dateOnly(allocation.startDate) === dateOnly(row.startDate) &&
+              dateOnly(allocation.endDate) === dateOnly(row.endDate),
+          )
+          .map((allocation) => [allocation.artistId, allocation]),
+      );
+      const lineupDays = row.lineup.map(({ artist, status }) => {
+        const allocation = allocations.get(artist.id);
+        return {
+          artist: artist.name,
+          artistSlug: artist.slug,
+          dates: allocation?.dates.map((date) => dateOnly(date)!) ?? [],
+          cancelled: status === "CANCELLED" || allocation?.status === "CANCELLED",
+          sourceUrl: allocation?.sourceUrl,
+          observedAt: allocation?.observedAt.toISOString(),
+        };
+      });
       return {
+        lineupDays: lineupDays.some(({ sourceUrl }) => sourceUrl) ? lineupDays : undefined,
         ...(freshnessEvidence && {
           freshness: {
             lastSuccessfulSourceCheckAt,

@@ -321,6 +321,7 @@ model FestivalEdition {
   festival        Festival               @relation(fields: [festivalId], references: [id], onDelete: Cascade)
   lineup          LineupEntry[]
   provenance      EditionProvenance[]
+  lineupDays      EditionLineupDayAllocation[]
   timetable       TimetablePerformance[]
   playlists       FestivalPlaylist[]
   sources         FestivalSource[]
@@ -356,6 +357,7 @@ model Artist {
   links          ArtistLink[]
   provenance     ArtistProvenance[]
   appearances    LineupEntry[]
+  lineupDays     EditionLineupDayAllocation[]
   timetable      TimetablePerformance[]
 }
 
@@ -422,6 +424,22 @@ model EditionProvenance {
   edition   FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
 
   @@index([editionId, field])
+}
+
+model EditionLineupDayAllocation {
+  editionId  String
+  artistId   String
+  dates      DateTime[]        @db.Date
+  status     LineupEntryStatus
+  startDate  DateTime          @db.Date
+  endDate    DateTime          @db.Date
+  sourceUrl  String
+  observedAt DateTime
+  edition    FestivalEdition   @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  artist     Artist            @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, artistId])
+  @@index([artistId])
 }
 
 model TimetablePerformance {

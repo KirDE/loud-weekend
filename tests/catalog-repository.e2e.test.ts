@@ -12,6 +12,7 @@ import { createIngestionRun, persistAttempt } from "../lib/ingestion/repository.
 import { publishAdminFestivalChange } from "../lib/catalog/publication.ts";
 import type { IngestionResult } from "../lib/ingestion/types.ts";
 import sitemap from "../app/sitemap.ts";
+import { importLineupDays } from "../lib/catalog/lineup-days-import.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl || !/(?:test|integration)/i.test(new URL(databaseUrl).pathname)) {
@@ -98,6 +99,157 @@ test("database reads do not retain a process-lifetime catalogue snapshot", async
     await db.festival.update({
       where: { slug: before.festivals[0].slug },
       data: { name: originalName },
+    });
+  }
+});
+
+test("reviewed lineup days are edition-bound, audited, and independent of stage schedules", async () => {
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { year: 2027, festival: { slug: "synthetic-fest" } },
+  });
+  const artist = await db.artist.findUniqueOrThrow({ where: { slug: "sample-artist" } });
+  const spare = await db.artist.create({
+    data: {
+      name: "Unassigned act",
+      slug: "unassigned-act",
+      identityState: "UNRESOLVED",
+      recentSetlists: [],
+      freshness: {},
+    },
+  });
+  const auditScope = { action: "lineup_day_allocation.publish", target: edition.id };
+  const day = (date: string) => new Date(date + "T00:00:00Z");
+  const input = {
+    festivalSlug: "synthetic-fest",
+    editionYear: 2027,
+    startDate: "2027-07-31",
+    endDate: "2027-08-02",
+    sourceUrl: "https://festival.example.test/2027/lineup-by-day",
+    observedAt: "2026-10-01T00:30:00+02:00",
+    entries: [{ artistSlug: artist.slug, dates: ["2027-07-31"], status: "announced" }],
+  };
+  const read = async () => (await readCatalog({ database: db })).festivals[0];
+  try {
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: {
+        startDate: day(input.startDate),
+        endDate: day(input.endDate),
+      },
+    });
+    await db.lineupEntry.create({
+      data: {
+        editionId: edition.id,
+        artistId: spare.id,
+        billing: "LINEUP",
+        position: 0,
+      },
+    });
+    assert.equal((await read()).lineupDays, undefined);
+    assert.deepEqual(await importLineupDays(db, input), { checkOnly: true, changed: 1 });
+    assert.equal(await db.adminAuditEntry.count({ where: auditScope }), 0);
+    assert.equal(
+      await db.editionLineupDayAllocation.count({ where: { editionId: edition.id } }),
+      0,
+    );
+    await assert.rejects(
+      importLineupDays(db, { ...input, editionYear: 2026 }, false),
+      /match the selected edition/,
+    );
+    await assert.rejects(
+      importLineupDays(db, { ...input, sourceUrl: "https://other.example.test/lineup" }, false),
+      /official origin/,
+    );
+    await assert.rejects(
+      importLineupDays(db, { ...input, sourceUrl: input.sourceUrl + "?private=1" }, false),
+      /public HTTPS source/,
+    );
+    await assert.rejects(
+      importLineupDays(
+        db,
+        {
+          ...input,
+          entries: [
+            {
+              ...input.entries[0],
+              dates: ["2027-08-03"],
+            },
+          ],
+        },
+        false,
+      ),
+      /within the selected edition/,
+    );
+    await assert.rejects(
+      importLineupDays(
+        db,
+        {
+          ...input,
+          entries: [
+            ...input.entries,
+            { artistSlug: "other-edition-act", dates: [], status: "announced" },
+          ],
+        },
+        false,
+      ),
+      /distinct artist/,
+    );
+    assert.equal(await db.adminAuditEntry.count({ where: auditScope }), 0);
+    assert.equal(
+      await db.editionLineupDayAllocation.count({ where: { editionId: edition.id } }),
+      0,
+    );
+
+    const results = await Promise.allSettled([
+      importLineupDays(db, input, false),
+      importLineupDays(db, input, false),
+    ]);
+    assert.ok(
+      results.some((result) => result.status === "fulfilled" && result.value.changed === 1),
+    );
+    assert.deepEqual(await importLineupDays(db, input, false), { checkOnly: false, changed: 0 });
+    assert.equal(await db.adminAuditEntry.count({ where: auditScope }), 1);
+    assert.equal((await read()).timetable, undefined);
+    assert.deepEqual(
+      (await read()).lineupDays?.find((row) => row.artistSlug === spare.slug)?.dates,
+      [],
+    );
+    const revision = {
+      ...input,
+      entries: [{ artistSlug: artist.slug, dates: ["2027-08-01"], status: "cancelled" }],
+      observedAt: "2026-10-02T12:00:00Z",
+    };
+    assert.equal((await importLineupDays(db, revision, false)).changed, 1);
+    await assert.rejects(importLineupDays(db, input, false), /newer official observation/);
+    const readback = (await read()).lineupDays?.find((row) => row.artistSlug === artist.slug);
+    assert.deepEqual(readback, {
+      artist: artist.name,
+      artistSlug: artist.slug,
+      dates: ["2027-08-01"],
+      cancelled: true,
+      sourceUrl: input.sourceUrl,
+      observedAt: revision.observedAt.replace("Z", ".000Z"),
+    });
+    const audit = await db.adminAuditEntry.findFirstOrThrow({
+      where: { ...auditScope, beforeValue: { path: ["status"], equals: "ANNOUNCED" } },
+    });
+    assert.deepEqual((audit.beforeValue as { dates: string[] }).dates, ["2027-07-31"]);
+    assert.deepEqual((audit.afterValue as { dates: string[] }).dates, ["2027-08-01"]);
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: { startDate: day("2027-08-01") },
+    });
+    assert.equal((await read()).lineupDays, undefined);
+  } finally {
+    await db.editionLineupDayAllocation.deleteMany({ where: { editionId: edition.id } });
+    await db.lineupEntry.deleteMany({ where: { artistId: spare.id } });
+    await db.artist.delete({ where: { id: spare.id } });
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: {
+        startDate: edition.startDate,
+        endDate: edition.endDate,
+      },
     });
   }
 });

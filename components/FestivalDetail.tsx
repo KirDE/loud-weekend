@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
+import { LineupByDay } from "./LineupByDay";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import { PlanningTools } from "./PlanningTools";
@@ -216,6 +217,9 @@ export function FestivalDetail({
               ))}
             </div>
           </>
+        )}
+        {item.lineupDays && (
+          <LineupByDay key={`${item.slug}:${item.editionYear}`} appearances={item.lineupDays} />
         )}
       </section>
       <PlanningTools item={item} festivals={festivals} />

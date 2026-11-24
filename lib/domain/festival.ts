@@ -12,6 +12,15 @@ export type TimetableEntry = {
   observedAt: string;
 };
 
+export type LineupDayAppearance = {
+  artist: string;
+  artistSlug: string;
+  dates: string[];
+  cancelled: boolean;
+  sourceUrl?: string;
+  observedAt?: string;
+};
+
 export type Festival = {
   slug: string;
   name: string;
@@ -45,6 +54,7 @@ export type Festival = {
   genres: string[];
   coordinates?: { latitude: number; longitude: number };
   timetable?: TimetableEntry[];
+  lineupDays?: LineupDayAppearance[];
 };
 
 export type PlaylistStatus = {
