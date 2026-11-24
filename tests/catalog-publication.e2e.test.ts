@@ -2138,6 +2138,66 @@ test("Provinssi provenance drift rolls back catalogue, completeness and provider
   }
 });
 
+test("a scoped refresh approval cannot persist reversed edition dates", async () => {
+  const rollback = new Error("rollback scoped date fixture");
+  await assert.rejects(
+    db.$transaction(async (tx) => {
+      const edition = await tx.festivalEdition.findFirstOrThrow({
+        where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+      });
+      const run = await tx.adminParserRun.create({
+        data: {
+          festivalSlug: "synthetic-fest",
+          sourceId: "https://festival.example.test/",
+          adapter: "fixture",
+          status: "SUCCEEDED",
+          startedAt: new Date("2026-01-01T10:00:00Z"),
+          finishedAt: new Date("2026-01-01T10:01:00Z"),
+          log: [],
+        },
+      });
+      const change = {
+        id: randomUUID(),
+        resourceKey: "synthetic-fest",
+        field: "startDate",
+        beforeValue: edition.startDate!.toISOString().slice(0, 10),
+        afterValue: "2027-06-13",
+        sourceEvidence: {
+          kind: "scoped-refresh",
+          editionId: edition.id,
+          editionYear: edition.year,
+        },
+        parserRunId: run.id,
+      };
+      const approve = (afterValue: string) =>
+        publishAdminFestivalChange(tx, {
+          change: { ...change, afterValue },
+          actorLabel: "synthetic-date-review",
+        });
+      await assert.rejects(
+        approve(change.afterValue),
+        /Festival end date cannot precede the start date/,
+      );
+      assert.equal(
+        await tx.catalogPublication.count({ where: { sourceId: `admin:${change.id}` } }),
+        0,
+      );
+      assert.deepEqual(
+        await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } }),
+        edition,
+      );
+
+      // A one-day interval remains valid.
+      await approve("2027-06-12");
+      const current = await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } });
+      assert.equal(current.startDate?.toISOString().slice(0, 10), "2027-06-12");
+      assert.equal(current.endDate?.toISOString().slice(0, 10), "2027-06-12");
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
+});
+
 test("free admission survives ingestion/replay and stale rollback without ticket offers", async () => {
   const { ticketPresentation, hasAvailableTickets } = await import("../lib/tickets.ts");
   const { festivalMusicEvent } = await import("../lib/seo.ts");
