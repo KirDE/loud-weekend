@@ -297,7 +297,7 @@ export function AccountSyncPanel({
           "saved-filters": { savedFilters: state.savedFilters },
           plans: { attendance: state.attendance },
         };
-        planner.replaceFields(fields[kind]);
+        planner.replaceFields(fields[kind], planner);
         setDocs((current) => ({ ...current, [kind]: latest }));
       }
       setConflict(null);
