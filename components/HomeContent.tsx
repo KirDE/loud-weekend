@@ -1,5 +1,6 @@
 "use client";
 
+import type { CatalogFreshness } from "@/lib/domain/freshness";
 import type { Festival } from "@/lib/domain/festival";
 import { SeasonNavigation } from "./SeasonNavigation";
 import { FestivalExplorer } from "./FestivalExplorer";
@@ -9,9 +10,11 @@ import { hasAnnouncedLineup } from "@/lib/festival-lineup";
 export function HomeContent({
   festivals,
   years,
+  freshness,
 }: {
   festivals: Festival[];
   years: readonly number[];
+  freshness: CatalogFreshness;
 }) {
   const { t } = useLanguage();
   const announced = festivals.filter(hasAnnouncedLineup).length;
@@ -39,7 +42,7 @@ export function HomeContent({
         </div>
         <SeasonNavigation years={years} />
       </section>
-      <FestivalExplorer festivals={festivals} />
+      <FestivalExplorer festivals={festivals} freshness={freshness} />
     </>
   );
 }
