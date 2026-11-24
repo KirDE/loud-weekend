@@ -1,20 +1,13 @@
-import { hasArchiveRecords } from "@/lib/catalog/browse";
-import { notFound } from "next/navigation";
-import { EditionYearContent } from "@/components/PublicCatalogPages";
-import { getCatalog } from "@/lib/catalog/repository";
+import { renderSeason, seasonMetadata } from "@/lib/season-page";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata({ params }: { params: Promise<{ year: string }> }) {
-  const { year } = await params;
-  return /^\d{4}$/.test(year)
-    ? { title: `${year} festival editions`, alternates: { canonical: `/editions/${year}/` } }
-    : {};
+type Props = { params: Promise<{ year: string }> };
+
+export async function generateMetadata({ params }: Props) {
+  return seasonMetadata((await params).year);
 }
-export default async function EditionYearPage({ params }: { params: Promise<{ year: string }> }) {
-  const year = Number((await params).year);
-  const { editions } = await getCatalog();
-  const items = editions.filter(({ editionYear }) => editionYear === year);
-  if (!items.length) notFound();
-  return <EditionYearContent year={year} items={items} hasArchive={hasArchiveRecords(editions)} />;
+
+export default async function EditionYearPage({ params }: Props) {
+  return renderSeason((await params).year);
 }

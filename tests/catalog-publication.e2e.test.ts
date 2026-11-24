@@ -1330,7 +1330,9 @@ test("I-Days provenance drift and identity collisions roll back without catalog 
     };
     await assert.rejects(
       publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
-      /I-Days publication requires|Ambiguous billing|Artist slug collision|publication scope does not match/,
+      drift === "edition"
+        ? /Cannot publish a lineup without one verified edition year/
+        : /I-Days publication requires|Ambiguous billing|Artist slug collision|publication scope does not match/,
     );
     assert.deepEqual(
       {
@@ -1455,10 +1457,14 @@ test(
       const before = await counts();
       await assert.rejects(
         publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
-        new RegExp(
-          "Graspop publication requires|Candidate edition 2026 does not match catalogue edition 2027|" +
-            "publication scope does not match",
-        ),
+        drift === "removal"
+          ? /Invalid automatic lineup addition/
+          : drift === "persisted-value"
+            ? /Lineup addition is missing from the observed billing/
+            : new RegExp(
+                "Graspop publication requires|Candidate edition 2026 does not match catalogue edition 2027|" +
+                  "publication scope does not match",
+              ),
       );
       assert.deepEqual(await counts(), before);
       assert.equal(
@@ -2098,7 +2104,11 @@ test("Provinssi provenance drift rolls back catalogue, completeness and provider
     const before = await counts();
     await assert.rejects(
       publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
-      /Provinssi publication requires|Candidate edition 2026|publication scope does not match/,
+      drift === "removal"
+        ? /Invalid automatic lineup addition/
+        : drift === "persisted-value"
+          ? /Lineup addition is missing from the observed billing/
+          : /Provinssi publication requires|Candidate edition 2026|publication scope does not match/,
     );
     assert.deepEqual(await counts(), before);
   }
@@ -3617,4 +3627,138 @@ test("scoped refresh previews show observed headliners, not carried-forward manu
   } finally {
     await applicationDb.$disconnect();
   }
+});
+
+test("an automatic lineup addition preserves comma billing as one canonical artist", async () => {
+  const first = `Existing support ${suffix}`;
+  const compound = `One Act, One Billing ${suffix}`;
+  for (const name of [first, compound, ...compound.split(",").map((part) => part.trim())]) {
+    createdArtists.push(name.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+  }
+  const previous = result(first);
+  const previousAttempt = await persist(previous);
+  await publishIngestionResult(db, {
+    attemptId: previousAttempt.id,
+    result: previous,
+    sourceCommit: suffix,
+  });
+
+  const value = result(compound);
+  const attempt = await persist(value);
+  const publish = () =>
+    publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix });
+  const publication = await publish();
+  assert.ok(publication);
+  assert.equal((await publish())?.id, publication.id);
+  const visible = (await readCatalog({ database: db })).festivals.find(
+    (festival) => festival.slug === value.festivalSlug,
+  )!;
+  assert.deepEqual(visible.lineup.slice(-2), [first, compound]);
+  assert.equal(
+    await db.artist.count({
+      where: { name: { in: compound.split(",").map((part) => part.trim()) } },
+    }),
+    0,
+  );
+});
+
+test("a persisted automatic roster change without an artist value cannot publish", async () => {
+  const value = result("Synthetic missing artist");
+  delete value.changes[0].after;
+  const attempt = await persist(value);
+  await assert.rejects(
+    publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
+    /Invalid automatic lineup addition/,
+  );
+  const candidate = await db.ingestionCandidate.findUniqueOrThrow({
+    where: { attemptId: attempt.id },
+  });
+  assert.equal(candidate.reviewState, "PENDING");
+  assert.equal(
+    await db.catalogPublication.count({ where: { sourceId: `ingestion:${candidate.id}` } }),
+    0,
+  );
+});
+
+test("automatic additions must appear in both observed rosters under the proposed billing", async () => {
+  const artist = `Unobserved support ${suffix}`;
+  createdArtists.push(artist.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+  const fixture = result(artist);
+  const wrongBilling = { ...fixture.candidate, lineup: [], headliners: [artist] };
+  const otherArtist = { ...fixture.candidate, lineup: ["Different Artist"] };
+
+  for (const [persisted, observed] of [
+    [wrongBilling, fixture.candidate],
+    [fixture.candidate, otherArtist],
+    [otherArtist, otherArtist],
+  ]) {
+    const attempt = await persist({ ...fixture, candidate: persisted });
+    await assert.rejects(
+      publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: { ...fixture, candidate: observed },
+        sourceCommit: suffix,
+      }),
+      /Lineup addition is missing from the observed billing/,
+    );
+    const candidate = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    assert.equal(candidate.reviewState, "PENDING");
+    assert.equal(
+      await db.catalogPublication.count({ where: { sourceId: `ingestion:${candidate.id}` } }),
+      0,
+    );
+  }
+  assert.equal(await db.artist.count({ where: { name: artist } }), 0);
+});
+
+test("a headliner addition requires an observed edition year, not a storage fallback", async () => {
+  const artist = `Unverified edition headliner ${suffix}`;
+  createdArtists.push(artist.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+  const fixture = result(artist);
+  const headlinerCandidate = {
+    ...fixture.candidate,
+    lineup: undefined,
+    headliners: [artist],
+    observedEditionYears: [],
+  };
+  const current = (await readCatalog({ database: db })).festivals.find(
+    (festival) => festival.slug === fixture.festivalSlug,
+  )!;
+  const evaluated = evaluateCandidate(current, {
+    ...headlinerCandidate,
+    artistListMode: "additive",
+  });
+  assert.equal(
+    evaluated.changes.some(({ kind }) => kind === "headliner_added"),
+    true,
+  );
+  const value: IngestionResult = {
+    ...fixture,
+    candidate: headlinerCandidate,
+    changes: [
+      { kind: "headliner_added", field: "headliners", after: artist, reviewRequired: false },
+    ],
+  };
+  const attempt = await persist(value);
+  const stored = await db.ingestionCandidate.findUniqueOrThrow({
+    where: { attemptId: attempt.id },
+  });
+  assert.equal(stored.sourceYear, 2027);
+  await assert.rejects(
+    publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
+    /Cannot publish a lineup without one verified edition year/,
+  );
+  assert.equal(evaluated.publishable, false);
+  assert.ok(
+    evaluated.reviewReasons.includes(
+      "Lineup edition could not be verified against the catalogue year",
+    ),
+  );
+  assert.equal(await db.artist.count({ where: { name: artist } }), 0);
+  assert.equal(
+    await db.catalogPublication.count({ where: { sourceId: `ingestion:${stored.id}` } }),
+    0,
+  );
 });
