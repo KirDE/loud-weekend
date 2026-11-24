@@ -13,8 +13,20 @@ function records(value: unknown): JsonLd[] {
   return [record, ...records(record["@graph"])];
 }
 
-function eventRecords(html: string): { event: JsonLd; excerpt: string }[] {
-  const events: { event: JsonLd; excerpt: string }[] = [];
+function eventId(record: JsonLd, sourceUrl: string): string | undefined {
+  const id = record["@id"];
+  if (typeof id !== "string" || !id.trim()) return undefined;
+  // Blank-node IDs are not relative URLs.
+  if (id.startsWith("_:")) return id;
+  try {
+    return new URL(id, sourceUrl).href;
+  } catch {
+    return undefined;
+  }
+}
+
+function eventRecords(html: string, sourceUrl: string): { event: JsonLd; excerpt: string }[] {
+  const events: JsonLd[] = [];
   const $ = load(html);
   $("template").remove();
   for (const element of $("script[type]").toArray()) {
@@ -25,20 +37,32 @@ function eventRecords(html: string): { event: JsonLd; excerpt: string }[] {
     try {
       const parsed = JSON.parse(source);
       for (const record of records(parsed)) {
-        // A linked performance or side event is not evidence for its parent festival.
-        if (record.superEvent != null) continue;
         const types = Array.isArray(record["@type"]) ? record["@type"] : [record["@type"]];
         if (
           types.some((type) => typeof type === "string" && type.toLowerCase().endsWith("event"))
         ) {
-          events.push({ event: record, excerpt: JSON.stringify(record).slice(0, 500) });
+          events.push(record);
         }
       }
     } catch {
       continue;
     }
   }
-  return events;
+  // A child can be independently defined in another script, with only the parent linking it.
+  const childIds = new Set<string>();
+  for (const event of events) {
+    const parentId = eventId(event, sourceUrl);
+    for (const child of records(event.subEvent)) {
+      const childId = eventId(child, sourceUrl);
+      if (childId && childId !== parentId) childIds.add(childId);
+    }
+  }
+  return events
+    .filter((event) => {
+      const id = eventId(event, sourceUrl);
+      return event.superEvent == null && (!id || !childIds.has(id));
+    })
+    .map((event) => ({ event, excerpt: JSON.stringify(event).slice(0, 500) }));
 }
 
 function text(value: unknown): string | undefined {
@@ -140,7 +164,7 @@ export function extractJsonLdCandidate(
   source: FestivalSource,
   fetchedAt: string,
 ): FestivalCandidate {
-  const events = eventRecords(html).map((record) => ({
+  const events = eventRecords(html, source.url).map((record) => ({
     ...record,
     startDate: eventDate(record.event.startDate),
     endDate: eventDate(record.event.endDate),
