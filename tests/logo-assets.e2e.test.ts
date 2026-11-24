@@ -1,26 +1,44 @@
-import { createPrismaClient } from '../lib/prisma-client.mjs';
+import { createPrismaClient } from "../lib/prisma-client.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { logoFixture } from "./support/logo-fixtures.ts";
 import test from "node:test";
 import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
-import { MAX_LOGO_BYTES, readFestivalLogo, saveFestivalLogo, validateLogo } from "../lib/catalog/logo-assets.ts";
+import {
+  MAX_LOGO_BYTES,
+  readFestivalLogo,
+  saveFestivalLogo,
+  validateLogo,
+} from "../lib/catalog/logo-assets.ts";
 
 const url = process.env.DATABASE_URL;
 if (!url || !/(?:test|integration)/i.test(new URL(url).pathname)) {
   throw new Error("A disposable test/integration DATABASE_URL is required");
 }
 const db = createPrismaClient();
-const slugs = [randomUUID(), randomUUID()].map((id) => 'asset-test-' + id);
+const slugs = [randomUUID(), randomUUID()].map((id) => "asset-test-" + id);
 let images: Buffer[];
 
 test.before(async () => {
-  images = (await Promise.all([logoFixture(), logoFixture("image/png", "#884422"), logoFixture("image/jpeg")])).map(row => row.bytes);
-  for (const slug of slugs) await db.festival.create({ data: {
-    slug, name: "Disposable asset test", country: "DE", countryCode: "DE", officialUrl: "https://example.org",
-    genres: [],
-  } });
+  images = (
+    await Promise.all([
+      logoFixture(),
+      logoFixture("image/png", "#884422"),
+      logoFixture("image/jpeg"),
+    ])
+  ).map((row) => row.bytes);
+  for (const slug of slugs)
+    await db.festival.create({
+      data: {
+        slug,
+        name: "Disposable asset test",
+        country: "DE",
+        countryCode: "DE",
+        officialUrl: "https://example.org",
+        genres: [],
+      },
+    });
 });
 test.after(async () => {
   await db.festival.deleteMany({ where: { slug: { in: slugs } } });
@@ -83,16 +101,42 @@ test("invalid MIME, oversize, and malformed bytes are rejected before database w
 
 test("database constraints reject invalid MIME, lengths, and SHA-256 digest", async () => {
   const valid = validateLogo(images[0], "image/png");
-  await assert.rejects(db.assetBlob.create({ data: {
-    sha256: 'a'.repeat(64), mimeType: "image/svg+xml", bytes: new Uint8Array(images[0]), sizeBytes: valid.sizeBytes,
-  } }));
-  await assert.rejects(db.assetBlob.create({ data: {
-    sha256: 'b'.repeat(64), mimeType: "image/png", bytes: new Uint8Array(images[0]), sizeBytes: valid.sizeBytes + 1,
-  } }));
-  await assert.rejects(db.assetBlob.create({ data: {
-    sha256: 'c'.repeat(64), mimeType: "image/png", bytes: new Uint8Array(images[0]), sizeBytes: valid.sizeBytes,
-  } }));
-  assert.equal(await db.assetBlob.count({ where: { sha256: { in: ['a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64)] } } }), 0);
+  await assert.rejects(
+    db.assetBlob.create({
+      data: {
+        sha256: "a".repeat(64),
+        mimeType: "image/svg+xml",
+        bytes: new Uint8Array(images[0]),
+        sizeBytes: valid.sizeBytes,
+      },
+    }),
+  );
+  await assert.rejects(
+    db.assetBlob.create({
+      data: {
+        sha256: "b".repeat(64),
+        mimeType: "image/png",
+        bytes: new Uint8Array(images[0]),
+        sizeBytes: valid.sizeBytes + 1,
+      },
+    }),
+  );
+  await assert.rejects(
+    db.assetBlob.create({
+      data: {
+        sha256: "c".repeat(64),
+        mimeType: "image/png",
+        bytes: new Uint8Array(images[0]),
+        sizeBytes: valid.sizeBytes,
+      },
+    }),
+  );
+  assert.equal(
+    await db.assetBlob.count({
+      where: { sha256: { in: ["a".repeat(64), "b".repeat(64), "c".repeat(64)] } },
+    }),
+    0,
+  );
 });
 
 test("a preexisting hash with mismatched MIME cannot be bound", async () => {
@@ -100,10 +144,18 @@ test("a preexisting hash with mismatched MIME cannot be bound", async () => {
   const previous = (await readFestivalLogo(db, slugs[0]))?.sha256;
   await db.assetBlob.delete({ where: { sha256: hash } });
   try {
-    await db.assetBlob.create({ data: {
-      sha256: hash, mimeType: "image/jpeg", sizeBytes: images[1].length, bytes: new Uint8Array(images[1]),
-    } });
-    await assert.rejects(saveFestivalLogo(db, slugs[0], images[1], "image/png"), /collision or corrupted/);
+    await db.assetBlob.create({
+      data: {
+        sha256: hash,
+        mimeType: "image/jpeg",
+        sizeBytes: images[1].length,
+        bytes: new Uint8Array(images[1]),
+      },
+    });
+    await assert.rejects(
+      saveFestivalLogo(db, slugs[0], images[1], "image/png"),
+      /collision or corrupted/,
+    );
     assert.equal((await readFestivalLogo(db, slugs[0]))?.sha256, previous);
   } finally {
     await db.assetBlob.deleteMany({ where: { sha256: hash } });
@@ -113,11 +165,20 @@ test("a preexisting hash with mismatched MIME cannot be bound", async () => {
 test("an existing blob cannot be mutated after a festival binds to it", async () => {
   const hash = validateLogo(images[0], "image/png").sha256;
   const original = await readFestivalLogo(db, slugs[0]);
-  await assert.rejects(db.assetBlob.update({
-    where: { sha256: hash }, data: { bytes: new Uint8Array(images[1]), sizeBytes: images[1].length },
-  }));
-  await assert.rejects(db.assetBlob.update({
-    where: { sha256: hash }, data: { mimeType: "image/jpeg" },
-  }));
-  assert.deepEqual(Buffer.from((await readFestivalLogo(db, slugs[0]))!.bytes), Buffer.from(original!.bytes));
+  await assert.rejects(
+    db.assetBlob.update({
+      where: { sha256: hash },
+      data: { bytes: new Uint8Array(images[1]), sizeBytes: images[1].length },
+    }),
+  );
+  await assert.rejects(
+    db.assetBlob.update({
+      where: { sha256: hash },
+      data: { mimeType: "image/jpeg" },
+    }),
+  );
+  assert.deepEqual(
+    Buffer.from((await readFestivalLogo(db, slugs[0]))!.bytes),
+    Buffer.from(original!.bytes),
+  );
 });

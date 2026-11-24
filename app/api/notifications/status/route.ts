@@ -8,13 +8,37 @@ import { rejectUntrustedOrigin } from "@/lib/request-origin";
 const requestSchema = z.object({ channel: z.nativeEnum(NotificationChannel) });
 
 export async function GET() {
-  const user = await requireUser(); if (!user) return error("Authentication required.", 401);
+  const user = await requireUser();
+  if (!user) return error("Authentication required.", 401);
   const [subscriptions, recent] = await Promise.all([
-    db.notificationSubscription.findMany({ where: { userId: user.id }, select: { id: true, channel: true, endpoint: true, enabled: true, updatedAt: true } }),
-    db.notificationDelivery.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 20, select: { channel: true, status: true, attempts: true, sentAt: true, updatedAt: true, lastError: true } }),
+    db.notificationSubscription.findMany({
+      where: { userId: user.id },
+      select: { id: true, channel: true, endpoint: true, enabled: true, updatedAt: true },
+    }),
+    db.notificationDelivery.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: {
+        channel: true,
+        status: true,
+        attempts: true,
+        sentAt: true,
+        updatedAt: true,
+        lastError: true,
+      },
+    }),
   ]);
   return Response.json({
-    subscriptions: subscriptions.map((item) => ({ ...item, endpoint: item.channel === NotificationChannel.EMAIL ? "account email" : item.channel === NotificationChannel.TELEGRAM ? `chat …${item.endpoint.slice(-4)}` : "browser subscription" })),
+    subscriptions: subscriptions.map((item) => ({
+      ...item,
+      endpoint:
+        item.channel === NotificationChannel.EMAIL
+          ? "account email"
+          : item.channel === NotificationChannel.TELEGRAM
+            ? `chat …${item.endpoint.slice(-4)}`
+            : "browser subscription",
+    })),
     recent,
     emailVerified: user.emailVerified,
     providers: notificationProviderState(),
@@ -23,15 +47,39 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const originError = rejectUntrustedOrigin(request); if (originError) return originError;
-  const user = await requireUser(); if (!user) return error("Authentication required.", 401);
-  const parsed = requestSchema.safeParse(await request.json().catch(() => null)); if (!parsed.success) return error("Invalid channel.");
-  if (parsed.data.channel === NotificationChannel.EMAIL && !user.emailVerified) return error("Verify your account email before sending an email test.", 409);
+  const originError = rejectUntrustedOrigin(request);
+  if (originError) return originError;
+  const user = await requireUser();
+  if (!user) return error("Authentication required.", 401);
+  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return error("Invalid channel.");
+  if (parsed.data.channel === NotificationChannel.EMAIL && !user.emailVerified)
+    return error("Verify your account email before sending an email test.", 409);
   if (parsed.data.channel !== NotificationChannel.EMAIL) {
-    const enrolled = await db.notificationSubscription.findFirst({ where: { userId: user.id, channel: parsed.data.channel, enabled: true } });
+    const enrolled = await db.notificationSubscription.findFirst({
+      where: { userId: user.id, channel: parsed.data.channel, enabled: true },
+    });
     if (!enrolled) return error("Enroll and enable this channel before sending a test.", 409);
   }
-  const event = await db.notificationEvent.create({ data: { dedupeKey: `user-test:${user.id}:${parsed.data.channel}:${Date.now()}`, festivalId: "notification-test", type: "TIMETABLE_PUBLISHED", title: "Loud Weekend test", message: "Your notification channel is connected.", occurredAt: new Date() } });
-  const delivery = await db.notificationDelivery.create({ data: { eventId: event.id, userId: user.id, channel: parsed.data.channel, frequency: NotificationFrequency.IMMEDIATE, status: NotificationStatus.PENDING, nextAttemptAt: new Date() } });
+  const event = await db.notificationEvent.create({
+    data: {
+      dedupeKey: `user-test:${user.id}:${parsed.data.channel}:${Date.now()}`,
+      festivalId: "notification-test",
+      type: "TIMETABLE_PUBLISHED",
+      title: "Loud Weekend test",
+      message: "Your notification channel is connected.",
+      occurredAt: new Date(),
+    },
+  });
+  const delivery = await db.notificationDelivery.create({
+    data: {
+      eventId: event.id,
+      userId: user.id,
+      channel: parsed.data.channel,
+      frequency: NotificationFrequency.IMMEDIATE,
+      status: NotificationStatus.PENDING,
+      nextAttemptAt: new Date(),
+    },
+  });
   return Response.json({ queued: true, deliveryId: delivery.id }, { status: 202 });
 }

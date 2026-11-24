@@ -14,7 +14,12 @@ export default defineConfig({
       DATABASE_URL: process.env.DATABASE_URL,
       AUTH_SECRET: "admin-e2e-secret-at-least-32-characters",
       APP_URL: "http://localhost:3245",
-      ADMIN_EMAILS: "browser-admin@example.test,browser-editor@example.test,browser-viewer@example.test",
+      ADMIN_EMAILS: [
+        "browser-admin@example.test",
+        "browser-editor@example.test",
+        "browser-viewer@example.test",
+        "browser-onboarding-editor@example.test",
+      ].join(","),
       SUBMISSION_HASH_SALT: "browser-submission-test-salt",
       EMAIL_WEBHOOK_URL: "http://provider.example.test/email",
       TELEGRAM_BOT_TOKEN: "browser-test-token",

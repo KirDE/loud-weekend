@@ -7,8 +7,13 @@ const sitemapSource = await readFile(new URL("../app/sitemap.ts", import.meta.ur
 
 test("all indexable route classes define self-canonical metadata", async () => {
   const routes = [
-    "festivals/[slug]", "artists/[slug]", "countries/[code]", "months/[month]",
-    "archive", "submit", "[lang]",
+    "festivals/[slug]",
+    "artists/[slug]",
+    "countries/[code]",
+    "months/[month]",
+    "archive",
+    "submit",
+    "[lang]",
   ];
   for (const route of routes) {
     const source = await readFile(new URL(`../app/${route}/page.tsx`, import.meta.url), "utf8");
@@ -17,8 +22,8 @@ test("all indexable route classes define self-canonical metadata", async () => {
 });
 
 test("sitemap uses content timestamps rather than future event dates", () => {
-  assert.match(sitemapSource, /updatedAt/);
-  assert.doesNotMatch(sitemapSource, /lastModified:\s*startDate/);
+  assert.match(sitemapSource, /lastModified:.*lastPublishedAt/);
+  assert.doesNotMatch(sitemapSource, /CATALOG_UPDATED_AT|lastModified:\s*(?:startDate|updatedAt)/);
 });
 
 test("MusicEvent omits unknown facts and maps verified ticket state", () => {

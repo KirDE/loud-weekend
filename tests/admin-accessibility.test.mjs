@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { cssDeclarations } from "./support/source-contracts.mjs";
 
 const admin = readFileSync(new URL("../components/AdminConsole.tsx", import.meta.url), "utf8");
 const shell = readFileSync(new URL("../components/AppShell.tsx", import.meta.url), "utf8");
-const catalog = readFileSync(new URL("../components/LanguageProvider.tsx", import.meta.url), "utf8");
+const catalog = readFileSync(
+  new URL("../components/LanguageProvider.tsx", import.meta.url),
+  "utf8",
+);
 const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
 test("admin uses the single shell main and a labelled navigation landmark", () => {
@@ -16,21 +20,33 @@ test("admin uses the single shell main and a labelled navigation landmark", () =
 });
 
 test("admin has complete EN, DE and RU catalogs and language control", () => {
-  for (const language of ["en", "de", "ru"]) assert.match(catalog, new RegExp(`\\n  [\"']?${language}[\"']?: \\{`));
+  for (const language of ["en", "de", "ru"])
+    assert.match(catalog, new RegExp(`\\n  ["']?${language}["']?: \\{`));
   assert.match(admin, /setLanguage\(event\.target\.value as Language\)/);
   assert.match(admin, /aria-live="polite"/);
 });
 
 test("admin exposes visible keyboard focus and responsive navigation", () => {
   assert.match(css, /\.adminShell :is\([^}]+\):focus-visible/);
-  assert.match(css, /\.adminNav\{position:relative;height:auto;overflow-x:auto\}/);
-  assert.match(css, /grid-template-columns:260px minmax\(0,1fr\)/);
-  assert.match(css, /\.adminNav,.adminMain[^}]+min-width:0/);
-  assert.match(css, /overflow-wrap:anywhere/);
+  assert.match(css, /overflow-wrap:\s*anywhere/);
+  const nav = cssDeclarations(css, ".adminNav", "(width <= 900px)");
+  assert.equal(nav.position, "relative");
+  assert.equal(nav.height, "auto");
+  assert.equal(nav["overflow-x"], "auto");
+  assert.equal(
+    cssDeclarations(css, ".adminShell")["grid-template-columns"],
+    "260px minmax(0, 1fr)",
+  );
+  for (const selector of [".adminNav", ".adminMain"]) {
+    assert.equal(cssDeclarations(css, selector)["min-width"], "0");
+  }
 });
 
 test("admin renders the authenticated operator role instead of a hard-coded editor label", () => {
-  assert.match(admin, /operator\.role === "ADMIN" \? "roleAdmin" : operator\.role === "EDITOR" \? "roleEditor" : "roleUser"/);
+  assert.match(
+    admin.replace(/\s+/g, " "),
+    /operator\.role === "ADMIN" \? "roleAdmin" : operator\.role === "EDITOR" \? "roleEditor" : "roleUser"/,
+  );
   assert.match(admin, /operator\.email/);
   assert.match(catalog, /roleAdmin: "Administrator"/);
   assert.match(catalog, /roleEditor: "Editor · Review required"/);

@@ -18,6 +18,9 @@ test("production owns notification scheduling", async () => {
   assert.match(runner, /\[\[ "\$http_status" == 2\?\? \]\]/);
   assert.doesNotMatch(runner, /INTERNAL_API_SECRET.*state_file/);
   assert.match(runner, /lastDeliveryAt: hadDelivery \? finishedAt : previous\.lastDeliveryAt/);
-  assert.match(runner, /lastDeliveryStatuses: hadDelivery \? statuses : previous\.lastDeliveryStatuses/);
+  assert.match(
+    runner,
+    /lastDeliveryStatuses: hadDelivery \? statuses : previous\.lastDeliveryStatuses/,
+  );
   assert.match(packager, /scripts\/notifications\/dispatch-production\.sh/);
 });
