@@ -1,117 +1,398 @@
-import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {test} from 'node:test';
-import {extractFestivalCandidate} from '../lib/ingestion/extract.ts';
-import {evaluateCandidate} from '../lib/ingestion/policy.ts';
-import {fetchSource} from '../lib/ingestion/fetch.ts';
-import {discoverMotocultorAnnouncement} from '../lib/ingestion/adapters/motocultor.ts';
-import {validateSource} from '../lib/sources/repository.ts';
-import {parserSource} from './support/parser-source.ts';
-const source = parserSource('motocultor', {url:'https://www.motocultor-festival.com/actualites/'});
-const at='2026-10-10T09:41:03.674Z';
-const ticketHome=await readFile(new URL('./fixtures/ticket-status/motocultor-regular-pass.html',import.meta.url),'utf8');
-const html=await readFile(new URL('./fixtures/official-markup/motocultor-announcement.html',import.meta.url),'utf8');
-const news=await readFile(new URL('./fixtures/official-markup/motocultor-news.html',import.meta.url),'utf8');
-const expected=['Helloween','Halestorm','The HU','Wind Rose','Kanonenfieber','Malevolence','Slomosa','Dark Funeral','Equilibrium','John Bush','Make Them Suffer','My Sleeping Karma','Non Est Deus','PeelingFlesh','Prong','Sylosis','Shadow of Intent','The Acacia Strain','The Browning'];
-const current={slug:'motocultor',editionYear:2027,startDate:'2027-08-19',endDate:'2027-08-22',city:'Carhaix',status:'partial',ticketStatus:'unknown',headliners:[expected[0]],lineup:expected.slice(1)};
-const parse=h=>extractFestivalCandidate(h,source,at);
-const sorted=x=>x.map(n=>n.toLocaleLowerCase()).sort();
-test('real corrected Motocultor announcement covers all 19 members without inventing poster ranking, dates or stock',()=>{
-  assert.equal(validateSource(source),'official_markup:motocultor');
-  const c=parse(html);assert.deepEqual(sorted(c.lineup),sorted(expected));assert.equal(c.lineupScope,'announcement');assert.equal(c.status,'partial');assert.deepEqual(c.warnings,[]);assert.deepEqual(c.observedEditionYears,[2027]);
-  for(const field of ['headliners','startDate','endDate','city','ticketStatus','ticketsUrl']) assert.equal(c[field],undefined);
-  assert.deepEqual(evaluateCandidate(current,c).changes,[]);assert.deepEqual(evaluateCandidate(current,c).reviewReasons,[]);
-  assert.ok(!c.lineup.some(n=>/anthrax|early bird/i.test(n)));
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { test } from "node:test";
+import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
+import { evaluateCandidate } from "../lib/ingestion/policy.ts";
+import { fetchSource } from "../lib/ingestion/fetch.ts";
+import { discoverMotocultorAnnouncement } from "../lib/ingestion/adapters/motocultor.ts";
+import { validateSource } from "../lib/sources/repository.ts";
+import { parserSource } from "./support/parser-source.ts";
+const source = parserSource("motocultor", {
+  url: "https://www.motocultor-festival.com/actualites/",
 });
-test('later official text changes and new named acts are not hash- or bill-locked',()=>{
-  const next=html.replace('THE BROWNING</b>','THE BROWNING · GOJIRA · MASTODON</b>').replace('1993–2003','a special anniversary set');
-  const c=parse(next);assert.equal(c.lineup.length,21);assert.deepEqual(c.warnings,[]);
-  const r=evaluateCandidate({...current,lineup:[...current.lineup,'Later Verified Act']},c);
-  assert.deepEqual(r.changes.map(x=>[x.kind,x.after]),[['artist_added','GOJIRA'],['artist_added','MASTODON']]);assert.deepEqual(r.reviewReasons,[]);
+const at = "2026-10-10T09:41:03.674Z";
+const ticketHome = await readFile(
+  new URL("./fixtures/ticket-status/motocultor-regular-pass.html", import.meta.url),
+  "utf8",
+);
+const htmlHeaders = { "content-type": "text/html" };
+const html = await readFile(
+  new URL("./fixtures/official-markup/motocultor-announcement.html", import.meta.url),
+  "utf8",
+);
+const news = await readFile(
+  new URL("./fixtures/official-markup/motocultor-news.html", import.meta.url),
+  "utf8",
+);
+const expected = [
+  "Helloween",
+  "Halestorm",
+  "The HU",
+  "Wind Rose",
+  "Kanonenfieber",
+  "Malevolence",
+  "Slomosa",
+  "Dark Funeral",
+  "Equilibrium",
+  "John Bush",
+  "Make Them Suffer",
+  "My Sleeping Karma",
+  "Non Est Deus",
+  "PeelingFlesh",
+  "Prong",
+  "Sylosis",
+  "Shadow of Intent",
+  "The Acacia Strain",
+  "The Browning",
+];
+const current = {
+  slug: "motocultor",
+  editionYear: 2027,
+  startDate: "2027-08-19",
+  endDate: "2027-08-22",
+  city: "Carhaix",
+  status: "partial",
+  ticketStatus: "unknown",
+  headliners: [expected[0]],
+  lineup: expected.slice(1),
+};
+const parse = (h) => extractFestivalCandidate(h, source, at);
+const sorted = (x) => x.map((n) => n.toLocaleLowerCase()).sort();
+test(
+  "real corrected Motocultor announcement covers all 19 members" +
+    " without inventing poster ranking, dates or stock",
+  () => {
+    assert.equal(validateSource(source), "official_markup:motocultor");
+    const c = parse(html);
+    assert.deepEqual(sorted(c.lineup), sorted(expected));
+    assert.equal(c.lineupScope, "announcement");
+    assert.equal(c.status, "partial");
+    assert.deepEqual(c.warnings, []);
+    assert.deepEqual(c.observedEditionYears, [2027]);
+    for (const field of [
+      "headliners",
+      "startDate",
+      "endDate",
+      "city",
+      "ticketStatus",
+      "ticketsUrl",
+    ])
+      assert.equal(c[field], undefined);
+    assert.deepEqual(evaluateCandidate(current, c).changes, []);
+    assert.deepEqual(evaluateCandidate(current, c).reviewReasons, []);
+    assert.ok(!c.lineup.some((n) => /anthrax|early bird/i.test(n)));
+  },
+);
+test("later official text changes and new named acts are not hash- or bill-locked", () => {
+  const next = html
+    .replace("THE BROWNING</b>", "THE BROWNING · GOJIRA · MASTODON</b>")
+    .replace("1993–2003", "a special anniversary set");
+  const c = parse(next);
+  assert.equal(c.lineup.length, 21);
+  assert.deepEqual(c.warnings, []);
+  const r = evaluateCandidate({ ...current, lineup: [...current.lineup, "Later Verified Act"] }, c);
+  assert.deepEqual(
+    r.changes.map((x) => [x.kind, x.after]),
+    [
+      ["artist_added", "GOJIRA"],
+      ["artist_added", "MASTODON"],
+    ],
+  );
+  assert.deepEqual(r.reviewReasons, []);
 });
-test('later small news drops preserve verified partial bill and complete status',()=>{
-  const next=html.replace(/<p><b>HELLOWEEN[\s\S]*?THE BROWNING<\/b><\/p>/,'<p><strong>GOJIRA · MASTODON</strong></p>').replace('premiers noms','nouveaux groupes');
-  const c=parse(next);assert.deepEqual(c.lineup,['GOJIRA','MASTODON']);
-  const r=evaluateCandidate({...current,status:'confirmed'},c);assert.equal(r.changes.length,2);assert.ok(r.changes.every(x=>x.kind==='artist_added'));assert.deepEqual(r.reviewReasons,[]);
+test("later small news drops preserve verified partial bill and complete status", () => {
+  const next = html
+    .replace(
+      /<p><b>HELLOWEEN[\s\S]*?THE BROWNING<\/b><\/p>/,
+      "<p><strong>GOJIRA · MASTODON</strong></p>",
+    )
+    .replace("premiers noms", "nouveaux groupes");
+  const c = parse(next);
+  assert.deepEqual(c.lineup, ["GOJIRA", "MASTODON"]);
+  const r = evaluateCandidate({ ...current, status: "confirmed" }, c);
+  assert.equal(r.changes.length, 2);
+  assert.ok(r.changes.every((x) => x.kind === "artist_added"));
+  assert.deepEqual(r.reviewReasons, []);
 });
-test('wrong editions, cancellation prose, unknown layout and duplicate names fail closed',()=>{
-  for(const h of [html.replaceAll('2027','2026'),html.replace('Et ce n′est que le début.','JOHN BUSH ne jouera pas.'),html.replace('premiers noms','billets'),html.replace('THE BROWNING</b>','THE BROWNING · THE HU</b>'),html.replace('THE BROWNING</b>','THE BROWNING annulé</b>'),html.replace('THE BROWNING</b>','THE BROWNING</b> new unread names')]) {
-    const c=parse(h);assert.equal(c.lineup,undefined);assert.ok(c.warnings.length);
+test("wrong editions, cancellation prose, unknown layout and duplicate names fail closed", () => {
+  for (const h of [
+    html.replaceAll("2027", "2026"),
+    html.replace("Et ce n′est que le début.", "JOHN BUSH ne jouera pas."),
+    html.replace("premiers noms", "billets"),
+    html.replace("THE BROWNING</b>", "THE BROWNING · THE HU</b>"),
+    html.replace("THE BROWNING</b>", "THE BROWNING annulé</b>"),
+    html.replace("THE BROWNING</b>", "THE BROWNING</b> new unread names"),
+  ]) {
+    const c = parse(h);
+    assert.equal(c.lineup, undefined);
+    assert.ok(c.warnings.length);
   }
 });
-test('latest same-host news discovery excludes tour, archive and navigation, accepts changed future slugs',()=>{
-  const url='https://www.motocultor-festival.com/les-premiers-noms-de-ledition-2027-sont-la/';
-  assert.equal(discoverMotocultorAnnouncement(news,source),url);
-  const card='<h3 class="blog-post_title"><a href="/20-nouveaux-groupes/">20 nouveaux groupes</a></h3>';
-  assert.equal(discoverMotocultorAnnouncement(card+news,source),'https://www.motocultor-festival.com/20-nouveaux-groupes/');
-  assert.equal(discoverMotocultorAnnouncement(card.replace('/20-nouveaux-groupes/','https://evil.example/20-nouveaux-groupes/')+news,source),url);
-  assert.equal(discoverMotocultorAnnouncement(card.replace('20 nouveaux groupes','Groupes annulés 2027')+news,source),undefined);
+test("latest same-host news discovery excludes tour, archive and navigation, accepts changed future slugs", () => {
+  const url = "https://www.motocultor-festival.com/les-premiers-noms-de-ledition-2027-sont-la/";
+  assert.equal(discoverMotocultorAnnouncement(news, source), url);
+  const card =
+    '<h3 class="blog-post_title"><a href="/20-nouveaux-groupes/">20 nouveaux groupes</a></h3>';
+  assert.equal(
+    discoverMotocultorAnnouncement(card + news, source),
+    "https://www.motocultor-festival.com/20-nouveaux-groupes/",
+  );
+  assert.equal(
+    discoverMotocultorAnnouncement(
+      card.replace("/20-nouveaux-groupes/", "https://evil.example/20-nouveaux-groupes/") + news,
+      source,
+    ),
+    url,
+  );
+  assert.equal(
+    discoverMotocultorAnnouncement(
+      card.replace("20 nouveaux groupes", "Groupes annulés 2027") + news,
+      source,
+    ),
+    undefined,
+  );
 });
-test('actual discovery fetches official article; 403 stays a source failure',async()=>{
-  const seen=[];const result=await fetchSource(source,{maxAttempts:1,fetchImpl:async url=>{seen.push(url);return new Response(seen.length===1?news:seen.length===2?html:ticketHome,{status:200,headers:{'content-type':'text/html'}});}});
-  assert.equal(seen.length,3);assert.match(seen[1],/les-premiers-noms-de-ledition-2027/);assert.equal(parse(await result.response.text()).lineup.length,19);
-  const denied=await fetchSource(source,{maxAttempts:1,fetchImpl:async()=>new Response('blocked',{status:403})});assert.equal(denied.response.status,403);assert.equal(denied.attempts,1);
-  await assert.rejects(()=>fetchSource(source,{maxAttempts:1,fetchImpl:async()=>new Response('<h3>No bill</h3>')}),/No current-edition/);
-});
-
-const astroNews=await readFile(new URL('./fixtures/official-markup/motocultor-astro-news.html',import.meta.url),'utf8');
-const astroNew=await readFile(new URL('./fixtures/official-markup/motocultor-astro-new-names.html',import.meta.url),'utf8');
-const astroFirst=await readFile(new URL('./fixtures/official-markup/motocultor-astro-first-names.html',import.meta.url),'utf8');
-const added=['Hypocrisy','I Am Morbid','Igorrr','1914','Get The Shot','Mucky Pup','Nile','Any Given Day','Blackwater Holylight','Conan','Glowsun','Heavy Lungs','Houle','Kanine','Sons of Arrakis','Sun','Sunborn'];
-test('2026-10-27 production failure: Astro cards discover latest nested article and parse all 17 new acts',async()=>{
-  assert.equal(discoverMotocultorAnnouncement(astroNews,source),'https://www.motocultor-festival.com/actualites/nouveaux-noms/');
-  const seen=[];
-  const home={...source,url:'https://www.motocultor-festival.com/'};
-  const r=await fetchSource(home,{maxAttempts:1,fetchImpl:async url=>{
-    seen.push(url);return new Response(seen.length===1?'<h1>Motocultor</h1>':seen.length===2?astroNews:seen.length===3?astroNew:ticketHome,{headers:{'content-type':'text/html'}});
-  }});
-  assert.deepEqual(seen,[home.url,source.url,'https://www.motocultor-festival.com/actualites/nouveaux-noms/',home.url]);
-  const c=parse(await r.response.text());assert.deepEqual(c.lineup,added);assert.deepEqual(c.warnings,[]);assert.equal(c.lineupScope,'announcement');
-  const stockCurrent={...current,ticketStatus:'available',ticketsUrl:home.url};
-  const result=evaluateCandidate(stockCurrent,c);
-  assert.equal(result.changes.length,17);assert.ok(result.changes.every(x=>x.kind==='artist_added'));assert.deepEqual(result.reviewReasons,[]);
-  for(const field of ['headliners','startDate','endDate','city'])assert.equal(c[field],undefined);
-  assert.equal(c.ticketStatus,'available');assert.equal(c.ticketsUrl,home.url);
-  const alreadyUpdated={...stockCurrent,lineup:[...current.lineup,...added]};
-  assert.deepEqual(evaluateCandidate(alreadyUpdated,c).changes,[]);
-});
-test('Astro first announcement still yields original 19, excludes contextual Anthrax and sibling new names',()=>{
-  const c=parse(astroFirst);assert.deepEqual(sorted(c.lineup),sorted(expected));assert.deepEqual(c.warnings,[]);
-  assert.deepEqual(evaluateCandidate(current,c).changes,[]);
-});
-test('Astro first announcement with multiple headline acts never merges them into one artist',()=>{
-  const c=parse(astroFirst.replace('<strong>Helloween</strong>','<strong>Gojira et Helloween</strong>'));
-  assert.deepEqual(sorted(c.lineup),sorted(['Gojira',...expected]));assert.deepEqual(c.warnings,[]);
-  assert.deepEqual(evaluateCandidate(current,c).changes.map(x=>[x.kind,x.after]),[['artist_added','Gojira']]);
-});
-test('Astro later names, changed counts and edition rollover are not frozen to one announcement',()=>{
-  const later=astroNew.replace('17 nouveaux noms','18 nouveaux noms').replace('Sun et Sunborn.','Sun, Sunborn et Gojira.');
-  assert.deepEqual(parse(later).lineup,[...added,'Gojira']);
-  const next=extractFestivalCandidate(later.replaceAll('2027','2028'),{...source,editionYear:2028},at);
-  assert.deepEqual(next.lineup,[...added,'Gojira']);assert.deepEqual(next.warnings,[]);
-});
-test('Astro discovery requires current-edition card, rejects foreign links and stops on cancellations',()=>{
-  assert.equal(discoverMotocultorAnnouncement(astroNews.replaceAll('2027','2026'),source),undefined);
-  assert.equal(discoverMotocultorAnnouncement(astroNews.replaceAll('2027',''),source),undefined);
-  const offsite=astroNews.replace('href="/actualites/nouveaux-noms/"','href="https://evil.example/actualites/nouveaux-noms/"');
-  assert.equal(discoverMotocultorAnnouncement(offsite,source),'https://www.motocultor-festival.com/actualites/premiers-noms/');
-  assert.equal(discoverMotocultorAnnouncement(astroNews.replace('17 nouveaux noms','Groupes annulés 2027'),source),undefined);
-});
-test('Astro year must be in the article, not siblings; wrong years, incomplete lists and cancellation prose fail closed',()=>{
-  for(const h of [astroNew.replaceAll('2027','2026'),astroNew.replaceAll("Affiche de l'édition 2027 avec les nouveaux noms","Poster"),astroNew.replace('17 nouveaux noms','18 nouveaux noms'),astroNew.replace('Sun et Sunborn.','Sun et Sun.'),astroNew.replace('Et ce n’est pas fini','Nile ne jouera pas. Et ce n’est pas fini'),astroNew.replace('https://www.motocultor-festival.com/actualites/nouveaux-noms/','https://evil.example/actualites/nouveaux-noms/')]) {
-    const c=parse(h);assert.equal(c.lineup,undefined);assert.ok(c.warnings.length);
-  }
+test("actual discovery fetches official article; 403 stays a source failure", async () => {
+  const seen = [];
+  const result = await fetchSource(source, {
+    maxAttempts: 1,
+    fetchImpl: async (url) => {
+      seen.push(url);
+      return new Response(seen.length === 1 ? news : seen.length === 2 ? html : ticketHome, {
+        headers: htmlHeaders,
+      });
+    },
+  });
+  assert.equal(seen.length, 3);
+  assert.match(seen[1], /les-premiers-noms-de-ledition-2027/);
+  assert.equal(parse(await result.response.text()).lineup.length, 19);
+  const denied = await fetchSource(source, {
+    maxAttempts: 1,
+    fetchImpl: async () => new Response("blocked", { status: 403 }),
+  });
+  assert.equal(denied.response.status, 403);
+  assert.equal(denied.attempts, 1);
+  await assert.rejects(
+    () =>
+      fetchSource(source, {
+        maxAttempts: 1,
+        fetchImpl: async () => new Response("<h3>No bill</h3>"),
+      }),
+    /No current-edition/,
+  );
 });
 
-const third=await readFile(new URL('./fixtures/official-markup/motocultor-20261112.html',import.meta.url),'utf8');
-const thirdNames=['Alestorm','Cavalera Chaos A.D.','DevilDriver','Eluveitie','Gogol Bordello','Katatonia','Sventevith','Agriculture','Flotsam & Jetsam','Grima','Villagers of Ioannina City','Dirty Sound Magnet','Godsleep','Gorod','Holy Fawn','Les Bâtards du Roi','Les Garçons Bouchers','Lion’s Law','Spitting Glass','Suicidal Angels','VCTMS'];
-test('complete November12 official response: 21 additions including dotted A.D. artist, no billing/date/ticket drift',()=>{
- const c=parse(third);assert.deepEqual(c.lineup,thirdNames);assert.deepEqual(c.warnings,[]);
- const baseline={...current,lineup:[...current.lineup,...added]};const r=evaluateCandidate(baseline,c);assert.equal(r.publishable,true);assert.deepEqual(r.changes.map(x=>x.kind),Array(21).fill('artist_added'));
- assert.deepEqual(evaluateCandidate({...baseline,lineup:[...baseline.lineup,...thirdNames]},c).changes,[]);
- for(const f of ['headliners','startDate','endDate','ticketsUrl','ticketStatus'])assert.equal(c[f],undefined);
+const astroNews = await readFile(
+  new URL("./fixtures/official-markup/motocultor-astro-news.html", import.meta.url),
+  "utf8",
+);
+const astroNew = await readFile(
+  new URL("./fixtures/official-markup/motocultor-astro-new-names.html", import.meta.url),
+  "utf8",
+);
+const astroFirst = await readFile(
+  new URL("./fixtures/official-markup/motocultor-astro-first-names.html", import.meta.url),
+  "utf8",
+);
+const added = [
+  "Hypocrisy",
+  "I Am Morbid",
+  "Igorrr",
+  "1914",
+  "Get The Shot",
+  "Mucky Pup",
+  "Nile",
+  "Any Given Day",
+  "Blackwater Holylight",
+  "Conan",
+  "Glowsun",
+  "Heavy Lungs",
+  "Houle",
+  "Kanine",
+  "Sons of Arrakis",
+  "Sun",
+  "Sunborn",
+];
+test(
+  "2026-10-27 production failure: Astro cards discover latest n" +
+    "ested article and parse all 17 new acts",
+  async () => {
+    assert.equal(
+      discoverMotocultorAnnouncement(astroNews, source),
+      "https://www.motocultor-festival.com/actualites/nouveaux-noms/",
+    );
+    const seen = [];
+    const home = { ...source, url: "https://www.motocultor-festival.com/" };
+    const r = await fetchSource(home, {
+      maxAttempts: 1,
+      fetchImpl: async (url) => {
+        seen.push(url);
+        return new Response(
+          ["<h1>Motocultor</h1>", astroNews, astroNew, ticketHome][seen.length - 1],
+          { headers: htmlHeaders },
+        );
+      },
+    });
+    assert.deepEqual(seen, [
+      home.url,
+      source.url,
+      "https://www.motocultor-festival.com/actualites/nouveaux-noms/",
+      home.url,
+    ]);
+    const c = parse(await r.response.text());
+    assert.deepEqual(c.lineup, added);
+    assert.deepEqual(c.warnings, []);
+    assert.equal(c.lineupScope, "announcement");
+    const stockCurrent = { ...current, ticketStatus: "available", ticketsUrl: home.url };
+    const result = evaluateCandidate(stockCurrent, c);
+    assert.equal(result.changes.length, 17);
+    assert.ok(result.changes.every((x) => x.kind === "artist_added"));
+    assert.deepEqual(result.reviewReasons, []);
+    for (const field of ["headliners", "startDate", "endDate", "city"])
+      assert.equal(c[field], undefined);
+    assert.equal(c.ticketStatus, "available");
+    assert.equal(c.ticketsUrl, home.url);
+    const alreadyUpdated = { ...stockCurrent, lineup: [...current.lineup, ...added] };
+    assert.deepEqual(evaluateCandidate(alreadyUpdated, c).changes, []);
+  },
+);
+test("Astro first announcement still yields original 19, excludes contextual Anthrax and sibling new names", () => {
+  const c = parse(astroFirst);
+  assert.deepEqual(sorted(c.lineup), sorted(expected));
+  assert.deepEqual(c.warnings, []);
+  assert.deepEqual(evaluateCandidate(current, c).changes, []);
 });
-test('November pattern supports later bounded additions, but rejects count mismatch, missing roster, old edition and prose',()=>{
- const later=third.replaceAll('21 nouveaux','22 nouveaux').replace('Suicidal Angels et VCTMS.','Suicidal Angels, VCTMS et Gojira.');assert.deepEqual(parse(later).lineup,[...thirdNames,'Gojira']);
- for(const doc of [third.replaceAll('21 nouveaux noms','22 nouveaux noms'),third.replaceAll('2027','2026'),third.replace('Suicidal Angels et VCTMS.','Suicidal Angels et VCTMS. New ticket sentence.'),third.replace(/<p>Alestorm[\s\S]*?<\/p>/,'')])assert.equal(parse(doc).lineup,undefined);
+test("Astro first announcement with multiple headline acts never merges them into one artist", () => {
+  const c = parse(
+    astroFirst.replace("<strong>Helloween</strong>", "<strong>Gojira et Helloween</strong>"),
+  );
+  assert.deepEqual(sorted(c.lineup), sorted(["Gojira", ...expected]));
+  assert.deepEqual(c.warnings, []);
+  assert.deepEqual(
+    evaluateCandidate(current, c).changes.map((x) => [x.kind, x.after]),
+    [["artist_added", "Gojira"]],
+  );
 });
+test("Astro later names, changed counts and edition rollover are not frozen to one announcement", () => {
+  const later = astroNew
+    .replace("17 nouveaux noms", "18 nouveaux noms")
+    .replace("Sun et Sunborn.", "Sun, Sunborn et Gojira.");
+  assert.deepEqual(parse(later).lineup, [...added, "Gojira"]);
+  const next = extractFestivalCandidate(
+    later.replaceAll("2027", "2028"),
+    { ...source, editionYear: 2028 },
+    at,
+  );
+  assert.deepEqual(next.lineup, [...added, "Gojira"]);
+  assert.deepEqual(next.warnings, []);
+});
+test("Astro discovery requires current-edition card, rejects foreign links and stops on cancellations", () => {
+  assert.equal(
+    discoverMotocultorAnnouncement(astroNews.replaceAll("2027", "2026"), source),
+    undefined,
+  );
+  assert.equal(discoverMotocultorAnnouncement(astroNews.replaceAll("2027", ""), source), undefined);
+  const offsite = astroNews.replace(
+    'href="/actualites/nouveaux-noms/"',
+    'href="https://evil.example/actualites/nouveaux-noms/"',
+  );
+  assert.equal(
+    discoverMotocultorAnnouncement(offsite, source),
+    "https://www.motocultor-festival.com/actualites/premiers-noms/",
+  );
+  assert.equal(
+    discoverMotocultorAnnouncement(
+      astroNews.replace("17 nouveaux noms", "Groupes annulés 2027"),
+      source,
+    ),
+    undefined,
+  );
+});
+test(
+  "Astro year must be in the article, not siblings; wrong years" +
+    ", incomplete lists and cancellation prose fail closed",
+  () => {
+    for (const h of [
+      astroNew.replaceAll("2027", "2026"),
+      astroNew.replaceAll("Affiche de l'édition 2027 avec les nouveaux noms", "Poster"),
+      astroNew.replace("17 nouveaux noms", "18 nouveaux noms"),
+      astroNew.replace("Sun et Sunborn.", "Sun et Sun."),
+      astroNew.replace("Et ce n’est pas fini", "Nile ne jouera pas. Et ce n’est pas fini"),
+      astroNew.replace(
+        "https://www.motocultor-festival.com/actualites/nouveaux-noms/",
+        "https://evil.example/actualites/nouveaux-noms/",
+      ),
+    ]) {
+      const c = parse(h);
+      assert.equal(c.lineup, undefined);
+      assert.ok(c.warnings.length);
+    }
+  },
+);
+
+const third = await readFile(
+  new URL("./fixtures/official-markup/motocultor-20261112.html", import.meta.url),
+  "utf8",
+);
+const thirdNames = [
+  "Alestorm",
+  "Cavalera Chaos A.D.",
+  "DevilDriver",
+  "Eluveitie",
+  "Gogol Bordello",
+  "Katatonia",
+  "Sventevith",
+  "Agriculture",
+  "Flotsam & Jetsam",
+  "Grima",
+  "Villagers of Ioannina City",
+  "Dirty Sound Magnet",
+  "Godsleep",
+  "Gorod",
+  "Holy Fawn",
+  "Les Bâtards du Roi",
+  "Les Garçons Bouchers",
+  "Lion’s Law",
+  "Spitting Glass",
+  "Suicidal Angels",
+  "VCTMS",
+];
+test(
+  "complete November12 official response: 21 additions includin" +
+    "g dotted A.D. artist, no billing/date/ticket drift",
+  () => {
+    const c = parse(third);
+    assert.deepEqual(c.lineup, thirdNames);
+    assert.deepEqual(c.warnings, []);
+    const baseline = { ...current, lineup: [...current.lineup, ...added] };
+    const r = evaluateCandidate(baseline, c);
+    assert.equal(r.publishable, true);
+    assert.deepEqual(
+      r.changes.map((x) => x.kind),
+      Array(21).fill("artist_added"),
+    );
+    assert.deepEqual(
+      evaluateCandidate({ ...baseline, lineup: [...baseline.lineup, ...thirdNames] }, c).changes,
+      [],
+    );
+    for (const f of ["headliners", "startDate", "endDate", "ticketsUrl", "ticketStatus"])
+      assert.equal(c[f], undefined);
+  },
+);
+test(
+  "November pattern supports later bounded additions, but rejec" +
+    "ts count mismatch, missing roster, old edition and prose",
+  () => {
+    const later = third
+      .replaceAll("21 nouveaux", "22 nouveaux")
+      .replace("Suicidal Angels et VCTMS.", "Suicidal Angels, VCTMS et Gojira.");
+    assert.deepEqual(parse(later).lineup, [...thirdNames, "Gojira"]);
+    for (const doc of [
+      third.replaceAll("21 nouveaux noms", "22 nouveaux noms"),
+      third.replaceAll("2027", "2026"),
+      third.replace("Suicidal Angels et VCTMS.", "Suicidal Angels et VCTMS. New ticket sentence."),
+      third.replace(/<p>Alestorm[\s\S]*?<\/p>/, ""),
+    ])
+      assert.equal(parse(doc).lineup, undefined);
+  },
+);

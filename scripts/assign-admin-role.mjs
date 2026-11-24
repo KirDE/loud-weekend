@@ -1,4 +1,4 @@
-import { createPrismaClient } from '../lib/prisma-client.mjs';
+import { createPrismaClient } from "../lib/prisma-client.mjs";
 
 const [emailArg, roleArg, confirmation] = process.argv.slice(2);
 const email = emailArg?.trim().toLowerCase();
@@ -9,6 +9,12 @@ if (!email || !["USER", "EDITOR", "ADMIN"].includes(role) || confirmation !== "-
 }
 const db = createPrismaClient();
 try {
-  const user = await db.user.update({ where: { email }, data: { role }, select: { id: true, email: true, role: true } });
+  const user = await db.user.update({
+    where: { email },
+    data: { role },
+    select: { id: true, email: true, role: true },
+  });
   console.log(`Role updated for ${user.email}: ${user.role}`);
-} finally { await db.$disconnect(); }
+} finally {
+  await db.$disconnect();
+}
