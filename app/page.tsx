@@ -9,6 +9,6 @@ export async function generateMetadata() {
 }
 
 export default async function Home() {
-  const { festivals } = await getHomeCatalog();
-  return <HomeContent festivals={festivals} />;
+  const { festivals, freshness } = await getHomeCatalog();
+  return <HomeContent festivals={festivals} freshness={freshness} />;
 }

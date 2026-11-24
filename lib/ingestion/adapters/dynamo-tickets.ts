@@ -171,13 +171,21 @@ export function extractDynamoTickets(
   startDate: string,
   endDate: string,
   fetchedAt: string,
-): { ticketsUrl?: string; ticketStatus?: "available"; ticketsExcerpt?: string } {
+): { ticketsUrl?: string; ticketStatus?: "available"; ticketsExcerpt?: string; warning?: string } {
+  const unverified = () => ({
+    warning:
+      "Dynamo current ordinary weekend inventory requires review; " +
+      "no festival sellout inferred from closed, stale or restricted tiers",
+  });
   try {
     const json = html.match(
       new RegExp(`<script type="application/json" id="${bundleId}">([\\s\\S]*?)<\\/script>`, "i"),
     )?.[1];
-    const docs: TicketDocument[] = JSON.parse(json ?? "[]");
-    if (!Array.isArray(docs) || docs.length > 4) return {};
+    // A legacy stored artist-only document made no live stock attempt. Active
+    // fetches always append this envelope, even if discovery yielded no sale.
+    if (json === undefined) return {};
+    const docs: TicketDocument[] = JSON.parse(json);
+    if (!Array.isArray(docs) || !docs.length || docs.length > 4) return unverified();
     for (const doc of docs) {
       const date = text(doc.body).match(
         /Three days of Dynamo Metalfest\. August (\d{1,2}), (\d{1,2}) & (\d{1,2}), (20\d{2})\./i,
@@ -221,6 +229,7 @@ export function extractDynamoTickets(
           p.membership === false &&
           Date.parse(p.start) <= now &&
           Date.parse(p.end) > now &&
+          doc.items.filter((i) => i.product === p.url).length === 1 &&
           doc.items.some(
             (i) =>
               i.product === p.url &&
@@ -245,7 +254,7 @@ export function extractDynamoTickets(
         };
     }
   } catch {
-    /* No trustworthy live sale means no new ticket fact. */
+    return unverified();
   }
-  return {};
+  return unverified();
 }

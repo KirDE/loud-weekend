@@ -1,57 +1,201 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#171712">
-  <title>Loud Weekend · Offline</title>
-  <style>body{font:18px system-ui;margin:0;background:#f2efe7;color:#171712}main{max-width:42rem;margin:8vh auto;padding:2rem}a{color:inherit}li{margin:.6rem 0}h2{margin-top:2rem}</style>
-</head>
-<body>
-<main>
-  <h1>You are offline</h1>
-  <p>Reconnect to refresh festival and timetable data. Saved data may be outdated.</p>
-  <p><a href="/">Try the festival list</a></p>
-  <p id="catalog-status" role="status">Loading saved festival data…</p>
-  <section id="catalog" aria-label="Saved festivals"></section>
-</main>
-<script>
-  async function showCatalog() {
-    const status = document.getElementById("catalog-status");
-    const catalog = document.getElementById("catalog");
-    try {
-      const response = await fetch("/api/offline/catalog/", { credentials: "omit", cache: "no-cache" });
-      if (!response.ok) throw new Error("Catalogue unavailable");
-      const data = await response.json();
-      if (data.schemaVersion !== 1 || !Array.isArray(data.festivals) || !data.festivals.length) throw new Error("Catalogue unavailable");
-      const fragment = document.createDocumentFragment();
-      for (const festival of data.festivals) {
-        const heading = document.createElement("h2");
-        heading.textContent = festival.name;
-        fragment.append(heading);
-        const dates = document.createElement("p");
-        dates.textContent = [festival.startDate, festival.endDate].filter(Boolean).join(" – ") || "Dates not published";
-        fragment.append(dates);
-        const timetable = document.createElement("ul");
-        for (const entry of festival.timetable) {
-          const item = document.createElement("li");
-          item.textContent = `${entry.date} · ${entry.start} (${entry.timeZone}) · ${entry.stage} · ${entry.artist}${entry.status === "cancelled" ? " · Cancelled" : ""}`;
-          timetable.append(item);
-        }
-        if (festival.timetable.length) fragment.append(timetable);
-        else {
-          const empty = document.createElement("p");
-          empty.textContent = "Timetable not published";
-          fragment.append(empty);
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#171712" />
+    <title>Loud Weekend · Offline</title>
+    <style>
+      body {
+        font: 18px system-ui;
+        margin: 0;
+        background: #f2efe7;
+        color: #171712;
+      }
+      main {
+        max-width: 42rem;
+        margin: 8vh auto;
+        padding: 2rem;
+      }
+      a {
+        color: inherit;
+      }
+      li {
+        margin: 0.6rem 0;
+      }
+      h2 {
+        margin-top: 2rem;
+      }
+      article {
+        border-top: 1px solid #989385;
+        margin-top: 1rem;
+      }
+      h2,
+      h3,
+      p,
+      li {
+        overflow-wrap: anywhere;
+      }
+      button {
+        font: inherit;
+        padding: 0.35rem 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>You are offline</h1>
+      <p>Reconnect to refresh festival and timetable data. Saved data may be outdated.</p>
+      <p><a href="/">Try the festival list</a></p>
+      <section id="trips" aria-labelledby="trips-title">
+        <h2 id="trips-title"></h2>
+        <div id="trip-list"></div>
+      </section>
+      <p id="catalog-status" role="status">Loading saved festival data…</p>
+      <section id="catalog" aria-label="Saved festivals"></section>
+    </main>
+    <script>
+      async function showCatalog() {
+        const status = document.getElementById("catalog-status");
+        const catalog = document.getElementById("catalog");
+        try {
+          const scope =
+            typeof navigator !== "undefined" && navigator.serviceWorker?.controller?.scriptURL;
+          const base = scope ? new URL(".", scope).pathname.replace(/\/$/, "") : "";
+          const home = document.querySelector?.("main > p > a");
+          if (home) home.href = `${base}/`;
+          const response = await fetch(`${base}/api/offline/catalog/`, {
+            credentials: "omit",
+            cache: "no-cache",
+          });
+          if (!response.ok) throw new Error("Catalogue unavailable");
+          const data = await response.json();
+          if (data.schemaVersion !== 1 || !Array.isArray(data.festivals) || !data.festivals.length)
+            throw new Error("Catalogue unavailable");
+          const fragment = document.createDocumentFragment();
+          for (const festival of data.festivals) {
+            const heading = document.createElement("h2");
+            heading.textContent = festival.name;
+            fragment.append(heading);
+            const dates = document.createElement("p");
+            dates.textContent =
+              [festival.startDate, festival.endDate].filter(Boolean).join(" – ") ||
+              "Dates not published";
+            fragment.append(dates);
+            const timetable = document.createElement("ul");
+            for (const entry of festival.timetable) {
+              const item = document.createElement("li");
+              item.textContent = `${entry.date} · ${entry.start} (${entry.timeZone}) · ${entry.stage} · ${entry.artist}${entry.status === "cancelled" ? " · Cancelled" : ""}`;
+              timetable.append(item);
+            }
+            if (festival.timetable.length) fragment.append(timetable);
+            else {
+              const empty = document.createElement("p");
+              empty.textContent = "Timetable not published";
+              fragment.append(empty);
+            }
+          }
+          catalog.replaceChildren(fragment);
+          status.textContent =
+            "Saved public festival and timetable data. Reconnect to check for updates.";
+        } catch {
+          status.textContent =
+            "No saved festival data is available. Open Loud Weekend online to save it for your next visit.";
         }
       }
-      catalog.replaceChildren(fragment);
-      status.textContent = "Saved public festival and timetable data. Reconnect to check for updates.";
-    } catch {
-      status.textContent = "No saved festival data is available. Open Loud Weekend online to save it for your next visit.";
-    }
-  }
-  showCatalog();
-</script>
-</body>
+      showCatalog();
+    </script>
+    <script type="module">
+      const worker = navigator.serviceWorker?.controller?.scriptURL;
+      const base = worker
+        ? new URL(".", worker).pathname
+        : location.pathname.replace(/offline\.html$/, "");
+      const { offlineTripCopy, offlineTripKey, listOfflineTrips } = await import(
+        `${base}offline-trips.mjs`
+      );
+      const language = (() => {
+        try {
+          const saved = localStorage.getItem("festival-radar-language");
+          if (saved === "en" || saved === "de" || saved === "ru") return saved;
+        } catch {
+          /* Browser storage may be unavailable. */
+        }
+        const routeLocale = location.pathname.slice(base.length).split("/")[0];
+        if (routeLocale === "en" || routeLocale === "de" || routeLocale === "ru")
+          return routeLocale;
+        const locale = navigator.language.split("-")[0];
+        return locale === "de" || locale === "ru" ? locale : "en";
+      })();
+      const copy = offlineTripCopy[language];
+      const list = document.getElementById("trip-list");
+      const group = document.getElementById("trips");
+      group.lang = language;
+      document.getElementById("trips-title").textContent = copy.heading;
+      const date = new Intl.DateTimeFormat(language, { dateStyle: "medium", timeZone: "UTC" });
+      const dateTime = new Intl.DateTimeFormat(language, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+      function element(tag, text) {
+        const node = document.createElement(tag);
+        node.textContent = text;
+        return node;
+      }
+      function showTrips() {
+        try {
+          const records = listOfflineTrips(localStorage);
+          if (!records.length) return list.replaceChildren(element("p", copy.empty));
+          list.replaceChildren(element("p", copy.stale));
+          for (const { savedAt, trip } of records) {
+            const card = document.createElement("article");
+            card.append(
+              element("h3", `${trip.name} ${trip.year}`),
+              element(
+                "p",
+                `${copy.savedAt}: ${dateTime.format(new Date(savedAt))} · ${copy.checkedAt}: ${dateTime.format(new Date(trip.updatedAt))}`,
+              ),
+              element(
+                "p",
+                [...new Set([trip.startDate, trip.endDate].filter(Boolean))]
+                  .map((value) => date.format(new Date(value)))
+                  .join(" – ") || copy.dates,
+              ),
+            );
+            if (trip.location) card.append(element("p", `${copy.place}: ${trip.location}`));
+            if (trip.timetable.length) {
+              const schedule = document.createElement("ul");
+              for (const row of trip.timetable) {
+                const status = row.status === "cancelled" ? ` · ${copy.cancelled}` : "";
+                schedule.append(
+                  element(
+                    "li",
+                    `${date.format(new Date(row.date))} · ${row.start} (${row.timeZone}) · ${row.stage} · ${row.artist}${status} · ${copy.performanceChecked}: ${dateTime.format(new Date(row.checkedAt))}`,
+                  ),
+                );
+              }
+              card.append(schedule);
+            } else {
+              card.append(element("p", copy.timetable));
+            }
+            const remove = element("button", copy.remove + ": " + trip.name);
+            remove.type = "button";
+            remove.addEventListener("click", () => {
+              try {
+                localStorage.removeItem(offlineTripKey(trip.slug, trip.year));
+                showTrips();
+                group.querySelector("button")?.focus();
+              } catch {
+                card.append(element("p", copy.storage));
+              }
+            });
+            card.append(remove);
+            list.append(card);
+          }
+        } catch {
+          list.replaceChildren(element("p", copy.storage));
+        }
+      }
+      showTrips();
+    </script>
+  </body>
 </html>
