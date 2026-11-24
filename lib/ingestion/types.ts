@@ -1,3 +1,4 @@
+import type { OverviewObservation } from "../catalog/festival-overview-import.ts";
 import type { ArrivalObservation } from "../catalog/arrival-import.ts";
 import type { Festival } from "../domain/festival.ts";
 
@@ -23,6 +24,7 @@ export type FestivalSource = {
 export type FieldEvidence = {
   field:
     | "arrival"
+    | "overview"
     | keyof Pick<
         Festival,
         | "startDate"
@@ -58,6 +60,7 @@ export type FestivalCandidate = Partial<
   // An unranked news announcement adds members; absence is not a cancellation.
   lineupScope?: "announcement";
   arrival?: ArrivalObservation;
+  overview?: OverviewObservation;
   /** Announcement feeds add artists; absence is not a removal. */
   artistListMode?: "additive";
   /** Explicit producer provenance; persisted with normalized candidate evidence. */

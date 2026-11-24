@@ -1,3 +1,7 @@
+import {
+  publishOverviewObservation,
+  type OverviewObservation,
+} from "./festival-overview-import.ts";
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import {
@@ -1204,20 +1208,36 @@ export async function publishAdminFestivalChange(
   });
 }
 
-export async function publishAgentArrivalResolution(
+export async function publishAgentOrganizerResolution(
   db: Prisma.TransactionClient,
-  input: { sourceId: string; arrival: ArrivalObservation; evidence: unknown },
+  input: {
+    sourceId: string;
+    arrival?: ArrivalObservation;
+    overview?: OverviewObservation;
+    evidence: unknown;
+  },
 ) {
-  if (!(await publishArrivalObservation(db, input.arrival))) return null;
-  return createPublication(db, {
-    source: CatalogPublicationSource.INGESTION,
-    sourceId: input.sourceId,
-    festivalSlug: input.arrival.festivalSlug,
-    editionYear: input.arrival.editionYear,
-    actorLabel: "OpenClaw import-conflict agent",
-    fields: ["arrival"],
-    evidence: input.evidence,
-  });
+  const { arrival, overview } = input;
+  const observation = arrival ?? overview;
+  if (!observation) return { publication: null, arrivalPublished: false, overviewPublished: false };
+  const arrivalPublished = arrival ? await publishArrivalObservation(db, arrival) : false;
+  const overviewPublished = overview ? await publishOverviewObservation(db, overview) : false;
+  const fields = [
+    ...(arrivalPublished ? ["arrival"] : []),
+    ...(overviewPublished ? ["overview"] : []),
+  ];
+  const publication = fields.length
+    ? await createPublication(db, {
+        source: CatalogPublicationSource.INGESTION,
+        sourceId: input.sourceId,
+        festivalSlug: observation.festivalSlug,
+        editionYear: observation.editionYear,
+        actorLabel: "OpenClaw import-conflict agent",
+        fields,
+        evidence: input.evidence,
+      })
+    : null;
+  return { publication, arrivalPublished, overviewPublished };
 }
 
 /** Authenticated agent review: caller holds the issue/source lease and has
