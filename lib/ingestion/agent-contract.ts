@@ -72,6 +72,10 @@ export const decisionSchema = z
     action: z.enum(["apply", "dismiss", "retry", "needs_user"]),
     reason: z.string().trim().min(10).max(2000),
     facts: factsSchema.optional(),
+    arrival: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     source: z
       .object({
         url: z.string().url().max(2048),
@@ -94,7 +98,12 @@ export const decisionSchema = z
         code: "custom",
         message: "Only apply may change facts or source",
       });
-    if (v.action === "apply" && !v.evidence.length)
+    if (v.arrival && (v.action !== "apply" || v.facts || v.source || v.evidence.length))
+      c.addIssue({
+        code: "custom",
+        message: "Arrival approval must reference only the persisted observation",
+      });
+    if (v.action === "apply" && !v.evidence.length && !v.arrival)
       c.addIssue({
         code: "custom",
         message: "Apply requires official evidence",
