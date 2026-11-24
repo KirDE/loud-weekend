@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { SuggestionArtist } from "@/lib/discovery-suggestions";
 import type { DiscoveryArtist } from "@/lib/discovery-artists";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
@@ -25,7 +26,7 @@ export function HomeContent({
   matchingArtists?: readonly DiscoveryArtist[];
   suggestionArtists?: readonly SuggestionArtist[];
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const announced = festivals.filter(hasAnnouncedLineup).length;
   const countries = new Set(festivals.map((item) => item.countryCode)).size;
   return (
@@ -58,6 +59,11 @@ export function HomeContent({
         matchingArtists={matchingArtists}
         suggestionArtists={suggestionArtists}
       />
+      <p className="dataQualityLink">
+        <Link className="textLink" href={`/${language}/data-quality/`}>
+          {t("dataQuality")}
+        </Link>
+      </p>
     </>
   );
 }
