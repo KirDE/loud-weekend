@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { readApprovedEditionLifecycleInSnapshot } from "../ingestion/edition-lifecycle-proposal-store.ts";
 import {
   offlineTimetableSelect,
   offlineTimetableWhere,
@@ -13,6 +14,7 @@ async function readSnapshot(tx: Prisma.TransactionClient, slug: string, year: nu
     where: { festival: { slug }, year, recordState: { in: ["CURRENT", "ARCHIVED"] } },
     select: {
       id: true,
+      recordState: true,
       festival: { select: { name: true, city: true, country: true } },
       startDate: true,
       endDate: true,
@@ -20,6 +22,11 @@ async function readSnapshot(tx: Prisma.TransactionClient, slug: string, year: nu
     },
   });
   if (!edition) return null;
+  if (
+    edition.recordState === "CURRENT" &&
+    (await readApprovedEditionLifecycleInSnapshot(tx, edition.id))
+  )
+    return null;
   const timetable = await tx.timetablePerformance.findMany({
     where: {
       editionId: edition.id,

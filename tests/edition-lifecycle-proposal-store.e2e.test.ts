@@ -11,6 +11,7 @@ import {
 } from "../lib/ingestion/edition-lifecycle-proposal-store.ts";
 import { DatabaseCatalogRepository } from "../lib/catalog/repository.ts";
 import { readOfflineCatalog, serveOfflineCatalog } from "../lib/catalog/offline.ts";
+import { readPublishedOfflineTrip } from "../lib/catalog/offline-trip.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db = createPrismaClient();
 const html = readFileSync(new URL("./fixtures/rock-en-seine/hiatus.html", import.meta.url), "utf8");
@@ -604,6 +605,13 @@ test(
     const readOffline = () => readOfflineCatalog(db);
     const before = await db.festivalEdition.findMany();
     try {
+      await db.$transaction(async (tx) => {
+        assert.equal(await readPublishedOfflineTrip(slug, 2027, tx), null);
+        assert.equal(
+          (await readPublishedOfflineTrip(other.slug, 2027, tx))?.startDate,
+          "2027-07-01",
+        );
+      });
       const body = await readOffline();
       assert.equal(
         body.festivals.some((f) => f.slug === slug),
