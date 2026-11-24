@@ -13,7 +13,8 @@ else
   app="$stage/app"
 fi
 test -d "$app/.python"
-PYTHONDONTWRITEBYTECODE=1 FESTIVAL_WORKER_STDIO=1 PYTHONPATH="$app/.python:$app/scripts/spotify_gmm_2026" "$python" - "$app" <<'PY'
+PYTHONDONTWRITEBYTECODE=1 FESTIVAL_WORKER_STDIO=1\
+ PYTHONPATH="$app/.python:$app/scripts/spotify_gmm_2026" "$python" - "$app" <<'PY'
 import importlib.metadata as metadata
 import json
 import pathlib
