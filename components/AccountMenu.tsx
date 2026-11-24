@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useId, useRef, useState } from "react";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { useLanguage } from "./LanguageProvider";
 import { authErrorMessage } from "@/lib/auth-error-copy";
@@ -36,6 +36,12 @@ const googleCopy = {
       "Если у вас уже есть аккаунт, войдите обычным способом и отдельно привяжите Google.",
     failed: "Не удалось завершить аутентификацию через Google.",
   },
+} as const;
+
+const exportLabel = {
+  en: "Download account data (JSON)",
+  de: "Kontodaten herunterladen (JSON)",
+  ru: "Скачать данные аккаунта (JSON)",
 } as const;
 
 const copy = {
@@ -103,6 +109,8 @@ export function AccountMenu() {
   const google = googleCopy[language];
   const [user, setUser] = useState<User | null>(null);
   const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   const [mode, setMode] = useState<Mode>("login");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -133,6 +141,11 @@ export function AccountMenu() {
       .then(async (response) => response.ok && setUser((await response.json()).user))
       .catch(() => undefined);
   }, []);
+
+  function dismiss() {
+    setOpen(false);
+    trigger.current?.focus();
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -232,17 +245,26 @@ export function AccountMenu() {
     );
 
   return (
-    <div className="accountMenu">
+    <div
+      className="accountMenu"
+      onKeyDown={(event) => {
+        if (!open || event.key !== "Escape" || event.defaultPrevented) return;
+        event.preventDefault();
+        dismiss();
+      }}
+    >
       <button
         type="button"
+        ref={trigger}
         className="accountButton"
+        aria-controls={open ? panelId : undefined}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
         {user?.email ?? t.account}
       </button>
       {open && (
-        <section className="accountPopover" aria-label={t.account}>
+        <section id={panelId} className="accountPopover" aria-label={t.account}>
           {googleResult && (
             <p role={googleResult === "connected" ? "status" : "alert"}>{google[googleResult]}</p>
           )}
@@ -254,6 +276,11 @@ export function AccountMenu() {
               <button type="button" disabled={busy} onClick={logout}>
                 {busy ? t.loading : t.logout}
               </button>
+              <form action="/api/auth/export" method="post">
+                <button type="submit" disabled={busy}>
+                  {exportLabel[language]}
+                </button>
+              </form>
             </>
           ) : (
             <>
@@ -340,12 +367,7 @@ export function AccountMenu() {
               <p className="accountHint">{t.local}</p>
             </>
           )}
-          <button
-            type="button"
-            className="accountClose"
-            onClick={() => setOpen(false)}
-            aria-label={t.close}
-          >
+          <button type="button" className="accountClose" onClick={dismiss} aria-label={t.close}>
             ×
           </button>
         </section>

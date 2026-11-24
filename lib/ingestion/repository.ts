@@ -20,6 +20,7 @@ type AttemptInput = {
   startedAt: Date;
   endedAt: Date;
   result?: IngestionResult;
+  sourceLease?: { id: string; owner: string; updatedAt: Date };
 };
 
 export async function createIngestionRun(
@@ -41,6 +42,23 @@ const attemptScope = (requestedUrl?: string): Prisma.IngestionAttemptWhereInput 
 
 export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
   return db.$transaction(async (tx) => {
+    if (Boolean(input.sourceLease) !== Boolean(input.result?.candidate.arrival))
+      throw new Error("Arrival observations require a source lease");
+    if (input.sourceLease) {
+      const lease = input.sourceLease;
+      const rows = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM "FestivalSource"
+        WHERE id = ${lease.id} AND "leaseOwner" = ${lease.owner}
+          AND enabled = true AND "configurationBackfilledAt" IS NOT NULL
+          AND "festivalSlug" = ${input.festivalSlug} AND url = ${input.requestedUrl}
+          AND "editionId" = ${input.result?.candidate.arrival?.editionId ?? null}
+          AND "editionYear" = ${input.result?.candidate.arrival?.editionYear ?? null}
+          AND "updatedAt" = (${lease.updatedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC')
+          AND "leaseExpiresAt" > (clock_timestamp() AT TIME ZONE 'UTC')
+        FOR UPDATE
+      `;
+      if (rows.length !== 1) throw new Error("Ingestion source lease is no longer active");
+    }
     const result = input.result;
     const independent = independentTicketUrls.includes(input.requestedUrl);
     const scope = attemptScope(independent ? input.requestedUrl : undefined);
@@ -88,7 +106,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
           sourceEdition: result.candidate.startDate,
           sourceYear: result.candidate.startDate
             ? Number(result.candidate.startDate.slice(0, 4))
-            : undefined,
+            : result.candidate.arrival?.editionYear,
           normalized: result.candidate as Prisma.InputJsonValue,
           warnings: result.candidate.warnings,
           publishable: result.publishable,
@@ -102,12 +120,14 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
             field: e.field,
             sourceUrl: e.sourceUrl,
             excerpt: e.excerpt?.slice(0, MAX_EVIDENCE_EXCERPT),
-            contentHash: createHash("sha256")
-              .update(e.excerpt ?? JSON.stringify(result.candidate[e.field] ?? null))
-              .digest("hex"),
+            contentHash:
+              e.contentHash ??
+              createHash("sha256")
+                .update(e.excerpt ?? JSON.stringify(result.candidate[e.field] ?? null))
+                .digest("hex"),
             observedValue: (result.candidate[e.field] ?? null) as Prisma.InputJsonValue,
             observedAt: new Date(e.observedAt),
-            adapter: "festival-extractor-v1",
+            adapter: e.adapter ?? "festival-extractor-v1",
           })),
         });
       if (result.changes.length)

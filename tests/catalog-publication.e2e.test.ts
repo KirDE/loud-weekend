@@ -191,6 +191,43 @@ test.after(async () => {
   await db.$disconnect();
 });
 
+test("publication requires the persisted festival, source and observed edition", async () => {
+  const value = result(`Scope verification ${suffix}`);
+  const attempt = await persist(value);
+  const publicationCount = await db.catalogPublication.count();
+  const queueCount = await db.catalogPlaylistRefresh.count();
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: value.festivalSlug }, recordState: "CURRENT" },
+  });
+  const variants = [
+    { ...value, festivalSlug: "rockharz" },
+    { ...value, sourceUrl: "https://other.example.test/" },
+    { ...value, candidate: { ...value.candidate, observedEditionYears: [2026] } },
+  ];
+  for (const variant of variants) {
+    await assert.rejects(
+      publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: variant,
+        sourceCommit: suffix,
+      }),
+      /publication scope does not match/,
+    );
+  }
+  const candidate = await db.ingestionCandidate.findUniqueOrThrow({
+    where: { attemptId: attempt.id },
+  });
+  assert.equal(candidate.reviewState, "PENDING");
+  assert.equal(await db.catalogPublication.count(), publicationCount);
+  assert.equal(await db.catalogPlaylistRefresh.count(), queueCount);
+  assert.equal(
+    await db.lineupEntry.count({
+      where: { editionId: edition.id, artist: { name: value.candidate.lineup![0] } },
+    }),
+    0,
+  );
+});
+
 test("commits catalog rows, candidate state, audit snapshot and playlist request together", async () => {
   const artist = `Catalog Transaction ${suffix}`;
   const value = result(artist);
@@ -246,6 +283,104 @@ test("commits catalog rows, candidate state, audit snapshot and playlist request
     db.catalogPublication.delete({ where: { id: publication.id } }),
     /append-only/,
   );
+});
+
+test("ingestion saves a compound billing as one addition without replacing existing artists", async () => {
+  const compound = `Synthetic, Compound Act ${suffix}`;
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+  });
+  const before = await db.lineupEntry.findMany({ where: { editionId: edition.id } });
+  const facts = result(compound);
+  const attempt = await persist(facts);
+  const publication = await publishIngestionResult(db, {
+    attemptId: attempt.id,
+    result: facts,
+    sourceCommit: suffix,
+  });
+  assert.ok(publication);
+  const after = await db.lineupEntry.findMany({
+    where: { editionId: edition.id },
+    include: { artist: true },
+  });
+  const inserted = after.find((row) => row.artist.name === compound);
+  assert.ok(inserted);
+  createdArtists.push(inserted.artist.slug);
+  assert.equal(after.length, before.length + 1);
+  assert.ok(before.every((row) => after.some((saved) => saved.id === row.id)));
+  const snapshot = await readCatalog({ database: db });
+  assert.ok(
+    snapshot.festivals.find((item) => item.slug === "synthetic-fest")?.lineup.includes(compound),
+  );
+  assert.equal(
+    (
+      await publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: facts,
+        sourceCommit: suffix,
+      })
+    )?.id,
+    publication.id,
+  );
+});
+
+test("automatic ingestion and ordinary admin edits cannot reinstate a cancelled identity", async () => {
+  const cancelled = await db.lineupEntry.findFirstOrThrow({
+    where: {
+      edition: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+      billing: "LINEUP",
+    },
+    include: { artist: true },
+  });
+  await db.lineupEntry.update({ where: { id: cancelled.id }, data: { status: "CANCELLED" } });
+  try {
+    const facts = result(cancelled.artist.name);
+    const attempt = await persist(facts);
+    await assert.rejects(
+      publishIngestionResult(db, { attemptId: attempt.id, result: facts, sourceCommit: suffix }),
+      /Cancellation requires separate explicit review/,
+    );
+    assert.equal(
+      (await db.ingestionCandidate.findUniqueOrThrow({ where: { attemptId: attempt.id } }))
+        .reviewState,
+      "PENDING",
+    );
+
+    const edit = (afterValue: string[]) =>
+      db.$transaction((tx) =>
+        publishAdminFestivalChange(tx, {
+          change: {
+            id: randomUUID(),
+            resourceKey: "synthetic-fest",
+            field: "lineup",
+            beforeValue: null,
+            afterValue,
+            sourceEvidence: null,
+            parserRunId: null,
+          },
+          actorLabel: "test reviewer",
+        }),
+      );
+    await assert.rejects(
+      edit([cancelled.artist.name]),
+      /Cancellation requires separate explicit review/,
+    );
+    // Build the edit from the same catalogue roster the Admin Console loads.
+    const before = (await readCatalog({ database: db })).festivals.find(
+      (item) => item.slug === "synthetic-fest",
+    );
+    assert.ok(before);
+    assert.ok(!before.lineup.includes(cancelled.artist.name));
+    const name = `Synthetic Reviewed Replacement ${suffix}`;
+    assert.ok(await edit([...before.lineup, name]));
+    const inserted = await db.artist.findFirstOrThrow({ where: { name } });
+    createdArtists.push(inserted.slug);
+    const retained = await db.lineupEntry.findUniqueOrThrow({ where: { id: cancelled.id } });
+    assert.equal(retained.status, "CANCELLED");
+    assert.equal(retained.position, cancelled.position);
+  } finally {
+    await db.lineupEntry.update({ where: { id: cancelled.id }, data: { status: "ANNOUNCED" } });
+  }
 });
 
 test("fails closed and rolls back every catalog row when artist identity is ambiguous", async () => {
@@ -1032,7 +1167,7 @@ test("I-Days provenance drift and identity collisions roll back without catalog 
     };
     await assert.rejects(
       publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
-      /I-Days publication requires|Ambiguous billing|Artist slug collision/,
+      /I-Days publication requires|Ambiguous billing|Artist slug collision|publication scope does not match/,
     );
     assert.deepEqual(
       {
@@ -1157,7 +1292,10 @@ test(
       const before = await counts();
       await assert.rejects(
         publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
-        /Graspop publication requires|Candidate edition 2026 does not match catalogue edition 2027/,
+        new RegExp(
+          "Graspop publication requires|Candidate edition 2026 does not match catalogue edition 2027|" +
+            "publication scope does not match",
+        ),
       );
       assert.deepEqual(await counts(), before);
       assert.equal(
@@ -1797,7 +1935,7 @@ test("Provinssi provenance drift rolls back catalogue, completeness and provider
     const before = await counts();
     await assert.rejects(
       publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
-      /Provinssi publication requires|Candidate edition 2026/,
+      /Provinssi publication requires|Candidate edition 2026|publication scope does not match/,
     );
     assert.deepEqual(await counts(), before);
   }
@@ -2123,7 +2261,7 @@ for (const slug of ["wacken-open-air", "download"]) {
       const before = await db.catalogPublication.count();
       await assert.rejects(
         publishIngestionResult(db, { attemptId: saved.id, result: clean, sourceCommit: suffix }),
-        /persisted official ticket evidence/,
+        /persisted official ticket evidence|publication scope does not match/,
         mutation,
       );
       assert.equal(await db.catalogPublication.count(), before, mutation);
@@ -2295,7 +2433,7 @@ test(
       };
       await assert.rejects(
         publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
-        /I-Days (?:ticket )?publication requires matching persisted/,
+        /I-Days (?:ticket )?publication requires matching persisted|publication scope does not match/,
       );
       assert.deepEqual(
         {
@@ -2476,7 +2614,7 @@ test("I-Days collected ticket-only changes cannot bypass persisted secondary-pro
       new RegExp(
         "(?:I-Days ticket publication requires matching persisted|Tic" +
           "ket supplement publication requires matching persisted offic" +
-          "ial ticket evidence)",
+          "ial ticket evidence)|publication scope does not match",
         "",
       ),
     );
@@ -2581,7 +2719,7 @@ test("I-Days direct ticketsUrl-only publication validates durable proof and atom
     } else {
       await assert.rejects(
         publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
-        /I-Days ticket publication requires matching persisted/,
+        /I-Days ticket publication requires matching persisted|publication scope does not match/,
       );
       assert.deepEqual(await counts(), before);
       const after = (await readCatalog({ database: db })).festivals.find(
@@ -2594,5 +2732,125 @@ test("I-Days direct ticketsUrl-only publication validates durable proof and atom
         "PENDING",
       );
     }
+  }
+});
+
+test("invalid dates cannot publish or replace the last verified edition range", async () => {
+  const slug = "synthetic-fest";
+  const where = { festival: { slug }, recordState: "CURRENT" as const };
+  const before = await db.festivalEdition.findFirstOrThrow({ where });
+  const start = before.startDate!.toISOString().slice(0, 10);
+  const end = before.endDate!.toISOString().slice(0, 10);
+  const assertUnchanged = async () => {
+    const after = await db.festivalEdition.findUniqueOrThrow({ where: { id: before.id } });
+    assert.deepEqual(
+      [after.startDate, after.endDate, after.sourceUpdatedAt],
+      [before.startDate, before.endDate, before.sourceUpdatedAt],
+    );
+  };
+
+  for (const [after, reason] of [
+    ["2027-02-29", /valid calendar dates/],
+    ["2028-01-01", /match the edition year/],
+    ["2027-01-01", /end date cannot precede/],
+  ] as const) {
+    const value = result("Unused", {
+      changes: [
+        { kind: "date_changed", field: "endDate", before: end, after, reviewRequired: false },
+      ],
+    });
+    const attempt = await persist(value);
+    const candidate = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    await assert.rejects(
+      publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
+      reason,
+    );
+    assert.equal(
+      await db.catalogPublication.findUnique({ where: { sourceId: `ingestion:${candidate.id}` } }),
+      null,
+    );
+    assert.equal(
+      (await db.ingestionCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).reviewState,
+      "PENDING",
+    );
+    await assertUnchanged();
+  }
+
+  const adminId = randomUUID();
+  await assert.rejects(
+    db.$transaction((tx) =>
+      publishAdminFestivalChange(tx, {
+        change: {
+          id: adminId,
+          resourceKey: slug,
+          field: "endDate",
+          beforeValue: end,
+          afterValue: 20270601,
+          sourceEvidence: {},
+          parserRunId: null,
+        },
+        actorLabel: "test",
+      }),
+    ),
+    /valid calendar dates/,
+  );
+  assert.equal(
+    await db.catalogPublication.findUnique({ where: { sourceId: `admin:${adminId}` } }),
+    null,
+  );
+  await assertUnchanged();
+
+  const value = result("Unused", {
+    changes: [
+      {
+        kind: "date_changed",
+        field: "startDate",
+        before: start,
+        after: "2027-11-10",
+        reviewRequired: false,
+      },
+      {
+        kind: "date_changed",
+        field: "endDate",
+        before: end,
+        after: "2027-11-13",
+        reviewRequired: false,
+      },
+    ],
+  });
+  const attempt = await persist(value);
+  try {
+    const publication = await publishIngestionResult(db, {
+      attemptId: attempt.id,
+      result: value,
+      sourceCommit: suffix,
+    });
+    assert.deepEqual(publication?.fields, ["startDate", "endDate"]);
+    assert.equal(publication?.playlistRefreshRequested, false);
+    const visible = (await readCatalog({ database: db })).festivals.find(
+      (festival) => festival.slug === slug,
+    );
+    assert.deepEqual([visible?.startDate, visible?.endDate], ["2027-11-10", "2027-11-13"]);
+    assert.equal(
+      (
+        await publishIngestionResult(db, {
+          attemptId: attempt.id,
+          result: value,
+          sourceCommit: suffix,
+        })
+      )?.id,
+      publication?.id,
+    );
+  } finally {
+    await db.festivalEdition.update({
+      where: { id: before.id },
+      data: {
+        startDate: before.startDate,
+        endDate: before.endDate,
+        sourceUpdatedAt: before.sourceUpdatedAt,
+      },
+    });
   }
 });
