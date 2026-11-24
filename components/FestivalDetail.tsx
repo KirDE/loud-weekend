@@ -6,6 +6,8 @@ import type { Festival } from "@/lib/domain/festival";
 import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
+import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
+import { FestivalArrival } from "./FestivalArrival";
 import { PlanningTools } from "./PlanningTools";
 import type { PlaylistStatus } from "@/lib/domain/festival";
 import { formatFreshnessDate } from "@/lib/freshness-date";
@@ -25,11 +27,13 @@ export function FestivalDetail({
   artistSlugs,
   playlist,
   artistPopularity = {},
+  arrivalFacts = [],
 }: {
   item: Festival;
   festivals: Festival[];
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
+  arrivalFacts?: readonly PublicArrivalFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
   const { locale, t } = useLanguage();
@@ -227,6 +231,7 @@ export function FestivalDetail({
         )}
       </section>
       <PlanningTools item={item} festivals={festivals} />
+      <FestivalArrival facts={arrivalFacts} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
         <p>

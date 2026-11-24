@@ -1454,6 +1454,18 @@ main {
   background-image: radial-gradient(circle at 90% 20%, #574d10, transparent 30%);
 }
 
+.editionDetailBody {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.editionDetailHero .status {
+  display: inline-block;
+  max-width: 100%;
+  white-space: normal;
+}
+
 .detailHero h1 {
   font-size: clamp(45px, 7vw, 96px);
   max-width: 920px;
