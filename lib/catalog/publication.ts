@@ -1194,17 +1194,33 @@ export async function publishAgentFestivalResolution(
       headliners.length + lineup.length
     )
       throw new Error("Ambiguous reviewed billing");
-    const oldHeadliners = edition.lineup
-      .filter((l) => l.billing === "HEADLINER" && l.status === "ANNOUNCED")
-      .map((l) => l.artist.name);
-    const oldLineup = edition.lineup
-      .filter((l) => l.billing === "LINEUP" && l.status === "ANNOUNCED")
-      .map((l) => l.artist.name);
-    if (!same(oldHeadliners, headliners) || !same(oldLineup, lineup)) {
-      const artists = [];
-      for (const name of [...headliners, ...lineup]) artists.push(await ensureArtist(name));
+    const announced = edition.lineup.filter((entry) => entry.status === "ANNOUNCED");
+    const oldHeadliners = announced.filter((entry) => entry.billing === "HEADLINER");
+    const oldLineup = announced.filter((entry) => entry.billing === "LINEUP");
+    const previousIds = [...oldHeadliners, ...oldLineup].map((entry) => entry.artistId);
+    const rosterNamesChanged =
+      !same(
+        oldHeadliners.map((entry) => entry.artist.name),
+        headliners,
+      ) ||
+      !same(
+        oldLineup.map((entry) => entry.artist.name),
+        lineup,
+      );
+    const artistIds = [];
+    if (rosterNamesChanged) {
+      for (const name of [...headliners, ...lineup]) artistIds.push((await ensureArtist(name)).id);
+      if (new Set(artistIds).size !== artistIds.length)
+        throw new Error("Ambiguous reviewed billing or duplicate alias identities");
+    }
+
+    // A reviewed spelling or alias does not change the published roster.
+    if (
+      rosterNamesChanged &&
+      (headliners.length !== oldHeadliners.length || !same(previousIds, artistIds))
+    ) {
       const cancelled = edition.lineup.filter((l) => l.status === "CANCELLED");
-      if (artists.some((a) => cancelled.some((l) => l.artistId === a.id)))
+      if (artistIds.some((id) => cancelled.some((l) => l.artistId === id)))
         throw new Error("Cancellation requires separate explicit review");
       // Replace both billing classes together so promotion/demotion cannot
       // collide with an artist temporarily present in the opposite class.
@@ -1224,7 +1240,7 @@ export async function publishAgentFestivalResolution(
           await db.lineupEntry.create({
             data: {
               editionId: edition.id,
-              artistId: artists[offset + n].id,
+              artistId: artistIds[offset + n],
               billing,
               position: position++,
               status: "ANNOUNCED",
