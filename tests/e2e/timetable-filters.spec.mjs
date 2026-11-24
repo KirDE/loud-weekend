@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
 import { importTimetable } from "../../lib/catalog/timetable-import.ts";
@@ -144,6 +145,16 @@ test("published days and stages can be filtered without hiding cancellations or 
       runningOrder.getByText("Verified overlap: First Fixture / Overlap Fixture"),
     ).toBeVisible();
     await expect(runningOrder.getByText(/no verified end time/)).toBeVisible();
+    const exportFile = planPage.waitForEvent("download");
+    await runningOrder
+      .getByRole("link", { name: "Download running order (.ics)", exact: true })
+      .click();
+    const downloaded = await exportFile;
+    expect(downloaded.suggestedFilename()).toBe("synthetic-west-2027-running-order.ics");
+    const content = await readFile(await downloaded.path(), "utf8");
+    expect(content.match(/BEGIN:VEVENT/g)).toHaveLength(2);
+    expect(content).toContain("DTEND:20270610T171500Z");
+    expect(content).not.toContain("Second Fixture");
     expect(await planPage.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       320,
     );
