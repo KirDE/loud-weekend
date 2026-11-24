@@ -8,28 +8,44 @@ export function parsePerformanceSelections(raw: string) {
   try {
     const values: unknown = JSON.parse(raw);
     if (!Array.isArray(values)) return [];
-    return [...new Set(values.filter((value): value is string =>
-      typeof value === "string" && performanceSelectionId.test(value)
-    ))].slice(0, maxPerformanceSelections);
+    return [
+      ...new Set(
+        values.filter(
+          (value): value is string =>
+            typeof value === "string" && performanceSelectionId.test(value),
+        ),
+      ),
+    ].slice(0, maxPerformanceSelections);
   } catch {
     return [];
   }
 }
 
 export function togglePerformanceSelection(ids: string[], id: string) {
-  if (ids.includes(id)) return ids.filter(value => value !== id);
+  if (ids.includes(id)) return ids.filter((value) => value !== id);
   return ids.length < maxPerformanceSelections ? [...ids, id] : ids;
 }
 
 function verifiedPerformanceWindows(entries: TimetableEntry[]) {
-  return entries.filter(entry => entry.status === "scheduled").flatMap(entry => entry.window
-    ? [{ entry, from: Date.parse(entry.window.startsAt), until: Date.parse(entry.window.endsAt) }]
-    : []).filter(window => window.until > window.from)
+  const scheduled = entries.filter((entry) => entry.status === "scheduled");
+  return scheduled
+    .flatMap((entry) =>
+      entry.window
+        ? [
+            {
+              entry,
+              from: Date.parse(entry.window.startsAt),
+              until: Date.parse(entry.window.endsAt),
+            },
+          ]
+        : [],
+    )
+    .filter((window) => window.until > window.from)
     .sort((left, right) => left.from - right.from);
 }
 
 export function assessPerformanceSelections(entries: TimetableEntry[]) {
-  const scheduledCount = entries.filter(entry => entry.status === "scheduled").length;
+  const scheduledCount = entries.filter((entry) => entry.status === "scheduled").length;
   const verified = verifiedPerformanceWindows(entries);
 
   const conflicts: [TimetableEntry, TimetableEntry][] = [];
@@ -42,7 +58,10 @@ export function assessPerformanceSelections(entries: TimetableEntry[]) {
 }
 
 function utcCalendarTime(instant: number) {
-  return new Date(instant).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  return new Date(instant)
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "Z");
 }
 
 function foldCalendarLine(line: string) {
@@ -65,9 +84,10 @@ export function runningOrderCalendar(entries: TimetableEntry[], slug: string, ye
   const events = verifiedPerformanceWindows(entries).flatMap(({ entry, from, until }) => {
     const checked = Date.parse(entry.observedAt);
     if (!entry.sourcePerformanceId || !Number.isFinite(checked)) return [];
+    const id = encodeURIComponent(entry.sourcePerformanceId);
     return [
       "BEGIN:VEVENT",
-      `UID:performance:${year}:${encodeURIComponent(slug)}:${encodeURIComponent(entry.sourcePerformanceId)}@festival-radar`,
+      `UID:performance:${year}:${encodeURIComponent(slug)}:${id}@festival-radar`,
       `DTSTAMP:${utcCalendarTime(checked)}`,
       `DTSTART:${utcCalendarTime(from)}`,
       `DTEND:${utcCalendarTime(until)}`,
@@ -77,7 +97,16 @@ export function runningOrderCalendar(entries: TimetableEntry[], slug: string, ye
     ];
   });
   return events.length
-    ? ["BEGIN:VCALENDAR", "VERSION:2.0", "CALSCALE:GREGORIAN", "PRODID:-//Loud Weekend//Running Order//EN", ...events, "END:VCALENDAR", ""]
-      .map(foldCalendarLine).join("\r\n")
+    ? [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "CALSCALE:GREGORIAN",
+        "PRODID:-//Loud Weekend//Running Order//EN",
+        ...events,
+        "END:VCALENDAR",
+        "",
+      ]
+        .map(foldCalendarLine)
+        .join("\r\n")
     : null;
 }
