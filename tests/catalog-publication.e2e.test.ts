@@ -3051,7 +3051,13 @@ test("admin parser approval retains the source check time rather than the approv
         field: "ticketsUrl",
         beforeValue: edition.ticketsUrl,
         afterValue: source,
-        sourceEvidence: [],
+        sourceEvidence: {
+          kind: "scoped-refresh",
+          refreshId: randomUUID(),
+          editionId: edition.id,
+          editionYear: edition.year,
+          evidence: [],
+        },
         parserRunId: run.id,
       };
       for (const data of [
@@ -3119,7 +3125,13 @@ test("publishing a changed festival city advances the current edition's source f
         field: "city",
         beforeValue: edition.festival.city,
         afterValue: "Synthetic Harbour",
-        sourceEvidence: [],
+        sourceEvidence: {
+          kind: "scoped-refresh",
+          refreshId: randomUUID(),
+          editionId: edition.id,
+          editionYear: edition.year,
+          evidence: [],
+        },
         parserRunId: run.id,
       };
       const publication = await publishAdminFestivalChange(tx, {
@@ -3293,7 +3305,13 @@ test("a parser proposal compares festival facts using their canonical whitespace
         field: "city",
         beforeValue: "Synthetic Harbour",
         afterValue: "  Synthetic Harbour",
-        sourceEvidence: [],
+        sourceEvidence: {
+          kind: "scoped-refresh",
+          refreshId: randomUUID(),
+          editionId: edition.id,
+          editionYear: edition.year,
+          evidence: [],
+        },
         parserRunId: run.id,
       };
       const publish = (patch: Partial<typeof change>) =>
