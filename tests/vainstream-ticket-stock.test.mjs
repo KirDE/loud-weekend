@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { load } from "cheerio";
+import { evaluateCandidate } from "../lib/ingestion/policy.ts";
 import { fetchSource } from "../lib/ingestion/fetch.ts";
 import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
 import {
@@ -94,7 +95,7 @@ async function pipeline(options = {}) {
         assert.ok(init.method === undefined || init.method === "GET");
         assert.ok(!String(target).includes("/checkout/"));
         if (target === VAINSTREAM_STOCK) assert.equal(init.headers.authorization, undefined);
-        const response = new Response(target === source.url ? home : fixture, {
+        const response = new Response(target === source.url ? home : (options.fixture ?? fixture), {
           status: target === VAINSTREAM_STOCK ? (options.status ?? 200) : 200,
           headers: {
             "content-type":
@@ -126,6 +127,39 @@ test("Vainstream GET supplies separate durable ticket proof and preserves artist
       .every((e) => e.sourceUrl === VAINSTREAM_STOCK),
   );
 });
+for (const notice of [
+  "<div>Nicht</div><div>verfügbar</div>",
+  '<span style="display: block">Nicht</span><span style="display: block">verfügbar</span>',
+  "<span>Nicht<br>mehr <strong>verfüg</strong>bar</span>",
+  "<span>Aus<strong>verkauft</strong></span>",
+]) {
+  test(`Vainstream: visible stock contradiction ${notice} prevents publication`, async () => {
+    const $ = load(fixture);
+    $(".buybox--inner").append(notice);
+    const { result } = await pipeline({ fixture: $.html() });
+    const candidate = extractFestivalCandidate(
+      await result.response.text(),
+      source,
+      "2026-11-22T13:10:00Z",
+    );
+    assert.equal(candidate.ticketStatus, undefined);
+    const evaluated = evaluateCandidate(
+      {
+        slug: source.festivalSlug,
+        editionYear: source.editionYear,
+        ...dates,
+        lineup: candidate.lineup,
+        headliners: [],
+        status: "partial",
+        ticketStatus: "unknown",
+      },
+      candidate,
+    );
+    assert.ok(
+      !evaluated.changes.some(({ field }) => ["ticketStatus", "ticketsUrl"].includes(field)),
+    );
+  });
+}
 test("Vainstream: access/schema/redirect failures are errors, not empty stock success", async () => {
   for (const status of [403, 429, 503])
     assert.equal((await pipeline({ status })).result.response.status, status);

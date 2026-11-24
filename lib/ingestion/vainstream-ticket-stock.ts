@@ -1,3 +1,4 @@
+import { renderedTicketText } from "./rendered-ticket-text.ts";
 import { z } from "zod";
 import { load } from "cheerio";
 import type { FestivalCandidate, FestivalSource } from "./types.ts";
@@ -100,7 +101,7 @@ export function observeVainstreamStock(
     text(buy.text()) !== "In den Warenkorb" ||
     [offer, form, quantity, buy].some((el) => el.is(blocked) || el.parents(blocked).length > 0) ||
     /ausverkauft|nicht\s+(?:mehr\s+)?(?:verfügbar|lieferbar)|nicht\s+auf\s+lager/i.test(
-      text(offer.text()),
+      renderedTicketText(offer),
     )
   )
     return fail("ordinary stock and enabled purchase controls absent or contradictory");
