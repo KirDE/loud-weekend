@@ -195,6 +195,15 @@ model User {
   submissionAuditEntries    FestivalSubmissionAudit[]
   emailVerificationTokens   EmailVerificationToken[]
   passkeys                  Passkey[]
+  calendarSubscription      CalendarSubscription?
+}
+
+model CalendarSubscription {
+  userId    String   @id
+  keyDigest String   @unique
+  seasons   Int[]
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Passkey {
