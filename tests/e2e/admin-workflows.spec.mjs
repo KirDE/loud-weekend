@@ -20,7 +20,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => db.$disconnect());
 
-test("admin edits, reviews, diagnostics and audit survive reload", async ({ page }) => {
+test("admin edits, reviews, diagnostics and audit survive reload", async ({ page }, testInfo) => {
   await expect((await page.request.get("/api/admin")).status()).toBe(403);
   await page.goto("/submit");
   await page.getByLabel("Festival name").fill("Browser Metal Festival");
@@ -213,7 +213,15 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   await page.getByRole("button", { name: "Review queue" }).click();
   const cityChange = page.locator("article.reviewCard").filter({ hasText: "Sample E2E City" });
   await expect(cityChange).toBeVisible();
+  const cityChangeApproval = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && response.url().includes("/api/admin/changes/"),
+  );
   await cityChange.getByRole("button", { name: "Approve change" }).click();
+  const cityApprovalTarget = new URL((await cityChangeApproval).url()).pathname
+    .split("/")
+    .filter(Boolean)
+    .at(-1);
   await expect(cityChange).toContainText("approved");
   const biographyChange = page
     .locator("article.reviewCard")
@@ -364,7 +372,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
           .selectOption(draftFestival[language]);
         await page
           .getByLabel(copy.city, { exact: true })
-          .fill(`Localized synthetic city ${language}`);
+          .fill(`Localized synthetic city ${language} ${testInfo.retry}`);
         await page.getByRole("button", { name: copy.save }).click();
         await expect(page.getByRole("status")).toContainText(copy.saved);
         await page
@@ -394,7 +402,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
       ]) {
         const approved = page
           .locator(".auditTable article")
-          .filter({ hasText: target })
+          .filter({ hasText: target === "synthetic-fest" ? cityApprovalTarget : target })
           .filter({ hasText: `"field":"${field}"` });
         await expect(approved.getByText("CHANGE_APPROVED", { exact: true })).toBeVisible();
       }
