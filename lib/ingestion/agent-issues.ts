@@ -1,3 +1,4 @@
+import { rosterFingerprint } from "../catalog/lineup-proof.ts";
 import { Prisma, type PrismaClient, type Prisma as PrismaTypes } from "@prisma/client";
 import { overviewObservation } from "../catalog/festival-overview-import.ts";
 import { OVERVIEW_ADAPTER, registeredOverviewSource } from "./overview-collector.ts";
@@ -210,6 +211,13 @@ export async function inspectSource(db: Database, sourceId: string) {
     lineup: s.edition.lineup
       .filter((l) => l.billing === "LINEUP" && l.status === "ANNOUNCED")
       .map((l) => l.artist.name),
+    finalLineup: {
+      year: s.editionYear,
+      complete: Boolean(
+        s.edition.finalLineupFingerprint &&
+        s.edition.finalLineupFingerprint === rosterFingerprint(s.edition.id, s.edition.lineup),
+      ),
+    },
     entries: s.edition.lineup.map((l) => ({
       artistId: l.artistId,
       billing: l.billing,
@@ -487,6 +495,20 @@ function allowedEvidence(
       !d.evidence.some((e) => e.field === "source" && e.url === d.source!.url))
   )
     throw new ImportAgentError("invalid");
+  if (d.facts?.finalLineup) {
+    const festivalHosts = new Set(
+      [i.source.officialUrl, i.source.url, i.source.fetchUrl]
+        .filter((url): url is string => Boolean(url))
+        .map((url) => new URL(url).hostname),
+    );
+    if (
+      d.facts.finalLineup.year !== i.current.year ||
+      d.evidence.some(
+        (e) => e.field === "finalLineup" && !festivalHosts.has(new URL(e.url).hostname),
+      )
+    )
+      throw new ImportAgentError("invalid");
+  }
   if (d.facts?.ticketsUrl && !valid(d.facts.ticketsUrl)) throw new ImportAgentError("invalid");
 }
 
@@ -649,12 +671,16 @@ TIME ZONE 'UTC')) FOR UPDATE
       // manual no-op reviews (including unchanged supplied facts/source) must
       // not manufacture repair tasks. Actual corrections and rejected/review
       // proposals still enqueue atomically with their audit.
-      const changedFacts =
+      const changedParserFacts =
         d.facts &&
         Object.entries(d.facts).some(
           ([field, value]) =>
+            field !== "finalLineup" &&
             fingerprint(value) !== fingerprint(i.current[field as keyof typeof i.current]),
         );
+      // An explicit review can renew or revoke stored proof even when the
+      // published artist names and the current display state have not changed.
+      const changedFacts = changedParserFacts || d.facts?.finalLineup !== undefined;
       const changedSource =
         d.source &&
         (d.source.url !== i.source.url ||
@@ -731,12 +757,14 @@ TIME ZONE 'UTC')) FOR UPDATE
             ? new Date(now.getTime() + 604800000).toISOString()
             : null;
       // Raw fact differences may be spelling changes for the same artist.
-      // Only a committed catalogue change is correction feedback on its own.
+      // Only committed parser facts, not reviewed completeness metadata, count as correction feedback.
       const parserRepairId =
         ["apply", "dismiss"].includes(d.action) &&
         !d.arrival &&
         !d.overview &&
-        (publication || changedSource || candidateFeedback)
+        (publication?.fields.some((field) => field !== "finalLineup") ||
+          changedSource ||
+          candidateFeedback)
           ? await enqueueParserRepair(tx, {
               sourceId: i.sourceId,
               festivalSlug: i.festivalSlug,
