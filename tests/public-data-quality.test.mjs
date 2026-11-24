@@ -4,6 +4,16 @@ import { summarizeDataQuality } from "../lib/catalog/data-quality.ts";
 
 const now = Date.parse("2026-11-23T02:00Z");
 const checkedAt = "2026-11-21T09:00:00.000Z";
+const performance = {
+  date: "2027-06-18",
+  start: "20:45",
+  stage: "Main Stage",
+  artist: "Verified artist",
+  timeZone: "Europe/Berlin",
+  status: "scheduled",
+  sourceUrl: "https://festival.example.test/private-schedule-fixture",
+  observedAt: checkedAt,
+};
 const festival = {
   startDate: "2027-06-17",
   endDate: "2027-06-19",
@@ -11,7 +21,7 @@ const festival = {
   headliners: ["Verified artist"],
   lineup: [],
   ticketStatus: "sold_out",
-  timetable: [{ status: "scheduled", sourceUrl: "private-schedule-fixture" }],
+  timetable: [performance],
   freshness: { sourceCheckStale: false, lastSuccessfulSourceCheckAt: checkedAt },
 };
 const current = {
@@ -86,4 +96,21 @@ test("absence of a source check is not success or proof of an outage", () => {
   assert.equal(unchecked.checked, 0);
   assert.equal(unchecked.stale, 0);
   assert.equal(unchecked.lastRecentCheck, undefined);
+});
+
+test("stage schedule coverage excludes malformed, out-of-edition and future observations", () => {
+  const tally = summarizeDataQuality(
+    {
+      festivals: [
+        { ...festival, timetable: [{ ...performance, start: "25:00" }] },
+        { ...festival, timetable: [{ ...performance, date: "2027-06-20" }] },
+        { ...festival, timetable: [{ ...performance, observedAt: "2029-01-01T00:00:00.000Z" }] },
+        { ...festival, timetable: [{ ...performance, timeZone: "Not/AZone" }, performance] },
+      ],
+      editions: [],
+    },
+    now,
+  );
+  assert.equal(tally.timetable, 1);
+  assert.doesNotMatch(JSON.stringify(tally), /private-schedule-fixture/);
 });
