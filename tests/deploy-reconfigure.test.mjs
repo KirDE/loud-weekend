@@ -1,3 +1,4 @@
+import { shellLogicalLines } from "./support/source-contracts.mjs";
 import assert from "node:assert/strict";
 import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,9 +15,15 @@ test("release packaging includes the helper required by the installer", async ()
   assert.match(packager, /cp scripts\/deploy\/reconfigure-webserver\.sh/);
   assert.match(packager, /app\/scripts\/deploy\/reconfigure-webserver\.sh/);
   assert.match(installer, /scripts\/deploy\/reconfigure-webserver\.sh/);
-  assert.match(packager, /cp scripts\/deploy\/db-due-scheduler-assets\.sh[^\n]*scripts\/deploy\/check-db-due-tick-ready/);
+  assert.match(
+    shellLogicalLines(packager),
+    /cp scripts\/deploy\/db-due-scheduler-assets\.sh[^\n]*scripts\/deploy\/check-db-due-tick-ready/,
+  );
   assert.match(packager, /app\/scripts\/deploy\/check-db-due-tick-ready/);
-  assert.match(installer, /install -o root -g root -m 0755 "\$release\/scripts\/deploy\/check-db-due-tick-ready"/);
+  assert.match(
+    installer,
+    /install -o root -g root -m 0755 "\$release\/scripts\/deploy\/check-db-due-tick-ready"/,
+  );
 });
 
 test("production packages database-owned catalogue only", async () => {
@@ -53,7 +60,10 @@ test("release activation explicitly restarts an already-running service", async 
 test("release activation configures both Plesk HTTP and HTTPS virtual hosts", async () => {
   const installer = await readFile("scripts/deploy/install-release.sh", "utf8");
 
-  assert.match(installer, /for vhost in "\$vhost_directory\/vhost\.conf" "\$vhost_directory\/vhost_ssl\.conf"/);
+  assert.match(
+    installer,
+    /for vhost in "\$vhost_directory\/vhost\.conf" "\$vhost_directory\/vhost_ssl\.conf"/,
+  );
   assert.match(installer, /ProxyPass \/ http:\/\/127\.0\.0\.1:\$port\//);
   assert.match(installer, /ProxyPassReverse \/ http:\/\/127\.0\.0\.1:\$port\//);
   assert.match(installer, /RequestHeader set X-Forwarded-Proto "https" env=HTTPS/);
@@ -67,7 +77,7 @@ test("release activation stages the new environment and rollback restores the pr
   const installer = await readFile("scripts/deploy/install-release.sh", "utf8");
 
   const stage = installer.indexOf('install -m 0600 "$env_source" "$staged_env"');
-  const migration = installer.indexOf('migrate deploy');
+  const migration = installer.indexOf("migrate deploy");
   const backup = installer.indexOf('cp -p "$env_file" "$previous_env"');
   const activateEnv = installer.indexOf('mv -f "$staged_env" "$env_file"');
   const activateRelease = installer.indexOf('ln -sfn "$release" "$app_root/current"');
@@ -78,10 +88,16 @@ test("release activation stages the new environment and rollback restores the pr
   assert.ok(stage >= 0, "new environment is staged with protected permissions");
   assert.ok(stage < migration, "staged environment is available to migrations");
   assert.ok(migration < backup, "shared environment remains unchanged until activation");
-  assert.ok(backup < activateEnv && activateEnv < activateRelease, "environment and release activate in order");
+  assert.ok(
+    backup < activateEnv && activateEnv < activateRelease,
+    "environment and release activate in order",
+  );
   assert.ok(activateRelease < rollbackRelease, "rollback follows activation health failure");
   assert.ok(rollbackRelease < rollbackEnv, "previous release is restored before its environment");
-  assert.ok(rollbackEnv < rollbackRestart, "previous environment is restored before service restart");
+  assert.ok(
+    rollbackEnv < rollbackRestart,
+    "previous environment is restored before service restart",
+  );
   assert.match(installer, /else\n\s+rm -f "\$env_file"\n\s+fi\n\s+if \[\[ -n "\$previous"/);
 });
 
@@ -108,7 +124,10 @@ test("uses the supported Plesk httpdmng executable", async () => {
 test("validates Apache before reloading when Plesk is unavailable", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "festival-apache-"));
   const log = path.join(directory, "calls.log");
-  await executable(path.join(directory, "apache2ctl"), `printf 'apache2ctl:%s\\n' "$*" >> "${log}"`);
+  await executable(
+    path.join(directory, "apache2ctl"),
+    `printf 'apache2ctl:%s\\n' "$*" >> "${log}"`,
+  );
   await executable(path.join(directory, "systemctl"), `printf 'systemctl:%s\\n' "$*" >> "${log}"`);
 
   const result = spawnSync("bash", [script, "loudweekend.eu"], {
@@ -121,8 +140,5 @@ test("validates Apache before reloading when Plesk is unavailable", async () => 
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(
-    await readFile(log, "utf8"),
-    "apache2ctl:configtest\nsystemctl:reload apache2\n",
-  );
+  assert.equal(await readFile(log, "utf8"), "apache2ctl:configtest\nsystemctl:reload apache2\n");
 });
