@@ -3482,6 +3482,14 @@ summary:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.playlistCoverage {
+  display: grid;
+  gap: 3px;
+  margin-block-start: 8px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
 .siteFooterLinks {
   display: flex;
   flex-wrap: wrap;
