@@ -213,6 +213,8 @@ test("Tolminator publishes durable proof, rejects stale updates and preserves of
     assert.equal(await db.ingestionRun.count(), count);
     await db.festivalEdition.update({ where: { id: edition.id }, data: { year: 2027 } });
     const rejectedScope = /Tolminator|Ingestion publication scope does not match/;
+    const rejectedTime =
+      /Ingestion observation time is later than the completed attempt or current time/;
     // Both the general persisted-scope fence and the product proof must fail atomically.
     for (const mutate of [
       (v: IngestionResult) => {
@@ -269,7 +271,7 @@ test("Tolminator publishes durable proof, rejects stale updates and preserves of
       const attempt = await persist(value);
       await db.ingestionAttempt.update({ where: { id: attempt.id }, data });
       const before = await snapshot();
-      await assert.rejects(publish(attempt.id), rejectedScope);
+      await assert.rejects(publish(attempt.id), "endedAt" in data ? rejectedTime : rejectedScope);
       assert.deepEqual(await snapshot(), before);
     }
     // Even matching caller/stored candidates cannot authorize seller-date or
@@ -290,7 +292,10 @@ test("Tolminator publishes durable proof, rejects stale updates and preserves of
       }
       const attempt = await persist(changed),
         before = await snapshot();
-      await assert.rejects(publish(attempt.id, changed), rejectedScope);
+      await assert.rejects(
+        publish(attempt.id, changed),
+        kind === "future" ? rejectedTime : rejectedScope,
+      );
       assert.deepEqual(await snapshot(), before);
     }
     const attempt = await persist(value),
