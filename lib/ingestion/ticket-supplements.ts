@@ -1,3 +1,4 @@
+import { renderedTicketText } from "./rendered-ticket-text.ts";
 import { RFP_STOCK, RFP_PURCHASE, observeRfpStock } from "./rfp-ticket-stock.ts";
 import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
@@ -77,6 +78,12 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
     url.pathname === "/"
   )
     return "https://downloadfestival.co.uk/tickets/";
+  if (
+    ["rock-am-ring", "rock-im-park"].includes(source.festivalSlug) &&
+    url.hostname === `www.${source.festivalSlug}.com` &&
+    url.pathname === "/"
+  )
+    return `https://www.${source.festivalSlug}.com/en/tickets`;
   if (
     source.festivalSlug === "wacken-open-air" &&
     url.hostname === "www.wacken.com" &&
@@ -217,6 +224,81 @@ export function observeTicketSupplement(
   const text = (value: string) => value.replace(/\s+/g, " ").trim();
   $("nav, footer").remove();
   const year = source.editionYear;
+  if (["rock-am-ring", "rock-im-park"].includes(source.festivalSlug)) {
+    const name = source.festivalSlug === "rock-am-ring" ? "Rock am Ring" : "Rock im Park";
+    const title = text($("title").text());
+    if (
+      !title.startsWith(`${name} | `) ||
+      !new RegExp(`\\b${year}\\b`).test(title) ||
+      $("link[rel='canonical']").length !== 1 ||
+      $("link[rel='canonical']").attr("href") !== url ||
+      text($("h1").text()) !== "Tickets"
+    )
+      return fail("current ticket-page identity absent");
+    const headings = $("h2").filter((_, element) => text($(element).text()) === "Festival tickets");
+    if (headings.length !== 1) return fail("ordinary admission group absent or ambiguous");
+    const expected =
+      source.festivalSlug === "rock-am-ring"
+        ? ["Festival Ticket"]
+        : ["FESTIVAL TICKET – GENERAL CAMPING", "FESTIVAL TICKET – GREEN CAMPING"];
+    const cards = headings
+      .parent()
+      .children(".ticketitem-block")
+      .filter((_, element) =>
+        expected.includes(text($(element).children(".header").children(".title").text())),
+      );
+    const titles = cards
+      .map((_, element) => text($(element).children(".header").children(".title").text()))
+      .get();
+    if (cards.length !== expected.length || new Set(titles).size !== expected.length)
+      return fail("standard admission card absent or duplicated");
+    let available: string | undefined;
+    for (const element of cards.toArray()) {
+      const card = $(element),
+        header = card.children(".header");
+      const description = text(card.children(".footer").children(".footer-content").text());
+      if (
+        !/valid (?:for|on) all three (?:event days|days of the event)/i.test(description) ||
+        !new RegExp(`\\b${year}\\b`).test(description) ||
+        /\b20\d{2}\b/g.test(description.replaceAll(String(year), ""))
+      )
+        return fail("ordinary admission product edition absent or conflicting");
+      const buy = header
+        .children(".ctas")
+        .find("a.btn-cta[href]")
+        .filter((_, anchor) => {
+          const link = $(anchor);
+          try {
+            const target = new URL(link.attr("href")!);
+            return (
+              target.protocol === "https:" &&
+              target.hostname === "www.eventim.de" &&
+              !target.username &&
+              !target.password &&
+              !target.port &&
+              !target.hash &&
+              /^\/noapp\/event\/\d+\/$/.test(target.pathname) &&
+              text(link.text()) === "Buy now" &&
+              link.closest("[disabled], [aria-disabled='true'], .disabled, .is-disabled").length ===
+                0
+            );
+          } catch {
+            return false;
+          }
+        });
+      const sold = /(?:sold out|ausverkauft)\b/i.test(renderedTicketText(card));
+      if (buy.length > 1 || (sold && buy.length))
+        return fail("conflicting ordinary admission inventory");
+      if (buy.length === 1 && !sold) available = text(header.children(".title").text());
+    }
+    if (available)
+      return {
+        status: "available",
+        excerpt: `${name} ${year}; ordinary three-day admission ${available}; enabled official Eventim Buy now control`,
+      };
+    // Hotel bundles or other admission may remain: do not infer global sellout.
+    return fail("no verified purchasable ordinary admission; whole-event sellout not established");
+  }
   if (source.festivalSlug === "wacken-open-air") {
     if (!new RegExp(`Ticket.*${year}`).test($("title").text()))
       return fail("current edition title absent");
