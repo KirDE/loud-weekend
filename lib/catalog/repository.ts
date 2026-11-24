@@ -1,3 +1,7 @@
+import { cache } from "react";
+import { YOUTUBE_URL } from "./youtube-playlist-queue.ts";
+import { playlistCoverage } from "../playlist-coverage.ts";
+import { uniqueFavoriteSlugs, type DiscoveryLineups } from "../discovery-sort.ts";
 import { rosterFingerprint } from "./lineup-proof.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
@@ -13,6 +17,7 @@ export type CatalogSnapshot = Readonly<{
   editions: readonly FestivalEdition[];
   artists: ArtistProfile[];
   playlists: Readonly<Record<string, PlaylistStatus>>;
+  discoveryLineups: DiscoveryLineups;
   freshness: CatalogFreshness;
 }>;
 export interface CatalogRepository {
@@ -44,6 +49,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
           timetable: { orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }] },
           playlists: { orderBy: { provider: "asc" } },
+          playlistLinks: { select: { provider: true, url: true } },
         },
         orderBy: [{ year: "asc" }, { festival: { catalogOrder: "asc" } }],
       }),
@@ -99,6 +105,15 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         startDate: dateOnly(row.startDate),
         endDate: dateOnly(row.endDate),
         dateLabel: row.dateLabel ?? undefined,
+        reviewedPlaylistLinks:
+          row.recordState === "CURRENT" && row.playlistLinks.length
+            ? {
+                spotify: row.playlistLinks.find(({ provider }) => provider === "spotify")?.url,
+                youtube_music: row.playlistLinks.find(
+                  ({ provider }) => provider === "youtube_music",
+                )?.url,
+              }
+            : undefined,
         headliners,
         lineup,
         ...(row.finalLineupFingerprint &&
@@ -150,7 +165,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           checkedAt: source.checkedAt.toISOString(),
           note: source.note,
         })),
-      } satisfies FestivalEdition;
+      } satisfies FestivalEdition & Pick<Festival, "reviewedPlaylistLinks">;
     });
     const currentEditions = editions.filter(({ recordState }) => recordState === "current");
     const currentArtistNames = new Set(
@@ -167,6 +182,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         ...festival,
         headliners: [...festival.headliners],
         lineup: [...festival.lineup],
+        timetable: festival.timetable?.map((performance) => ({ ...performance })),
       };
     });
     const artists: ArtistProfile[] = artistRows
@@ -223,18 +239,27 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       .sort((left, right) => left.name.localeCompare(right.name));
     const playlists: Record<string, PlaylistStatus> = {};
     for (const row of editionRows.filter(({ recordState }) => recordState === "CURRENT")) {
-      const spotify = row.playlists.find(({ provider }) => provider === "spotify");
-      const youtube = row.playlists.find(({ provider }) => provider === "youtube_music");
-      if (!spotify) continue;
+      const spotify = row.playlists.find(
+        ({ provider, url }) =>
+          provider === "spotify" &&
+          /^https:\/\/open\.spotify\.com\/playlist\/[A-Za-z0-9]{22}(?:\?[^\s#]*)?$/.test(url),
+      );
+      const youtube = row.playlists.find(
+        ({ provider, url }) => provider === "youtube_music" && YOUTUBE_URL.test(url),
+      );
+      if (!spotify && !youtube) continue;
       playlists[row.festival.slug] = {
-        spotifyUrl: spotify.url,
+        spotifyUrl: spotify?.url,
         youtubeMusicUrl: youtube?.url,
         youtubeMusicArtists: youtube?.artistCount ?? undefined,
         youtubeMusicTracks: youtube?.trackCount ?? undefined,
         artists:
-          spotify.artistCount ?? row.lineup.filter(({ status }) => status === "ANNOUNCED").length,
-        tracks: spotify.trackCount ?? 0,
-        updatedAt: instant(spotify.syncedAt) ?? row.sourceUpdatedAt.toISOString(),
+          spotify?.artistCount ?? row.lineup.filter(({ status }) => status === "ANNOUNCED").length,
+        tracks: spotify?.trackCount ?? 0,
+        updatedAt:
+          instant(spotify?.syncedAt ?? youtube?.syncedAt ?? null) ??
+          row.sourceUpdatedAt.toISOString(),
+        coverage: { youtubeMusic: playlistCoverage(youtube) },
       };
     }
     const freshness = {
@@ -243,11 +268,39 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         currentEditions.map(({ freshness }) => freshness?.lastPublishedAt),
       ),
     };
+    const artistSlugsByFestival = Object.fromEntries(
+      editionRows
+        .filter((row) => row.recordState === "CURRENT")
+        .map((row) => [
+          row.festival.slug,
+          [
+            ...new Set(
+              row.lineup
+                .filter(
+                  ({ status, billing }) =>
+                    status === "ANNOUNCED" && (billing === "HEADLINER" || billing === "LINEUP"),
+                )
+                .map((entry) => entry.artist.slug),
+            ),
+          ],
+        ]),
+    );
+    const visibleSlugs = new Set(Object.values(artistSlugsByFestival).flat());
+    const discoveryLineups = {
+      artistSlugsByFestival,
+      artistNamesBySlug: Object.fromEntries(
+        artistRows
+          .filter((artist) => visibleSlugs.has(artist.slug))
+          .map(({ slug, name }) => [slug, name]),
+      ),
+      legacyFavoriteSlugs: uniqueFavoriteSlugs(artistRows, visibleSlugs),
+    };
     return Object.freeze({
       festivals: festivalsFromDatabase,
       editions,
       artists,
       playlists,
+      discoveryLineups,
       freshness,
     });
   }
@@ -262,6 +315,10 @@ export async function readCatalog(
   });
 }
 
+// React shares the projection only within a request. Key by the normalized option
+// rather than the caller's options object so equivalent reads can be reused.
+const getRequestCatalog = cache((includeFreshness: boolean) => readCatalog({ includeFreshness }));
+
 export function getCatalog(options?: { includeFreshness?: boolean }) {
-  return readCatalog(options);
+  return getRequestCatalog(options?.includeFreshness === true);
 }
