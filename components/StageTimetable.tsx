@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { TimetableEntry } from "@/lib/domain/festival";
 import { useLanguage, type Language } from "./LanguageProvider";
 import { findTimetableConflicts, groupTimetable } from "@/lib/timetables";
@@ -24,7 +25,8 @@ const copy: Record<
       "es will appear after an official schedule is checked.",
     performances: (count) => `${count} verified performances · local festival time`,
     checked: "Checked",
-    conflict: "Schedule conflict detected. Check the official source before planning.",
+    conflict:
+      "More than one artist is listed for the same stage and start time. Check the official timetable.",
     cancelled: "Cancelled",
     timezone: "Timezone",
     source: "Official timetable source ↗",
@@ -36,7 +38,8 @@ const copy: Record<
       "tszeiten erscheinen nach Prüfung des offiziellen Plans.",
     performances: (count) => `${count} bestätigte Auftritte · Ortszeit des Festivals`,
     checked: "Geprüft",
-    conflict: "Terminkonflikt erkannt. Prüfe vor der Planung die offizielle Quelle.",
+    conflict:
+      "Mehrere Künstler sind zur selben Startzeit auf derselben Bühne eingetragen. Prüfe den offiziellen Bühnenplan.",
     cancelled: "Abgesagt",
     timezone: "Zeitzone",
     source: "Offizieller Zeitplan ↗",
@@ -49,16 +52,43 @@ const copy: Record<
     performances: (count) => `Подтверждённых выступлений: ${count} · местное время фестиваля`,
     checked: "Проверено",
     conflict:
-      "Обнаружено пересечение выступлений. Перед планированием проверьте официальный источник.",
+      "На одной сцене на одно время указано несколько артистов. Проверьте официальное расписание.",
     cancelled: "Отменено",
     timezone: "Часовой пояс",
     source: "Официальное расписание ↗",
   },
 };
 
+const filters = {
+  en: {
+    day: "Timetable day",
+    stage: "Timetable stage",
+    allDays: "All days",
+    allStages: "All stages",
+    empty: "No published slots match these filters.",
+  },
+  de: {
+    day: "Tag im Bühnenplan",
+    stage: "Bühne im Bühnenplan",
+    allDays: "Alle Tage",
+    allStages: "Alle Bühnen",
+    empty: "Keine veröffentlichten Auftritte für diese Filter.",
+  },
+  ru: {
+    day: "День в расписании",
+    stage: "Сцена в расписании",
+    allDays: "Все дни",
+    allStages: "Все сцены",
+    empty: "По этим фильтрам нет опубликованных выступлений.",
+  },
+};
+
 export function StageTimetable({ entries }: { entries?: TimetableEntry[] }) {
   const { language, locale } = useLanguage();
+  const [selectedDay, setDate] = useState("");
+  const [selectedStage, setStage] = useState("");
   const t = copy[language];
+  const labels = filters[language];
   if (!entries?.length)
     return (
       <div className="timetable timetableEmpty">
@@ -66,7 +96,24 @@ export function StageTimetable({ entries }: { entries?: TimetableEntry[] }) {
         <span>{t.empty}</span>
       </div>
     );
-  const days = groupTimetable(entries);
+  const dates = [...new Set(entries.map(({ date }) => date))].sort();
+  const stages = [...new Set(entries.map(({ stage }) => stage))].sort((a, b) =>
+    a.localeCompare(b, locale),
+  );
+  const dayFilter = dates.includes(selectedDay) ? selectedDay : "";
+  const stageFilter = stages.includes(selectedStage) ? selectedStage : "";
+  const matches = entries.filter(
+    ({ date, stage }) =>
+      (!dayFilter || dayFilter === date) && (!stageFilter || stageFilter === stage),
+  );
+  const days = groupTimetable(matches);
+  const dayFormatter = new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  const dayLabel = (date: string) => dayFormatter.format(new Date(`${date}T12:00:00Z`));
   const conflicts = findTimetableConflicts(entries);
   const newestObservation = entries
     .map(({ observedAt }) => observedAt)
@@ -91,17 +138,35 @@ export function StageTimetable({ entries }: { entries?: TimetableEntry[] }) {
           {t.conflict}
         </div>
       )}
+      <div className="timetableFilters">
+        <label>
+          {labels.day}
+          <select value={dayFilter} onChange={(event) => setDate(event.target.value)}>
+            <option value="">{labels.allDays}</option>
+            {dates.map((date) => (
+              <option key={date} value={date}>
+                {dayLabel(date)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {labels.stage}
+          <select value={stageFilter} onChange={(event) => setStage(event.target.value)}>
+            <option value="">{labels.allStages}</option>
+            {stages.map((stage) => (
+              <option key={stage} value={stage}>
+                {stage}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {!matches.length && <p role="status">{labels.empty}</p>}
       {days.map((day) => (
         <section className="timetableDay" key={day.date}>
           <h3>
-            <time dateTime={day.date}>
-              {new Intl.DateTimeFormat(locale, {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-                timeZone: "UTC",
-              }).format(new Date(`${day.date}T12:00:00Z`))}
-            </time>
+            <time dateTime={day.date}>{dayLabel(day.date)}</time>
           </h3>
           <div className="timetableStages">
             {day.stages.map((stage) => (

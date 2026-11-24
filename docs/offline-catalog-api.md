@@ -4,9 +4,11 @@
 from the database. It preserves the existing `schemaVersion: 1` envelope and
 festival brief (`slug`, `name`, dates, timetable), with all current festivals
 rather than the static sample. Missing dates are `null`; absent timetables are
-empty arrays. Timetable entries expose only date, stage, start, artist, timeZone
-(UTC fallback) and scheduled/cancelled status. No source URLs, observation times,
-internal IDs, profiles, playlists or account data are exposed.
+empty arrays. A timetable row needs a stored time zone, source URL and observation
+time to appear. The response exposes date, stage, start, artist, the recorded time
+zone and scheduled/cancelled status, not the source URL, observation time,
+internal IDs, profiles, playlists or account data. The service-worker upgrade
+evicts catalogue copies made before this evidence requirement.
 
 `dataVersion` identifies the existing format, not freshness. `generatedAt` is
 `null`: this live deterministic representation has no build timestamp.

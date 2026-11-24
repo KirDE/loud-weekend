@@ -15,11 +15,11 @@ export type ReviewChange = {
 export type ParserRun = {
   festival: string;
   source: string;
-  status: "healthy" | "warning" | "failed";
+  status: "healthy" | "warning" | "failed" | "running";
   lastRun: string;
   durationMs: number;
   extracted: number;
-  message: string;
+  message: string | null;
   log: unknown;
 };
 
