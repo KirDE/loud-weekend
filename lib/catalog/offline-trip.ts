@@ -64,7 +64,7 @@ export async function readPublishedOfflineTrip(
     startDate,
     endDate,
     updatedAt: edition.sourceUpdatedAt.toISOString(),
-    timetable: timetable.flatMap(projectOfflinePerformance),
+    timetable: timetable.flatMap((performance) => projectOfflinePerformance(performance, edition)),
   });
   if (!trip) throw new Error("Invalid public trip data");
   return trip;

@@ -32,7 +32,7 @@ export function projectOfflineCatalog(rows: readonly OfflineEdition[], editionYe
       startDate: dateOnly(row.startDate),
       endDate: dateOnly(row.endDate),
       timetable: row.timetable
-        .flatMap(projectOfflinePerformance)
+        .flatMap((performance) => projectOfflinePerformance(performance, row))
         .map(({ date, stage, start, artist, timeZone, status }) => ({
           date,
           stage,
