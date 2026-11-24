@@ -39,7 +39,7 @@ for (const [locale, t] of Object.entries(labels)) {
     await expect(panel).toHaveCount(0);
     await expect(page.locator(".festivalCard h2")).toHaveText(["Synthetic Fest"]);
     await search.fill("sample city");
-    const city = panel.getByRole("button", { name: "Sample City · DE", exact: true });
+    const city = panel.getByRole("button", { name: "Sample City · AT", exact: true });
     await expect(city).toBeVisible();
     await expect(city).toHaveCSS("display", "block");
     await expect
