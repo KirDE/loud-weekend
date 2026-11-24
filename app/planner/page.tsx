@@ -7,7 +7,7 @@ export default async function Planner() {
   return (
     <PlannerPage
       festivals={festivals}
-      catalogueArtists={artists.map(({ name, slug }) => ({ name, slug }))}
+      catalogueArtists={artists.map(({ name, slug, aliases }) => ({ name, slug, aliases }))}
       lineups={discoveryLineups}
     />
   );

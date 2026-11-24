@@ -25,7 +25,7 @@ export default async function LocalizedPlanner({ params }: { params: Promise<{ l
   return (
     <PlannerPage
       festivals={festivals}
-      catalogueArtists={artists.map(({ name, slug }) => ({ name, slug }))}
+      catalogueArtists={artists.map(({ name, slug, aliases }) => ({ name, slug, aliases }))}
       lineups={discoveryLineups}
     />
   );

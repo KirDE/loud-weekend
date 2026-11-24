@@ -1,12 +1,17 @@
 "use client";
+
+import { favoriteArtistLabels, type FavoriteArtistIdentity } from "@/lib/favorite-artist";
 import Link from "next/link";
 import { useState } from "react";
 import { playlistLineup } from "@/lib/playlist-selection";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
+import { festivalDateInterval } from "@/lib/festival-dates";
+import { calendarFile } from "@/lib/planning";
 import type { Festival } from "@/lib/domain/festival";
 import { useLocalPlanner, type Attendance } from "./LocalPlanner";
 import { PlannerReset } from "./PlannerReset";
 import { AccountSyncPanel } from "./AccountSyncPanel";
+import { PersonalCalendar } from "./PersonalCalendar";
 import { FestivalViews } from "./FestivalViews";
 import { useLanguage, type Language } from "./LanguageProvider";
 
@@ -187,7 +192,7 @@ export function PlannerPage({
   lineups,
 }: {
   festivals: Festival[];
-  catalogueArtists: { slug: string; name: string }[];
+  catalogueArtists: FavoriteArtistIdentity[];
   lineups: DiscoveryLineups;
 }) {
   const { language } = useLanguage();
@@ -236,7 +241,7 @@ export function PlannerPage({
     p.setPlaylistExclusions([...next]);
   }
   const dated = planned
-    .filter((f) => f.startDate)
+    .filter((f) => festivalDateInterval(f))
     .sort((a, b) => a.startDate!.localeCompare(b.startDate!));
   async function createPlaylist() {
     setPlaylist({ status: "creating", message: t.creating });
@@ -332,6 +337,7 @@ export function PlannerPage({
               </a>
             )}
           </section>
+          <PersonalCalendar festivals={festivals} />
           <section className="plannerSection">
             <div className="sectionHeading">
               <div>
@@ -433,8 +439,8 @@ export function PlannerPage({
             <section className="plannerSection">
               <div className="eyebrow">{t.favorites}</div>
               <div className="artistChips">
-                {p.favoriteArtists.map((a) => (
-                  <span key={a}>{a}</span>
+                {favoriteArtistLabels(p.favoriteArtists, catalogueArtists).map(([key, name]) => (
+                  <span key={key}>{name}</span>
                 ))}
               </div>
             </section>
@@ -443,27 +449,4 @@ export function PlannerPage({
       )}
     </div>
   );
-}
-function calendarFile(items: Festival[]) {
-  const out = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Loud Weekend//Trip Planner//EN",
-    "CALSCALE:GREGORIAN",
-  ];
-  for (const f of items) {
-    const end = new Date(`${f.endDate || f.startDate}T12:00:00Z`);
-    end.setUTCDate(end.getUTCDate() + 1);
-    out.push(
-      "BEGIN:VEVENT",
-      `UID:${f.slug}-2027@festival-radar`,
-      `DTSTART;VALUE=DATE:${f.startDate!.replaceAll("-", "")}`,
-      `DTEND;VALUE=DATE:${end.toISOString().slice(0, 10).replaceAll("-", "")}`,
-      `SUMMARY:${f.name}`,
-      `LOCATION:${f.city || f.country}`,
-      `URL:${f.officialUrl}`,
-      "END:VEVENT",
-    );
-  }
-  return [...out, "END:VCALENDAR"].join("\r\n");
 }
