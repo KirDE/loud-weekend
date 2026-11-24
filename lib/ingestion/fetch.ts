@@ -1,5 +1,10 @@
+import { validateBarcelonaFetch } from "./adapters/barcelona-banner.ts";
 import { RFP_STOCK, reduceRfpStockDocument } from "./rfp-ticket-stock.ts";
-import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
+import {
+  matchesTicketPrimaryUrl,
+  ticketSupplementUrl,
+  TICKET_SUPPLEMENT,
+} from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import { isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS } from "./adapters/full-rewind.ts";
 import { isDownloadSource, DOWNLOAD_ARTISTS, DOWNLOAD_DOCUMENTS } from "./adapters/download.ts";
@@ -150,10 +155,13 @@ async function fetchSourceWithoutTicketSupplement(
     throw new Error("Fetch attempts exhausted without a response");
   };
 
+  validateBarcelonaFetch(source);
+
   if (isRoskildeSource(source) && !options.fetchImpl)
     return fetchRoskildeDocuments(source.editionYear);
 
   let initial = await fetchWithRetry(source.fetchUrl ?? source.url);
+  validateBarcelonaFetch(source, initial);
   if (
     source.festivalSlug === "area53" &&
     (source.url !== "https://area53festival.at/de/" ||
@@ -1111,8 +1119,7 @@ export async function fetchSource(
   let attempts = primary.attempts;
   try {
     if (
-      primary.response.url &&
-      primary.response.url !== source.url &&
+      !matchesTicketPrimaryUrl(source, primary.response.url) &&
       primary.response.url !== primary.verifiedPrimaryUrl
     )
       throw new Error("Official ticket primary source changed identity");

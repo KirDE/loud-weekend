@@ -48,44 +48,112 @@ function readSite(artist: Artist) {
 
 const socialHost =
   /^(?:www\.)?(?:instagram\.com|facebook\.com|tiktok\.com|x\.com|twitter\.com|youtube\.com)$/;
-const linkProof = z.strictObject({
-  url: z.string().max(2048),
+const observation = {
   sourceUrl: z.string().max(2048),
   observedAt: z.string().datetime({ offset: true }),
+};
+const linkProof = z.strictObject({ url: z.string().max(2048), ...observation });
+const biographyProof = z.strictObject({
+  text: z
+    .string()
+    .trim()
+    .min(1)
+    .max(1200)
+    .refine((text) => !/[\p{Cc}]/u.test(text)),
+  ...observation,
 });
+
+function officialObservation(artist: Artist, proof: { sourceUrl: string; observedAt: string }) {
+  const site = readSite(artist);
+  const evidence = new URL(urlValue(proof.sourceUrl));
+  if (
+    !site?.verified ||
+    evidence.origin !== new URL(urlValue(site.url)).origin ||
+    evidence.search ||
+    evidence.hash
+  ) {
+    throw new Error("Use a public source on the verified artist site");
+  }
+  const observedAt = new Date(proof.observedAt);
+  if (observedAt.getTime() > Date.now()) throw new Error("Observation cannot be in the future");
+  return { site, sourceUrl: evidence.href, observedAt: observedAt.toISOString() };
+}
+
+async function reviewBiography(tx: Prisma.TransactionClient, artist: Artist, value: unknown) {
+  const { text, ...observation } = biographyProof.parse(value);
+  if (artist.identityState === "AMBIGUOUS")
+    throw new Error("Resolve the artist identity before reviewing a biography");
+  const { site, sourceUrl, observedAt } = officialObservation(artist, observation);
+  const previous = await tx.artistProvenance.findFirst({
+    where: { artistId: artist.id, field: "biography" },
+    orderBy: [{ checkedAt: "desc" }, { position: "desc" }, { id: "desc" }],
+    select: { id: true, checkedAt: true, url: true, source: true },
+  });
+  const unchanged =
+    artist.biography === text &&
+    previous?.url === sourceUrl &&
+    previous.source === "official" &&
+    previous.checkedAt.toISOString() === observedAt;
+  if (previous && observedAt <= previous.checkedAt.toISOString() && !unchanged) {
+    throw new Error("A revised biography needs a newer source observation");
+  }
+  return {
+    before: {
+      text: artist.biography,
+      siteId: site.id,
+      siteUrl: site.url,
+      proofId: previous?.id ?? null,
+    },
+    proof: { text, sourceUrl, observedAt },
+    unchanged,
+  };
+}
+
+async function appendOfficialProof(
+  tx: Prisma.TransactionClient,
+  artistId: string,
+  field: string,
+  url: string,
+  checkedAt: Date,
+) {
+  const previous = await tx.artistProvenance.findFirst({
+    where: { artistId },
+    orderBy: { position: "desc" },
+    select: { position: true },
+  });
+  await tx.artistProvenance.create({
+    data: {
+      artistId,
+      field,
+      source: "official",
+      url,
+      checkedAt,
+      position: (previous?.position ?? -1) + 1,
+    },
+  });
+}
 
 function reviewSocialLink(artist: Artist, value: unknown) {
   const proof = linkProof.parse(value);
-  const site = readSite(artist);
   const candidate = artist.links.find(({ url }) => url === proof.url);
   if (!candidate || candidate.label !== "Social profile" || candidate.source !== "musicbrainz") {
     throw new Error("Choose an existing provider-discovered social profile for this artist");
   }
   const url = new URL(urlValue(candidate.url));
-  const evidence = new URL(urlValue(proof.sourceUrl));
+  const { site, sourceUrl, observedAt } = officialObservation(artist, proof);
   if (
     !socialHost.test(url.hostname) ||
     url.port ||
     url.pathname === "/" ||
     url.search ||
     url.hash ||
-    !site?.verified ||
-    evidence.origin !== new URL(urlValue(site.url)).origin ||
-    evidence.search ||
-    evidence.hash ||
-    evidence.href === url.href
+    sourceUrl === url.href
   ) {
     throw new Error(
       "Use a supported social profile and a public source on the verified artist site",
     );
   }
-  const observedAt = new Date(proof.observedAt);
-  if (observedAt.getTime() > Date.now()) throw new Error("Observation cannot be in the future");
-  return {
-    candidate,
-    site,
-    proof: { ...proof, sourceUrl: evidence.href, observedAt: observedAt.toISOString() },
-  };
+  return { candidate, site, proof: { ...proof, sourceUrl, observedAt } };
 }
 
 async function assertUniqueName(tx: Prisma.TransactionClient, artist: Artist, name: string) {
@@ -118,6 +186,11 @@ export async function prepareArtistDraft(
           afterValue: urlValue(value),
         });
         break;
+      case "biography": {
+        const { before, proof } = await reviewBiography(tx, artist, value);
+        changes.push({ field, beforeValue: before, afterValue: proof });
+        break;
+      }
       case "socialProfile": {
         const { candidate, site, proof } = reviewSocialLink(artist, value);
         changes.push({
@@ -176,21 +249,29 @@ export async function publishAdminArtistChange(tx: Prisma.TransactionClient, cha
           data: { artistId: artist.id, url, ...officialSite, verified: true, position },
         });
       }
-      const provenance = await tx.artistProvenance.findFirst({
-        where: { artistId: artist.id },
-        orderBy: { position: "desc" },
-        select: { position: true },
-      });
-      await tx.artistProvenance.create({
-        data: {
-          artistId: artist.id,
-          field: "officialUrl",
-          source: "official",
-          url,
-          checkedAt: new Date(),
-          position: (provenance?.position ?? -1) + 1,
-        },
-      });
+      await appendOfficialProof(tx, artist.id, "officialUrl", url, new Date());
+      return "published";
+    }
+    case "biography": {
+      const { before, proof, unchanged } = await reviewBiography(tx, artist, change.afterValue);
+      const expected = change.beforeValue as Partial<typeof before> | null;
+      if (
+        expected?.text !== before.text ||
+        expected.siteId !== before.siteId ||
+        expected.siteUrl !== before.siteUrl ||
+        expected.proofId !== before.proofId
+      ) {
+        throw new Error("The biography or official source changed after review was queued");
+      }
+      if (unchanged) return "unchanged";
+      await tx.artist.update({ where: { id: artist.id }, data: { biography: proof.text } });
+      await appendOfficialProof(
+        tx,
+        artist.id,
+        "biography",
+        proof.sourceUrl,
+        new Date(proof.observedAt),
+      );
       return "published";
     }
     case "socialProfile": {
@@ -208,21 +289,13 @@ export async function publishAdminArtistChange(tx: Prisma.TransactionClient, cha
       if (before.verified !== candidate.verified)
         throw new Error("Artist link changed after review was queued");
       await tx.artistLink.update({ where: { id: candidate.id }, data: { verified: true } });
-      const previous = await tx.artistProvenance.findFirst({
-        where: { artistId: artist.id },
-        orderBy: { position: "desc" },
-        select: { position: true },
-      });
-      await tx.artistProvenance.create({
-        data: {
-          artistId: artist.id,
-          field: "links",
-          source: "official",
-          url: proof.sourceUrl,
-          checkedAt: new Date(proof.observedAt),
-          position: (previous?.position ?? -1) + 1,
-        },
-      });
+      await appendOfficialProof(
+        tx,
+        artist.id,
+        "links",
+        proof.sourceUrl,
+        new Date(proof.observedAt),
+      );
       return "published";
     }
     default:
