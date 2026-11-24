@@ -550,7 +550,7 @@ export async function publishIngestionResult(
       const artistChanges = input.result.changes.filter(
         ({ field }) => field === "lineup" || field === "headliners",
       );
-      if (artistChanges.length && !expectedYear)
+      if (artistChanges.length && !stored.observedEditionYears[0])
         throw new Error("Cannot publish a lineup without one verified edition year");
       const ensureArtist = artistResolver(db, observedAt);
       for (const { kind, field, after } of artistChanges) {

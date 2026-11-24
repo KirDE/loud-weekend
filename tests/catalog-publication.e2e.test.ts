@@ -1156,7 +1156,9 @@ test("I-Days provenance drift and identity collisions roll back without catalog 
     };
     await assert.rejects(
       publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
-      /I-Days publication requires|Ambiguous billing|Artist slug collision|publication scope does not match/,
+      drift === "edition"
+        ? /Cannot publish a lineup without one verified edition year/
+        : /I-Days publication requires|Ambiguous billing|Artist slug collision|publication scope does not match/,
     );
     assert.deepEqual(
       {
@@ -3139,4 +3141,54 @@ test("automatic additions must appear in both observed rosters under the propose
     );
   }
   assert.equal(await db.artist.count({ where: { name: artist } }), 0);
+});
+
+test("a headliner addition requires an observed edition year, not a storage fallback", async () => {
+  const artist = `Unverified edition headliner ${suffix}`;
+  createdArtists.push(artist.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+  const fixture = result(artist);
+  const headlinerCandidate = {
+    ...fixture.candidate,
+    lineup: undefined,
+    headliners: [artist],
+    observedEditionYears: [],
+  };
+  const current = (await readCatalog({ database: db })).festivals.find(
+    (festival) => festival.slug === fixture.festivalSlug,
+  )!;
+  const evaluated = evaluateCandidate(current, {
+    ...headlinerCandidate,
+    artistListMode: "additive",
+  });
+  assert.equal(
+    evaluated.changes.some(({ kind }) => kind === "headliner_added"),
+    true,
+  );
+  const value: IngestionResult = {
+    ...fixture,
+    candidate: headlinerCandidate,
+    changes: [
+      { kind: "headliner_added", field: "headliners", after: artist, reviewRequired: false },
+    ],
+  };
+  const attempt = await persist(value);
+  const stored = await db.ingestionCandidate.findUniqueOrThrow({
+    where: { attemptId: attempt.id },
+  });
+  assert.equal(stored.sourceYear, 2027);
+  await assert.rejects(
+    publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
+    /Cannot publish a lineup without one verified edition year/,
+  );
+  assert.equal(evaluated.publishable, false);
+  assert.ok(
+    evaluated.reviewReasons.includes(
+      "Lineup edition could not be verified against the catalogue year",
+    ),
+  );
+  assert.equal(await db.artist.count({ where: { name: artist } }), 0);
+  assert.equal(
+    await db.catalogPublication.count({ where: { sourceId: `ingestion:${stored.id}` } }),
+    0,
+  );
 });
