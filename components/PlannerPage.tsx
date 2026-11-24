@@ -1,5 +1,6 @@
 "use client";
 
+import { favoriteArtistLabels, type FavoriteArtistIdentity } from "@/lib/favorite-artist";
 import Link from "next/link";
 import { useState } from "react";
 import { festivalDateInterval } from "@/lib/festival-dates";
@@ -160,7 +161,13 @@ const plannerLabels: Record<Language, PlannerLabels> = {
     downloadArtists: "Скачать список артистов",
   },
 };
-export function PlannerPage({ festivals }: { festivals: Festival[] }) {
+export function PlannerPage({
+  festivals,
+  artists: catalogArtists,
+}: {
+  festivals: Festival[];
+  artists: FavoriteArtistIdentity[];
+}) {
   const { language } = useLanguage();
   const t = plannerLabels[language];
   const p = useLocalPlanner();
@@ -340,6 +347,13 @@ export function PlannerPage({ festivals }: { festivals: Festival[] }) {
             <Link className="outlineButton" href={`/${language}/planner/artists/`}>
               {t.favorites}
             </Link>
+            {!!p.favoriteArtists.length && (
+              <div className="artistChips">
+                {favoriteArtistLabels(p.favoriteArtists, catalogArtists).map(([key, name]) => (
+                  <span key={key}>{name}</span>
+                ))}
+              </div>
+            )}
           </section>
         </>
       )}
