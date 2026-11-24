@@ -220,6 +220,47 @@ test("sold-out, early-bird exhaustion and generic gateway CTA never prove pass a
   e.documents.pop();
   assert.equal(extract(e).ticketStatus, undefined);
 });
+
+test("visible singular and plural unavailable notices override an enabled general pass", () => {
+  const current = {
+    slug: source.festivalSlug,
+    editionYear: source.editionYear,
+    startDate: "2027-07-02",
+    endDate: "2027-07-04",
+    ticketsUrl: source.url,
+    ticketStatus: "unknown",
+    headliners: [],
+    lineup: [],
+  };
+  assert.equal(evaluateCandidate(current, extract()).publishable, true);
+
+  for (const notice of [
+    "No disponible",
+    "No disponibles",
+    "Entradas no disponibles",
+    "<div>No</div><div>disponibles</div>",
+    '<span style="display: block !important">No</span><span>disponibles</span>',
+    "No dispo<strong>nibles</strong>",
+  ]) {
+    for (const scope of ["availability", "form"]) {
+      const docs = envelope();
+      const { html } = docs.documents[2];
+      docs.documents[2].html =
+        scope === "availability"
+          ? html + `<section id="product-availability">${notice}</section>`
+          : html.replace("</form>", `${notice}</form>`);
+      const candidate = extract(docs);
+      const result = evaluateCandidate(current, candidate);
+      assert.equal(candidate.ticketStatus, undefined, notice);
+      assert.equal(result.publishable, false, notice);
+      assert.equal(
+        result.changes.some(({ field }) => field === "ticketStatus"),
+        false,
+        notice,
+      );
+    }
+  }
+});
 test("stale title or wrong general-pass edition fails closed", () => {
   const e = envelope();
   e.home = e.home.replaceAll("2027", "2026");
@@ -516,4 +557,88 @@ test("English later announcement uses new subjects and blocks explicit withdrawa
   ]);
   e.documents[0].html += "<p>New Band will not perform.</p>";
   assert.equal(extract(e).lineup, undefined);
+});
+
+test("only a unique visible current admission form with trusted action can establish availability", () => {
+  for (const change of [
+    (h) => "<div hidden>" + h + "</div>",
+    (h) => h.replace("<form action=", '<form style="display:none" action='),
+    (h) => h.replace("<form action=", '<form aria-disabled="true" action='),
+    (h) => h.replace("https://www.madnesslive.es/es/carrito", "https://evil.example/cart"),
+    (h) =>
+      h.replace(
+        "https://www.madnesslive.es/es/carrito",
+        "https://user@www.madnesslive.es/es/carrito",
+      ),
+    (h) =>
+      h.replace(
+        "https://www.madnesslive.es/es/carrito",
+        "https://www.madnesslive.es:8443/es/carrito",
+      ),
+    (h) => h.replace('method="post"', 'method="get"'),
+    (h) => h + h,
+    (h) => h.replace("</form>", "<p>Abono agotado</p></form>"),
+    (h) => h + '<span id="product-availability">Fuera de stock</span>',
+  ]) {
+    const e = envelope();
+    e.documents[2].html = change(e.documents[2].html);
+    const c = extract(e);
+    assert.equal(c.ticketStatus, undefined);
+    assert(c.warnings.length);
+    const r = evaluateCandidate(
+      {
+        slug: "rock-imperium",
+        editionYear: 2027,
+        ticketStatus: "available",
+        lineup: [],
+        headliners: [],
+      },
+      c,
+    );
+    assert.equal(r.publishable, false);
+    assert(!r.changes.some((change) => change.field === "ticketStatus"));
+  }
+  const e = envelope();
+  e.documents.push({ ...e.documents[2] });
+  assert.equal(extract(e).ticketStatus, undefined);
+});
+test("hidden controls and historical footer sellout copy do not create or negate live current stock", () => {
+  const e = envelope();
+  e.documents[2].html += "<footer>Rock Imperium 2026: Abono agotado</footer>";
+  assert.equal(extract(e).ticketStatus, "available");
+  const hidden = envelope();
+  hidden.documents[2].html = hidden.documents[2].html.replace(
+    'type="submit"',
+    'hidden type="submit"',
+  );
+  assert.equal(extract(hidden).ticketStatus, undefined);
+});
+
+test("reviewed English cart path aliases both preserve the current ordinary pass", () => {
+  for (const action of [
+    "https://www.madnesslive.es/en/carrito",
+    "https://www.madnesslive.es/en/cart",
+  ]) {
+    const e = envelope();
+    e.documents[2].html = e.documents[2].html.replace(
+      "https://www.madnesslive.es/es/carrito",
+      action,
+    );
+    assert.equal(extract(e).ticketStatus, "available");
+  }
+});
+
+test("inert links cannot establish or contradict the live organizer-to-seller route", () => {
+  const ghost = direct();
+  ghost.home = `<title>Rock Imperium Festival 2027</title><template><a href="${category}">Tickets</a></template>`;
+  assert.equal(extract(ghost).ticketStatus, undefined);
+
+  const mixed = direct();
+  mixed.home += `<div hidden><a href="${landing}">Archived gateway</a></div>`;
+  assert.equal(extract(mixed).ticketStatus, "available");
+
+  const staged = direct();
+  staged.documents[0].html = `<title>Rock Imperium Festival 2027</title>
+    <section inert><h2 class="product-title"><a href="${product}">Abono Rock Imperium Festival 2027</a></h2></section>`;
+  assert.equal(extract(staged).ticketStatus, undefined);
 });

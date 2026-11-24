@@ -314,7 +314,7 @@ export function evaluateCandidate(
   const hasObservedActs = Boolean(candidate.lineup?.length || candidate.headliners?.length);
   if (hasObservedActs && !catalogueYear)
     reviewReasons.add("Catalogue edition year is unknown; lineup requires review");
-  if (hasObservedActs && candidate.observedEditionYears.length === 0)
+  if (hasObservedActs && candidate.observedEditionYears.length !== 1)
     reviewReasons.add("Lineup edition could not be verified against the catalogue year");
   if (candidate.lineup && candidate.lineup.length === 0 && current.lineup.length > 0)
     reviewReasons.add("A non-empty lineup cannot be replaced by an empty lineup");
