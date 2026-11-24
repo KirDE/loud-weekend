@@ -1,3 +1,4 @@
+import { uniqueFavoriteSlugs, type DiscoveryLineups } from "../discovery-sort.ts";
 import { rosterFingerprint } from "./lineup-proof.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
@@ -13,6 +14,7 @@ export type CatalogSnapshot = Readonly<{
   editions: readonly FestivalEdition[];
   artists: ArtistProfile[];
   playlists: Readonly<Record<string, PlaylistStatus>>;
+  discoveryLineups: DiscoveryLineups;
   freshness: CatalogFreshness;
 }>;
 export interface CatalogRepository {
@@ -253,11 +255,34 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         currentEditions.map(({ freshness }) => freshness?.lastPublishedAt),
       ),
     };
+    const artistSlugsByFestival = Object.fromEntries(
+      editionRows
+        .filter((row) => row.recordState === "CURRENT")
+        .map((row) => [
+          row.festival.slug,
+          [
+            ...new Set(
+              row.lineup
+                .filter(
+                  ({ status, billing }) =>
+                    status === "ANNOUNCED" && (billing === "HEADLINER" || billing === "LINEUP"),
+                )
+                .map((entry) => entry.artist.slug),
+            ),
+          ],
+        ]),
+    );
+    const visibleSlugs = new Set(Object.values(artistSlugsByFestival).flat());
+    const discoveryLineups = {
+      artistSlugsByFestival,
+      legacyFavoriteSlugs: uniqueFavoriteSlugs(artistRows, visibleSlugs),
+    };
     return Object.freeze({
       festivals: festivalsFromDatabase,
       editions,
       artists,
       playlists,
+      discoveryLineups,
       freshness,
     });
   }
