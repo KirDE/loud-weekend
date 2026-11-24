@@ -1,21 +1,19 @@
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
+import {
+  offlineTimetableSelect,
+  offlineTimetableWhere,
+  projectOfflinePerformance,
+} from "./offline-timetable.ts";
 
-// Explicit allowlist: no source metadata, internal IDs, artist profiles or URLs.
+// Only fields used by the public projection or its schedule validation are read.
 const offlineSelect = {
   festival: { select: { slug: true, name: true } },
   startDate: true,
   endDate: true,
   timetable: {
-    where: { timeZone: { not: null }, sourceUrl: { not: null }, observedAt: { not: null } },
-    select: {
-      date: true,
-      stage: true,
-      start: true,
-      artistName: true,
-      timeZone: true,
-      status: true,
-    },
+    where: offlineTimetableWhere,
+    select: offlineTimetableSelect,
   },
 } satisfies Prisma.FestivalEditionSelect;
 
@@ -34,20 +32,15 @@ export function projectOfflineCatalog(rows: readonly OfflineEdition[], editionYe
       startDate: dateOnly(row.startDate),
       endDate: dateOnly(row.endDate),
       timetable: row.timetable
-        .flatMap((entry) =>
-          entry.timeZone
-            ? [
-                {
-                  date: dateOnly(entry.date)!,
-                  stage: entry.stage,
-                  start: entry.start,
-                  artist: entry.artistName,
-                  timeZone: entry.timeZone,
-                  status: entry.status === "CANCELLED" ? "cancelled" : "scheduled",
-                },
-              ]
-            : [],
-        )
+        .flatMap(projectOfflinePerformance)
+        .map(({ date, stage, start, artist, timeZone, status }) => ({
+          date,
+          stage,
+          start,
+          artist,
+          timeZone,
+          status,
+        }))
         .sort((a, b) => compare(JSON.stringify(a), JSON.stringify(b))),
     }))
     .sort((a, b) => compare(a.slug, b.slug));

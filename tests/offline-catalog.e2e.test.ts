@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { readOfflineCatalog, serveOfflineCatalog } from "../lib/catalog/offline.ts";
+import { readPublishedOfflineTrip } from "../lib/catalog/offline-trip.ts";
 
 // This test requires an already migrated/synthetically seeded local disposable database.
 // It never clears, migrates or seeds the catalogue; mutations always roll back.
@@ -89,6 +90,9 @@ test("real DB content mutations invalidate ETag; timestamps alone do not; missin
             { ...basePerformance, artistName: "No time zone", timeZone: null },
             { ...basePerformance, artistName: "No source", sourceUrl: null },
             { ...basePerformance, artistName: "No observation", observedAt: null },
+            { ...basePerformance, artistName: "Invalid zone", timeZone: "City/Unknown" },
+            { ...basePerformance, artistName: "Invalid source", sourceUrl: "unverified" },
+            { ...basePerformance, artistName: "Invalid clock", start: "25:00" },
           ],
         });
         const datedTag = dated.headers.get("etag");
@@ -101,7 +105,10 @@ test("real DB content mutations invalidate ETag; timestamps alone do not; missin
         assert.equal(withSchedule.status, 200);
         const schedule = await withSchedule.text();
         assert.match(schedule, /"artist":"Verified offline artist","timeZone":"Europe\/Berlin"/);
-        assert.doesNotMatch(schedule, /No time zone|No source|No observation|sourceUrl|observedAt/);
+        assert.doesNotMatch(
+          schedule,
+          /No time zone|No source|No observation|Invalid zone|Invalid source|Invalid clock|sourceUrl|observedAt/,
+        );
         await tx.festivalEdition.updateMany({
           where: { year: 2027, recordState: "CURRENT" },
           data: { recordState: "TRACKING" },
@@ -110,6 +117,52 @@ test("real DB content mutations invalidate ETag; timestamps alone do not; missin
         assert.equal(missing.status, 503);
         assert.equal(missing.headers.get("cache-control"), "no-store");
         assert.equal(missing.headers.get("etag"), null);
+        throw rollback;
+      },
+      { timeout: 15_000 },
+    ),
+    (error) => error === rollback,
+  );
+});
+
+test("trip download refuses a bounded query that could hide valid performances", async () => {
+  const rollback = new Error("rollback trip test");
+  await assert.rejects(
+    db.$transaction(
+      async (tx) => {
+        const edition = await tx.festivalEdition.findFirstOrThrow({
+          where: { festival: { slug: "synthetic-fest" }, year: 2027, recordState: "CURRENT" },
+        });
+        const setup = {
+          editionId: edition.id,
+          date: new Date("2027-06-11"),
+          stage: "Oversize fixture stage",
+          start: "20:00",
+          sourceUrl: "https://festival.example.test/timetable/",
+          observedAt: new Date("2027-05-01T10:00:00Z"),
+        };
+        await tx.timetablePerformance.createMany({
+          data: Array.from({ length: 800 }, (_, index) => ({
+            ...setup,
+            artistName: `Invalid fixture ${index}`,
+            timeZone: "City/Unknown",
+          })),
+        });
+        const atLimit = await readPublishedOfflineTrip("synthetic-fest", 2027, tx);
+        assert.ok(atLimit);
+        assert.equal(atLimit.timetable.length, 0);
+        await tx.timetablePerformance.create({
+          data: {
+            ...setup,
+            start: "20:01",
+            artistName: "Later valid performance",
+            timeZone: "Europe/Berlin",
+          },
+        });
+        await assert.rejects(
+          readPublishedOfflineTrip("synthetic-fest", 2027, tx),
+          /timetable exceeds the download limit/,
+        );
         throw rollback;
       },
       { timeout: 15_000 },

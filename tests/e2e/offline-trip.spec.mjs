@@ -38,6 +38,30 @@ test("explicit mobile trip download keeps only public proof and works offline", 
       false,
     );
 
+    await db.timetablePerformance.createMany({
+      data: [
+        {
+          editionId: target.id,
+          date: new Date(entry.date),
+          start: "20:31",
+          stage: entry.stage,
+          artistName: "Invalid zone",
+          timeZone: "City/Unknown",
+          sourceUrl: entry.sourceUrl,
+          observedAt: new Date(entry.observedAt),
+        },
+        {
+          editionId: target.id,
+          date: new Date(entry.date),
+          start: "20:32",
+          stage: entry.stage,
+          artistName: "Invalid source",
+          timeZone: entry.timeZone,
+          sourceUrl: "unverified",
+          observedAt: new Date(entry.observedAt),
+        },
+      ],
+    });
     const download = await request.get(api);
     expect(download.status()).toBe(200);
     expect(download.headers()["cache-control"]).toBe("no-store");
