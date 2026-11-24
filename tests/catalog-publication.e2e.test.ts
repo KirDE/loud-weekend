@@ -3171,7 +3171,15 @@ test("social previews show parser-backed approved dates but not unsupported edit
           beforeValue,
           afterValue,
           baseRevision: revision?.revision ?? 0,
-          sourceEvidence: backed ? [{ field: "headliners", sourceUrl }] : [],
+          sourceEvidence: backed
+            ? {
+                kind: "scoped-refresh",
+                refreshId: run.id,
+                editionId: edition.id,
+                editionYear: 2027,
+                evidence: [{ field: "headliners", sourceUrl }],
+              }
+            : [],
           parserRunId: backed ? run.id : null,
         },
       });
@@ -3191,7 +3199,7 @@ test("social previews show parser-backed approved dates but not unsupported edit
       },
     });
     assert.equal(await headliners(), undefined);
-    await approveHeadliners([], [alias], true);
+    await approveHeadliners(catalogSeed.festivals[0].headliners, [alias], true);
     assert.deepEqual(await headliners(), [headliner]);
     await approveHeadliners([headliner], [headliner, replacement], false);
     assert.equal(await headliners(), undefined);
