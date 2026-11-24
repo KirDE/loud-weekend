@@ -1,4 +1,6 @@
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
+import { createHash } from "node:crypto";
+import sharp from "sharp";
 import { expect, test } from "@playwright/test";
 
 const db = createPrismaClient();
@@ -92,7 +94,23 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
 
   await page.getByRole("button", { name: "Links & assets" }).click();
   await page.getByLabel("Tickets URL").fill("https://tickets.example.test/wacken");
-  await page.getByLabel("Logo URL").fill("https://assets.example.test/wacken.svg");
+  const logoBytes = await sharp({
+    create: { width: 2, height: 2, channels: 3, background: "#ac5" },
+  })
+    .png()
+    .toBuffer();
+  const logoHash = createHash("sha256").update(logoBytes).digest("hex");
+  await db.assetBlob.upsert({
+    where: { sha256: logoHash },
+    create: {
+      sha256: logoHash,
+      mimeType: "image/png",
+      sizeBytes: logoBytes.length,
+      bytes: logoBytes,
+    },
+    update: {},
+  });
+  await page.getByLabel("Reviewed logo SHA-256").fill(logoHash);
   await Promise.all([
     page.waitForResponse(
       (response) =>
@@ -119,7 +137,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
         response.request().method() === "POST" &&
         response.request().postData()?.includes('"resourceKind":"asset"'),
     ),
-    page.getByRole("button", { name: "Save asset draft" }).click(),
+    page.getByRole("button", { name: "Save logo draft" }).click(),
   ]);
 
   await page.reload();
@@ -185,6 +203,46 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
         `${name} at ${width}px: ${JSON.stringify(layout)}`,
       ).toBeLessThanOrEqual(layout.viewport);
     }
+  }
+});
+
+test("artist favorites survive canonical renames and legacy names can be removed", async ({
+  page,
+}) => {
+  const original = await db.artist.findUniqueOrThrow({ where: { slug: "sample-artist" } });
+  await page.addInitScript((name) => {
+    const key = "festival-radar-planner-v1";
+    if (!localStorage.getItem(key))
+      localStorage.setItem(key, JSON.stringify({ favoriteArtists: [name] }));
+  }, original.name);
+  const renamed = "Sample Artist Reviewed";
+  await db.artist.update({
+    where: { id: original.id },
+    data: { name: renamed, aliases: [...original.aliases, original.name] },
+  });
+  try {
+    await page.goto("/artists/sample-artist/");
+    await expect(page.getByRole("heading", { name: renamed })).toBeVisible();
+    const favorite = page.locator(".favoriteButton");
+    await expect(favorite).toHaveAttribute("aria-pressed", "true");
+    await favorite.click();
+    await expect(favorite).toHaveAttribute("aria-pressed", "false");
+    await favorite.click();
+    await expect(favorite).toHaveAttribute("aria-pressed", "true");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => JSON.parse(localStorage.getItem("festival-radar-planner-v1")).favoriteArtists,
+        ),
+      )
+      .toEqual(["artist:sample-artist"]);
+    await page.goto("/planner/");
+    await expect(page.getByText(renamed, { exact: true })).toBeVisible();
+  } finally {
+    await db.artist.update({
+      where: { id: original.id },
+      data: { name: original.name, aliases: original.aliases },
+    });
   }
 });
 
