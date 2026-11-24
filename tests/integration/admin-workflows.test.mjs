@@ -102,7 +102,7 @@ test.before(async () => {
   await db.lineupEntry.deleteMany({ where: { editionId: edition.id } });
   await db.artist.updateMany({
     where: { slug: "integration-headliner" },
-    data: { name: "Integration Headliner", aliases: [] },
+    data: { name: "Integration Headliner", aliases: [], biography: null },
   });
   await db.artistLink.deleteMany({ where: { artist: { slug: "integration-headliner" } } });
   await db.artistProvenance.deleteMany({ where: { artist: { slug: "integration-headliner" } } });
@@ -570,10 +570,77 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     /href="https:\/\/www\.instagram\.com\/synthetic-artist\/"/,
   );
 
+  const biography = {
+    text: "The integration fixture blends two guitar styles.",
+    sourceUrl: "https://artist.example.test/biography/",
+    observedAt: "2026-01-02T00:00:00Z",
+  };
+  const saveBiography = (client, proof, baseRevision = 4) =>
+    client.json("/api/admin", "POST", {
+      resourceKind: "artist",
+      resourceKey: artistSlug,
+      baseRevision,
+      values: { biography: proof },
+    });
+  const getArtist = () => db.artist.findUniqueOrThrow({ where: { id: originalArtist.id } });
+  assert.equal((await saveBiography(anonymous, biography)).status, 403);
+  assert.equal(
+    (await saveBiography(admin, { ...biography, sourceUrl: "https://unrelated.example.test/" }))
+      .status,
+    409,
+  );
+  assert.equal(
+    (await saveBiography(admin, { ...biography, observedAt: "2099-01-01T00:00:00Z" })).status,
+    409,
+  );
+  const queuedBiography = await saveBiography(admin, biography);
+  assert.equal(queuedBiography.status, 201, await queuedBiography.clone().text());
+  const biographyDraft = await queuedBiography.json();
+  const biographyChange = await db.adminChange.findFirstOrThrow({
+    where: { draftId: biographyDraft.id },
+  });
+  assert.equal((await getArtist()).biography, null);
+  assert.doesNotMatch(
+    await (await anonymous.json(`/artists/${artistSlug}/`)).text(),
+    /blends two guitar styles/,
+  );
+  await db.artist.update({
+    where: { id: originalArtist.id },
+    data: { biography: "Previously reviewed biography" },
+  });
+  assert.equal((await decideArtist(biographyChange.id)).status, 409);
+  assert.equal((await getArtist()).biography, "Previously reviewed biography");
+  await db.artist.update({ where: { id: originalArtist.id }, data: { biography: null } });
+  const approvedBiography = await decideArtist(biographyChange.id);
+  assert.equal(approvedBiography.status, 200, await approvedBiography.clone().text());
+  assert.equal((await approvedBiography.json()).artistPublication, "published");
+  assert.equal((await getArtist()).biography, biography.text);
+  const publicBiography = await (await anonymous.json(`/artists/${artistSlug}/`)).text();
+  assert.match(publicBiography, /blends two guitar styles/);
+  assert.match(publicBiography, /href="https:\/\/artist\.example\.test\/biography\/"/);
+  assert.equal(
+    (await saveBiography(admin, { ...biography, text: "Stale edit", observedAt }, 5)).status,
+    409,
+  );
+  const noopBiography = await saveBiography(admin, biography, 5);
+  assert.equal(noopBiography.status, 201, await noopBiography.clone().text());
+  const noopBiographyDraft = await noopBiography.json();
+  const noopBiographyChange = await db.adminChange.findFirstOrThrow({
+    where: { draftId: noopBiographyDraft.id },
+  });
+  assert.equal(
+    (await (await decideArtist(noopBiographyChange.id)).json()).artistPublication,
+    "unchanged",
+  );
+  assert.equal(
+    await db.artistProvenance.count({ where: { artistId: originalArtist.id, field: "biography" } }),
+    1,
+  );
+
   const rejectedResponse = await admin.json("/api/admin", "POST", {
     resourceKind: "artist",
     resourceKey: artistSlug,
-    baseRevision: 4,
+    baseRevision: 6,
     values: { canonicalName: "Unpublished Name" },
   });
   assert.equal(rejectedResponse.status, 201);
@@ -591,7 +658,7 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     admin.json("/api/admin", "POST", {
       resourceKind: "artist",
       resourceKey: artistSlug,
-      baseRevision: 4,
+      baseRevision: 6,
       values: { canonicalName },
     });
   const correctionResponse = await submitArtistCorrection("Integration Reviewer Correction");

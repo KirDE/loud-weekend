@@ -5,6 +5,7 @@ import {
   matchesTolminatorStockEdition,
 } from "../ingestion/adapters/tolminator-stock.ts";
 import { editionDateProblem } from "../domain/edition-dates.ts";
+import { publishArrivalObservation, type ArrivalObservation } from "./arrival-import.ts";
 import {
   ticketSupplementUrl,
   ticketSupplementPurchaseUrl,
@@ -1098,6 +1099,22 @@ export async function publishAdminFestivalChange(
     actorLabel: input.actorLabel,
     fields: applied.changedFields,
     evidence: { adminChangeId: input.change.id, sourceEvidence: input.change.sourceEvidence },
+  });
+}
+
+export async function publishAgentArrivalResolution(
+  db: Prisma.TransactionClient,
+  input: { sourceId: string; arrival: ArrivalObservation; evidence: unknown },
+) {
+  if (!(await publishArrivalObservation(db, input.arrival))) return null;
+  return createPublication(db, {
+    source: CatalogPublicationSource.INGESTION,
+    sourceId: input.sourceId,
+    festivalSlug: input.arrival.festivalSlug,
+    editionYear: input.arrival.editionYear,
+    actorLabel: "OpenClaw import-conflict agent",
+    fields: ["arrival"],
+    evidence: input.evidence,
   });
 }
 
