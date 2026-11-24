@@ -28,7 +28,7 @@ test("explicit mobile trip download keeps only public proof and works offline", 
     timeZone: "Europe/Berlin",
     status: "scheduled",
     sourceUrl: "https://festival.example.test/timetable",
-    observedAt: "2027-01-01T10:00:00.000Z",
+    observedAt: "2026-11-12T10:00:00.000Z",
   };
   const api = "/api/offline/trips/synthetic-fest/2027/";
   try {
@@ -38,6 +38,30 @@ test("explicit mobile trip download keeps only public proof and works offline", 
       false,
     );
 
+    await db.timetablePerformance.createMany({
+      data: [
+        {
+          editionId: target.id,
+          date: new Date(entry.date),
+          start: "20:31",
+          stage: entry.stage,
+          artistName: "Invalid zone",
+          timeZone: "City/Unknown",
+          sourceUrl: entry.sourceUrl,
+          observedAt: new Date(entry.observedAt),
+        },
+        {
+          editionId: target.id,
+          date: new Date(entry.date),
+          start: "20:32",
+          stage: entry.stage,
+          artistName: "Invalid source",
+          timeZone: entry.timeZone,
+          sourceUrl: "unverified",
+          observedAt: new Date(entry.observedAt),
+        },
+      ],
+    });
     const download = await request.get(api);
     expect(download.status()).toBe(200);
     expect(download.headers()["cache-control"]).toBe("no-store");
@@ -79,11 +103,30 @@ test("explicit mobile trip download keeps only public proof and works offline", 
       {
         festivalSlug: "synthetic-fest",
         editionYear: 2027,
-        entries: [{ ...entry, status: "cancelled", observedAt: "2027-01-02T10:00:00.000Z" }],
+        entries: [{ ...entry, status: "cancelled", observedAt: "2026-11-13T10:00:00.000Z" }],
       },
       false,
     );
-    await page.getByRole("button", { name: "Offline-Kopie aktualisieren" }).click();
+    await page.getByRole("link", { name: "Offline-Reisen öffnen" }).click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "de");
+    await expect(page.getByRole("heading", { name: "Offline-Reisen", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Festivalliste öffnen" })).toHaveAttribute(
+      "href",
+      "/de/",
+    );
+    const trip = page.locator("#trips article");
+    const update = trip.getByRole("button", {
+      name: "Offline-Kopie aktualisieren: Synthetic Fest",
+    });
+    await expect(trip.getByText("Abgesagt", { exact: false })).toHaveCount(0);
+    const sent = page.waitForRequest((req) => new URL(req.url()).pathname === api);
+    await update.click();
+    expect(await (await sent).headerValue("cookie")).toBeNull();
+    await expect(trip.getByRole("status")).toHaveText(
+      "Reisedetails wurden auf diesem Gerät gespeichert.",
+    );
+    await expect(update).toBeFocused();
+    await expect(trip.getByText("Abgesagt", { exact: false })).toContainText("20:30");
     await expect
       .poll(async () => JSON.parse(await saved()).trip.timetable[0].status)
       .toBe("cancelled");
@@ -128,6 +171,37 @@ test("explicit mobile trip download keeps only public proof and works offline", 
     }
 
     const lastGood = await saved();
+    await page.route(`**${api}`, (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(body) + " ".repeat(192 * 1024),
+      }),
+    );
+    await update.click();
+    await expect(trip.getByRole("status")).toContainText("Reisedetails nicht verfügbar");
+    expect(await saved()).toBe(lastGood);
+    await page.unroute(`**${api}`);
+
+    await page.route(`**${api}`, (route) =>
+      route.fulfill({
+        json: { ...body, timetable: [{ ...body.timetable[0], timeZone: "City/Unknown" }] },
+      }),
+    );
+    await update.click();
+    await expect(trip.getByRole("status")).toContainText("Reisedetails nicht verfügbar");
+    expect(await saved()).toBe(lastGood);
+    await page.unroute(`**${api}`);
+
+    await page.route(`**${api}`, (route) =>
+      route.fulfill({
+        json: { ...body, startDate: "2027-06-12", endDate: "2027-06-10", timetable: [] },
+      }),
+    );
+    await update.click();
+    await expect(trip.getByRole("status")).toContainText("Reisedetails nicht verfügbar");
+    expect(await saved()).toBe(lastGood);
+    await page.unroute(`**${api}`);
+
     await page.evaluate(() => {
       const setItem = Storage.prototype.setItem;
       Storage.prototype.setItem = function (key, value) {
@@ -136,7 +210,7 @@ test("explicit mobile trip download keeps only public proof and works offline", 
         return setItem.call(this, key, value);
       };
     });
-    await page.getByRole("button", { name: "Offline-Kopie aktualisieren" }).click();
+    await update.click();
     await expect(
       page.getByText("Offline-Kopie konnte nicht geändert werden.", { exact: false }),
     ).toBeVisible();
@@ -154,8 +228,15 @@ test("explicit mobile trip download keeps only public proof and works offline", 
     ).toBe(true);
 
     await context.setOffline(true);
+    await page.goto("/ru/festivals/synthetic-fest/");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ru");
+    await expect(page.getByRole("heading", { name: "Поездки офлайн", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Открыть список фестивалей" })).toHaveAttribute(
+      "href",
+      "/ru/",
+    );
     await page.goto("/de/festivals/synthetic-fest/");
-    const trip = page.locator("#trips article");
+    await expect(page.locator("html")).toHaveAttribute("lang", "de");
     await expect(trip.getByRole("heading", { name: "Synthetic Fest 2027" })).toBeVisible();
     await expect(trip.getByText("Abgesagt", { exact: false })).toContainText("20:30");
     await expect(trip.getByText(/Festivalort: .*Testland/)).toBeVisible();
@@ -163,6 +244,9 @@ test("explicit mobile trip download keeps only public proof and works offline", 
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(320);
+    await update.click();
+    await expect(trip.getByRole("status")).toContainText("Reisedetails nicht verfügbar");
+    expect(await saved()).toBe(lastGood);
     await trip.getByRole("button", { name: "Offline-Kopie entfernen: Synthetic Fest" }).click();
     await expect(
       page.getByText("Auf diesem Gerät wurden keine Reisedetails gespeichert."),
@@ -173,5 +257,41 @@ test("explicit mobile trip download keeps only public proof and works offline", 
       where: { editionId: target.id, stage: entry.stage },
     });
     await db.$disconnect();
+  }
+});
+
+test("refreshing an offline trip does not restore a copy removed in another tab", async ({
+  page,
+  context,
+}) => {
+  const festivalPath = "/en/festivals/synthetic-fest/";
+  const key = "festival-radar-offline-trip:v1:synthetic-fest:2027";
+  await page.goto(festivalPath);
+  const save = page.getByRole("button", { name: "Save trip offline", exact: true });
+  await save.click();
+  const refresh = page.getByRole("button", { name: "Update offline copy", exact: true });
+  await expect(refresh).toBeVisible();
+
+  const otherTab = await context.newPage();
+  const responseReady = Promise.withResolvers();
+  const releaseResponse = Promise.withResolvers();
+  await page.route("**/api/offline/trips/synthetic-fest/2027/", async (route) => {
+    const response = await route.fetch();
+    responseReady.resolve(response.status());
+    await releaseResponse.promise;
+    await route.fulfill({ response });
+  });
+  try {
+    await refresh.click();
+    expect(await responseReady.promise).toBe(200);
+    await otherTab.goto("/offline.html#trips");
+    await otherTab.getByRole("button", { name: "Remove offline copy: Synthetic Fest" }).click();
+    releaseResponse.resolve();
+
+    await expect(save).toBeEnabled();
+    expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBeNull();
+  } finally {
+    releaseResponse.resolve();
+    await otherTab.close();
   }
 });

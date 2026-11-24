@@ -11,6 +11,11 @@ const legacyFilters = {
 };
 const activeFilters = {
   ...legacyFilters,
+  dateFrom: "",
+  dateTo: "",
+  weekendOnly: false,
+  maxDays: "all",
+  sort: "date",
   ticketsOnly: true,
   genre: "doom metal",
   origin: "cologne",
@@ -113,7 +118,125 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
       )
       .toEqual(activeFilters);
     await expect(secondPage.locator(".festivalCard")).toHaveCount(0);
+
+    // Leave the second device on the same planner page while the first device saves.
+    await secondPage.goto("/en/planner/");
+    const pull = secondPage.getByRole("button", {
+      name: "Use account data on this device",
+      exact: true,
+    });
+    await expect(pull).toBeEnabled();
+    const latest = { ...activeFilters, ticketsOnly: false };
+    const { document: previous } = await (
+      await page.request.get("/api/sync/saved-filters/")
+    ).json();
+    expect(
+      (
+        await page.request.put("/api/sync/saved-filters/", {
+          headers: { origin: new URL(page.url()).origin },
+          data: { revision: previous.revision, payload: { savedFilters: latest } },
+        })
+      ).status(),
+    ).toBe(200);
+
+    // A failed document read must not replace any local data.
+    const filtersRoute = "**/api/sync/saved-filters*";
+    const invalidPayload = {
+      json: { document: { ...previous, payload: { savedFilters: "invalid" } } },
+    };
+    // A 409 followed by a malformed read must not offer a destructive choice.
+    await secondPage.route(filtersRoute, (route) =>
+      route.request().method() === "GET" ? route.fulfill(invalidPayload) : route.continue(),
+    );
+    await secondPage.getByRole("button", { name: "Sync now", exact: true }).click();
+    await expect(secondPage.getByText("Sync failed. Reconnect and try again.")).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(
+      secondPage.getByRole("button", { name: "Use other device", exact: true }),
+    ).toHaveCount(0);
+    await expect
+      .poll(() =>
+        secondPage.evaluate(
+          (key) => JSON.parse(localStorage.getItem(key)).savedFilters,
+          storageKey,
+        ),
+      )
+      .toEqual(activeFilters);
+    await secondPage.unroute(filtersRoute);
+
+    for (const response of [{ status: 503 }, { json: {} }, invalidPayload]) {
+      await secondPage.route(filtersRoute, (route) => route.fulfill(response));
+      await pull.click();
+      await expect(secondPage.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
+      await expect
+        .poll(() =>
+          secondPage.evaluate(
+            (key) => JSON.parse(localStorage.getItem(key)).savedFilters,
+            storageKey,
+          ),
+        )
+        .toEqual(activeFilters);
+      await secondPage.unroute(filtersRoute);
+    }
+
+    await pull.click();
+    await expect(secondPage.getByText("Everything is synchronized.")).toBeVisible();
+    await secondPage.goto("/en/");
+    await expectFilters(secondPage, latest);
+    await expect(secondPage.locator(".festivalCard h2")).toHaveText(["Synthetic Fest"]);
   } finally {
     await secondDevice.close();
   }
+});
+
+test("taking remote favorites leaves unrelated unsynced planner data on this device", async ({
+  page,
+}) => {
+  const local = {
+    favoriteFestivals: ["local-festival"],
+    favoriteArtists: ["local-artist"],
+    attendance: { "local-festival": "going" },
+    playlistFestivals: ["local-playlist"],
+    playlistExcludedArtists: ["local-excluded-artist"],
+    savedFilters: activeFilters,
+  };
+  await page.addInitScript(
+    ({ key, planner }) => {
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(planner));
+    },
+    { key: storageKey, planner: local },
+  );
+
+  const credentials = {
+    email: `discovery-conflict-${randomUUID()}@example.test`,
+    password: "synthetic conflict test password",
+  };
+  expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
+  await page.goto("/en/planner/");
+  const pull = page.getByRole("button", { name: "Use account data on this device", exact: true });
+  await expect(pull).toBeDisabled();
+
+  // Another device creates favorites before this one tries to sync its local version.
+  const remote = { favoriteFestivals: ["remote-festival"], favoriteArtists: [] };
+  expect(
+    (
+      await page.request.put("/api/sync/favorites/", {
+        headers: { origin: new URL(page.url()).origin },
+        data: { revision: 0, payload: remote },
+      })
+    ).status(),
+  ).toBe(201);
+
+  await page.getByRole("button", { name: "Sync now", exact: true }).click();
+  await page.getByRole("button", { name: "Use other device", exact: true }).click();
+  await expect(
+    page.getByText("Conflict resolved. Sync again to send other local changes."),
+  ).toBeVisible();
+  await expect
+    .poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)), storageKey))
+    .toEqual({ ...local, ...remote });
+
+  const savedFilters = await page.request.get("/api/sync/saved-filters/");
+  expect((await savedFilters.json()).document).toBeNull();
 });
