@@ -353,6 +353,25 @@ test("public freshness separates edition-bound checks, publication and source fa
     await db.festivalEdition.update({ where: { id: current.id }, data: { snapshotAt: ago(-72) } });
     assert.deepEqual(await sitemapDates(), dates, "future evidence may not change the sitemap");
 
+    const arrival = await db.catalogPublication.create({
+      data: {
+        source: "INGESTION",
+        sourceId: `${slug}-reviewed-arrival`,
+        festivalSlug: slug,
+        editionYear: current.year,
+        actorLabel: "fixture",
+        fields: ["arrival"],
+        createdAt: new Date(),
+      },
+    });
+    const arrivalDates = await sitemapDates();
+    const arrivalDate = arrival.createdAt.toISOString();
+    assert.equal(arrivalDates[`/festivals/${slug}/`], arrivalDate);
+    assert.equal(arrivalDates[`/festivals/${slug}/2027/`], arrivalDate);
+    for (const path of ["/archive/", "/editions/2027/", "/countries/de/", "/months/06/"]) {
+      assert.equal(arrivalDates[path], dates[path], path);
+    }
+
     const provenanceUrl = "https://official.example.test/ticket-update";
     const reviewedTicket = await db.$transaction((tx) =>
       publishAgentFestivalResolution(tx, {
