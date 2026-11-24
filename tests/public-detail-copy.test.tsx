@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { StageTimetable } from "../components/StageTimetable";
 import { ArtistDetail } from "../components/ArtistDetail";
 import { artist } from "./support/catalog";
 import { FestivalExplorer } from "../components/FestivalExplorer";
@@ -375,3 +376,32 @@ for (const language of ["en", "de", "ru"] as const) {
     }
   });
 }
+
+test("the public timetable distinguishes both occurrences of a repeated local time", () => {
+  const shared = {
+    date: "2027-10-31",
+    start: "02:30",
+    stage: "Main stage",
+    timeZone: "Europe/Berlin",
+    status: "scheduled" as const,
+    sourceUrl: "https://festival.example.test/",
+    observedAt: "2027-10-01T10:00:00Z",
+  };
+  const entries = ["+02:00", "+01:00"].map((offset, index) => ({
+    ...shared,
+    artist: `Fixture ${index + 1}`,
+    window: {
+      startsAt: `2027-10-31T02:30:00${offset}`,
+      endsAt: `2027-10-31T02:50:00${offset}`,
+    },
+  }));
+  const html = renderToStaticMarkup(
+    <LanguageProvider initialLanguage="en">
+      <StageTimetable entries={entries} />
+    </LanguageProvider>,
+  );
+  for (const offset of ["02:00", "01:00"]) {
+    assert.ok(html.includes(`>02:30 GMT+${offset}</time>`));
+    assert.ok(html.includes(`>02:50 GMT+${offset}</time>`));
+  }
+});

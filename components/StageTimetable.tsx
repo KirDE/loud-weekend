@@ -3,7 +3,12 @@
 import { useState } from "react";
 import type { TimetableEntry } from "@/lib/domain/festival";
 import { useLanguage, type Language } from "./LanguageProvider";
-import { findTimetableConflicts, groupTimetable, timetableLocalDateTime } from "@/lib/timetables";
+import {
+  findTimetableConflicts,
+  groupTimetable,
+  isRepeatedTimetableTime,
+  timetableLocalDateTime,
+} from "@/lib/timetables";
 
 const copy: Record<
   Language,
@@ -180,7 +185,13 @@ export function StageTimetable({ entries }: { entries?: TimetableEntry[] }) {
                     const end = entry.window
                       ? timetableLocalDateTime(entry.window.endsAt, entry.timeZone)
                       : null;
-                    const showOffsets = start?.offset !== end?.offset;
+                    const showOffsets =
+                      entry.window &&
+                      start &&
+                      end &&
+                      (start.offset !== end.offset ||
+                        isRepeatedTimetableTime(entry.window.startsAt, entry.timeZone, start) ||
+                        isRepeatedTimetableTime(entry.window.endsAt, entry.timeZone, end));
                     return (
                       <li
                         className={entry.status === "cancelled" ? "cancelled" : undefined}
