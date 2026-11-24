@@ -144,6 +144,7 @@ for (const slug of ["rock-am-ring", "rock-im-park"]) {
     '<span style="display: block">Sold</span><span style="display: block">out</span>',
     "<span>Sold<br>out</span>",
     "<span>aus<strong>verkauft</strong></span>",
+    '<span>aus<span style="display: inline-block">verkauft</span></span>',
   ]) {
     test(`${slug}: visible stock contradiction ${notice} prevents publication`, async () => {
       const html = alter(($) => ordinary($).find(".header").append(notice));
