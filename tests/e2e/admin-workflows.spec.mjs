@@ -1,4 +1,6 @@
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
+import { createHash } from "node:crypto";
+import sharp from "sharp";
 import { expect, test } from "@playwright/test";
 
 const db = createPrismaClient();
@@ -84,15 +86,69 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   await page.getByRole("button", { name: "Save festival draft" }).click();
   await expect(page.getByRole("status")).toContainText("persisted and queued");
 
+  const sampledArtist = await db.artist.findUniqueOrThrow({ where: { slug: "sample-artist" } });
+  const site = "https://sample-artist.example.test/";
+  const social = "https://www.instagram.com/sample-artist/";
+  await db.artistLink.createMany({
+    skipDuplicates: true,
+    data: [
+      {
+        artistId: sampledArtist.id,
+        url: site,
+        label: "Official site",
+        source: "official",
+        verified: true,
+      },
+      {
+        artistId: sampledArtist.id,
+        url: social,
+        label: "Social profile",
+        source: "musicbrainz",
+        verified: false,
+        position: 1,
+      },
+    ],
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Festivals & artists" }).click();
   await page.getByPlaceholder("Find an artist").fill("Sample Artist");
   await page.getByRole("button", { name: "Edit" }).first().click();
   await page.getByLabel("Canonical name").fill("Sample Artist E2E");
   await page.getByRole("button", { name: "Save artist draft" }).click();
   await expect(page.getByRole("status")).toContainText("persisted and queued");
 
+  await page.getByLabel("Official evidence URL").fill(site + "social/");
+  const queuedSocial = page.waitForResponse(
+    (response) =>
+      response.status() === 201 &&
+      response.request().method() === "POST" &&
+      response.request().postData()?.includes('"socialProfile"'),
+  );
+  await page.getByRole("button", { name: "Queue social profile for review" }).click();
+  await queuedSocial;
+  expect(
+    await db.artistLink.findFirstOrThrow({ where: { artistId: sampledArtist.id, url: social } }),
+  ).toMatchObject({ verified: false });
+
   await page.getByRole("button", { name: "Links & assets" }).click();
   await page.getByLabel("Tickets URL").fill("https://tickets.example.test/wacken");
-  await page.getByLabel("Logo URL").fill("https://assets.example.test/wacken.svg");
+  const logoBytes = await sharp({
+    create: { width: 2, height: 2, channels: 3, background: "#ac5" },
+  })
+    .png()
+    .toBuffer();
+  const logoHash = createHash("sha256").update(logoBytes).digest("hex");
+  await db.assetBlob.upsert({
+    where: { sha256: logoHash },
+    create: {
+      sha256: logoHash,
+      mimeType: "image/png",
+      sizeBytes: logoBytes.length,
+      bytes: logoBytes,
+    },
+    update: {},
+  });
+  await page.getByLabel("Reviewed logo SHA-256").fill(logoHash);
   await Promise.all([
     page.waitForResponse(
       (response) =>
@@ -119,7 +175,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
         response.request().method() === "POST" &&
         response.request().postData()?.includes('"resourceKind":"asset"'),
     ),
-    page.getByRole("button", { name: "Save asset draft" }).click(),
+    page.getByRole("button", { name: "Save logo draft" }).click(),
   ]);
 
   await page.reload();
@@ -153,7 +209,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   await expect(page.getByLabel("synthetic-fest parser log")).toContainText("fixture");
 
   const snapshot = await (await page.request.get("/api/admin")).json();
-  expect(snapshot.drafts).toHaveLength(5);
+  expect(snapshot.drafts).toHaveLength(6);
   expect(snapshot.resources.find((item) => item.resourceKind === "FESTIVAL")?.values.city).toBe(
     "Sample E2E City",
   );
@@ -185,6 +241,46 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
         `${name} at ${width}px: ${JSON.stringify(layout)}`,
       ).toBeLessThanOrEqual(layout.viewport);
     }
+  }
+});
+
+test("artist favorites survive canonical renames and legacy names can be removed", async ({
+  page,
+}) => {
+  const original = await db.artist.findUniqueOrThrow({ where: { slug: "sample-artist" } });
+  await page.addInitScript((name) => {
+    const key = "festival-radar-planner-v1";
+    if (!localStorage.getItem(key))
+      localStorage.setItem(key, JSON.stringify({ favoriteArtists: [name] }));
+  }, original.name);
+  const renamed = "Sample Artist Reviewed";
+  await db.artist.update({
+    where: { id: original.id },
+    data: { name: renamed, aliases: [...original.aliases, original.name] },
+  });
+  try {
+    await page.goto("/artists/sample-artist/");
+    await expect(page.getByRole("heading", { name: renamed })).toBeVisible();
+    const favorite = page.locator(".favoriteButton");
+    await expect(favorite).toHaveAttribute("aria-pressed", "true");
+    await favorite.click();
+    await expect(favorite).toHaveAttribute("aria-pressed", "false");
+    await favorite.click();
+    await expect(favorite).toHaveAttribute("aria-pressed", "true");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => JSON.parse(localStorage.getItem("festival-radar-planner-v1")).favoriteArtists,
+        ),
+      )
+      .toEqual(["artist:sample-artist"]);
+    await page.goto("/planner/");
+    await expect(page.getByText(renamed, { exact: true })).toBeVisible();
+  } finally {
+    await db.artist.update({
+      where: { id: original.id },
+      data: { name: original.name, aliases: original.aliases },
+    });
   }
 });
 

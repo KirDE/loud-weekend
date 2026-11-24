@@ -1,0 +1,55 @@
+{
+  "status": 200,
+  "production": true,
+  "sales": {
+    "579901": {
+      "id": 579901,
+      "startISO8601": "2026-06-18T10:00:00+02:00",
+      "url": "https://goout.net/cs/listky/rock-for-people-2027/bvcmb/",
+      "currency": "CZK",
+      "precisionCents": 100,
+      "season": false,
+      "voucher": false,
+      "state": "ACTIVE",
+      "ticketsLimit": 4,
+      "promo": false,
+      "scheduleId": 9532556,
+      "eventName": "Rock for People 2027",
+      "saleType": "REGULAR",
+      "passCodeProtected": false,
+      "promoCodeProtected": false,
+      "donation": false,
+      "schedule": {
+        "id": 9532556,
+        "eventId": 3395438,
+        "cancelled": false,
+        "startISO8601": "2027-06-02T12:00:01+02:00",
+        "endISO8601": "2027-06-05T23:59:00+02:00",
+        "state": "APPROVED"
+      },
+      "deals": {
+        "3633368": {
+          "id": 3633368,
+          "name": "4 dny",
+          "start": "2026-08-05T20:49:00+02:00",
+          "hidden": false,
+          "hiddenDesk": false,
+          "active": true,
+          "namedTickets": false,
+          "ticketNameSource": "WITHOUT_NAME",
+          "joinedTickets": false,
+          "preOwnedTicketsRequired": false,
+          "unlimited": false,
+          "counts": {
+            "ticketsMinimum": 0,
+            "ticketsLimit": 4,
+            "ticketsAvailable": 4
+          },
+          "onlyPrint": false,
+          "isLastTickets": false,
+          "priceCents": 529000
+        }
+      }
+    }
+  }
+}

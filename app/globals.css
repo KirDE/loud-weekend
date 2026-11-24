@@ -621,6 +621,10 @@
   box-shadow: 7px 7px 0 #17171244;
 }
 
+.personalCalendar a:where(:not(.primaryButton)) {
+  text-decoration: underline;
+}
+
 .mapMarker > div a {
   display: flex;
   flex-direction: column;
@@ -1148,6 +1152,8 @@ main {
 
 .resultMeta {
   display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
   justify-content: space-between;
   margin: 35px 0 15px;
   color: var(--muted);
@@ -2205,10 +2211,6 @@ main {
 
   .festivalCard {
     min-height: 350px;
-  }
-
-  .resultMeta span:last-child {
-    display: none;
   }
 
   .detailHero {
@@ -3421,4 +3423,18 @@ summary:focus-visible {
 
 .plannerReset [role="status"] {
   max-width: 28rem;
+}
+
+.personalCalendar li {
+  margin-block: 8px;
+}
+
+.personalCalendarConflicts {
+  margin-block: 16px;
+  padding: 12px 16px;
+  border-inline-start: 4px solid var(--orange);
+}
+
+.personalCalendarConflicts h3 {
+  margin: 0;
 }

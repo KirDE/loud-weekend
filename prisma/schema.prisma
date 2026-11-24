@@ -126,6 +126,7 @@ enum TicketStatus {
   NOT_ON_SALE
   SOLD_OUT
   SALES_ENDED
+  FREE
   UNAVAILABLE
   UNKNOWN
 }

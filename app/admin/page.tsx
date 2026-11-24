@@ -1,3 +1,4 @@
+import { readSubmissionEditionLink } from "@/lib/submission-edition-link";
 import { AdminConsole } from "@/components/AdminConsole";
 import { currentAdmin } from "@/lib/admin-access";
 import { adminSnapshot } from "@/lib/admin-store";
@@ -9,9 +10,17 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
   if (!(await currentAdmin())) redirect("/?admin=forbidden");
-  const [snapshot, { festivals }] = await Promise.all([adminSnapshot(), getCatalog()]);
+  const [snapshot, { festivals, editions, artists }] = await Promise.all([
+    adminSnapshot(),
+    getCatalog(),
+  ]);
   return (
     <AdminConsole
+      editionOptions={editions.map(({ slug, name, editionYear }) => ({
+        slug,
+        name,
+        year: editionYear,
+      }))}
       sourceHealth={snapshot.sourceHealth.map((s) => ({
         ...s,
         failureStartedAt: s.failureStartedAt?.toISOString() ?? null,
@@ -26,12 +35,26 @@ export default async function AdminPage() {
         notes: item.notes,
         status: item.status.toLowerCase() as "pending" | "approved" | "rejected",
         submittedAt: item.submittedAt.toISOString(),
+        editionLink: readSubmissionEditionLink(item.audit),
         audit: item.audit.map((entry) => ({
           action: entry.action,
           at: entry.createdAt.toISOString(),
         })),
       }))}
       festivals={festivals}
+      artists={artists.map(({ slug, name, links }) => ({
+        slug,
+        name,
+        officialUrl: links.find(
+          ({ label, source }) => label === "Official site" && source === "official",
+        )?.url,
+        socialCandidates: links
+          .filter(
+            ({ label, source, verified }) =>
+              label === "Social profile" && source === "musicbrainz" && !verified,
+          )
+          .map(({ url }) => url),
+      }))}
       initialChanges={snapshot.changes.map((item) => ({
         id: item.id,
         festival: item.resourceKey,
