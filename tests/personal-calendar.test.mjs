@@ -36,7 +36,7 @@ test("shared days conflict once, while day-after adjacency, unscheduled and decl
   const ics = calendarFile(result.dated);
   assert.match(
     ics,
-    /UID:a-2027@festival-radar\r\nDTSTART;VALUE=DATE:20270630\r\nDTEND;VALUE=DATE:20270703/,
+    /UID:a-2027@festival-radar\r\nDTSTAMP:\d{8}T\d{6}Z\r\nDTSTART;VALUE=DATE:20270630\r\nDTEND;VALUE=DATE:20270703/,
   );
   assert.doesNotMatch(ics, /UID:(d|unknown|invalid)-/);
 });
