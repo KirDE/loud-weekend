@@ -132,6 +132,7 @@ for (const notice of [
   '<span style="display: block">Nicht</span><span style="display: block">verfügbar</span>',
   "<span>Nicht<br>mehr <strong>verfüg</strong>bar</span>",
   "<span>Aus<strong>verkauft</strong></span>",
+  '<span>Aus<span style="display: inline-block">verkauft</span></span>',
 ]) {
   test(`Vainstream: visible stock contradiction ${notice} prevents publication`, async () => {
     const $ = load(fixture);
