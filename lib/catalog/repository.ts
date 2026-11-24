@@ -1,3 +1,4 @@
+import { timetableEntrySchema } from "../timetables.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
 import type { PrismaClient } from "@prisma/client";
@@ -123,7 +124,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
               const name =
                 (performance.artistId && rosterById.get(performance.artistId)) ||
                 (owners.length === 1 ? owners[0].name : performance.artistName);
-              return {
+              const entry: TimetableEntry = {
                 date: dateOnly(performance.date)!,
                 stage: performance.stage,
                 start: performance.start,
@@ -133,6 +134,12 @@ export class DatabaseCatalogRepository implements CatalogRepository {
                 sourceUrl: performance.sourceUrl ?? row.festival.officialUrl,
                 observedAt: instant(performance.observedAt) ?? row.sourceUpdatedAt.toISOString(),
               };
+              const { startsAt, endsAt, timeZone, sourceUrl, observedAt } = performance;
+              if (!startsAt || !endsAt || !timeZone || !sourceUrl || !observedAt) return entry;
+              const window = { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
+              return timetableEntrySchema.safeParse({ ...entry, window }).success
+                ? { ...entry, window }
+                : entry;
             })
           : undefined,
         recordState: lower(row.recordState),
