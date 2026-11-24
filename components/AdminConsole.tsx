@@ -19,10 +19,12 @@ type Submission = {
   editionLink?: LinkedEdition | null;
   audit: { action: string; at: string }[];
 };
+type EditableArtist = { slug: string; name: string; officialUrl?: string };
 type Operator = { email: string; role: "USER" | "EDITOR" | "ADMIN" };
 
 export function AdminConsole({
   festivals,
+  artists,
   initialChanges,
   parserRuns,
   auditEntries,
@@ -31,6 +33,7 @@ export function AdminConsole({
   sourceHealth = [],
 }: {
   festivals: Festival[];
+  artists: EditableArtist[];
   initialChanges: ReviewChange[];
   parserRuns: ParserRun[];
   auditEntries: AuditEntry[];
@@ -53,7 +56,8 @@ export function AdminConsole({
   const [notice, setNotice] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [artistQuery, setArtistQuery] = useState("");
-  const [selectedArtist, setSelectedArtist] = useState("");
+  const [selectedArtistSlug, setSelectedArtistSlug] = useState("");
+  const selectedArtist = artists.find(({ slug }) => slug === selectedArtistSlug);
   const [artistDraft, setArtistDraft] = useState<Record<string, string>>({});
   const [festivalDraft, setFestivalDraft] = useState<Record<string, string>>({});
   const [assetDraft, setAssetDraft] = useState<Record<string, string>>({});
@@ -61,12 +65,12 @@ export function AdminConsole({
   const [playlistDraft, setPlaylistDraft] = useState<Record<string, string>>({});
   const [openLog, setOpenLog] = useState<string | null>(null);
   const { language, setLanguage, ta } = useLanguage();
-  const artists = useMemo(
+  const matchingArtists = useMemo(
     () =>
-      Array.from(new Set(festivals.flatMap((item) => [...item.headliners, ...item.lineup])))
-        .filter((artist) => artist.toLowerCase().includes(artistQuery.toLowerCase()))
+      artists
+        .filter(({ name }) => name.toLowerCase().includes(artistQuery.toLowerCase()))
         .slice(0, 12),
-    [festivals, artistQuery],
+    [artists, artistQuery],
   );
   useEffect(() => {
     fetch("/api/auth/me", { headers: { accept: "application/json" } })
@@ -442,13 +446,13 @@ export function AdminConsole({
                   onChange={(event) => setArtistQuery(event.target.value)}
                 />
                 <ul className="artistAdminList">
-                  {artists.map((artist) => (
-                    <li key={artist}>
-                      <span>{artist}</span>
+                  {matchingArtists.map((artist) => (
+                    <li key={artist.slug}>
+                      <span>{artist.name}</span>
                       <button
                         className="textButton"
                         onClick={() => {
-                          setSelectedArtist(artist);
+                          setSelectedArtistSlug(artist.slug);
                           setArtistDraft({});
                         }}
                       >
@@ -458,12 +462,12 @@ export function AdminConsole({
                   ))}
                 </ul>
                 {selectedArtist && (
-                  <div>
-                    <strong>{selectedArtist}</strong>
+                  <div key={selectedArtist.slug}>
+                    <strong>{selectedArtist.name}</strong>
                     <label>
                       Canonical name
                       <input
-                        defaultValue={selectedArtist}
+                        defaultValue={selectedArtist.name}
                         onChange={(event) =>
                           setArtistDraft((value) => ({
                             ...value,
@@ -476,6 +480,7 @@ export function AdminConsole({
                       Official URL
                       <input
                         type="url"
+                        defaultValue={selectedArtist.officialUrl}
                         placeholder="https://…"
                         onChange={(event) =>
                           setArtistDraft((value) => ({ ...value, officialUrl: event.target.value }))
@@ -484,7 +489,7 @@ export function AdminConsole({
                     </label>
                     <button
                       disabled={!Object.keys(artistDraft).length}
-                      onClick={() => save("artist", selectedArtist, artistDraft)}
+                      onClick={() => save("artist", selectedArtist.slug, artistDraft)}
                     >
                       Save artist draft
                     </button>
@@ -525,7 +530,6 @@ export function AdminConsole({
                 [
                   ["officialUrl", "Official URL", selected.officialUrl],
                   ["ticketsUrl", "Tickets URL", selected.ticketsUrl],
-                  ["logoUrl", "Logo URL", ""],
                 ] as const
               ).map(([field, label, value]) => (
                 <label key={field}>
@@ -539,29 +543,42 @@ export function AdminConsole({
                 </label>
               ))}
               <button
-                disabled={!Object.keys(assetDraft).some((field) => field !== "logoUrl")}
+                disabled={!Object.keys(assetDraft).some((field) => field !== "logoAssetHash")}
                 onClick={() =>
                   save(
                     "link",
                     selected.slug,
                     Object.fromEntries(
-                      Object.entries(assetDraft).filter(([field]) => field !== "logoUrl"),
+                      Object.entries(assetDraft).filter(([field]) => field !== "logoAssetHash"),
                     ),
                   )
                 }
               >
                 Save links draft
               </button>
+              <label>
+                Reviewed logo SHA-256
+                <input
+                  key={selected.slug}
+                  value={assetDraft.logoAssetHash ?? ""}
+                  onChange={(event) =>
+                    setAssetDraft((value) => ({ ...value, logoAssetHash: event.target.value }))
+                  }
+                />
+              </label>
               <button
-                disabled={!assetDraft.logoUrl}
-                onClick={() => save("asset", selected.slug, { logoUrl: assetDraft.logoUrl })}
+                disabled={!/^[a-f0-9]{64}$/.test(assetDraft.logoAssetHash ?? "")}
+                onClick={() =>
+                  save("asset", selected.slug, { logoAssetHash: assetDraft.logoAssetHash })
+                }
               >
-                Save asset draft
+                Save logo draft
               </button>
             </div>
             <div>
               <div className="adminPanel">
                 <h3>Playlist editor</h3>
+                <p>Playlist drafts can be saved, but cannot yet be published.</p>
                 <label>
                   Playlist URL
                   <input
