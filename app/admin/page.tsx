@@ -47,9 +47,14 @@ export default async function AdminPage() {
         })),
       }))}
       festivals={festivals}
-      artists={artists.map(({ slug, name, links }) => ({
+      artists={artists.map(({ slug, name, biography, links }) => ({
         slug,
         name,
+        biography,
+        verifiedOfficialSite: links.some(
+          ({ label, source, verified }) =>
+            label === "Official site" && source === "official" && verified,
+        ),
         officialUrl: links.find(
           ({ label, source }) => label === "Official site" && source === "official",
         )?.url,
