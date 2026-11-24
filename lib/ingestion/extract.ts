@@ -1,3 +1,4 @@
+import { isBarcelonaSource } from "./adapters/barcelona-banner.ts";
 import {
   observeTicketSupplement,
   ticketSupplementUrl,
@@ -59,6 +60,18 @@ function extractConfiguredCandidate(
   source: FestivalSource,
   fetchedAt: string,
 ): FestivalCandidate {
+  const barcelona = source.festivalSlug === "barcelona-rock-fest";
+  if (barcelona && !isBarcelonaSource(source)) {
+    return {
+      schemaVersion: INGESTION_SCHEMA_VERSION,
+      festivalSlug: source.festivalSlug,
+      sourceUrl: source.url,
+      fetchedAt,
+      evidence: [],
+      observedEditionYears: [],
+      warnings: ["Barcelona source identity is not the reviewed homepage"],
+    };
+  }
   const roskilde = extractRoskildeCandidate(html, source, fetchedAt);
   if (roskilde) return roskilde;
   const roadburn = extractRoadburnCandidate(html, source, fetchedAt);
@@ -115,16 +128,36 @@ function extractConfiguredCandidate(
   // Its trusted fallback owns this existing source, not generic Event guesses.
   if (source.festivalSlug === "alcatraz" && source.strategies.includes("html_fallback"))
     return extractHtmlFallbackCandidate(html, source, fetchedAt);
-  // Masters current scoped full-pass DOM owns stock, including absence/conflict.
-  // A generic stale JSON-LD offer must not restore an unavailable card.
+  // Scoped source DOM owns stock, including absence/conflicts; generic
+  // Event offers cannot restore unavailable or uncorroborated stock.
   if (source.festivalSlug === "masters-of-rock" && source.strategies.includes("html_fallback"))
     return extractHtmlFallbackCandidate(html, source, fetchedAt);
-  const candidates = source.strategies.flatMap((strategy) => {
-    if (strategy === "json_ld_event") return [extractJsonLdCandidate(html, source, fetchedAt)];
+  const strategies =
+    barcelona && source.strategies.includes("html_fallback")
+      ? ([
+          "html_fallback",
+          ...source.strategies.filter((strategy) => strategy !== "html_fallback"),
+        ] as const)
+      : source.strategies;
+  const candidates = strategies.flatMap((strategy) => {
     if (strategy === "html_fallback")
       return [extractHtmlFallbackCandidate(html, source, fetchedAt)];
-    if (strategy === "official_markup")
-      return [extractOfficialMarkupCandidate(html, source, fetchedAt)];
+    if (strategy === "json_ld_event" || strategy === "official_markup") {
+      const candidate =
+        strategy === "json_ld_event"
+          ? extractJsonLdCandidate(html, source, fetchedAt)
+          : extractOfficialMarkupCandidate(html, source, fetchedAt);
+      // Preserve non-ticket fields and cancellation warnings; only the
+      // corroborated visible banner may establish Barcelona ticket stock.
+      if (barcelona) {
+        delete candidate.ticketsUrl;
+        delete candidate.ticketStatus;
+        candidate.evidence = candidate.evidence.filter(
+          ({ field }) => field !== "ticketsUrl" && field !== "ticketStatus",
+        );
+      }
+      return [candidate];
+    }
     if (
       strategy === "manual_review" &&
       (isFullForceArchivedEdition(html, source) ||

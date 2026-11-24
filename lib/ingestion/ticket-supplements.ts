@@ -28,6 +28,17 @@ export type TicketObservation = {
   ticketsUrl?: string;
 };
 
+/** A same-document response or a source adapter's reviewed canonical homepage. */
+export function matchesTicketPrimaryUrl(source: FestivalSource, finalUrl: string): boolean {
+  return (
+    !finalUrl ||
+    finalUrl === source.url ||
+    (source.festivalSlug === "wacken-open-air" &&
+      source.url === "https://www.wacken.com/" &&
+      finalUrl === "https://www.wacken.com/de/")
+  );
+}
+
 /** Reviewed source routes, not URLs supplied by arbitrary markup or API clients. */
 export function ticketSupplementUrl(source: FestivalSource): string | undefined {
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review"))
