@@ -13,6 +13,7 @@ import { publishAdminFestivalChange } from "../lib/catalog/publication.ts";
 import type { IngestionResult } from "../lib/ingestion/types.ts";
 import sitemap from "../app/sitemap.ts";
 import { importLineupDays } from "../lib/catalog/lineup-days-import.ts";
+import { readEditionHistory } from "../lib/catalog/public-history.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl || !/(?:test|integration)/i.test(new URL(databaseUrl).pathname)) {
@@ -223,6 +224,11 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     assert.equal(await db.catalogPublication.count({ where: receiptScope }), 1);
     assert.equal(receipt.lineupChanged, false);
     assert.equal((await read()).freshness?.lastPublishedAt, receipt.createdAt.toISOString());
+    const expectedHistory = [
+      { publishedAt: receipt.createdAt.toISOString(), categories: ["lineup"] },
+    ];
+    assert.deepEqual(await readEditionHistory(db, slug, 2027), expectedHistory);
+    assert.deepEqual(await readEditionHistory(db, slug, 2026), []);
     const reobservation = { ...input, observedAt: "2026-10-01T12:00:00Z" };
     assert.deepEqual(await importLineupDays(db, reobservation), { checkOnly: true, changed: 0 });
     assert.deepEqual(await importLineupDays(db, reobservation, false), {
@@ -231,6 +237,7 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     });
     assert.equal(await db.catalogPublication.count({ where: receiptScope }), 1);
     assert.equal(await db.adminAuditEntry.count({ where: auditScope }), 1);
+    assert.deepEqual(await readEditionHistory(db, slug, 2027), expectedHistory);
     assert.equal((await read()).freshness?.lastPublishedAt, receipt.createdAt.toISOString());
     assert.equal(
       (await read()).lineupDays?.find((row) => row.artistSlug === artist.slug)?.observedAt,
