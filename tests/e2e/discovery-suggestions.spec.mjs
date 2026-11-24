@@ -75,3 +75,38 @@ for (const [locale, t] of Object.entries(labels)) {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Second Artist");
   });
 }
+
+test("composition keys remain available to the input method", async ({ page }) => {
+  await page.goto("/en/");
+  await expect(page.locator(".search")).toHaveAttribute("data-ready", "true");
+  const search = page.locator(".search input");
+  const suggestion = page
+    .locator(".discoverySuggestions")
+    .getByRole("link", { name: /Synthetic Fest/ });
+  await search.fill("synthetic fest");
+  await expect(suggestion).toBeVisible();
+
+  const keyWasHandled = (key) =>
+    search.evaluate(
+      (input, key) =>
+        !input.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key,
+            bubbles: true,
+            cancelable: true,
+            isComposing: true,
+          }),
+        ),
+      key,
+    );
+  expect(await keyWasHandled("ArrowDown")).toBe(false);
+  await expect(search).toBeFocused();
+  expect(await keyWasHandled("Escape")).toBe(false);
+  await expect(suggestion).toBeVisible();
+
+  await search.press("ArrowDown");
+  await expect(suggestion).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(search).toBeFocused();
+  await expect(suggestion).toHaveCount(0);
+});

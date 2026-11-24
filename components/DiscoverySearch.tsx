@@ -63,6 +63,7 @@ export function DiscoverySearch({
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
       onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
         if (event.key === "Escape" && open) {
           event.preventDefault();
           inputRef.current?.focus();
