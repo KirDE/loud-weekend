@@ -4,7 +4,9 @@ import type { PlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-rea
 
 import { useState } from "react";
 import Link from "next/link";
+import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
@@ -29,6 +31,7 @@ import { FavoriteButton, useLocalPlanner, type Attendance } from "./LocalPlanner
 export function FestivalDetail({
   item,
   festivals,
+  discoveryLineups,
   artistSlugs,
   playlist,
   playlistRefreshFailures,
@@ -37,6 +40,7 @@ export function FestivalDetail({
 }: {
   item: Festival;
   festivals: Festival[];
+  discoveryLineups?: DiscoveryLineups;
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
   playlistRefreshFailures?: PlaylistRefreshFailures;
@@ -252,7 +256,12 @@ export function FestivalDetail({
           </>
         )}
       </section>
-      <PlanningTools item={item} festivals={festivals} />
+      <PlanningTools
+        item={item}
+        festivals={festivals}
+        discoveryLineups={discoveryLineups}
+        favorites={planner.favoriteArtists}
+      />
       <FestivalArrival facts={arrivalFacts} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
@@ -282,6 +291,11 @@ export function FestivalDetail({
           {t("primarySource")}
         </a>
       </section>
+      {item.editionYear !== undefined && (
+        <CorrectionReportForm
+          identity={{ target: "edition", slug: item.slug, year: item.editionYear }}
+        />
+      )}
     </div>
   );
 }

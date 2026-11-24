@@ -1,3 +1,10 @@
+import { readArtistSelection, type ArtistMatchMode } from "./discovery-artists.ts";
+import { discoverySorts, type DiscoverySort } from "./discovery-sort.ts";
+import {
+  defaultDiscoveryDates,
+  readDiscoveryDates,
+  type DiscoveryDates,
+} from "./discovery-dates.ts";
 import type { Coordinates } from "./festival-discovery.ts";
 
 export const discoveryOrigins = {
@@ -16,7 +23,7 @@ export const discoveryOrigins = {
 
 export const discoveryDistances = ["100", "250", "500", "1000", "2000"] as const;
 
-export type DiscoveryPreferences = {
+export type DiscoveryPreferences = DiscoveryDates & {
   query: string;
   country: string;
   announcedOnly: boolean;
@@ -25,9 +32,13 @@ export type DiscoveryPreferences = {
   genre: string;
   origin: keyof typeof discoveryOrigins;
   maxDistance: string;
+  sort: DiscoverySort;
+  artistSelection?: string[];
+  artistMatch?: ArtistMatchMode;
 };
 
 export const defaultDiscoveryPreferences: DiscoveryPreferences = {
+  ...defaultDiscoveryDates,
   query: "",
   country: "all",
   announcedOnly: false,
@@ -36,11 +47,19 @@ export const defaultDiscoveryPreferences: DiscoveryPreferences = {
   genre: "all",
   origin: "berlin",
   maxDistance: "all",
+  sort: "date",
 };
 
 export function readDiscoveryPreferences(value: unknown): DiscoveryPreferences {
   const fields = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
   return {
+    ...readDiscoveryDates(fields),
+    ...(Array.isArray(fields.artistSelection)
+      ? { artistSelection: readArtistSelection(fields.artistSelection) }
+      : {}),
+    ...(fields.artistMatch === "any" || fields.artistMatch === "all"
+      ? { artistMatch: fields.artistMatch }
+      : {}),
     query: typeof fields.query === "string" ? fields.query : defaultDiscoveryPreferences.query,
     country:
       typeof fields.country === "string" && /^[A-Z]{2}$/.test(fields.country)
@@ -60,6 +79,7 @@ export function readDiscoveryPreferences(value: unknown): DiscoveryPreferences {
       typeof fields.origin === "string" && Object.hasOwn(discoveryOrigins, fields.origin)
         ? (fields.origin as DiscoveryPreferences["origin"])
         : defaultDiscoveryPreferences.origin,
+    sort: discoverySorts.find((sort) => sort === fields.sort) ?? defaultDiscoveryPreferences.sort,
     maxDistance:
       discoveryDistances.find((distance) => distance === fields.maxDistance) ??
       defaultDiscoveryPreferences.maxDistance,
