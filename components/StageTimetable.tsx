@@ -5,7 +5,12 @@ import { assessPerformanceSelections } from "@/lib/timetable-plan";
 import { useTimetablePlan } from "./useTimetablePlan";
 import type { TimetableEntry } from "@/lib/domain/festival";
 import { useLanguage, type Language } from "./LanguageProvider";
-import { findTimetableConflicts, groupTimetable, timetableLocalDateTime } from "@/lib/timetables";
+import {
+  findTimetableConflicts,
+  groupTimetable,
+  isRepeatedTimetableTime,
+  timetableLocalDateTime,
+} from "@/lib/timetables";
 
 const copy: Record<
   Language,
@@ -267,7 +272,13 @@ export function StageTimetable({
                     const end = entry.window
                       ? timetableLocalDateTime(entry.window.endsAt, entry.timeZone)
                       : null;
-                    const showOffsets = start?.offset !== end?.offset;
+                    const showOffsets =
+                      entry.window &&
+                      start &&
+                      end &&
+                      (start.offset !== end.offset ||
+                        isRepeatedTimetableTime(entry.window.startsAt, entry.timeZone, start) ||
+                        isRepeatedTimetableTime(entry.window.endsAt, entry.timeZone, end));
                     const id = slug && year ? entry.sourcePerformanceId : undefined;
                     const saved = id ? plan.selected.includes(id) : false;
                     return (

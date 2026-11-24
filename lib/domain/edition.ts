@@ -1,7 +1,7 @@
 import type { Festival, TimetableEntry } from "./festival.ts";
 
 export type EditionProvenance = Readonly<{
-  field: "edition" | "dates" | "lineup";
+  field: "edition" | "dates" | "lineup" | "finalLineup";
   url: string;
   checkedAt: string;
   note: string;

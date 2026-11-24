@@ -102,6 +102,34 @@ test("database reads do not retain a process-lifetime catalogue snapshot", async
   }
 });
 
+test("cancelled artists do not count as announced in the public catalogue", async () => {
+  const entry = await db.lineupEntry.findFirstOrThrow({
+    where: { edition: { recordState: "CURRENT", festival: { slug: "synthetic-fest" } } },
+  });
+  const playlist = await db.festivalPlaylist.create({
+    data: {
+      editionId: entry.editionId,
+      provider: "spotify",
+      url: "https://open.spotify.com/playlist/synthetic",
+    },
+  });
+  await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "CANCELLED" } });
+  try {
+    const snapshot = await readCatalog({ database: db });
+    assert.deepEqual(snapshot.festivals[0].headliners, []);
+    assert.deepEqual(
+      snapshot.editions.find(({ recordState }) => recordState === "current")?.headliners,
+      [],
+    );
+    assert.deepEqual(snapshot.discoveryLineups.artistSlugsByFestival["synthetic-fest"], []);
+    assert.deepEqual(snapshot.artists, []);
+    assert.equal(snapshot.playlists["synthetic-fest"].artists, 0);
+  } finally {
+    await db.festivalPlaylist.delete({ where: { id: playlist.id } });
+    await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "ANNOUNCED" } });
+  }
+});
+
 test("public freshness separates edition-bound checks, publication and source failures", async () => {
   await clearCatalog();
   const slug = `freshness-${randomUUID()}`;
