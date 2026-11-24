@@ -35,7 +35,12 @@ import {
   festivalOverlapsMonth,
   formatFestivalDateRange,
 } from "@/lib/festival-dates";
-import { announcedArtists, hasAnnouncedLineup, lineupPreviewArtists } from "@/lib/festival-lineup";
+import {
+  announcedArtists,
+  hasAnnouncedLineup,
+  lineupPresentation,
+  lineupPreviewArtists,
+} from "@/lib/festival-lineup";
 
 import {
   defaultDiscoveryPreferences,
@@ -289,7 +294,7 @@ export function FestivalExplorer({
               onChange={(event) => updateFilters({ announcedOnly: event.target.checked })}
             />
             <span />
-            {t("lineupAnnounced")}
+            {t("onlyAnnouncedActs")}
           </label>
           <label className="toggle">
             <input
@@ -431,6 +436,7 @@ export function FestivalExplorer({
           const isSelected = selected.includes(item.slug);
           const previewArtists = lineupPreviewArtists(item);
           const artistCount = announcedArtists(item).length;
+          const lineupStatus = lineupPresentation(item);
           return (
             <article className="festivalCard" key={item.slug}>
               <button
@@ -447,9 +453,7 @@ export function FestivalExplorer({
               <Link href={`/festivals/${item.slug}/`}>
                 <div className="cardTop">
                   <FestivalLogo slug={item.slug} name={item.name} />
-                  <span className={`status ${item.status}`}>
-                    {t(item.status === "tba" ? "tba" : item.status)}
-                  </span>
+                  <span className={`status ${lineupStatus.tone}`}>{t(lineupStatus.label)}</span>
                 </div>
                 {item.sourceDeprecated && (
                   <span className="status deprecated">{t("sourceDeprecated")}</span>
@@ -461,11 +465,9 @@ export function FestivalExplorer({
                   {item.city || displayNames.of(item.countryCode) || item.country}
                 </div>
                 <div className="artists">
-                  {previewArtists.length ? (
-                    previewArtists.slice(0, 4).map((artist) => <span key={artist}>{artist}</span>)
-                  ) : (
-                    <span className="muted">{t("lineupNotAnnounced")}</span>
-                  )}
+                  {previewArtists.length
+                    ? previewArtists.slice(0, 4).map((artist) => <span key={artist}>{artist}</span>)
+                    : null}
                 </div>
                 <div className="cardFoot">
                   <span>
