@@ -15,6 +15,7 @@ import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { isDownloadAnnouncement } from "../ingestion/adapters/download.ts";
 import {
+  AdminRunStatus,
   ArtistIdentityState,
   CatalogPublicationSource,
   FestivalStatus,
@@ -1160,6 +1161,20 @@ export async function publishAdminFestivalChange(
   const sourceId = `admin:${input.change.id}`;
   const existing = await db.catalogPublication.findUnique({ where: { sourceId } });
   if (existing) return { ...existing, playlistRefreshRequested: existing.lineupChanged };
+  let observedAt = new Date();
+  if (input.change.parserRunId) {
+    const run = await db.adminParserRun.findUnique({ where: { id: input.change.parserRunId } });
+    if (
+      !run?.finishedAt ||
+      run.festivalSlug !== input.change.resourceKey ||
+      (run.status !== AdminRunStatus.SUCCEEDED && run.status !== AdminRunStatus.PARTIAL) ||
+      run.finishedAt < run.startedAt ||
+      run.finishedAt > observedAt
+    ) {
+      throw new Error("Admin change has no completed source check for this festival");
+    }
+    observedAt = run.finishedAt;
+  }
   const afterValue =
     input.change.field === "lineup" || input.change.field === "headliners"
       ? stringList(input.change.afterValue, input.change.field)
@@ -1168,7 +1183,7 @@ export async function publishAdminFestivalChange(
     festivalSlug: input.change.resourceKey,
     changes: [{ field: input.change.field, before: input.change.beforeValue, after: afterValue }],
     strictBefore: Boolean(input.change.parserRunId),
-    observedAt: new Date(),
+    observedAt,
   });
   return createPublication(db, {
     source: CatalogPublicationSource.ADMIN,

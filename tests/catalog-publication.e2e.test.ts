@@ -3008,3 +3008,70 @@ test("invalid dates cannot publish or replace the last verified edition range", 
     });
   }
 });
+
+test("admin parser approval retains the source check time rather than the approval time", async () => {
+  const slug = "synthetic-fest";
+  const source = "https://festival.example.test/tickets";
+  const startedAt = new Date("2026-01-01T10:00:00Z");
+  const finishedAt = new Date("2026-01-01T10:01:00Z");
+  const rollback = new Error("rollback source-check fixture");
+  await assert.rejects(
+    db.$transaction(async (tx) => {
+      const edition = await tx.festivalEdition.findFirstOrThrow({
+        where: { festival: { slug }, recordState: "CURRENT" },
+      });
+      await tx.festivalEdition.update({
+        where: { id: edition.id },
+        data: { sourceUpdatedAt: startedAt },
+      });
+      const run = await tx.adminParserRun.create({
+        data: {
+          festivalSlug: slug,
+          sourceId: source,
+          adapter: "fixture",
+          status: "SUCCEEDED",
+          startedAt,
+          finishedAt,
+          log: [],
+        },
+      });
+      const change = {
+        id: randomUUID(),
+        resourceKey: slug,
+        field: "ticketsUrl",
+        beforeValue: edition.ticketsUrl,
+        afterValue: source,
+        sourceEvidence: [],
+        parserRunId: run.id,
+      };
+      for (const data of [
+        { status: "FAILED" as const },
+        { status: "SUCCEEDED" as const, festivalSlug: "different-festival" },
+      ]) {
+        await tx.adminParserRun.update({ where: { id: run.id }, data });
+        await assert.rejects(
+          publishAdminFestivalChange(tx, { actorLabel: "synthetic-review", change }),
+          /no completed source check for this festival/,
+        );
+        assert.equal(
+          await tx.catalogPublication.findUnique({ where: { sourceId: `admin:${change.id}` } }),
+          null,
+        );
+      }
+      await tx.adminParserRun.update({
+        where: { id: run.id },
+        data: { status: "SUCCEEDED", festivalSlug: slug },
+      });
+      const publication = await publishAdminFestivalChange(tx, {
+        actorLabel: "synthetic-review",
+        change,
+      });
+      assert.deepEqual(publication?.fields, ["ticketsUrl"]);
+      const current = await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } });
+      assert.equal(current.ticketsUrl, source);
+      assert.deepEqual(current.sourceUpdatedAt, finishedAt);
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
+});
