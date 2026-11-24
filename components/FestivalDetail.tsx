@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import { LineupByDay } from "./LineupByDay";
@@ -283,6 +284,11 @@ export function FestivalDetail({
           {t("primarySource")}
         </a>
       </section>
+      {item.editionYear !== undefined && (
+        <CorrectionReportForm
+          identity={{ target: "edition", slug: item.slug, year: item.editionYear }}
+        />
+      )}
     </div>
   );
 }

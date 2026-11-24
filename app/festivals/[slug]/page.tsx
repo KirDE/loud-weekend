@@ -1,9 +1,11 @@
+import { EditionHistory } from "@/components/EditionHistory";
+import { db } from "@/lib/db";
+import { readEditionHistory } from "@/lib/catalog/public-history";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { lineupDayProfileSlugs } from "@/lib/festival-lineup";
 import { FestivalDetail } from "@/components/FestivalDetail";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
-import { db } from "@/lib/db";
 import { getCatalog } from "@/lib/catalog/repository";
 import { canonicalPath, festivalMusicEvent } from "@/lib/seo";
 
@@ -34,6 +36,8 @@ export default async function FestivalPage({ params }: { params: Promise<{ slug:
   const requestedSlug = (await params).slug;
   const item = festivals.find(({ slug }) => slug === requestedSlug);
   if (!item) notFound();
+  const history =
+    item.editionYear === undefined ? [] : await readEditionHistory(db, item.slug, item.editionYear);
   const arrivalFacts = await readArrivalFacts(db, item);
   const event = festivalMusicEvent(item);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
@@ -55,6 +59,7 @@ export default async function FestivalPage({ params }: { params: Promise<{ slug:
         )}
         playlist={playlists[item.slug]}
       />
+      <EditionHistory entries={history} officialUrl={item.officialUrl} />
     </>
   );
 }
