@@ -263,7 +263,9 @@ async function catalogResponse() {
   } catch (error) {
     // A newer request may have refreshed the cache while this fetch was pending.
     if (cache && order < lastCachedRequest) {
-      const latest = await accessCatalogCache(() => readCachedCatalog(cache)).catch(() => undefined);
+      const latest = await accessCatalogCache(() => readCachedCatalog(cache)).catch(
+        () => undefined,
+      );
       if (latest) return latest;
     }
     if (cached) return cached;
