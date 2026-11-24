@@ -10,6 +10,22 @@ import { shareableFavoriteSlugs } from "@/lib/discovery-share";
 import { ticketPresentation } from "@/lib/tickets";
 import { useLanguage } from "./LanguageProvider";
 
+export function FestivalComparisonTicket({ item }: { item: Festival }) {
+  const { t } = useLanguage();
+  const tickets = ticketPresentation(item);
+  return (
+    <td data-ticket-status={tickets.status}>
+      {tickets.href ? (
+        <a href={tickets.href} rel="noreferrer" target="_blank">
+          {t(tickets.label)}
+        </a>
+      ) : (
+        t(tickets.label)
+      )}
+    </td>
+  );
+}
+
 export function FestivalComparison({
   festivals,
   origin,
@@ -99,20 +115,9 @@ export function FestivalComparison({
           </tr>
           <tr>
             <th scope="row">{t("tickets")}</th>
-            {festivals.map((item) => {
-              const ticket = ticketPresentation(item);
-              return (
-                <td key={item.slug}>
-                  {ticket.href ? (
-                    <a href={ticket.href} rel="noreferrer" target="_blank">
-                      {t(ticket.label)}
-                    </a>
-                  ) : (
-                    t(ticket.label)
-                  )}
-                </td>
-              );
-            })}
+            {festivals.map((item) => (
+              <FestivalComparisonTicket key={item.slug} item={item} />
+            ))}
           </tr>
           <tr>
             <th scope="row">{t("comparisonCamping")}</th>
