@@ -228,6 +228,38 @@ test("publication requires the persisted festival, source and observed edition",
   );
 });
 
+test("publication cannot replace the timestamp of a persisted observation", async () => {
+  const artist = `Observation time ${suffix}`;
+  const value = result(artist);
+  const attempt = await persist(value);
+  const fetchedAt = "2028-01-01T00:00:00.000Z";
+  const variants = [
+    { ...value, fetchedAt },
+    { ...value, candidate: { ...value.candidate, fetchedAt } },
+    { ...value, fetchedAt, candidate: { ...value.candidate, fetchedAt } },
+  ];
+  const publications = await db.catalogPublication.count();
+  const jobs = await db.catalogPlaylistRefresh.count();
+  for (const variant of variants) {
+    await assert.rejects(
+      publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: variant,
+        sourceCommit: suffix,
+      }),
+      /does not match the persisted observation time/,
+    );
+  }
+  assert.equal(await db.catalogPublication.count(), publications);
+  assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
+  assert.equal(await db.artist.count({ where: { name: artist } }), 0);
+  assert.equal(
+    (await db.ingestionCandidate.findUniqueOrThrow({ where: { attemptId: attempt.id } }))
+      .reviewState,
+    "PENDING",
+  );
+});
+
 test("commits catalog rows, candidate state, audit snapshot and playlist request together", async () => {
   const artist = `Catalog Transaction ${suffix}`;
   const value = result(artist);

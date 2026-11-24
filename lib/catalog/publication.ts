@@ -581,6 +581,14 @@ export async function publishIngestionResult(
         return { ...existing, playlistRefreshRequested: Boolean(existing.playlistRefresh) };
       if (candidate.reviewState !== "PENDING")
         throw new Error(`Candidate is not pending: ${candidate.reviewState}`);
+      const observedAt = new Date(stored.fetchedAt);
+      if (
+        !Number.isFinite(observedAt.getTime()) ||
+        stored.fetchedAt !== observed.fetchedAt ||
+        stored.fetchedAt !== input.result.fetchedAt
+      ) {
+        throw new Error("Ingestion publication does not match the persisted observation time");
+      }
       if (candidate.diffs.some(({ reviewRequired }) => reviewRequired))
         throw new Error("Persisted candidate requires review");
       const normalizedDiffs = (values: { field: string; before: unknown; after: unknown }[]) =>
@@ -752,7 +760,7 @@ export async function publishIngestionResult(
         expectedYear,
         changes: input.result.changes,
         strictBefore: true,
-        observedAt: new Date(input.result.fetchedAt),
+        observedAt,
       });
       // Rockharz 2027 publications retain exact edition/source/field and persisted
       // evidence guards. Verified lineup changes use the normal provider queue.
