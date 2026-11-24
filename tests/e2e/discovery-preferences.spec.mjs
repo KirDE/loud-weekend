@@ -160,3 +160,53 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
     await secondDevice.close();
   }
 });
+
+test("taking remote favorites leaves unrelated unsynced planner data on this device", async ({
+  page,
+}) => {
+  const local = {
+    favoriteFestivals: ["local-festival"],
+    favoriteArtists: ["local-artist"],
+    attendance: { "local-festival": "going" },
+    playlistFestivals: ["local-playlist"],
+    savedFilters: activeFilters,
+  };
+  await page.addInitScript(
+    ({ key, planner }) => {
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(planner));
+    },
+    { key: storageKey, planner: local },
+  );
+
+  const credentials = {
+    email: `discovery-conflict-${randomUUID()}@example.test`,
+    password: "synthetic conflict test password",
+  };
+  expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
+  await page.goto("/en/planner/");
+  const pull = page.getByRole("button", { name: "Use account data on this device", exact: true });
+  await expect(pull).toBeDisabled();
+
+  // Another device creates favorites before this one tries to sync its local version.
+  const remote = { favoriteFestivals: ["remote-festival"], favoriteArtists: [] };
+  expect(
+    (
+      await page.request.put("/api/sync/favorites/", {
+        headers: { origin: new URL(page.url()).origin },
+        data: { revision: 0, payload: remote },
+      })
+    ).status(),
+  ).toBe(201);
+
+  await page.getByRole("button", { name: "Sync now", exact: true }).click();
+  await page.getByRole("button", { name: "Use other device", exact: true }).click();
+  await expect(
+    page.getByText("Conflict resolved. Sync again to send other local changes."),
+  ).toBeVisible();
+  await expect
+    .poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)), storageKey))
+    .toEqual({ ...local, ...remote });
+
+  const savedFilters = await page.request.get("/api/sync/saved-filters/");
+  expect((await savedFilters.json()).document).toBeNull();
+});
