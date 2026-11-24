@@ -185,9 +185,16 @@ export async function fetchOfflineTrip(basePath, slug, year) {
   ) {
     throw new Error("Trip download unavailable");
   }
-  const trip = parseOfflineTrip(await response.json());
-  if (!trip || trip.slug !== slug || trip.year !== year)
+  const data = await response.json();
+  const trip = parseOfflineTrip(data);
+  if (
+    !trip ||
+    trip.slug !== slug ||
+    trip.year !== year ||
+    trip.timetable.length !== data.timetable.length
+  ) {
     throw new Error("Unexpected trip download");
+  }
   return trip;
 }
 

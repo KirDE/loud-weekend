@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  fetchOfflineTrip,
   listOfflineTrips,
   offlineTripKey,
   parseOfflineTrip,
@@ -85,4 +86,37 @@ test("bad input, quota errors and wrong-key records never replace the last good 
     name: "QuotaExceededError",
   });
   assert.deepEqual(readOfflineTrip(storage, "festival", 2027), saved);
+});
+
+test("legacy offline copies omit out-of-range performances without losing trip details", () => {
+  const storage = memoryStorage();
+  const trip = {
+    ...fact,
+    startDate: "2027-12-31",
+    endDate: "2028-01-01",
+    timetable: ["2027-12-30", "2027-12-31", "2028-01-01", "2028-01-02"].map((date) => ({
+      ...fact.timetable[0],
+      date,
+    })),
+  };
+  const key = offlineTripKey(trip.slug, trip.year);
+  storage.setItem(key, JSON.stringify({ trip, savedAt: updatedAt }));
+  const [read] = listOfflineTrips(storage);
+  assert.equal(read.trip.name, trip.name);
+  assert.equal(read.savedAt, updatedAt);
+  assert.deepEqual(
+    read.trip.timetable.map((row) => row.date),
+    ["2027-12-31", "2028-01-01"],
+  );
+  assert.deepEqual(readOfflineTrip(storage, trip.slug, trip.year), read);
+});
+
+test("a fresh trip response with an out-of-range performance is not usable as an update", async (t) => {
+  t.mock.method(globalThis, "fetch", async () =>
+    Response.json({
+      ...fact,
+      timetable: [{ ...fact.timetable[0], date: "2027-06-13" }],
+    }),
+  );
+  await assert.rejects(fetchOfflineTrip("", fact.slug, fact.year), /Unexpected trip download/);
 });
