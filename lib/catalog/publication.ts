@@ -1,3 +1,10 @@
+import { isDeepStrictEqual } from "node:util";
+import { createHash } from "node:crypto";
+import {
+  isTolminatorStockRoute,
+  matchesTolminatorStockEdition,
+} from "../ingestion/adapters/tolminator-stock.ts";
+import { editionDateProblem } from "../domain/edition-dates.ts";
 import {
   ticketSupplementUrl,
   ticketSupplementPurchaseUrl,
@@ -38,6 +45,7 @@ const ticketStatuses = {
   not_on_sale: TicketStatus.NOT_ON_SALE,
   sold_out: TicketStatus.SOLD_OUT,
   sales_ended: TicketStatus.SALES_ENDED,
+  free: TicketStatus.FREE,
   unavailable: TicketStatus.UNAVAILABLE,
   unknown: TicketStatus.UNKNOWN,
 } as const;
@@ -135,9 +143,11 @@ async function replaceLineup(
     include: { artist: true },
     orderBy: { position: "asc" },
   });
+  const announced = existing.filter(({ status }) => status === "ANNOUNCED");
+  const cancelled = existing.filter(({ status }) => status === "CANCELLED");
   if (
     same(
-      existing.map(({ artist }) => artist.name),
+      announced.map(({ artist }) => artist.name),
       names,
     )
   )
@@ -156,22 +166,24 @@ async function replaceLineup(
     artists.some((a) => other.some((entry) => entry.artistId === a.id))
   )
     throw new Error("Artist cannot have ambiguous lineup billing or duplicate alias identities");
+  if (artists.some((artist) => cancelled.some((entry) => entry.artistId === artist.id)))
+    throw new Error("Cancellation requires separate explicit review");
   if (
     same(
-      existing.map((entry) => entry.artistId),
+      announced.map((entry) => entry.artistId),
       artists.map((a) => a.id),
     )
   )
     return false;
-  await db.lineupEntry.deleteMany({ where: { editionId, billing } });
+  await db.lineupEntry.deleteMany({ where: { editionId, billing, status: "ANNOUNCED" } });
+  const occupied = new Set(cancelled.map(({ position }) => position));
+  let position = 0;
   if (artists.length)
     await db.lineupEntry.createMany({
-      data: artists.map((artist, position) => ({
-        editionId,
-        artistId: artist.id,
-        billing,
-        position,
-      })),
+      data: artists.map((artist) => {
+        while (occupied.has(position)) position++;
+        return { editionId, artistId: artist.id, billing, position: position++ };
+      }),
     });
   return true;
 }
@@ -188,6 +200,8 @@ async function addLineupArtist(
     where: { editionId_artistId: { editionId, artistId: artist.id } },
   });
   if (existing) {
+    if (existing.status === "CANCELLED")
+      throw new Error("Cancellation requires separate explicit review");
     if (existing.billing !== billing) throw new Error(`Ambiguous billing change for ${name}`);
     return false;
   }
@@ -223,6 +237,22 @@ async function applyFestivalChanges(
     throw new Error(
       `Candidate edition ${input.expectedYear} does not match catalogue edition ${edition.year}`,
     );
+
+  const dateChanges = input.changes.filter(
+    ({ field }) => field === "startDate" || field === "endDate",
+  );
+  if (dateChanges.length) {
+    const proposed = new Map(
+      dateChanges.map(({ field, after }) => [field, after === "" ? null : after]),
+    );
+    if (proposed.size !== dateChanges.length) throw new Error("Duplicate festival date changes");
+    const start = proposed.has("startDate")
+      ? proposed.get("startDate")
+      : isoDate(edition.startDate);
+    const end = proposed.has("endDate") ? proposed.get("endDate") : isoDate(edition.endDate);
+    const problem = editionDateProblem(edition.year, start, end);
+    if (problem) throw new Error(problem);
+  }
 
   const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
@@ -341,17 +371,21 @@ async function applyFestivalChanges(
       case "headliners": {
         const billing =
           change.field === "headliners" ? LineupBilling.HEADLINER : LineupBilling.LINEUP;
-        changed =
-          Array.isArray(change.after) ||
-          (typeof change.after === "string" && /\r?\n|,/.test(change.after))
-            ? await replaceLineup(
-                db,
-                edition.id,
-                billing,
-                stringList(change.after, change.field),
-                ensureArtist,
-              )
-            : await addLineupArtist(db, edition.id, billing, String(change.after), ensureArtist);
+        // Admin replacements arrive as arrays; an ingestion diff adds one
+        // artist verbatim, including commas in an official billing name.
+        if (Array.isArray(change.after)) {
+          changed = await replaceLineup(
+            db,
+            edition.id,
+            billing,
+            stringList(change.after, change.field),
+            ensureArtist,
+          );
+        } else {
+          if (typeof change.after !== "string" || !change.after.trim())
+            throw new Error("Invalid announced artist");
+          changed = await addLineupArtist(db, edition.id, billing, change.after, ensureArtist);
+        }
         break;
       }
       default:
@@ -437,7 +471,13 @@ export async function publishIngestionResult(
       }
       const candidate = await db.ingestionCandidate.findUnique({
         where: { attemptId: input.attemptId },
-        include: { diffs: true, evidence: true, attempt: { select: { requestedUrl: true } } },
+        include: {
+          diffs: true,
+          evidence: true,
+          attempt: {
+            select: { requestedUrl: true, finalUrl: true, httpStatus: true, endedAt: true },
+          },
+        },
       });
       if (!candidate || !candidate.publishable)
         throw new Error("Publishable ingestion candidate was not persisted");
@@ -491,6 +531,85 @@ export async function publishIngestionResult(
       // Do not extend the separate Impericon/I-Days publication paths here (#497).
       const observed = input.result.candidate;
       const stored = candidate.normalized as unknown as FestivalCandidate;
+      // Scope this stock-only guard to the product route, never the festival
+      // slug: the primary homepage still publishes its independent date fields.
+      // Durable route identities keep caller slug/source stripping fail-closed.
+      if (
+        [
+          input.result.sourceUrl,
+          candidate.attempt.requestedUrl,
+          candidate.attempt.finalUrl,
+          observed.sourceUrl,
+          stored.sourceUrl,
+        ].some(isTolminatorStockRoute)
+      ) {
+        const time = Date.parse(observed.fetchedAt);
+        const allowed = new Set([
+          "schemaVersion",
+          "festivalSlug",
+          "sourceUrl",
+          "fetchedAt",
+          "observedEditionYears",
+          "warnings",
+          "ticketStatus",
+          "ticketsUrl",
+          "evidence",
+        ]);
+        const valid =
+          [input.result.festivalSlug, candidate.festivalSlug, observed.festivalSlug].every((slug) =>
+            matchesTolminatorStockEdition(slug, observed.observedEditionYears),
+          ) &&
+          [
+            input.result.sourceUrl,
+            observed.sourceUrl,
+            candidate.attempt.requestedUrl,
+            candidate.attempt.finalUrl,
+            observed.ticketsUrl,
+          ].every(isTolminatorStockRoute) &&
+          candidate.attempt.httpStatus === 200 &&
+          isDeepStrictEqual(stored, observed) &&
+          Object.keys(observed).every((key) => allowed.has(key)) &&
+          observed.schemaVersion === 1 &&
+          observed.warnings.length === 0 &&
+          observed.ticketStatus === "available" &&
+          Number.isFinite(time) &&
+          time <= Date.now() + 60_000 &&
+          time >= Date.now() - 86_400_000 &&
+          input.result.fetchedAt === observed.fetchedAt &&
+          Math.abs(candidate.attempt.endedAt.getTime() - time) <= 60_000 &&
+          input.result.changes.every(
+            (change) =>
+              ["ticketStatus", "ticketsUrl"].includes(change.field) &&
+              same(change.after, observed[change.field as "ticketStatus" | "ticketsUrl"]),
+          ) &&
+          observed.evidence.length === 2 &&
+          candidate.evidence.length === 2 &&
+          ["ticketStatus", "ticketsUrl"].every((field) => {
+            const proof = observed.evidence.filter((e) => e.field === field);
+            return (
+              proof.length === 1 &&
+              isTolminatorStockRoute(proof[0].sourceUrl) &&
+              proof[0].observedAt === observed.fetchedAt &&
+              typeof proof[0].excerpt === "string" &&
+              proof[0].excerpt.length > 0 &&
+              proof[0].excerpt.length <= 1800 &&
+              candidate.evidence.some(
+                (saved) =>
+                  saved.field === field &&
+                  isTolminatorStockRoute(saved.sourceUrl) &&
+                  saved.excerpt === proof[0].excerpt &&
+                  saved.observedAt.getTime() === time &&
+                  saved.contentHash ===
+                    createHash("sha256").update(proof[0].excerpt!).digest("hex") &&
+                  same(saved.observedValue, observed[field as "ticketStatus" | "ticketsUrl"]),
+              )
+            );
+          });
+        if (!valid)
+          throw new Error(
+            "Tolminator stock publication requires matching persisted ticket-only proof",
+          );
+      }
       if (observed.ticketSupplement || stored.ticketSupplement) {
         const registeredSource = {
           festivalSlug: input.result.festivalSlug,
@@ -994,14 +1113,12 @@ export async function publishAgentFestivalResolution(
   });
   if (edition.festival.slug !== input.festivalSlug || edition.recordState !== "CURRENT")
     throw new Error("Reviewed edition mismatch");
-  const dateStart = input.facts.startDate ?? isoDate(edition.startDate),
-    dateEnd = input.facts.endDate ?? isoDate(edition.endDate);
-  if (
-    (dateStart && Number(dateStart.slice(0, 4)) !== edition.year) ||
-    (dateEnd && Number(dateEnd.slice(0, 4)) !== edition.year) ||
-    (dateStart && dateEnd && dateStart > dateEnd)
-  )
-    throw new Error("Reviewed dates mismatch");
+  const dateProblem = editionDateProblem(
+    edition.year,
+    input.facts.startDate ?? isoDate(edition.startDate),
+    input.facts.endDate ?? isoDate(edition.endDate),
+  );
+  if (dateProblem) throw new Error(`Reviewed dates mismatch: ${dateProblem}`);
   // Only a genuinely new edition's first reviewed roster enters the native
   // provider queue. Existing/cancelled rosters and prior generations stay gated.
   const initialPlaylistGeneration =
