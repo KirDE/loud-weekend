@@ -42,6 +42,9 @@ test("returns actionable sanitized guidance when SSH is unavailable", async () =
   });
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /Verify the production deploy key, host, port, and known-hosts secret/);
+  assert.match(
+    result.stderr,
+    /Verify the production deploy key, host, port, and known-hosts secret/,
+  );
   assert.doesNotMatch(result.stderr, /sensitive ssh diagnostic/);
 });
