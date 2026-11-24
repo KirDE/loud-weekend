@@ -49,6 +49,7 @@ export const factsSchema = z
         "not_on_sale",
         "sold_out",
         "sales_ended",
+        "free",
         "unavailable",
         "unknown",
       ])
