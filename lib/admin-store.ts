@@ -575,9 +575,13 @@ async function refreshSource(
       const differences = result.changes.filter((item) => item.field === field);
       const evidence = candidate.evidence.filter((item) => item.field === field);
       if (!differences.length || !evidence.length) return [];
-      if (field === "ticketStatus" && !editionObserved) {
-        reviewReasons.push("Ticket availability could not be verified for the selected edition.");
-        return [];
+      if (field === "ticketsUrl" || field === "ticketStatus") {
+        const ticketYears = candidate.ticketEditionYears?.[field] ?? candidate.observedEditionYears;
+        if (!ticketYears.includes(active.editionYear)) {
+          const detail = field === "ticketsUrl" ? "Ticket URL" : "Ticket availability";
+          reviewReasons.push(`${detail} could not be verified for the selected edition.`);
+          return [];
+        }
       }
       if ((field === "lineup" || field === "headliners") && !editionObserved) return [];
       const afterValue =

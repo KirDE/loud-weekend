@@ -202,8 +202,11 @@ function extractConfiguredCandidate(
   for (const candidate of candidates) {
     if (candidate.artistListMode) merged.artistListMode = candidate.artistListMode;
     for (const field of supportedFields) {
-      if (merged[field] === undefined && candidate[field] !== undefined)
-        Object.assign(merged, { [field]: candidate[field] });
+      if (merged[field] !== undefined || candidate[field] === undefined) continue;
+      Object.assign(merged, { [field]: candidate[field] });
+      if (field === "ticketsUrl" || field === "ticketStatus") {
+        (merged.ticketEditionYears ??= {})[field] = candidate.observedEditionYears;
+      }
     }
     if (candidate.lineupScope && merged.lineup === candidate.lineup)
       merged.lineupScope = candidate.lineupScope;
@@ -275,6 +278,7 @@ export function extractFestivalCandidate(
   // A failed current ticket check must not publish an older stock assertion
   // from another format as if the current inventory had been verified.
   delete candidate.ticketStatus;
+  if (candidate.ticketEditionYears) delete candidate.ticketEditionYears.ticketStatus;
   candidate.evidence = candidate.evidence.filter((evidence) => evidence.field !== "ticketStatus");
   if (ticket.warning) candidate.warnings.push(ticket.warning);
   if (ticket.status) {
@@ -285,6 +289,10 @@ export function extractFestivalCandidate(
     };
     candidate.ticketStatus = ticket.status;
     candidate.ticketsUrl = ticket.ticketsUrl ?? envelope.ticket.url;
+    candidate.ticketEditionYears = {
+      ticketStatus: [source.editionYear],
+      ticketsUrl: [source.editionYear],
+    };
     candidate.observedEditionYears = [
       ...new Set([...candidate.observedEditionYears, source.editionYear]),
     ];
