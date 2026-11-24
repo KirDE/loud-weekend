@@ -3313,6 +3313,10 @@ select:not(:disabled) {
   cursor: pointer;
 }
 
+.discoveryOrder select {
+  max-width: 100%;
+}
+
 select:not(:disabled):is(:hover, :focus-visible) {
   background: var(--acid);
   color: var(--solid);
@@ -3322,6 +3326,14 @@ select option,
 select optgroup {
   background: var(--paper);
   color: var(--ink);
+}
+
+.discoveryOrder label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 summary:is(:hover, :focus-visible),
@@ -3529,6 +3541,12 @@ summary:focus-visible {
   outline-offset: 3px;
 }
 /* stylelint-enable no-descending-specificity */
+
+.discoveryOrder {
+  display: flex;
+  justify-content: flex-end;
+  margin-block: 12px 0;
+}
 
 .personalCalendar li {
   margin-block: 8px;
