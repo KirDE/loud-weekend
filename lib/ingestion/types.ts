@@ -1,8 +1,10 @@
+import type { ArrivalObservation } from "../catalog/arrival-import.ts";
 import type { Festival } from "../domain/festival.ts";
 
 export const INGESTION_SCHEMA_VERSION = 1 as const;
 export type RefreshPolicy = "daily" | "every_3_days" | "weekly" | "archived";
-export type ParserStrategy = "json_ld_event" | "html_fallback" | "official_markup" | "manual_review";
+export type ParserStrategy =
+  "json_ld_event" | "html_fallback" | "official_markup" | "manual_review";
 
 export type FestivalSource = {
   festivalSlug: string;
@@ -19,15 +21,43 @@ export type FestivalSource = {
 };
 
 export type FieldEvidence = {
-  field: keyof Pick<Festival, "startDate" | "endDate" | "city" | "headliners" | "lineup" | "ticketsUrl" | "ticketStatus" | "timetable" | "status">;
+  field:
+    | "arrival"
+    | keyof Pick<
+        Festival,
+        | "startDate"
+        | "endDate"
+        | "city"
+        | "headliners"
+        | "lineup"
+        | "ticketsUrl"
+        | "ticketStatus"
+        | "timetable"
+        | "status"
+      >;
   sourceUrl: string;
   observedAt: string;
   excerpt?: string;
+  contentHash?: string;
+  adapter?: string;
 };
 
-export type FestivalCandidate = Partial<Pick<Festival, "startDate" | "endDate" | "city" | "headliners" | "lineup" | "ticketsUrl" | "ticketStatus" | "status">> & {
+export type FestivalCandidate = Partial<
+  Pick<
+    Festival,
+    | "startDate"
+    | "endDate"
+    | "city"
+    | "headliners"
+    | "lineup"
+    | "ticketsUrl"
+    | "ticketStatus"
+    | "status"
+  >
+> & {
   // An unranked news announcement adds members; absence is not a cancellation.
   lineupScope?: "announcement";
+  arrival?: ArrivalObservation;
   /** Announcement feeds add artists; absence is not a removal. */
   artistListMode?: "additive";
   /** Explicit producer provenance; persisted with normalized candidate evidence. */
@@ -42,8 +72,26 @@ export type FestivalCandidate = Partial<Pick<Festival, "startDate" | "endDate" |
   observedEditionYears: number[];
 };
 
-export type ChangeKind = "completeness_changed" | "date_changed" | "city_changed" | "artist_added" | "artist_removed" | "headliner_added" | "headliner_removed" | "tickets_changed" | "ticket_status_changed" | "timetable_published" | "status_changed";
-export type FestivalChange = { kind: ChangeKind; field: string; before?: string; after?: string; reviewRequired: boolean; reason?: string };
+export type ChangeKind =
+  | "completeness_changed"
+  | "date_changed"
+  | "city_changed"
+  | "artist_added"
+  | "artist_removed"
+  | "headliner_added"
+  | "headliner_removed"
+  | "tickets_changed"
+  | "ticket_status_changed"
+  | "timetable_published"
+  | "status_changed";
+export type FestivalChange = {
+  kind: ChangeKind;
+  field: string;
+  before?: string;
+  after?: string;
+  reviewRequired: boolean;
+  reason?: string;
+};
 export type IngestionResult = {
   schemaVersion: typeof INGESTION_SCHEMA_VERSION;
   festivalSlug: string;

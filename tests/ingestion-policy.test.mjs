@@ -34,15 +34,21 @@ test("edition-matched first dates and lineup can publish without a pre-existing 
   const result = evaluateCandidate(current, candidate);
   assert.equal(result.publishable, true);
   assert.deepEqual(result.reviewReasons, []);
-  assert.deepEqual(result.changes.map(({ field, reviewRequired }) => [field, reviewRequired]), [
-    ["startDate", false],
-    ["endDate", false],
-    ["lineup", false],
-  ]);
+  assert.deepEqual(
+    result.changes.map(({ field, reviewRequired }) => [field, reviewRequired]),
+    [
+      ["startDate", false],
+      ["endDate", false],
+      ["lineup", false],
+    ],
+  );
 });
 
 test("changing established dates still requires review", () => {
-  const result = evaluateCandidate({ ...current, startDate: "2027-06-22", endDate: "2027-06-25" }, candidate);
+  const result = evaluateCandidate(
+    { ...current, startDate: "2027-06-22", endDate: "2027-06-25" },
+    candidate,
+  );
   assert.equal(result.publishable, false);
   assert.ok(result.reviewReasons.includes("date_changed requires review"));
 });
@@ -50,5 +56,39 @@ test("changing established dates still requires review", () => {
 test("a lineup for another edition still fails closed", () => {
   const result = evaluateCandidate(current, { ...candidate, observedEditionYears: [2028] });
   assert.equal(result.publishable, false);
-  assert.ok(result.reviewReasons.includes("Candidate edition 2028 does not match catalogue edition 2027"));
+  assert.ok(
+    result.reviewReasons.includes("Candidate edition 2028 does not match catalogue edition 2027"),
+  );
+});
+
+test("headliner-only announcements still need matching edition evidence", () => {
+  const headlinersOnly = { ...candidate, lineup: undefined, headliners: ["Example Band"] };
+  assert.equal(evaluateCandidate(current, headlinersOnly).publishable, true);
+  const unbound = evaluateCandidate(current, { ...headlinersOnly, observedEditionYears: [] });
+  assert.equal(unbound.publishable, false);
+  assert.match(unbound.reviewReasons.join("; "), /edition could not be verified/);
+});
+
+test("date additions cannot publish with impossible, reversed or out-of-edition dates", () => {
+  for (const [startDate, endDate, reason] of [
+    ["2027-02-29", undefined, /valid calendar dates/],
+    ["2027-06-27", "2027-06-26", /end date cannot precede/],
+    ["2028-06-23", undefined, /match the edition year/],
+  ]) {
+    const result = evaluateCandidate(current, { ...candidate, startDate, endDate });
+    assert.equal(result.publishable, false);
+    assert.match(result.reviewReasons.join("; "), reason);
+  }
+  const rollover = evaluateCandidate(current, {
+    ...candidate,
+    startDate: "2027-12-30",
+    endDate: "2028-01-02",
+  });
+  assert.equal(rollover.publishable, true);
+  const result = evaluateCandidate(
+    { ...current, endDate: "2027-06-22" },
+    { ...candidate, endDate: undefined },
+  );
+  assert.equal(result.publishable, false);
+  assert.match(result.reviewReasons.join("; "), /end date cannot precede/);
 });

@@ -2,57 +2,65 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
 import { parsePlannerState, serializePlannerState } from "@/lib/planner-storage";
+import {
+  defaultDiscoveryPreferences,
+  readDiscoveryPreferences,
+  type DiscoveryPreferences,
+} from "@/lib/discovery-preferences";
 export type Attendance = "going" | "maybe" | "not-going";
 export type PlannerState = {
   favoriteFestivals: string[];
   favoriteArtists: string[];
   attendance: Record<string, Attendance>;
   playlistFestivals: string[];
-  savedFilters: { query: string; country: string; announcedOnly: boolean; month: string; ticketsOnly: boolean };
+  savedFilters: DiscoveryPreferences;
 };
 export const emptyPlannerState: PlannerState = {
   favoriteFestivals: [],
   favoriteArtists: [],
   attendance: {},
   playlistFestivals: [],
-  savedFilters: { query: "", country: "all", announcedOnly: false, month: "all", ticketsOnly: false },
+  savedFilters: defaultDiscoveryPreferences,
 };
 const Context = createContext<
   | (PlannerState & {
       ready: boolean;
       toggleFestival: (v: string) => void;
-      toggleArtist: (v: string) => void;
+      toggleArtist: (v: string, legacyValues: readonly string[]) => void;
       setAttendance: (v: string, a?: Attendance) => void;
       togglePlaylistFestival: (v: string) => void;
-      setSavedFilters: (value: PlannerState["savedFilters"]) => void;
+      setSavedFilters: (value: DiscoveryPreferences) => void;
+      updateSavedFilters: (patch: Partial<DiscoveryPreferences>) => void;
       replace: (value: PlannerState) => void;
+      replaceFields: (value: Partial<PlannerState>) => void;
       merge: (value: Partial<PlannerState>) => void;
       clear: () => void;
     })
   | null
 >(null);
-export function LocalPlannerProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function LocalPlannerProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState(emptyPlannerState);
   const [ready, setReady] = useState(false);
   useEffect(() => {
     try {
       const value = localStorage.getItem("festival-radar-planner-v1");
-      if (value) setState({ ...emptyPlannerState, ...parsePlannerState(value) });
+      if (value) {
+        const restored = parsePlannerState(value);
+        setState({
+          ...emptyPlannerState,
+          ...restored,
+          savedFilters: readDiscoveryPreferences(restored.savedFilters),
+        });
+      }
     } catch {
       localStorage.removeItem("festival-radar-planner-v1");
     }
     setReady(true);
   }, []);
   useEffect(() => {
-    if (ready)
-      localStorage.setItem("festival-radar-planner-v1", serializePlannerState(state));
+    if (ready) localStorage.setItem("festival-radar-planner-v1", serializePlannerState(state));
   }, [ready, state]);
-  const toggle = (a: string[], v: string) =>
-    a.includes(v) ? a.filter((x) => x !== v) : [...a, v];
+  const toggle = (a: string[], v: string) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]);
   const value = useMemo(
     () => ({
       ...state,
@@ -62,11 +70,16 @@ export function LocalPlannerProvider({
           ...s,
           favoriteFestivals: toggle(s.favoriteFestivals, v),
         })),
-      toggleArtist: (v: string) =>
-        setState((s) => ({
-          ...s,
-          favoriteArtists: toggle(s.favoriteArtists, v),
-        })),
+      toggleArtist: (v: string, legacyValues: readonly string[]) =>
+        setState((s) => {
+          const matches = new Set([v, ...legacyValues]);
+          return {
+            ...s,
+            favoriteArtists: s.favoriteArtists.some((value) => matches.has(value))
+              ? s.favoriteArtists.filter((value) => !matches.has(value))
+              : [...s.favoriteArtists, v],
+          };
+        }),
       setAttendance: (v: string, a?: Attendance) =>
         setState((s) => {
           const attendance = { ...s.attendance };
@@ -79,15 +92,32 @@ export function LocalPlannerProvider({
           ...s,
           playlistFestivals: toggle(s.playlistFestivals, v),
         })),
-      setSavedFilters: (savedFilters: PlannerState["savedFilters"]) => setState((s) => ({ ...s, savedFilters })),
-      replace: (next: PlannerState) => setState({ ...emptyPlannerState, ...next }),
-      merge: (next: Partial<PlannerState>) => setState((current) => ({
-        favoriteFestivals: Array.from(new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])])),
-        favoriteArtists: Array.from(new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])])),
-        attendance: { ...(next.attendance || {}), ...current.attendance },
-        playlistFestivals: Array.from(new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])])),
-        savedFilters: { ...current.savedFilters, ...(next.savedFilters || {}) },
-      })),
+      setSavedFilters: (savedFilters: DiscoveryPreferences) =>
+        setState((s) => ({ ...s, savedFilters })),
+      updateSavedFilters: (patch: Partial<DiscoveryPreferences>) =>
+        setState((s) => ({ ...s, savedFilters: { ...s.savedFilters, ...patch } })),
+      replace: (next: PlannerState) =>
+        setState({
+          ...emptyPlannerState,
+          ...next,
+          savedFilters: readDiscoveryPreferences(next.savedFilters),
+        }),
+      replaceFields: (fields: Partial<PlannerState>) =>
+        setState((current) => ({ ...current, ...fields })),
+      merge: (next: Partial<PlannerState>) =>
+        setState((current) => ({
+          favoriteFestivals: Array.from(
+            new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])]),
+          ),
+          favoriteArtists: Array.from(
+            new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])]),
+          ),
+          attendance: { ...next.attendance, ...current.attendance },
+          playlistFestivals: Array.from(
+            new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]),
+          ),
+          savedFilters: readDiscoveryPreferences({ ...current.savedFilters, ...next.savedFilters }),
+        })),
       clear: () => setState(emptyPlannerState),
     }),
     [ready, state],
@@ -102,22 +132,25 @@ export function useLocalPlanner() {
 export function FavoriteButton({
   kind,
   value,
+  legacyValues = [],
 }: {
   kind: "festival" | "artist";
   value: string;
+  legacyValues?: readonly string[];
 }) {
   const p = useLocalPlanner();
   const { t } = useLanguage();
-  const selected = (
-    kind === "festival" ? p.favoriteFestivals : p.favoriteArtists
-  ).includes(value);
+  const selected =
+    kind === "festival"
+      ? p.favoriteFestivals.includes(value)
+      : p.favoriteArtists.some((saved) => saved === value || legacyValues.includes(saved));
   return (
     <button
       className={`favoriteButton${selected ? " selected" : ""}`}
       type="button"
       aria-pressed={selected}
       onClick={() =>
-        kind === "festival" ? p.toggleFestival(value) : p.toggleArtist(value)
+        kind === "festival" ? p.toggleFestival(value) : p.toggleArtist(value, legacyValues)
       }
     >
       {t(selected ? "saved" : "save")}
