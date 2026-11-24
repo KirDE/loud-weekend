@@ -1,4 +1,4 @@
-import { createPrismaClient } from '../lib/prisma-client.mjs';
+import { createPrismaClient } from "../lib/prisma-client.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
@@ -12,20 +12,42 @@ import path from "node:path";
 import test from "node:test";
 
 const url = process.env.DATABASE_URL;
-if (!url || !/(?:test|integration)/i.test(new URL(url).pathname)) throw new Error("Disposable test/integration DATABASE_URL required");
+if (!url || !/(?:test|integration)/i.test(new URL(url).pathname))
+  throw new Error("Disposable test/integration DATABASE_URL required");
 const db = createPrismaClient();
 const slug = "due-worker-" + randomUUID().slice(0, 8);
 let sourceId;
 let dir;
 let runIds = [];
 const orphanRunIds = [];
-const fixture = '<html><script type="application/ld+json">{"@type":"MusicEvent","startDate":"2027-07-07"}</script></html>';
+const fixture =
+  '<html><script type="application/ld+json">{"@type":"MusicEvent","startDate":"2027-07-07"}</script></html>';
 
 function run(extra = [], output = path.join(dir, "out-" + randomUUID()), envExtra = {}) {
-  return spawnSync(process.execPath, ["scripts/ingest-festivals.mjs", "--db-due", "--publish", ...(extra.some((value) => value.startsWith("--fixture=")) ? [] : ["--fixture=" + path.join(dir, "fixture.html")]), "--output=" + output, ...extra], {
-    encoding: "utf8",
-    env: { ...process.env, APP_URL: "", NOTIFICATION_EVENTS_URL: "", INTERNAL_API_SECRET: "", NOTIFICATION_DELIVERY_REQUIRED: "false", ...envExtra },
-  });
+  return spawnSync(
+    process.execPath,
+    [
+      "scripts/ingest-festivals.mjs",
+      "--db-due",
+      "--publish",
+      ...(extra.some((value) => value.startsWith("--fixture="))
+        ? []
+        : ["--fixture=" + path.join(dir, "fixture.html")]),
+      "--output=" + output,
+      ...extra,
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        APP_URL: "",
+        NOTIFICATION_EVENTS_URL: "",
+        INTERNAL_API_SECRET: "",
+        NOTIFICATION_DELIVERY_REQUIRED: "false",
+        ...envExtra,
+      },
+    },
+  );
 }
 
 test.before(async () => {
@@ -35,21 +57,59 @@ test.before(async () => {
   }
   dir = await mkdtemp(path.join(tmpdir(), "due-worker-"));
   await writeFile(path.join(dir, "fixture.html"), fixture);
-  const festival = await db.festival.create({ data: {
-    slug, name: "Worker Fixture", country: "Test", countryCode: "DE", officialUrl: "https://example.test/worker", genres: [],
-    editions: { create: { year: 2027, status: "TBA", ticketStatus: "UNKNOWN", recordState: "CURRENT", completeness: "TBA", sourceUpdatedAt: new Date() } },
-  } });
+  const festival = await db.festival.create({
+    data: {
+      slug,
+      name: "Worker Fixture",
+      country: "Test",
+      countryCode: "DE",
+      officialUrl: "https://example.test/worker",
+      genres: [],
+      editions: {
+        create: {
+          year: 2027,
+          status: "TBA",
+          ticketStatus: "UNKNOWN",
+          recordState: "CURRENT",
+          completeness: "TBA",
+          sourceUpdatedAt: new Date(),
+        },
+      },
+    },
+  });
   const edition = await db.festivalEdition.findFirstOrThrow({ where: { festivalId: festival.id } });
-  const source = await db.festivalSource.create({ data: {
-    festivalSlug: slug, festivalId: festival.id, editionId: edition.id, url: "https://example.test/worker",
-    strategies: ["manual_review"], parserKey: "manual_review", refreshPolicy: "daily", cadenceSeconds: 86400,
-    enabled: true, editionYear: 2027, configurationBackfilledAt: new Date(), nextRunAt: new Date(Date.now() - 1000),
-  } });
+  const source = await db.festivalSource.create({
+    data: {
+      festivalSlug: slug,
+      festivalId: festival.id,
+      editionId: edition.id,
+      url: "https://example.test/worker",
+      strategies: ["manual_review"],
+      parserKey: "manual_review",
+      refreshPolicy: "daily",
+      cadenceSeconds: 86400,
+      enabled: true,
+      editionYear: 2027,
+      configurationBackfilledAt: new Date(),
+      nextRunAt: new Date(Date.now() - 1000),
+    },
+  });
   sourceId = source.id;
 });
 test.after(async () => {
-  runIds = [...orphanRunIds, ...(await db.ingestionRun.findMany({ where: { attempts: { some: { festivalSlug: slug } } }, select: { id: true } })).map((row) => row.id)];
-  const candidates = await db.ingestionCandidate.findMany({ where: { runId: { in: runIds } }, select: { id: true } });
+  runIds = [
+    ...orphanRunIds,
+    ...(
+      await db.ingestionRun.findMany({
+        where: { attempts: { some: { festivalSlug: slug } } },
+        select: { id: true },
+      })
+    ).map((row) => row.id),
+  ];
+  const candidates = await db.ingestionCandidate.findMany({
+    where: { runId: { in: runIds } },
+    select: { id: true },
+  });
   const ids = candidates.map((row) => row.id);
   await db.ingestionDiff.deleteMany({ where: { candidateId: { in: ids } } });
   await db.ingestionEvidence.deleteMany({ where: { candidateId: { in: ids } } });
@@ -83,12 +143,22 @@ test("opt-in worker acknowledges exactly one due source and leaves non-due runs 
 test("UNCHANGED attempt and candidate complete their lease and run without publication", async () => {
   const marker = "unchanged-" + randomUUID();
   const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
-  const publicationsBefore = await db.catalogPublication.count({ where: { festivalSlug: slug, source: "INGESTION" } });
-  await db.festivalEdition.update({ where: { id: source.editionId }, data: { startDate: new Date("2027-07-07T00:00:00.000Z") } });
+  const publicationsBefore = await db.catalogPublication.count({
+    where: { festivalSlug: slug, source: "INGESTION" },
+  });
+  await db.festivalEdition.update({
+    where: { id: source.editionId },
+    data: { startDate: new Date("2027-07-07T00:00:00.000Z") },
+  });
   try {
-    await db.festivalSource.update({ where: { id: sourceId }, data: {
-      strategies: ["json_ld_event"], parserKey: "json_ld_event", nextRunAt: new Date(Date.now() - 1000),
-    } });
+    await db.festivalSource.update({
+      where: { id: sourceId },
+      data: {
+        strategies: ["json_ld_event"],
+        parserKey: "json_ld_event",
+        nextRunAt: new Date(Date.now() - 1000),
+      },
+    });
     const completed = run([], undefined, { GITHUB_SHA: marker });
     assert.equal(completed.status, 0, completed.stderr);
     const summary = JSON.parse(completed.stdout);
@@ -99,7 +169,10 @@ test("UNCHANGED attempt and candidate complete their lease and run without publi
     const terminal = await db.ingestionRun.findFirstOrThrow({ where: { sourceCommit: marker } });
     assert.equal(terminal.status, "COMPLETED");
     assert.ok(terminal.endedAt);
-    const attempt = await db.ingestionAttempt.findFirstOrThrow({ where: { runId: terminal.id, festivalSlug: slug }, include: { candidate: { include: { diffs: true } } } });
+    const attempt = await db.ingestionAttempt.findFirstOrThrow({
+      where: { runId: terminal.id, festivalSlug: slug },
+      include: { candidate: { include: { diffs: true } } },
+    });
     assert.equal(attempt.status, "UNCHANGED");
     assert.ok(attempt.candidate);
     assert.equal(attempt.candidate.diffs.length, 0);
@@ -111,14 +184,20 @@ test("UNCHANGED attempt and candidate complete their lease and run without publi
     assert.ok(released.lastAttemptAt);
     assert.ok(released.lastSuccessAt);
     assert.ok(released.nextRunAt > new Date());
-    assert.equal(await db.catalogPublication.count({ where: { festivalSlug: slug, source: "INGESTION" } }), publicationsBefore);
+    assert.equal(
+      await db.catalogPublication.count({ where: { festivalSlug: slug, source: "INGESTION" } }),
+      publicationsBefore,
+    );
   } finally {
     await db.festivalEdition.update({ where: { id: source.editionId }, data: { startDate: null } });
   }
 });
 
 test("fetch failure persists an attempt and backs off before next claim", async () => {
-  await db.festivalSource.update({ where: { id: sourceId }, data: { nextRunAt: new Date(Date.now() - 1000) } });
+  await db.festivalSource.update({
+    where: { id: sourceId },
+    data: { nextRunAt: new Date(Date.now() - 1000) },
+  });
   const failed = run(["--fixture=" + path.join(dir, "missing.html")]);
   assert.equal(failed.status, 2, failed.stderr);
   assert.match(failed.stderr, /db_due_failure_stage=fetch/);
@@ -133,12 +212,21 @@ test("fetch failure persists an attempt and backs off before next claim", async 
 });
 
 test("post-UNCHANGED artifact failure uses bounded post_attempt_error, not parser_error", async () => {
-  const festivalId = (await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } })).festivalId;
-  await db.festivalEdition.updateMany({ where: { festivalId }, data: { startDate: new Date("2027-07-07T00:00:00.000Z") } });
+  const festivalId = (await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } }))
+    .festivalId;
+  await db.festivalEdition.updateMany({
+    where: { festivalId },
+    data: { startDate: new Date("2027-07-07T00:00:00.000Z") },
+  });
   try {
-    await db.festivalSource.update({ where: { id: sourceId }, data: {
-      strategies: ["json_ld_event"], parserKey: "json_ld_event", nextRunAt: new Date(Date.now() - 1000),
-    } });
+    await db.festivalSource.update({
+      where: { id: sourceId },
+      data: {
+        strategies: ["json_ld_event"],
+        parserKey: "json_ld_event",
+        nextRunAt: new Date(Date.now() - 1000),
+      },
+    });
     const output = path.join(dir, "blocked");
     await mkdir(path.join(output, slug + ".json"), { recursive: true });
     const failed = run([], output);
@@ -151,10 +239,16 @@ test("post-UNCHANGED artifact failure uses bounded post_attempt_error, not parse
     assert.equal(row.lastError, "post_attempt_error");
     assert.equal(row.consecutiveFailures, 2);
     assert.ok(row.nextRunAt > new Date());
-    const latest = await db.ingestionRun.findFirstOrThrow({ where: { attempts: { some: { festivalSlug: slug } } }, orderBy: { startedAt: "desc" } });
+    const latest = await db.ingestionRun.findFirstOrThrow({
+      where: { attempts: { some: { festivalSlug: slug } } },
+      orderBy: { startedAt: "desc" },
+    });
     assert.equal(latest.status, "FAILED");
     assert.ok(latest.endedAt);
-    const attempt = await db.ingestionAttempt.findFirstOrThrow({ where: { runId: latest.id, festivalSlug: slug }, include: { candidate: { include: { diffs: true } } } });
+    const attempt = await db.ingestionAttempt.findFirstOrThrow({
+      where: { runId: latest.id, festivalSlug: slug },
+      include: { candidate: { include: { diffs: true } } },
+    });
     assert.equal(attempt.status, "UNCHANGED");
     assert.equal(attempt.candidate.diffs.length, 0);
     assert.doesNotMatch(row.lastError, /https?:|EISDIR/i);
@@ -167,9 +261,14 @@ test("real extraction exception persists a repair event and safe parser category
   const marker = "parser-" + randomUUID();
   const invalidEntity = path.join(dir, "invalid-entity.html");
   await writeFile(invalidEntity, '<meta name="event:start_date" content="&#1114112;">');
-  await db.festivalSource.update({ where: { id: sourceId }, data: {
-    strategies: ["html_fallback"], parserKey: "html_fallback", nextRunAt: new Date(Date.now() - 1000),
-  } });
+  await db.festivalSource.update({
+    where: { id: sourceId },
+    data: {
+      strategies: ["html_fallback"],
+      parserKey: "html_fallback",
+      nextRunAt: new Date(Date.now() - 1000),
+    },
+  });
   try {
     const failed = run(["--fixture=" + invalidEntity], undefined, { GITHUB_SHA: marker });
     assert.notEqual(failed.status, 0);
@@ -181,17 +280,24 @@ test("real extraction exception persists a repair event and safe parser category
     assert.equal(await db.ingestionAttempt.count({ where: { runId: terminal.id } }), 1);
     const attempt = await db.ingestionAttempt.findFirstOrThrow({ where: { runId: terminal.id } });
     assert.equal(attempt.error, "parser_error");
-    assert.equal(await db.operationalState.count({ where: { key: "import-event-" + attempt.id + "-" + sourceId } }), 1);
+    assert.equal(
+      await db.operationalState.count({
+        where: { key: "import-event-" + attempt.id + "-" + sourceId },
+      }),
+      1,
+    );
     const row = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
     assert.equal(row.leaseOwner, null);
     assert.equal(row.lastError, "parser_error");
     assert.doesNotMatch(row.lastError, /https?:|Invalid code point/i);
     assert.ok(row.nextRunAt > new Date());
   } finally {
-    await db.festivalSource.update({ where: { id: sourceId }, data: { strategies: ["manual_review"], parserKey: "manual_review" } });
+    await db.festivalSource.update({
+      where: { id: sourceId },
+      data: { strategies: ["manual_review"], parserKey: "manual_review" },
+    });
   }
 });
-
 
 test("due mode rejects ambiguous manual controls without claiming", async () => {
   const before = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
@@ -204,13 +310,27 @@ test("due mode rejects ambiguous manual controls without claiming", async () => 
 
 test("run creation failure releases claimed source without a RUNNING run", async () => {
   const marker = "fail-" + randomUUID();
-  await db.festivalSource.update({ where: { id: sourceId }, data: { nextRunAt: new Date(Date.now() - 1000) } });
+  await db.festivalSource.update({
+    where: { id: sourceId },
+    data: { nextRunAt: new Date(Date.now() - 1000) },
+  });
   // Disposable PostgreSQL: force INSERT failure only for this test invocation.
-  await db.$executeRawUnsafe("CREATE FUNCTION due_worker_reject_run() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.\"sourceCommit\" = '" + marker + "' THEN RAISE EXCEPTION 'test run insert failure'; END IF; RETURN NEW; END $$");
-  await db.$executeRawUnsafe('CREATE TRIGGER due_worker_reject_run BEFORE INSERT ON "IngestionRun" FOR EACH ROW EXECUTE FUNCTION due_worker_reject_run()');
+  await db.$executeRawUnsafe(
+    'CREATE FUNCTION due_worker_reject_run() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."sourceCommit" = \'' +
+      marker +
+      "' THEN RAISE EXCEPTION 'test run insert failure'; END IF; RETURN NEW; END $$",
+  );
+  await db.$executeRawUnsafe(
+    'CREATE TRIGGER due_worker_reject_run BEFORE INSERT ON "Inges' +
+      'tionRun" FOR EACH ROW EXECUTE FUNCTION due_worker_reject_run' +
+      "()",
+  );
   try {
-    const publicationsBefore = await db.catalogPublication.count({ where: { festivalSlug: slug, source: "INGESTION" } });
-    const failuresBefore = (await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } })).consecutiveFailures;
+    const publicationsBefore = await db.catalogPublication.count({
+      where: { festivalSlug: slug, source: "INGESTION" },
+    });
+    const failuresBefore = (await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } }))
+      .consecutiveFailures;
     const failed = run([], undefined, { GITHUB_SHA: marker });
     assert.notEqual(failed.status, 0);
     assert.match(failed.stderr, /test run insert failure/);
@@ -219,29 +339,58 @@ test("run creation failure releases claimed source without a RUNNING run", async
     assert.equal(source.leaseOwner, null);
     assert.equal(source.lastError, "pre_attempt_error");
     assert.equal(source.consecutiveFailures, failuresBefore + 1);
-    assert.ok(source.nextRunAt > new Date(), "pre-attempt failure backs off instead of retaining the lease");
+    assert.ok(
+      source.nextRunAt > new Date(),
+      "pre-attempt failure backs off instead of retaining the lease",
+    );
     assert.equal(await db.ingestionRun.count({ where: { sourceCommit: marker } }), 0);
-    assert.equal(await db.catalogPublication.count({ where: { festivalSlug: slug, source: "INGESTION" } }), publicationsBefore);
+    assert.equal(
+      await db.catalogPublication.count({ where: { festivalSlug: slug, source: "INGESTION" } }),
+      publicationsBefore,
+    );
   } finally {
     await db.$executeRawUnsafe('DROP TRIGGER due_worker_reject_run ON "IngestionRun"');
-    await db.$executeRawUnsafe('DROP FUNCTION due_worker_reject_run()');
+    await db.$executeRawUnsafe("DROP FUNCTION due_worker_reject_run()");
   }
 });
 
 test("setup failure releases owned lease even when completion UPDATE throws", async () => {
   const marker = "setup-completion-" + randomUUID();
-  await db.festivalSource.update({ where: { id: sourceId }, data: {
-    enabled: true, nextRunAt: new Date(Date.now() - 1000), leaseOwner: null, leaseExpiresAt: null,
-  } });
+  await db.festivalSource.update({
+    where: { id: sourceId },
+    data: {
+      enabled: true,
+      nextRunAt: new Date(Date.now() - 1000),
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  });
   const before = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
   await db.$executeRawUnsafe(
-    "CREATE FUNCTION due_worker_setup_reject_run() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.\"sourceCommit\" = '" + marker + "' THEN RAISE EXCEPTION 'test setup insert failure'; END IF; RETURN NEW; END $$",
+    "CREATE FUNCTION due_worker_setup_reject_run() RETURNS trigge" +
+      'r LANGUAGE plpgsql AS $$ BEGIN IF NEW."sourceCommit" = \'' +
+      marker +
+      "' THEN RAISE EXCEPTION 'test setup insert failure'; END IF; RETURN NEW; END $$",
   );
-  await db.$executeRawUnsafe('CREATE TRIGGER due_worker_setup_reject_run BEFORE INSERT ON "IngestionRun" FOR EACH ROW EXECUTE FUNCTION due_worker_setup_reject_run()');
   await db.$executeRawUnsafe(
-    "CREATE FUNCTION due_worker_setup_reject_completion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.\"festivalSlug\" = '" + slug + "' AND NEW.\"lastAttemptAt\" IS DISTINCT FROM OLD.\"lastAttemptAt\" THEN RAISE EXCEPTION 'test setup completion failure'; END IF; RETURN NEW; END $$",
+    "CREATE TRIGGER due_worker_setup_reject_run BEFORE INSERT ON " +
+      '"IngestionRun" FOR EACH ROW EXECUTE FUNCTION due_worker_setu' +
+      "p_reject_run()",
   );
-  await db.$executeRawUnsafe('CREATE TRIGGER due_worker_setup_reject_completion BEFORE UPDATE ON "FestivalSource" FOR EACH ROW EXECUTE FUNCTION due_worker_setup_reject_completion()');
+  await db.$executeRawUnsafe(
+    "CREATE FUNCTION due_worker_setup_reject_completion() RETURNS" +
+      ' trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD."festivalSlug" ' +
+      "= '" +
+      slug +
+      ('\' AND NEW."lastAttemptAt" IS DISTINCT FROM OLD."lastAttemptA' +
+        "t\" THEN RAISE EXCEPTION 'test setup completion failure'; END" +
+        " IF; RETURN NEW; END $$"),
+  );
+  await db.$executeRawUnsafe(
+    "CREATE TRIGGER due_worker_setup_reject_completion BEFORE UPD" +
+      'ATE ON "FestivalSource" FOR EACH ROW EXECUTE FUNCTION due_wo' +
+      "rker_setup_reject_completion()",
+  );
   try {
     const failed = run([], undefined, { GITHUB_SHA: marker });
     assert.notEqual(failed.status, 0);
@@ -256,21 +405,37 @@ test("setup failure releases owned lease even when completion UPDATE throws", as
     assert.equal(source.lastAttemptAt?.getTime() ?? null, before.lastAttemptAt?.getTime() ?? null);
     assert.equal(source.nextRunAt?.getTime(), before.nextRunAt?.getTime());
   } finally {
-    await db.$executeRawUnsafe('DROP TRIGGER due_worker_setup_reject_completion ON "FestivalSource"');
-    await db.$executeRawUnsafe('DROP FUNCTION due_worker_setup_reject_completion()');
+    await db.$executeRawUnsafe(
+      'DROP TRIGGER due_worker_setup_reject_completion ON "FestivalSource"',
+    );
+    await db.$executeRawUnsafe("DROP FUNCTION due_worker_setup_reject_completion()");
     await db.$executeRawUnsafe('DROP TRIGGER due_worker_setup_reject_run ON "IngestionRun"');
-    await db.$executeRawUnsafe('DROP FUNCTION due_worker_setup_reject_run()');
+    await db.$executeRawUnsafe("DROP FUNCTION due_worker_setup_reject_run()");
   }
 });
 
 test("failure before attempt persistence records a safe category and releases the lease", async () => {
   const marker = "fail-" + randomUUID();
-  await db.festivalSource.update({ where: { id: sourceId }, data: { nextRunAt: new Date(Date.now() - 1000) } });
-  await db.$executeRawUnsafe("CREATE FUNCTION due_worker_reject_attempt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test attempt insert failure'; END $$");
-  await db.$executeRawUnsafe('CREATE TRIGGER due_worker_reject_attempt BEFORE INSERT ON "IngestionAttempt" FOR EACH ROW EXECUTE FUNCTION due_worker_reject_attempt()');
+  await db.festivalSource.update({
+    where: { id: sourceId },
+    data: { nextRunAt: new Date(Date.now() - 1000) },
+  });
+  await db.$executeRawUnsafe(
+    "CREATE FUNCTION due_worker_reject_attempt() RETURNS trigger " +
+      "LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test attempt i" +
+      "nsert failure'; END $$",
+  );
+  await db.$executeRawUnsafe(
+    'CREATE TRIGGER due_worker_reject_attempt BEFORE INSERT ON "I' +
+      'ngestionAttempt" FOR EACH ROW EXECUTE FUNCTION due_worker_re' +
+      "ject_attempt()",
+  );
   try {
-    const publicationsBefore = await db.catalogPublication.count({ where: { festivalSlug: slug, source: "INGESTION" } });
-    const failuresBefore = (await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } })).consecutiveFailures;
+    const publicationsBefore = await db.catalogPublication.count({
+      where: { festivalSlug: slug, source: "INGESTION" },
+    });
+    const failuresBefore = (await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } }))
+      .consecutiveFailures;
     const failed = run([], undefined, { GITHUB_SHA: marker });
     assert.notEqual(failed.status, 0);
     assert.match(failed.stderr, /test attempt insert failure/);
@@ -282,29 +447,52 @@ test("failure before attempt persistence records a safe category and releases th
     const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
     assert.equal(source.leaseOwner, null);
     assert.equal(source.leaseExpiresAt, null);
-    assert.equal(source.lastError, "pre_attempt_error", "never infer a parser failure or persist raw errors/URLs before an attempt");
+    assert.equal(
+      source.lastError,
+      "pre_attempt_error",
+      "never infer a parser failure or persist raw errors/URLs before an attempt",
+    );
     assert.equal(source.consecutiveFailures, failuresBefore + 1);
     assert.ok(source.nextRunAt > new Date());
-    assert.equal(await db.catalogPublication.count({ where: { festivalSlug: slug, source: "INGESTION" } }), publicationsBefore);
+    assert.equal(
+      await db.catalogPublication.count({ where: { festivalSlug: slug, source: "INGESTION" } }),
+      publicationsBefore,
+    );
   } finally {
     await db.$executeRawUnsafe('DROP TRIGGER due_worker_reject_attempt ON "IngestionAttempt"');
-    await db.$executeRawUnsafe('DROP FUNCTION due_worker_reject_attempt()');
+    await db.$executeRawUnsafe("DROP FUNCTION due_worker_reject_attempt()");
   }
 });
 
 test("completion UPDATE exception falls back to owner-only release while preserving FAILED run", async () => {
   const marker = "completion-" + randomUUID();
-  await db.festivalSource.update({ where: { id: sourceId }, data: {
-    enabled: true, strategies: ["manual_review"], parserKey: "manual_review",
-    nextRunAt: new Date(Date.now() - 1000), leaseOwner: null, leaseExpiresAt: null,
-  } });
+  await db.festivalSource.update({
+    where: { id: sourceId },
+    data: {
+      enabled: true,
+      strategies: ["manual_review"],
+      parserKey: "manual_review",
+      nextRunAt: new Date(Date.now() - 1000),
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  });
   const before = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
   const output = path.join(dir, "blocked-completion");
   await mkdir(path.join(output, slug + ".json"), { recursive: true });
   await db.$executeRawUnsafe(
-    "CREATE FUNCTION due_worker_reject_completion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.\"festivalSlug\" = '" + slug + "' AND NEW.\"lastAttemptAt\" IS DISTINCT FROM OLD.\"lastAttemptAt\" THEN RAISE EXCEPTION 'test completion write failure'; END IF; RETURN NEW; END $$",
+    "CREATE FUNCTION due_worker_reject_completion() RETURNS trigg" +
+      'er LANGUAGE plpgsql AS $$ BEGIN IF OLD."festivalSlug" = \'' +
+      slug +
+      ('\' AND NEW."lastAttemptAt" IS DISTINCT FROM OLD."lastAttemptA' +
+        "t\" THEN RAISE EXCEPTION 'test completion write failure'; END" +
+        " IF; RETURN NEW; END $$"),
   );
-  await db.$executeRawUnsafe('CREATE TRIGGER due_worker_reject_completion BEFORE UPDATE ON "FestivalSource" FOR EACH ROW EXECUTE FUNCTION due_worker_reject_completion()');
+  await db.$executeRawUnsafe(
+    "CREATE TRIGGER due_worker_reject_completion BEFORE UPDATE ON" +
+      ' "FestivalSource" FOR EACH ROW EXECUTE FUNCTION due_worker_r' +
+      "eject_completion()",
+  );
   try {
     const failed = run([], output, { GITHUB_SHA: marker });
     assert.notEqual(failed.status, 0);
@@ -323,85 +511,163 @@ test("completion UPDATE exception falls back to owner-only release while preserv
     assert.equal(source.nextRunAt?.getTime(), before.nextRunAt?.getTime());
   } finally {
     await db.$executeRawUnsafe('DROP TRIGGER due_worker_reject_completion ON "FestivalSource"');
-    await db.$executeRawUnsafe('DROP FUNCTION due_worker_reject_completion()');
+    await db.$executeRawUnsafe("DROP FUNCTION due_worker_reject_completion()");
   }
 });
 
 test("both cleanup writes failing preserve the original error and terminal run", async () => {
   const marker = "cleanup-" + randomUUID();
-  await db.festivalSource.update({ where: { id: sourceId }, data: {
-    enabled: true, strategies: ["manual_review"], parserKey: "manual_review",
-    nextRunAt: new Date(Date.now() - 1000), leaseOwner: null, leaseExpiresAt: null,
-  } });
+  await db.festivalSource.update({
+    where: { id: sourceId },
+    data: {
+      enabled: true,
+      strategies: ["manual_review"],
+      parserKey: "manual_review",
+      nextRunAt: new Date(Date.now() - 1000),
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  });
   const output = path.join(dir, "blocked-cleanup");
   await mkdir(path.join(output, slug + ".json"), { recursive: true });
   await db.$executeRawUnsafe(
-    "CREATE FUNCTION due_worker_reject_cleanup() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.\"festivalSlug\" = '" + slug + "' AND OLD.\"leaseOwner\" IS NOT NULL AND NEW.\"leaseOwner\" IS NULL THEN RAISE EXCEPTION 'test cleanup failure'; END IF; RETURN NEW; END $$",
+    "CREATE FUNCTION due_worker_reject_cleanup() RETURNS trigger " +
+      'LANGUAGE plpgsql AS $$ BEGIN IF OLD."festivalSlug" = \'' +
+      slug +
+      ('\' AND OLD."leaseOwner" IS NOT NULL AND NEW."leaseOwner" IS N' +
+        "ULL THEN RAISE EXCEPTION 'test cleanup failure'; END IF; RET" +
+        "URN NEW; END $$"),
   );
-  await db.$executeRawUnsafe('CREATE TRIGGER due_worker_reject_cleanup BEFORE UPDATE ON "FestivalSource" FOR EACH ROW EXECUTE FUNCTION due_worker_reject_cleanup()');
+  await db.$executeRawUnsafe(
+    'CREATE TRIGGER due_worker_reject_cleanup BEFORE UPDATE ON "F' +
+      'estivalSource" FOR EACH ROW EXECUTE FUNCTION due_worker_reje' +
+      "ct_cleanup()",
+  );
   try {
     const failed = run([], output, { GITHUB_SHA: marker });
     assert.notEqual(failed.status, 0);
     assert.match(failed.stderr, /EISDIR/);
-    assert.doesNotMatch(failed.stderr, /test cleanup failure/, "the original file error stays primary");
+    assert.doesNotMatch(
+      failed.stderr,
+      /test cleanup failure/,
+      "the original file error stays primary",
+    );
     const terminal = await db.ingestionRun.findFirstOrThrow({ where: { sourceCommit: marker } });
     orphanRunIds.push(terminal.id);
     assert.equal(terminal.status, "FAILED");
     assert.ok(terminal.endedAt);
     const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
-    assert.notEqual(source.leaseOwner, null, "both cleanup writes were rejected; TTL still fences the abandoned owner");
+    assert.notEqual(
+      source.leaseOwner,
+      null,
+      "both cleanup writes were rejected; TTL still fences the abandoned owner",
+    );
   } finally {
     await db.$executeRawUnsafe('DROP TRIGGER due_worker_reject_cleanup ON "FestivalSource"');
-    await db.$executeRawUnsafe('DROP FUNCTION due_worker_reject_cleanup()');
-    await db.festivalSource.update({ where: { id: sourceId }, data: { leaseOwner: null, leaseExpiresAt: null } });
+    await db.$executeRawUnsafe("DROP FUNCTION due_worker_reject_cleanup()");
+    await db.festivalSource.update({
+      where: { id: sourceId },
+      data: { leaseOwner: null, leaseExpiresAt: null },
+    });
   }
 });
 
 test("publication survives notification failure and independent drain recovers once", async () => {
-  const user = await db.user.create({ data: { email: slug + "@example.test", passwordHash: "unused", emailVerifiedAt: new Date() } });
-  await db.notificationPreference.create({ data: {
-    userId: user.id, festivalId: slug + ":2027", eventType: "FESTIVAL_DATE_MOVED",
-    channel: "EMAIL", frequency: "IMMEDIATE",
-  } });
+  const user = await db.user.create({
+    data: { email: slug + "@example.test", passwordHash: "unused", emailVerifiedAt: new Date() },
+  });
+  await db.notificationPreference.create({
+    data: {
+      userId: user.id,
+      festivalId: slug + ":2027",
+      eventType: "FESTIVAL_DATE_MOVED",
+      channel: "EMAIL",
+      frequency: "IMMEDIATE",
+    },
+  });
   try {
-    await db.festivalSource.update({ where: { id: sourceId }, data: {
-      nextRunAt: new Date(Date.now() - 1000), strategies: ["json_ld_event"], parserKey: "json_ld_event",
-    } });
+    await db.festivalSource.update({
+      where: { id: sourceId },
+      data: {
+        nextRunAt: new Date(Date.now() - 1000),
+        strategies: ["json_ld_event"],
+        parserKey: "json_ld_event",
+      },
+    });
     // The start and end dates change to the same value: two changes, one
     // notification dedupe key. existing sequential upsert keeps the first.
     const duplicateFixture = path.join(dir, "duplicate-event-key.html");
-    await writeFile(duplicateFixture, fixture.replace('"startDate":"2027-07-07"', '"startDate":"2027-07-07","endDate":"2027-07-07"'));
+    await writeFile(
+      duplicateFixture,
+      fixture.replace(
+        '"startDate":"2027-07-07"',
+        '"startDate":"2027-07-07","endDate":"2027-07-07"',
+      ),
+    );
     const published = run(["--fixture=" + duplicateFixture], undefined, {
-      NOTIFICATION_EVENTS_URL: "http://127.0.0.1:1/events", INTERNAL_API_SECRET: "disposable-test-secret",
+      NOTIFICATION_EVENTS_URL: "http://127.0.0.1:1/events",
+      INTERNAL_API_SECRET: "disposable-test-secret",
     });
     assert.equal(published.status, 0, published.stderr);
     const summary = JSON.parse(published.stdout);
     assert.equal(summary.published, 1);
     assert.equal(summary.results[0].changes, 2, "fixture must produce two date changes");
     assert.equal(summary.notificationEvents, 1, "stage only one event for duplicate key");
-    const publication = await db.catalogPublication.findFirstOrThrow({ where: { festivalSlug: slug, source: "INGESTION" } });
-    const outbox = await db.ingestionNotificationOutbox.findMany({ where: { publicationId: publication.id } });
+    const publication = await db.catalogPublication.findFirstOrThrow({
+      where: { festivalSlug: slug, source: "INGESTION" },
+    });
+    const outbox = await db.ingestionNotificationOutbox.findMany({
+      where: { publicationId: publication.id },
+    });
     assert.equal(outbox.length, 1);
     assert.equal(outbox[0].event.payload.change.field, "startDate", "first change payload wins");
     assert.equal(outbox[0].deliveredAt, null);
-    assert.equal(await db.notificationEvent.count({ where: { dedupeKey: outbox[0].dedupeKey } }), 0);
-    await assert.rejects(drainIngestionNotificationOutbox(db, {
-      afterRecord: async () => { throw new Error("simulated post-record crash"); },
-    }), /simulated post-record crash/);
-    assert.equal(await db.notificationEvent.count({ where: { dedupeKey: outbox[0].dedupeKey } }), 0);
+    assert.equal(
+      await db.notificationEvent.count({ where: { dedupeKey: outbox[0].dedupeKey } }),
+      0,
+    );
+    await assert.rejects(
+      drainIngestionNotificationOutbox(db, {
+        afterRecord: async () => {
+          throw new Error("simulated post-record crash");
+        },
+      }),
+      /simulated post-record crash/,
+    );
+    assert.equal(
+      await db.notificationEvent.count({ where: { dedupeKey: outbox[0].dedupeKey } }),
+      0,
+    );
     assert.equal(await db.notificationDelivery.count({ where: { userId: user.id } }), 0);
-    assert.equal((await db.ingestionNotificationOutbox.findUniqueOrThrow({ where: { id: outbox[0].id } })).deliveredAt, null);
-    const recovered = spawnSync(process.execPath, ["scripts/drain-ingestion-notifications.mjs", "--db-due"], {
-      encoding: "utf8", env: process.env,
-    });
+    assert.equal(
+      (await db.ingestionNotificationOutbox.findUniqueOrThrow({ where: { id: outbox[0].id } }))
+        .deliveredAt,
+      null,
+    );
+    const recovered = spawnSync(
+      process.execPath,
+      ["scripts/drain-ingestion-notifications.mjs", "--db-due"],
+      {
+        encoding: "utf8",
+        env: process.env,
+      },
+    );
     assert.equal(recovered.status, 0, recovered.stderr);
-    assert.deepEqual(JSON.parse(recovered.stdout), { delivered: 1, importEvents: { delivered: 0, failed: 0 } });
+    assert.deepEqual(JSON.parse(recovered.stdout), {
+      delivered: 1,
+      importEvents: { delivered: 0, failed: 0 },
+    });
     assert.equal(await drainIngestionNotificationOutbox(db), 0);
-    const recorded = await db.notificationEvent.findMany({ where: { dedupeKey: outbox[0].dedupeKey } });
+    const recorded = await db.notificationEvent.findMany({
+      where: { dedupeKey: outbox[0].dedupeKey },
+    });
     assert.equal(recorded.length, 1);
     assert.equal(recorded[0].payload.change.field, "startDate");
     assert.equal(await db.notificationDelivery.count({ where: { userId: user.id } }), 1);
-    assert.ok((await db.ingestionNotificationOutbox.findUniqueOrThrow({ where: { id: outbox[0].id } })).deliveredAt);
+    assert.ok(
+      (await db.ingestionNotificationOutbox.findUniqueOrThrow({ where: { id: outbox[0].id } }))
+        .deliveredAt,
+    );
     assert.deepEqual(JSON.parse(run().stdout), { status: "NO_DUE_SOURCES", attempted: 0 });
   } finally {
     await db.notificationDelivery.deleteMany({ where: { userId: user.id } });
@@ -413,55 +679,134 @@ test("publication survives notification failure and independent drain recovers o
 async function within(promise, ms, message) {
   let timer;
   try {
-    return await Promise.race([promise, new Promise((_resolve, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); })]);
-  } finally { clearTimeout(timer); }
+    return await Promise.race([
+      promise,
+      new Promise((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 test("in-flight source edit or reclaim rejects publication and unchanged lease completion", async () => {
-  const publicationsBefore = await db.catalogPublication.count({ where: { festivalSlug: slug, source: "INGESTION" } });
+  const publicationsBefore = await db.catalogPublication.count({
+    where: { festivalSlug: slug, source: "INGESTION" },
+  });
   for (const change of ["edit", "reclaim", "unchanged-edit"]) {
-    await db.festivalEdition.updateMany({ where: { festivalId: (await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } })).festivalId }, data: { startDate: change === "unchanged-edit" ? new Date("2027-07-07T00:00:00.000Z") : null } });
+    await db.festivalEdition.updateMany({
+      where: {
+        festivalId: (await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } }))
+          .festivalId,
+      },
+      data: {
+        startDate: change === "unchanged-edit" ? new Date("2027-07-07T00:00:00.000Z") : null,
+      },
+    });
     let respond;
     let requested;
-    const request = new Promise((resolve) => { requested = resolve; });
-    const server = createServer((_req, res) => { respond = () => { res.writeHead(200, { "content-type": "text/html" }); res.end(fixture); }; requested(); });
+    const request = new Promise((resolve) => {
+      requested = resolve;
+    });
+    const server = createServer((_req, res) => {
+      respond = () => {
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(fixture);
+      };
+      requested();
+    });
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
-    await db.festivalSource.update({ where: { id: sourceId }, data: {
-      strategies: ["json_ld_event"], parserKey: "json_ld_event", fetchUrl: "http://127.0.0.1:" + address.port + "/fixture",
-      nextRunAt: new Date(Date.now() - 1000), leaseOwner: null, leaseExpiresAt: null,
-    } });
-    const child = spawn(process.execPath, ["scripts/ingest-festivals.mjs", "--db-due", "--publish", "--output=" + path.join(dir, "concurrent-" + change)], {
-      env: { ...process.env, APP_URL: "", NOTIFICATION_EVENTS_URL: "", INTERNAL_API_SECRET: "", NOTIFICATION_DELIVERY_REQUIRED: "false" },
-      stdio: ["ignore", "pipe", "pipe"],
+    await db.festivalSource.update({
+      where: { id: sourceId },
+      data: {
+        strategies: ["json_ld_event"],
+        parserKey: "json_ld_event",
+        fetchUrl: "http://127.0.0.1:" + address.port + "/fixture",
+        nextRunAt: new Date(Date.now() - 1000),
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      },
     });
+    const child = spawn(
+      process.execPath,
+      [
+        "scripts/ingest-festivals.mjs",
+        "--db-due",
+        "--publish",
+        "--output=" + path.join(dir, "concurrent-" + change),
+      ],
+      {
+        env: {
+          ...process.env,
+          APP_URL: "",
+          NOTIFICATION_EVENTS_URL: "",
+          INTERNAL_API_SECRET: "",
+          NOTIFICATION_DELIVERY_REQUIRED: "false",
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
     let stderr = "";
     child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
     try {
       await within(request, 10_000, "Worker fetch did not start");
       if (change === "edit" || change === "unchanged-edit") {
-        await db.festivalSource.update({ where: { id: sourceId }, data: { cadenceSeconds: 172800, updatedAt: new Date(Date.now() + 60_000) } });
+        await db.festivalSource.update({
+          where: { id: sourceId },
+          data: { cadenceSeconds: 172800, updatedAt: new Date(Date.now() + 60_000) },
+        });
       } else {
-        await db.festivalSource.update({ where: { id: sourceId }, data: { leaseExpiresAt: new Date(Date.now() - 1000) } });
-        const [reclaimed] = await claimDueSources(db, { owner: randomUUID(), now: new Date(), limit: 1, ttlMs: 30_000 });
+        await db.festivalSource.update({
+          where: { id: sourceId },
+          data: { leaseExpiresAt: new Date(Date.now() - 1000) },
+        });
+        const [reclaimed] = await claimDueSources(db, {
+          owner: randomUUID(),
+          now: new Date(),
+          limit: 1,
+          ttlMs: 30_000,
+        });
         assert.equal(reclaimed.id, sourceId);
       }
       respond();
       const [code] = await within(once(child, "close"), 10_000, "Worker did not exit");
       assert.notEqual(code, 0, stderr);
       assert.match(stderr, /Ingestion source lease is no longer active/);
-      assert.match(stderr, new RegExp(`db_due_failure_stage=${change === "unchanged-edit" ? "lease_completion" : "publication"}`));
-      assert.equal(await db.catalogPublication.count({ where: { festivalSlug: slug, source: "INGESTION" } }), publicationsBefore);
+      assert.match(
+        stderr,
+        new RegExp(
+          `db_due_failure_stage=${change === "unchanged-edit" ? "lease_completion" : "publication"}`,
+        ),
+      );
+      assert.equal(
+        await db.catalogPublication.count({ where: { festivalSlug: slug, source: "INGESTION" } }),
+        publicationsBefore,
+      );
       const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
       if (change === "reclaim") assert.notEqual(source.leaseOwner, null);
-      else { assert.equal(source.cadenceSeconds, 172800); assert.equal(source.leaseOwner, null); assert.equal(source.leaseExpiresAt, null); }
-      const latest = await db.ingestionRun.findFirstOrThrow({ where: { attempts: { some: { festivalSlug: slug } } }, orderBy: { startedAt: "desc" } });
+      else {
+        assert.equal(source.cadenceSeconds, 172800);
+        assert.equal(source.leaseOwner, null);
+        assert.equal(source.leaseExpiresAt, null);
+      }
+      const latest = await db.ingestionRun.findFirstOrThrow({
+        where: { attempts: { some: { festivalSlug: slug } } },
+        orderBy: { startedAt: "desc" },
+      });
       assert.equal(latest.status, "FAILED");
-      const candidate = await db.ingestionCandidate.findFirstOrThrow({ where: { runId: latest.id } });
+      const candidate = await db.ingestionCandidate.findFirstOrThrow({
+        where: { runId: latest.id },
+      });
       assert.equal(candidate.publishable, change !== "unchanged-edit");
       if (change === "unchanged-edit") {
-        const attempt = await db.ingestionAttempt.findFirstOrThrow({ where: { runId: latest.id, festivalSlug: slug } });
+        const attempt = await db.ingestionAttempt.findFirstOrThrow({
+          where: { runId: latest.id, festivalSlug: slug },
+        });
         assert.equal(attempt.status, "UNCHANGED");
         assert.equal(source.lastError, null);
       }

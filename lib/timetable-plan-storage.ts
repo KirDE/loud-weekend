@@ -30,7 +30,10 @@ export function clearBrowserRunningOrders(storage: Storage, snapshot: Record<str
       cleared.push(key);
     }
   } catch (error) {
-    restoreBrowserRunningOrders(storage, Object.fromEntries(cleared.map(key => [key, snapshot[key]])));
+    restoreBrowserRunningOrders(
+      storage,
+      Object.fromEntries(cleared.map((key) => [key, snapshot[key]])),
+    );
     throw error;
   }
 }

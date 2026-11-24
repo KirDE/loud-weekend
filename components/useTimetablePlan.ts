@@ -9,7 +9,7 @@ const empty = "[]";
 
 function read(key: string | null) {
   try {
-    return key ? localStorage.getItem(key) ?? empty : empty;
+    return key ? (localStorage.getItem(key) ?? empty) : empty;
   } catch {
     return empty;
   }
@@ -18,19 +18,24 @@ function read(key: string | null) {
 export function useTimetablePlan(slug?: string, year?: number) {
   const key = slug && year ? timetablePlanKey(slug, year) : null;
   const [storageFailed, setStorageFailed] = useState(false);
-  const subscribe = useCallback((notify: () => void) => {
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === key || event.key === null) notify();
-    };
-    window.addEventListener("storage", onStorage);
-    window.addEventListener(timetablePlanChanged, notify);
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener(timetablePlanChanged, notify);
-    };
-  }, [key]);
+  const subscribe = useCallback(
+    (notify: () => void) => {
+      const onStorage = (event: StorageEvent) => {
+        if (event.key === key || event.key === null) notify();
+      };
+      window.addEventListener("storage", onStorage);
+      window.addEventListener(timetablePlanChanged, notify);
+      return () => {
+        window.removeEventListener("storage", onStorage);
+        window.removeEventListener(timetablePlanChanged, notify);
+      };
+    },
+    [key],
+  );
   const snapshot = useCallback(() => read(key), [key]);
-  const selected = parsePerformanceSelections(useSyncExternalStore(subscribe, snapshot, () => empty));
+  const selected = parsePerformanceSelections(
+    useSyncExternalStore(subscribe, snapshot, () => empty),
+  );
 
   function update(action: (ids: string[]) => string[]) {
     if (!key) return false;
@@ -48,8 +53,9 @@ export function useTimetablePlan(slug?: string, year?: number) {
   }
 
   return {
-    selected, storageFailed,
-    toggle: (id: string) => update(ids => togglePerformanceSelection(ids, id)),
+    selected,
+    storageFailed,
+    toggle: (id: string) => update((ids) => togglePerformanceSelection(ids, id)),
     clear: () => update(() => []),
     replace: (ids: string[]) => update(() => ids),
   };
