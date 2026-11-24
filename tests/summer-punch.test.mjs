@@ -152,7 +152,8 @@ test("Summer Punch additive roster cannot be replaced by the admin path, includi
   }
   assert.doesNotThrow(() => assertAdminArtistReviewAllowed("summer-punch", ["startDate"]));
 });
-test("fetch rejects foreign/same-origin redirects, missing response identity and acquisition overrides", async () => {
+test("fetch rejects foreign/same-origin redirects, missing response identity and acquisition overrides", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-22T14:08:00Z") });
   const { fetchSource } = await import("../lib/ingestion/fetch.ts");
   const reply = (url) => {
     const r = new Response(html, { status: 200 });
