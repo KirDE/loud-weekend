@@ -1,3 +1,7 @@
+import {
+  extractSwedenRockCandidate,
+  swedenRockTicketSupplementUrl,
+} from "./adapters/sweden-rock.ts";
 import { RFP_STOCK, RFP_PURCHASE, observeRfpStock } from "./rfp-ticket-stock.ts";
 import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
@@ -29,6 +33,8 @@ export function matchesTicketPrimaryUrl(source: FestivalSource, finalUrl: string
 export function ticketSupplementUrl(source: FestivalSource): string | undefined {
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review"))
     return;
+  const swedenRock = swedenRockTicketSupplementUrl(source);
+  if (swedenRock) return swedenRock;
   const remaining = remainingTicketUrl(source);
   if (remaining) return remaining;
   let url: URL;
@@ -103,7 +109,9 @@ export function observeTicketSupplement(
   html: string,
   source: FestivalSource,
   url: string,
-  dates?: Partial<Pick<FestivalCandidate, "startDate" | "endDate" | "observedEditionYears">>,
+  dates?: Partial<
+    Pick<FestivalCandidate, "startDate" | "endDate" | "observedEditionYears" | "fetchedAt">
+  >,
 ): TicketObservation {
   const fail = (reason: string): TicketObservation => ({
     excerpt: "",
@@ -111,6 +119,17 @@ export function observeTicketSupplement(
   });
   if (!isTicketSupplementUrl(source, url) || html.length > 2_000_000)
     return fail("source identity or size changed");
+  if (swedenRockTicketSupplementUrl(source)) {
+    const ticket = extractSwedenRockCandidate(
+      html,
+      { ...source, url },
+      dates?.fetchedAt ?? new Date().toISOString(),
+    );
+    const evidence = ticket.evidence.find((entry) => entry.field === "ticketStatus");
+    if (!ticket.ticketStatus || !evidence?.excerpt || ticket.warnings.length)
+      return fail(ticket.warnings.join("; ") || "current ordinary-admission evidence absent");
+    return { status: ticket.ticketStatus, ticketsUrl: url, excerpt: evidence.excerpt };
+  }
   if (source.festivalSlug === "idays") return observeIdaysTicketStock(html, source.editionYear);
   if (source.festivalSlug === "rock-for-people")
     return observeRfpStock(html, source.editionYear, dates);

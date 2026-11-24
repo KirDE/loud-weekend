@@ -31,6 +31,12 @@ const missingFormatWarnings = new Set([
   "HTML fallback did not find explicitly marked festival fields",
 ]);
 
+// Only a verified supplemental ticket status can replace a missing homepage summary.
+const supplementalFormatWarnings = new Set([
+  ...missingFormatWarnings,
+  "Sweden Rock current ticket summary was not found",
+]);
+
 const supportedFields: FieldEvidence["field"][] = [
   "startDate",
   "endDate",
@@ -299,7 +305,7 @@ export function extractFestivalCandidate(
     // Supplemental evidence makes optional homepage formats unnecessary, but
     // semantic, edition, source-identity and artist/provider warnings still gate.
     candidate.warnings = candidate.warnings.filter(
-      (warning) => !missingFormatWarnings.has(warning),
+      (warning) => !supplementalFormatWarnings.has(warning),
     );
   }
   return candidate;
