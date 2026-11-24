@@ -1,13 +1,10 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { isCalendarDate } from "../domain/edition-dates.ts";
 
-export function agentAuthorized(
-  request: Request,
-  secret = process.env.IMPORT_AGENT_SECRET,
-) {
+export function agentAuthorized(request: Request, secret = process.env.IMPORT_AGENT_SECRET) {
   const value = request.headers.get("authorization") ?? "";
-  if (!secret || secret.length < 32 || !value.startsWith("Bearer "))
-    return false;
+  if (!secret || secret.length < 32 || !value.startsWith("Bearer ")) return false;
   const actual = Buffer.from(value.slice(7)),
     expected = Buffer.from(secret);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
@@ -32,13 +29,7 @@ export function fingerprint(value: unknown): string {
 const date = z
   .string()
   .regex(/^20\d{2}-\d{2}-\d{2}$/)
-  .refine((v) => {
-    try {
-      return new Date(v + "T00:00:00Z").toISOString().slice(0, 10) === v;
-    } catch {
-      return false;
-    }
-  });
+  .refine(isCalendarDate);
 const name = z.string().trim().min(1).max(160);
 export const factsSchema = z
   .object({
@@ -47,16 +38,40 @@ export const factsSchema = z
     city: name.optional(),
     status: z.enum(["confirmed", "partial", "tba"]).optional(),
     ticketStatus: z
-      .enum(["available", "low", "not_on_sale", "sold_out", "sales_ended", "unavailable", "unknown"])
+      .enum([
+        "available",
+        "low",
+        "not_on_sale",
+        "sold_out",
+        "sales_ended",
+        "free",
+        "unavailable",
+        "unknown",
+      ])
       .optional(),
     ticketsUrl: z.string().url().max(2048).optional(),
     headliners: z.array(name).max(300).optional(),
     lineup: z.array(name).max(300).optional(),
+    finalLineup: z
+      .object({
+        year: z.number().int().min(2000).max(2099),
+        complete: z.boolean(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .refine(
     (v) => (v.headliners === undefined) === (v.lineup === undefined),
     "Both billing groups are required for a reviewed lineup",
+  )
+  .refine(
+    (v) =>
+      !v.finalLineup?.complete ||
+      (v.headliners !== undefined &&
+        v.lineup !== undefined &&
+        v.headliners.length + v.lineup.length > 0),
+    "A final lineup requires the complete reviewed roster",
   );
 export const evidenceSchema = z
   .object({
@@ -72,18 +87,15 @@ export const decisionSchema = z
     action: z.enum(["apply", "dismiss", "retry", "needs_user"]),
     reason: z.string().trim().min(10).max(2000),
     facts: factsSchema.optional(),
+    arrival: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     source: z
       .object({
         url: z.string().url().max(2048),
         strategies: z
-          .array(
-            z.enum([
-              "official_markup",
-              "json_ld_event",
-              "html_fallback",
-              "manual_review",
-            ]),
-          )
+          .array(z.enum(["official_markup", "json_ld_event", "html_fallback", "manual_review"]))
           .min(1)
           .max(3),
         refreshPolicy: z.enum(["daily", "every_3_days", "weekly"]),
@@ -101,7 +113,12 @@ export const decisionSchema = z
         code: "custom",
         message: "Only apply may change facts or source",
       });
-    if (v.action === "apply" && !v.evidence.length)
+    if (v.arrival && (v.action !== "apply" || v.facts || v.source || v.evidence.length))
+      c.addIssue({
+        code: "custom",
+        message: "Arrival approval must reference only the persisted observation",
+      });
+    if (v.action === "apply" && !v.evidence.length && !v.arrival)
       c.addIssue({
         code: "custom",
         message: "Apply requires official evidence",
@@ -117,6 +134,6 @@ export class ImportAgentError extends Error {
   code: "stale" | "busy" | "missing" | "invalid";
   constructor(code: "stale" | "busy" | "missing" | "invalid") {
     super(code);
-    this.code=code;
+    this.code = code;
   }
 }

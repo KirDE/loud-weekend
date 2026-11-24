@@ -1,0 +1,25 @@
+{
+  "title": "Full Rewind Weekend Ticket 2027",
+  "handle": "full-rewind-weekend-ticket-2027",
+  "url": "/products/full-rewind-weekend-ticket-2027",
+  "vendor": "Full Rewind",
+  "description": "<p>Full Rewind (19. - 21.08.2027) Weekend Ticket beinhaltet ein Weekend Ticket inkl. Camping. Jedes Weekend Ticket berechtigt zum kostenfreien Camping vom Mittwoch, den 18.08.2027 – Sonntag, den 22.08.2027.</p>",
+  "available": true,
+  "price": 19000,
+  "requires_selling_plan": false,
+  "variants": [
+    {
+      "title": "Default Title",
+      "name": "Full Rewind Weekend Ticket 2027",
+      "sku": "T-2027-Weekend",
+      "available": true,
+      "price": 19000,
+      "requires_selling_plan": false,
+      "quantity_rule": {
+        "min": 1,
+        "max": null,
+        "increment": 1
+      }
+    }
+  ]
+}

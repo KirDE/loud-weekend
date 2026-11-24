@@ -7,6 +7,11 @@ export function isLanguage(value: unknown): value is Language {
 }
 
 /** Explicit saved choices survive navigation; a fresh visitor uses the route locale. */
-export function preferredLanguage(stored: unknown, cookie: unknown, initial: Language | undefined, fallback: Language): Language {
-  return isLanguage(stored) ? stored : isLanguage(cookie) ? cookie : initial ?? fallback;
+export function preferredLanguage(
+  stored: unknown,
+  cookie: unknown,
+  initial: Language | undefined,
+  fallback: Language,
+): Language {
+  return isLanguage(stored) ? stored : isLanguage(cookie) ? cookie : (initial ?? fallback);
 }
