@@ -238,8 +238,17 @@ export function ArchiveContent({
   );
 }
 
-export function EditionYearContent({ year, items }: { year: number; items: FestivalEdition[] }) {
+export function EditionYearContent({
+  year,
+  items,
+  hasArchive = true,
+}: {
+  year: number;
+  items: FestivalEdition[];
+  hasArchive?: boolean;
+}) {
   const { t } = usePublicCopy();
+  const { t: ui } = useLanguage();
   return (
     <div className="directoryPage">
       <p className="eyebrow">{t.editionYear}</p>
@@ -250,8 +259,8 @@ export function EditionYearContent({ year, items }: { year: number; items: Festi
           <EditionRow item={item} key={item.slug} />
         ))}
       </section>
-      <Link className="textLink" href="/archive/">
-        {t.archiveBack}
+      <Link className="textLink" href={hasArchive ? "/archive/" : "/browse/"}>
+        {hasArchive ? t.archiveBack : ui("browseCatalogue")}
       </Link>
     </div>
   );

@@ -1,3 +1,4 @@
+import { hasArchiveRecords } from "@/lib/catalog/browse";
 import type { MetadataRoute } from "next";
 import { supportedLanguages } from "@/lib/catalog/public";
 import { DatabaseCatalogRepository } from "@/lib/catalog/repository";
@@ -88,7 +89,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (recordState === "archived" || recordState === "tracking") archiveDates.push(listingDate);
   }
   for (const [year, date] of years) add(`/editions/${year}/`, date);
-  add("/archive/", latestDate(archiveDates));
+  add("/browse/");
+  if (hasArchiveRecords(editions)) add("/archive/", latestDate(archiveDates));
   add("/submit/");
   for (const language of supportedLanguages) {
     add(`/${language}/about/`);

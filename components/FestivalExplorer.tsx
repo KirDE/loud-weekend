@@ -14,6 +14,12 @@ import {
   type DiscoveryLineups,
   type DiscoverySort,
 } from "@/lib/discovery-sort";
+import { DiscoveryShare } from "./DiscoveryShare";
+import {
+  discoveryFromQuery,
+  removeDiscoveryQuery,
+  shareableFavoriteSlugs,
+} from "@/lib/discovery-share";
 import { DiscoveryDateFilters } from "./DiscoveryDateFilters";
 import {
   datesFromQuery,
@@ -76,17 +82,40 @@ export function FestivalExplorer({
 }) {
   const { locale, t } = useLanguage();
   const planner = useLocalPlanner();
-  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance, sort } =
-    planner.savedFilters;
   const filtersReady = planner.ready;
   const queryParams = useSearchParams();
+  const linkKey = queryParams?.toString() ?? "";
+  const shared = useMemo(
+    () => (queryParams ? discoveryFromQuery(queryParams, discoveryLineups) : null),
+    [queryParams, discoveryLineups],
+  );
+  const [draft, setDraft] = useState<{ key: string; patch: Partial<DiscoveryPreferences> }>();
+  const activeFilters = shared
+    ? { ...shared.filters, ...(draft?.key === linkKey ? draft.patch : {}) }
+    : planner.savedFilters;
+  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance, sort } =
+    activeFilters;
   const linkedDates = useMemo(
     () => (queryParams ? datesFromQuery(queryParams) : null),
     [queryParams],
   );
-  const dateFilters = linkedDates ?? planner.savedFilters;
+  const dateFilters = shared ? activeFilters : (linkedDates ?? activeFilters);
   const dateFiltersActive = hasDiscoveryDates(dateFilters);
-  const updateFilters = planner.updateSavedFilters;
+  const favoriteKeys = shared?.favorites ?? planner.favoriteArtists;
+  const shareFavorites = useMemo(
+    () => shareableFavoriteSlugs(favoriteKeys, discoveryLineups),
+    [favoriteKeys, discoveryLineups],
+  );
+  const updateFilters = (patch: Partial<DiscoveryPreferences>) => {
+    if (!shared) {
+      planner.updateSavedFilters(patch);
+      return;
+    }
+    setDraft((current) => ({
+      key: linkKey,
+      patch: { ...(current?.key === linkKey ? current.patch : {}), ...patch },
+    }));
+  };
   const searchRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [comparisonStatus, setComparisonStatus] = useState("");
@@ -152,10 +181,10 @@ export function FestivalExplorer({
       sortDiscoveryFestivals(filtered, sort, {
         locale,
         origin: originCoordinates,
-        favorites: planner.favoriteArtists,
+        favorites: favoriteKeys,
         lineups: discoveryLineups,
       }),
-    [filtered, sort, locale, originCoordinates, planner.favoriteArtists, discoveryLineups],
+    [filtered, sort, locale, originCoordinates, favoriteKeys, discoveryLineups],
   );
   const compared = festivals.filter((item) => selected.includes(item.slug));
   const overlap = lineupOverlap(compared);
@@ -180,12 +209,19 @@ export function FestivalExplorer({
     window.history.replaceState(null, "", url);
   };
   const updateDates = (patch: Partial<DiscoveryDates>) => {
-    updateFilters({ ...linkedDates, ...patch });
-    if (linkedDates) clearLinkedDates();
+    updateFilters(shared ? patch : { ...linkedDates, ...patch });
+    if (!shared && linkedDates) clearLinkedDates();
   };
   const clearFilters = () => {
-    if (linkedDates) clearLinkedDates();
-    planner.setSavedFilters(defaultDiscoveryPreferences);
+    if (shared) {
+      const url = new URL(window.location.href);
+      removeDiscoveryQuery(url);
+      setDraft(undefined);
+      window.history.pushState(null, "", url);
+    } else {
+      if (linkedDates) clearLinkedDates();
+      planner.setSavedFilters(defaultDiscoveryPreferences);
+    }
     searchRef.current?.focus();
   };
 
@@ -285,6 +321,7 @@ export function FestivalExplorer({
         >
           {t("clearAllFilters")}
         </button>
+        <DiscoveryShare filters={{ ...activeFilters, ...dateFilters }} favorites={shareFavorites} />
         <DiscoveryDateFilters filters={dateFilters} onChange={updateDates} />
         <div className="filterToggles">
           <label className="toggle">
