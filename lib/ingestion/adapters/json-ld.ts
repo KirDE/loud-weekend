@@ -1,3 +1,4 @@
+import { load } from "cheerio";
 import type { FestivalCandidate, FestivalSource, FieldEvidence } from "../types.ts";
 import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 import { validateGenericLineup } from "../lineup-quality.ts";
@@ -14,10 +15,12 @@ function records(value: unknown): JsonLd[] {
 
 function eventRecords(html: string): { event: JsonLd; excerpt: string }[] {
   const events: { event: JsonLd; excerpt: string }[] = [];
-  const scriptPattern =
-    /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-  for (const match of html.matchAll(scriptPattern)) {
-    const source = match[1].trim();
+  const $ = load(html);
+  $("template").remove();
+  for (const element of $("script[type]").toArray()) {
+    const script = $(element);
+    if (script.attr("type")?.trim().toLowerCase() !== "application/ld+json") continue;
+    const source = script.text().trim();
     if (!source) continue;
     try {
       const parsed = JSON.parse(source);
@@ -26,7 +29,7 @@ function eventRecords(html: string): { event: JsonLd; excerpt: string }[] {
         if (
           types.some((type) => typeof type === "string" && type.toLowerCase().endsWith("event"))
         ) {
-          events.push({ event: record, excerpt: source.slice(0, 500) });
+          events.push({ event: record, excerpt: JSON.stringify(record).slice(0, 500) });
         }
       }
     } catch {
