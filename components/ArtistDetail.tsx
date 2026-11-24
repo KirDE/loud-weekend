@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
 import type { ArtistProfile } from "@/lib/domain/artist";
 import { useLanguage } from "./LanguageProvider";
@@ -189,6 +190,7 @@ export function ArtistDetail({
           {t("freshnessSetlists")} {artist.freshness.setlists.cadenceDays} {t("freshnessDays")}.
         </p>
       </details>
+      <CorrectionReportForm identity={{ target: "artist", slug: artist.slug }} />
     </div>
   );
 }
