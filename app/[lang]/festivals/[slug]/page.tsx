@@ -36,11 +36,13 @@ export default async function LocalizedFestivalPage({
 }) {
   const { lang, slug } = await params;
   if (!supportedLanguages.includes(lang as Language)) notFound();
-  const { festivals, artists, playlists } = await getCatalog({ includeFreshness: true });
+  const { festivals, artists, playlists, discoveryLineups } = await getCatalog({
+    includeFreshness: true,
+  });
   const item = festivals.find((festival) => festival.slug === slug);
   if (!item) notFound();
   const arrivalFacts = await readArrivalFacts(db, item);
-  const event = festivalMusicEvent(item);
+  const event = festivalMusicEvent(item, lang);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
     <>
@@ -52,6 +54,7 @@ export default async function LocalizedFestivalPage({
         item={item}
         arrivalFacts={arrivalFacts}
         festivals={festivals}
+        discoveryLineups={discoveryLineups}
         artistSlugs={artistSlugs}
         artistPopularity={Object.fromEntries(
           artists.map((artist) => [artist.name, artist.spotifyStats?.popularity ?? null]),
