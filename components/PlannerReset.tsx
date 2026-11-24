@@ -2,6 +2,7 @@
 import { useId, useRef, useState } from "react";
 import { maxTripBudgets } from "@/lib/trip-budget";
 import { serializePlannerState } from "@/lib/planner-storage";
+import { maxPlaylistArtistPreferences } from "@/lib/playlist-selection";
 import { useLanguage } from "./LanguageProvider";
 import { useLocalPlanner, type PlannerState } from "./LocalPlanner";
 
@@ -64,6 +65,7 @@ function snapshot(planner: PlannerState): PlannerState {
     attendance: planner.attendance,
     tripBudgets: planner.tripBudgets,
     playlistFestivals: planner.playlistFestivals,
+    playlistExcludedArtists: planner.playlistExcludedArtists,
     savedFilters: planner.savedFilters,
   });
 }
@@ -158,7 +160,13 @@ export function PlannerReset({
                 setUndoError(true);
                 return;
               }
-              planner.merge(backup);
+              const current = planner.playlistExcludedArtists;
+              const saved = backup.playlistExcludedArtists;
+              const playlistExcludedArtists =
+                current && saved
+                  ? [...new Set([...current, ...saved])].slice(0, maxPlaylistArtistPreferences)
+                  : (current ?? saved);
+              planner.merge({ ...backup, playlistExcludedArtists });
               setBackup(null);
               setUndoError(false);
             }}

@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
 import { FestivalArrival } from "./FestivalArrival";
 import { PlanningTools } from "./PlanningTools";
+import { PlaylistCoverageLabel } from "./PlaylistCoverageLabel";
 import type { PlaylistStatus } from "@/lib/domain/festival";
 import { formatFreshnessDate } from "@/lib/freshness-date";
 import { ticketPresentation } from "@/lib/tickets";
@@ -26,6 +29,7 @@ import { FavoriteButton, useLocalPlanner, type Attendance } from "./LocalPlanner
 export function FestivalDetail({
   item,
   festivals,
+  discoveryLineups,
   artistSlugs,
   playlist,
   artistPopularity = {},
@@ -33,6 +37,7 @@ export function FestivalDetail({
 }: {
   item: Festival;
   festivals: Festival[];
+  discoveryLineups?: DiscoveryLineups;
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
   arrivalFacts?: readonly PublicArrivalFact[];
@@ -134,13 +139,13 @@ export function FestivalDetail({
         )}
         {playlistUrl ? (
           <a href={playlistUrl} target="_blank" rel="noreferrer">
-            <small>
-              {t("listen")}
-              {playlist && !reviewedSpotify
-                ? ` · ${playlist.artists} ${t("artists")} · ${playlist.tracks} ${t("tracks")}`
-                : ""}
-            </small>
+            <small>{t("listen")}</small>
             <strong>{t("spotifyPlaylist")}</strong>
+            <PlaylistCoverageLabel
+              coverage={
+                playlistUrl === playlist?.spotifyUrl ? playlist.coverage?.spotify : undefined
+              }
+            />
           </a>
         ) : (
           <div className="disabled">
@@ -150,15 +155,15 @@ export function FestivalDetail({
         )}
         {youtubePlaylistUrl ? (
           <a href={youtubePlaylistUrl} target="_blank" rel="noreferrer">
-            <small>
-              {t("listen")}
-              {!reviewedYoutube &&
-              playlist?.youtubeMusicArtists !== undefined &&
-              playlist.youtubeMusicTracks !== undefined
-                ? ` · ${playlist.youtubeMusicArtists} ${t("artists")} · ${playlist.youtubeMusicTracks} ${t("tracks")}`
-                : ""}
-            </small>
+            <small>{t("listen")}</small>
             <strong>{t("youtubeMusicPlaylist")}</strong>
+            <PlaylistCoverageLabel
+              coverage={
+                youtubePlaylistUrl === playlist?.youtubeMusicUrl
+                  ? playlist.coverage?.youtubeMusic
+                  : undefined
+              }
+            />
           </a>
         ) : null}
         {setlistUrl ? (
@@ -234,7 +239,12 @@ export function FestivalDetail({
           </>
         )}
       </section>
-      <PlanningTools item={item} festivals={festivals} />
+      <PlanningTools
+        item={item}
+        festivals={festivals}
+        discoveryLineups={discoveryLineups}
+        favorites={planner.favoriteArtists}
+      />
       <FestivalArrival facts={arrivalFacts} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
@@ -264,6 +274,11 @@ export function FestivalDetail({
           {t("primarySource")}
         </a>
       </section>
+      {item.editionYear !== undefined && (
+        <CorrectionReportForm
+          identity={{ target: "edition", slug: item.slug, year: item.editionYear }}
+        />
+      )}
     </div>
   );
 }
