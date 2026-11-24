@@ -12,9 +12,12 @@ import {
   isSummerStockSource,
   observeSummerStock,
 } from "./summer-ticket-stock.ts";
+import { RFP_STOCK, RFP_PURCHASE, observeRfpStock } from "./rfp-ticket-stock.ts";
 import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
+
+import { observeRemainingTicket, remainingTicketUrl } from "./remaining-ticket-stock.ts";
 
 export const TICKET_SUPPLEMENT = "official-ticket-supplement-v1";
 type TicketState = NonNullable<FestivalCandidate["ticketStatus"]>;
@@ -29,6 +32,8 @@ export type TicketObservation = {
 export function ticketSupplementUrl(source: FestivalSource): string | undefined {
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review"))
     return;
+  const remaining = remainingTicketUrl(source);
+  if (remaining) return remaining;
   let url: URL;
   try {
     url = new URL(source.url);
@@ -46,6 +51,13 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
     return;
   if (isProvinssiStockSource(source)) return PROVINSSI_STOCK;
   if (isSummerStockSource(source)) return SUMMER_STOCK;
+  if (
+    source.festivalSlug === "rock-for-people" &&
+    source.editionYear === 2027 &&
+    url.href === "https://rockforpeople.cz/" &&
+    source.strategies.includes("official_markup")
+  )
+    return RFP_STOCK;
   if (
     source.festivalSlug === "full-rewind" &&
     url.href === "https://full-rewind.de/" &&
@@ -84,6 +96,7 @@ export function ticketSupplementPurchaseUrl(source: FestivalSource): string | un
   if (!stockUrl) return;
   if (stockUrl === PROVINSSI_STOCK) return PROVINSSI_PURCHASE;
   if (stockUrl === SUMMER_STOCK) return SUMMER_PURCHASE;
+  if (stockUrl === RFP_STOCK) return RFP_PURCHASE;
   return source.festivalSlug === "full-rewind"
     ? `https://full-rewind.de/collections/tickets-${source.editionYear}`
     : stockUrl;
@@ -105,7 +118,7 @@ export function observeTicketSupplement(
   html: string,
   source: FestivalSource,
   url: string,
-  dates?: Pick<FestivalCandidate, "startDate" | "endDate">,
+  dates?: Partial<Pick<FestivalCandidate, "startDate" | "endDate" | "observedEditionYears">>,
 ): TicketObservation {
   const fail = (reason: string): TicketObservation => ({
     excerpt: "",
@@ -116,6 +129,8 @@ export function observeTicketSupplement(
   if (source.festivalSlug === "idays") return observeIdaysTicketStock(html, source.editionYear);
   if (url === PROVINSSI_STOCK) return observeProvinssiStock(html, dates);
   if (url === SUMMER_STOCK) return observeSummerStock(html, dates);
+  if (source.festivalSlug === "rock-for-people")
+    return observeRfpStock(html, source.editionYear, dates);
   if (source.festivalSlug === "full-rewind") {
     const year = source.editionYear;
     try {
@@ -192,6 +207,7 @@ export function observeTicketSupplement(
       return fail("invalid public weekend product JSON");
     }
   }
+  if (remainingTicketUrl(source)) return observeRemainingTicket(html, source, dates);
   const $ = load(html);
   const declaredEvents: Array<{
     name?: unknown;
