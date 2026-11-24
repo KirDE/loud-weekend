@@ -1,3 +1,4 @@
+import { alcatrazPrimaryUrl } from "./alcatraz-ticket-stock.ts";
 import { validateBarcelonaFetch } from "./adapters/barcelona-banner.ts";
 import { RFP_STOCK, reduceRfpStockDocument } from "./rfp-ticket-stock.ts";
 import {
@@ -1109,7 +1110,10 @@ export async function fetchSource(
   if (!primary.response.ok || !ticketUrl) return primary;
   let attempts = primary.attempts;
   try {
-    if (!matchesTicketPrimaryUrl(source, primary.response.url))
+    if (
+      !matchesTicketPrimaryUrl(source, primary.response.url) &&
+      !(source.festivalSlug === "alcatraz" && alcatrazPrimaryUrl(source.url, primary.response.url))
+    )
       throw new Error("Official ticket primary source changed identity");
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
@@ -1131,9 +1135,11 @@ export async function fetchSource(
       throw new Error("Official ticket destination changed identity");
     const type = ticket.response.headers.get("content-type") ?? "";
     const supportedType =
-      source.festivalSlug === "full-rewind" || ticketUrl === RFP_STOCK
-        ? /^(?:application\/json|text\/javascript|application\/javascript)\b/i.test(type)
-        : /^text\/html\b|^application\/xhtml\+xml\b/i.test(type);
+      source.festivalSlug === "alcatraz"
+        ? /^application\/json\b/i.test(type)
+        : source.festivalSlug === "full-rewind" || ticketUrl === RFP_STOCK
+          ? /^(?:application\/json|text\/javascript|application\/javascript)\b/i.test(type)
+          : /^text\/html\b|^application\/xhtml\+xml\b/i.test(type);
     if (!supportedType)
       throw new Error(
         source.festivalSlug === "full-rewind"

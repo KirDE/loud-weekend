@@ -105,6 +105,48 @@ test("database reads do not retain a process-lifetime catalogue snapshot", async
   }
 });
 
+test("public data quality does not count schedule rows with only fallback evidence", async () => {
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+  });
+  const base = {
+    editionId: edition.id,
+    date: new Date("2027-06-11"),
+    stage: "Fixture stage",
+    start: "20:45",
+    timeZone: "Europe/Berlin",
+    sourceUrl: "https://festival.example.test/private-schedule-fixture",
+    observedAt: new Date("2026-11-21T09:00:00Z"),
+  };
+  await db.timetablePerformance.createMany({
+    data: [
+      {
+        ...base,
+        artistName: "All evidence missing",
+        sourceUrl: null,
+        observedAt: null,
+        timeZone: null,
+      },
+      { ...base, artistName: "Missing schedule source", sourceUrl: null },
+      { ...base, artistName: "Missing schedule observation", observedAt: null },
+      { ...base, artistName: "Missing schedule time zone", timeZone: null },
+    ],
+  });
+  try {
+    const qualityRead = () =>
+      readCatalog({ database: db, includeFreshness: true, requireTimetableEvidence: true });
+    assert.equal((await readCatalog({ database: db })).festivals[0].timetable?.length, 4);
+    const { summarizeDataQuality } = await import("../lib/catalog/data-quality.ts");
+    assert.equal(summarizeDataQuality(await qualityRead()).timetable, 0);
+    await db.timetablePerformance.create({ data: { ...base, artistName: "Verified fixture" } });
+    const summary = summarizeDataQuality(await qualityRead());
+    assert.equal(summary.timetable, 1);
+    assert.doesNotMatch(JSON.stringify(summary), /private-schedule-fixture|Verified fixture/);
+  } finally {
+    await db.timetablePerformance.deleteMany({ where: { editionId: edition.id } });
+  }
+});
+
 test("cancelled artists do not count as announced in the public catalogue", async () => {
   const entry = await db.lineupEntry.findFirstOrThrow({
     where: { edition: { recordState: "CURRENT", festival: { slug: "synthetic-fest" } } },
