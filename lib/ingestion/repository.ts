@@ -1,4 +1,5 @@
 import { campingSourceFilters, isCampingSourceUrl } from "./adapters/camping-guidance.ts";
+import { overviewSourceUrls } from "./adapters/festival-overview.ts";
 import { TOLMINATOR_PRODUCT } from "./adapters/tolminator-stock.ts";
 import { queueImportEvent } from "./import-event-queue.ts";
 import { createHash } from "node:crypto";
@@ -38,19 +39,31 @@ export async function createIngestionRun(
 // Only reviewed independent endpoints are excluded. Do not infer scope from
 // caller-supplied candidate fields (a failed request has no candidate at all).
 const independentTicketUrls = [TOLMINATOR_PRODUCT];
-const attemptScope = (requestedUrl?: string): Prisma.IngestionAttemptWhereInput =>
+const attemptScope = (
+  festivalSlug: string,
+  requestedUrl?: string,
+): Prisma.IngestionAttemptWhereInput =>
   requestedUrl
     ? { requestedUrl }
     : {
-        AND: [{ requestedUrl: { notIn: independentTicketUrls } }, { NOT: campingSourceFilters }],
+        requestedUrl: { notIn: [...independentTicketUrls, ...overviewSourceUrls(festivalSlug)] },
+        NOT: campingSourceFilters,
       };
 
 export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
   return db.$transaction(async (tx) => {
-    const { arrival, camping } = input.result?.candidate ?? {};
-    const organizer = arrival ?? camping;
-    if (Boolean(input.sourceLease) !== Boolean(organizer) || (arrival && camping))
-      throw new Error("Organizer observations require a source lease and an unambiguous scope");
+    const { arrival, overview, camping } = input.result?.candidate ?? {};
+    const organizer = arrival ?? overview ?? camping;
+    if (Boolean(input.sourceLease) !== Boolean(organizer) || (camping && (arrival || overview)))
+      throw new Error("Organizer observations require a source lease");
+    if (
+      arrival &&
+      overview &&
+      (arrival.editionId !== overview.editionId ||
+        arrival.editionYear !== overview.editionYear ||
+        arrival.festivalSlug !== overview.festivalSlug)
+    )
+      throw new Error("Shared organizer observations must refer to the same edition");
     if (input.sourceLease) {
       const lease = input.sourceLease;
       const rows = await tx.$queryRaw<{ id: string }[]>`
@@ -69,8 +82,9 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
     const result = input.result;
     const independent =
       independentTicketUrls.includes(input.requestedUrl) ||
-      isCampingSourceUrl(input.festivalSlug, input.requestedUrl);
-    const scope = attemptScope(independent ? input.requestedUrl : undefined);
+      isCampingSourceUrl(input.festivalSlug, input.requestedUrl) ||
+      overviewSourceUrls(input.festivalSlug).includes(input.requestedUrl);
+    const scope = attemptScope(input.festivalSlug, independent ? input.requestedUrl : undefined);
     const status = !result
       ? "FAILED"
       : result.reviewReasons.length
@@ -202,7 +216,7 @@ export const ingestionQueries = {
     db.ingestionRun.findMany({ orderBy: { startedAt: "desc" }, take, include: { attempts: true } }),
   latestResult: (db: Client, festivalSlug: string, requestedUrl?: string) =>
     db.ingestionAttempt.findFirst({
-      where: { festivalSlug, ...attemptScope(requestedUrl) },
+      where: { festivalSlug, ...attemptScope(festivalSlug, requestedUrl) },
       orderBy: { endedAt: "desc" },
       include: { candidate: { include: { evidence: true, diffs: true } } },
     }),
@@ -221,13 +235,13 @@ export const ingestionQueries = {
     db.ingestionSourceState.findMany({ select: { festivalSlug: true, lastSuccessfulCheck: true } }),
   lastSuccessfulExtraction: (db: Client, festivalSlug: string, requestedUrl?: string) =>
     db.ingestionEvidence.findFirst({
-      where: { candidate: { festivalSlug, attempt: attemptScope(requestedUrl) } },
+      where: { candidate: { festivalSlug, attempt: attemptScope(festivalSlug, requestedUrl) } },
       orderBy: { observedAt: "desc" },
       select: { observedAt: true },
     }),
   consecutiveFailures: async (db: Client, festivalSlug: string, requestedUrl?: string) => {
     const attempts = await db.ingestionAttempt.findMany({
-      where: { festivalSlug, ...attemptScope(requestedUrl) },
+      where: { festivalSlug, ...attemptScope(festivalSlug, requestedUrl) },
       orderBy: { endedAt: "desc" },
       take: 100,
       select: { status: true },

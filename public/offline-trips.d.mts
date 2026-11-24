@@ -42,6 +42,11 @@ type Label =
   | "empty";
 
 export const offlineTripCopy: Record<Language, Record<Label, string>>;
+export function fetchOfflineTrip(
+  basePath: string,
+  slug: string,
+  year: number,
+): Promise<OfflineTrip>;
 export function offlineTripKey(slug: string, year: number): string;
 export function parseOfflineTrip(value: unknown): OfflineTrip | null;
 export function readOfflineTrip(

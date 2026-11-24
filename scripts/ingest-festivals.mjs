@@ -1,13 +1,10 @@
+import { organizerReviewCollector } from "../lib/ingestion/organizer-collector.ts";
 import { drainImportEvents } from "../lib/ingestion/import-events.ts";
 import { sendImportEvent, transportConfigured } from "../lib/ingestion/import-event-transport.mjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { listConfiguredSources } from "../lib/sources/repository.ts";
-import {
-  collectArrivalCandidate,
-  registeredArrivalSource,
-} from "../lib/ingestion/arrival-collector.ts";
 import {
   collectCampingCandidate,
   registeredCampingSource,
@@ -89,7 +86,8 @@ function organizerCollector(source) {
     url: source.url,
     parserKey: source.parserKey,
   };
-  if (registeredArrivalSource(identity)) return collectArrivalCandidate;
+  const organizer = organizerReviewCollector(source);
+  if (organizer) return organizer;
   if (registeredCampingSource(identity)) return collectCampingCandidate;
 }
 let selected = eligible.filter(
@@ -246,14 +244,14 @@ for (const source of selected) {
     const startedAt = new Date();
     let response;
     let html;
-    let organizerResult;
+    let organizerReview;
     const collectReview = sourceLease && organizerCollector(source);
     failureStage = "fetch";
     try {
       if (collectReview) {
         if (current.editionYear !== source.editionYear)
           throw new Error("Organizer source does not match the current edition");
-        organizerResult = await collectReview(source, fetch, current);
+        organizerReview = await collectReview(source, fetch, current);
       } else if (!fixturePath) {
         const fetched = await fetchSource(source);
         response = fetched.response;
@@ -323,8 +321,8 @@ for (const source of selected) {
     let result;
     failureStage = "extraction";
     try {
-      candidate = organizerResult?.candidate ?? extractFestivalCandidate(html, source, fetchedAt);
-      result = organizerResult ?? evaluateCandidate(current, candidate, aliasArtists);
+      candidate = organizerReview?.candidate ?? extractFestivalCandidate(html, source, fetchedAt);
+      result = organizerReview ?? evaluateCandidate(current, candidate, aliasArtists);
     } catch (error) {
       failureOutcome = "parser_error";
       if (run)
@@ -361,8 +359,8 @@ for (const source of selected) {
           festivalSlug: source.festivalSlug,
           requestedUrl: source.url,
           finalUrl: response?.url ?? source.url,
-          httpStatus: organizerResult ? 200 : (response?.status ?? null),
-          ...(organizerResult && { sourceLease }),
+          httpStatus: organizerReview ? 200 : (response?.status ?? null),
+          ...(organizerReview && { sourceLease }),
           durationMs: Date.now() - startedAt.getTime(),
           startedAt,
           endedAt: new Date(),

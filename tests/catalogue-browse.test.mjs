@@ -21,8 +21,20 @@ test("browse lists only recorded countries, overlapping months, edition years an
     artists: [{ slug: "artist-a", name: "Artist A" }],
   });
   const archive = { editionYear: 2025, recordState: "archived" };
-  const future = { editionYear: 2029, recordState: "tracking" };
-  const complete = catalogueBrowse(festivals, [...editions, archive, future], artists);
+  const future = { editionYear: 2029, recordState: "tracking", provenance: [] };
+  const unverified = catalogueBrowse(festivals, [...editions, archive, future], artists);
+  assert.equal(unverified.hasArchive, false);
+  assert.deepEqual(unverified.years, [2027]);
+
+  const complete = catalogueBrowse(
+    festivals,
+    [
+      ...editions,
+      { ...archive, snapshotAt: "2025-10-01T00:00:00Z" },
+      { ...future, provenance: [{ field: "edition" }] },
+    ],
+    artists,
+  );
   assert.equal(complete.hasArchive, true);
   assert.deepEqual(complete.years, [2029, 2027, 2025]);
 });

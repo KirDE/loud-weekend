@@ -1,3 +1,4 @@
+import { SyncKind } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   const parsed = input.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return error("A document ID is required.");
   const document = await db.syncDocument.findFirst({
-    where: { id: parsed.data.documentId, userId: user.id },
+    where: { id: parsed.data.documentId, userId: user.id, kind: { not: SyncKind.TRIP_BUDGETS } },
   });
   if (!document) return error("Document not found.", 404);
   const link = await db.shareLink.upsert({
