@@ -34,5 +34,7 @@ test("HTML fallback refuses unmarked prose and unsafe ticket URLs", () => {
   const html = `<p>July 1-3, 2027 in Berlin with Band A</p><a href="http://tickets.example">Tickets</a>`;
   const candidate = extractHtmlFallbackCandidate(html, source, "2026-08-28T21:15:00.000Z");
   assert.deepEqual(candidate.evidence, []);
-  assert.deepEqual(candidate.warnings, ["HTML fallback did not find explicitly marked festival fields"]);
+  assert.deepEqual(candidate.warnings, [
+    "HTML fallback did not find explicitly marked festival fields",
+  ]);
 });

@@ -12,36 +12,57 @@ export function lineupOverlap(items: Festival[]) {
 
 export function similarFestivals(item: Festival, festivals: Festival[], limit = 3) {
   const artists = festivalArtists(item);
-  return festivals.filter((candidate) => candidate.slug !== item.slug).map((candidate) => ({
-    festival: candidate,
-    shared: [...festivalArtists(candidate)].filter((artist) => artists.has(artist)).length,
-  })).filter(({ shared }) => shared > 0).sort((a, b) => b.shared - a.shared || a.festival.name.localeCompare(b.festival.name)).slice(0, limit);
+  return festivals
+    .filter((candidate) => candidate.slug !== item.slug)
+    .map((candidate) => ({
+      festival: candidate,
+      shared: [...festivalArtists(candidate)].filter((artist) => artists.has(artist)).length,
+    }))
+    .filter(({ shared }) => shared > 0)
+    .sort((a, b) => b.shared - a.shared || a.festival.name.localeCompare(b.festival.name))
+    .slice(0, limit);
 }
 
-function compactDate(value: string) { return value.replaceAll("-", ""); }
+function compactDate(value: string) {
+  return value.replaceAll("-", "");
+}
 
 function escapeIcs(value: string) {
-  return value.replaceAll("\\", "\\\\").replaceAll(";", "\\;").replaceAll(",", "\\,").replaceAll(/\r?\n/g, "\\n");
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll(";", "\\;")
+    .replaceAll(",", "\\,")
+    .replaceAll(/\r?\n/g, "\\n");
 }
 
 export function calendarFile(items: Festival[]) {
-  const events = items.filter((item) => item.startDate).flatMap((item) => {
-    const end = new Date(`${item.endDate || item.startDate}T12:00:00Z`);
-    end.setUTCDate(end.getUTCDate() + 1);
-    const location = [item.city, item.country].filter(Boolean).join(", ");
-    return [
-      "BEGIN:VEVENT",
-      `UID:${item.slug}-${item.editionYear || 2027}@festival-radar`,
-      `DTSTART;VALUE=DATE:${compactDate(item.startDate!)}`,
-      `DTEND;VALUE=DATE:${compactDate(end.toISOString().slice(0, 10))}`,
-      `SUMMARY:${escapeIcs(item.name)}`,
-      `LOCATION:${escapeIcs(location)}`,
-      `DESCRIPTION:${escapeIcs(`Official information: ${item.officialUrl}`)}`,
-      `URL:${item.officialUrl}`,
-      "END:VEVENT",
-    ];
-  });
-  return ["BEGIN:VCALENDAR", "VERSION:2.0", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "PRODID:-//Loud Weekend//European Festivals//EN", ...events, "END:VCALENDAR"].join("\r\n");
+  const events = items
+    .filter((item) => item.startDate)
+    .flatMap((item) => {
+      const end = new Date(`${item.endDate || item.startDate}T12:00:00Z`);
+      end.setUTCDate(end.getUTCDate() + 1);
+      const location = [item.city, item.country].filter(Boolean).join(", ");
+      return [
+        "BEGIN:VEVENT",
+        `UID:${item.slug}-${item.editionYear || 2027}@festival-radar`,
+        `DTSTART;VALUE=DATE:${compactDate(item.startDate!)}`,
+        `DTEND;VALUE=DATE:${compactDate(end.toISOString().slice(0, 10))}`,
+        `SUMMARY:${escapeIcs(item.name)}`,
+        `LOCATION:${escapeIcs(location)}`,
+        `DESCRIPTION:${escapeIcs(`Official information: ${item.officialUrl}`)}`,
+        `URL:${item.officialUrl}`,
+        "END:VEVENT",
+      ];
+    });
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "PRODID:-//Loud Weekend//European Festivals//EN",
+    ...events,
+    "END:VCALENDAR",
+  ].join("\r\n");
 }
 
 export function calendarUrls(item: Festival) {
@@ -51,7 +72,13 @@ export function calendarUrls(item: Festival) {
   const exclusiveEnd = end.toISOString().slice(0, 10);
   const dates = `${compactDate(item.startDate)}/${compactDate(exclusiveEnd)}`;
   const details = `Official information: ${item.officialUrl}`;
-  const query = new URLSearchParams({ action: "TEMPLATE", text: item.name, dates, details, location: [item.city, item.country].filter(Boolean).join(", ") });
+  const query = new URLSearchParams({
+    action: "TEMPLATE",
+    text: item.name,
+    dates,
+    details,
+    location: [item.city, item.country].filter(Boolean).join(", "),
+  });
   return {
     google: `https://calendar.google.com/calendar/render?${query}`,
     ics: `data:text/calendar;charset=utf-8,${encodeURIComponent(calendarFile([item]))}`,
