@@ -29,6 +29,7 @@ export function DiscoverySearch({
   const [open, setOpen] = useState(false);
   const [settled, setSettled] = useState("");
   const panel = useRef<HTMLDivElement>(null);
+  const focusOnOpen = useRef(false);
   const index = useMemo(
     () => discoverySuggestionIndex(festivals, artists ?? []),
     [festivals, artists],
@@ -38,7 +39,8 @@ export function DiscoverySearch({
     return () => window.clearTimeout(timer);
   }, [query]);
 
-  const active = open && settled === query && query.trim().length >= 2 && query.length <= 80;
+  const canSuggest = query.trim().length >= 2 && query.length <= 80;
+  const active = open && settled === query && canSuggest;
   const matches = useMemo(
     () => discoverySuggestions(active ? settled : "", index, locale),
     [active, settled, index, locale],
@@ -61,19 +63,21 @@ export function DiscoverySearch({
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
       onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
         if (event.key === "Escape" && open) {
           event.preventDefault();
           inputRef.current?.focus();
           setOpen(false);
         }
-        if (
-          event.key === "ArrowDown" &&
-          event.target === inputRef.current &&
-          active &&
-          anyMatches
-        ) {
+        if (event.key === "ArrowDown" && event.target === inputRef.current && canSuggest) {
+          if (active && !anyMatches) return;
           event.preventDefault();
-          panel.current?.querySelector<HTMLElement>("a,button")?.focus();
+          if (active) panel.current?.querySelector<HTMLElement>("a,button")?.focus();
+          else {
+            focusOnOpen.current = true;
+            setSettled(query);
+            setOpen(true);
+          }
         }
       }}
     >
@@ -83,6 +87,7 @@ export function DiscoverySearch({
         aria-label={t("filterSearch")}
         value={query}
         onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onChange={(event) => {
           setOpen(true);
           onChange(event.target.value);
@@ -103,7 +108,17 @@ export function DiscoverySearch({
         </button>
       )}
       {active && (
-        <div className="discoverySuggestions" ref={panel} aria-label={t("searchSuggestions")}>
+        <div
+          className="discoverySuggestions"
+          ref={(node) => {
+            panel.current = node;
+            if (node && focusOnOpen.current) {
+              focusOnOpen.current = false;
+              node.querySelector<HTMLElement>("a,button")?.focus();
+            }
+          }}
+          aria-label={t("searchSuggestions")}
+        >
           {!anyMatches && <p role="status">{t("noSearchSuggestions")}</p>}
           {groups.map(
             (group) =>

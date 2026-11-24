@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import {
   festivalDateInterval,
@@ -27,6 +27,8 @@ const labels: Record<
     mapHelp: string;
     mapLabel: string;
     europe: string;
+    places: string;
+    emptyMap: string;
     marker: (country: string, count: number) => string;
   }
 > = {
@@ -57,6 +59,8 @@ const labels: Record<
     mapHelp: "Markers group festivals by country. Open a marker to choose a festival.",
     mapLabel: "Map of Europe with festival markers",
     europe: "EUROPE",
+    places: "Festivals by country (list)",
+    emptyMap: "No festivals to list.",
     marker: (country, count) => `${country}: ${count} festivals`,
   },
   de: {
@@ -87,6 +91,8 @@ const labels: Record<
       "Die Markierungen gruppieren Festivals nach Ländern. Öffne eine Markierung, um ein Festival auszuwählen.",
     mapLabel: "Europakarte mit Festival-Markierungen",
     europe: "EUROPA",
+    places: "Festivals nach Land (Liste)",
+    emptyMap: "Keine Festivals vorhanden.",
     marker: (country, count) => `${country}: ${count} Festivals`,
   },
   ru: {
@@ -116,6 +122,8 @@ const labels: Record<
     mapHelp: "Метки объединяют фестивали по странам. Откройте метку, чтобы выбрать фестиваль.",
     mapLabel: "Карта Европы с метками фестивалей",
     europe: "ЕВРОПА",
+    places: "Фестивали по странам (список)",
+    emptyMap: "Фестивалей нет.",
     marker: (country, count) => `${country}: фестивалей — ${count}`,
   },
 };
@@ -142,6 +150,22 @@ const POINTS: Record<string, [number, number]> = {
 export function FestivalViews({ festivals }: { festivals: Festival[] }) {
   const { language, locale } = useLanguage();
   const t = labels[language];
+  const mapId = useId();
+  const [openMarker, setOpenMarker] = useState<string>();
+  const mapGroups = useMemo(() => {
+    const countries = new Intl.DisplayNames([locale], { type: "region", fallback: "none" });
+    const groups = new Map<string, { country: string; items: Festival[] }>();
+    for (const festival of festivals) {
+      const { country, countryCode } = festival;
+      const label = /^[A-Z]{2}$/.test(countryCode)
+        ? (countries.of(countryCode) ?? country)
+        : country;
+      const group = groups.get(countryCode) ?? { country: label, items: [] };
+      group.items.push(festival);
+      groups.set(countryCode, group);
+    }
+    return [...groups].sort(([, a], [, b]) => a.country.localeCompare(b.country, locale));
+  }, [festivals, locale]);
   const dated = useMemo(
     () =>
       festivals
@@ -170,7 +194,7 @@ export function FestivalViews({ festivals }: { festivals: Festival[] }) {
             <button onClick={() => setSelectedMonth((value) => value - 1)} aria-label={t.previous}>
               ←
             </button>
-            <strong>
+            <strong role="status" aria-live="polite" aria-atomic="true">
               {t.months[month]} {year}
             </strong>
             <button onClick={() => setSelectedMonth((value) => value + 1)} aria-label={t.next}>
@@ -214,34 +238,78 @@ export function FestivalViews({ festivals }: { festivals: Festival[] }) {
           </div>
           <p>{t.mapHelp}</p>
         </div>
-        <div className="europeMap" role="img" aria-label={t.mapLabel}>
-          <div className="mapLand" aria-hidden="true">
-            {t.europe}
-          </div>
-          {Object.entries(POINTS).map(([code, [left, top]]) => {
-            const items = festivals.filter((f) => f.countryCode === code && f.city);
-            return items.length ? (
-              <details
-                className="mapMarker"
-                style={{ left: `${left}%`, top: `${top}%` }}
-                key={code}
-              >
-                <summary aria-label={t.marker(items[0].country, items.length)}>
-                  {items.length}
-                  <span>{code}</span>
-                </summary>
-                <div>
-                  {items.map((f) => (
-                    <Link href={`/festivals/${f.slug}/`} key={f.slug}>
-                      <strong>{f.name}</strong>
-                      <small>{f.city}</small>
-                    </Link>
-                  ))}
+        {mapGroups.some(([code, { items }]) => POINTS[code] && items.some(({ city }) => city)) && (
+          <div className="europeMap" role="group" aria-label={t.mapLabel}>
+            <div className="mapLand" aria-hidden="true">
+              {t.europe}
+            </div>
+            {mapGroups.map(([code, { country, items }]) => {
+              const point = POINTS[code];
+              const mapped = items.filter(({ city }) => city);
+              if (!point || !mapped.length) return null;
+              const [left, top] = point;
+              const isOpen = openMarker === code;
+              const panelId = `${mapId}-${code}`;
+              return (
+                <div
+                  className="mapMarker"
+                  data-open={isOpen}
+                  style={{ left: `${left}%`, top: `${top}%` }}
+                  key={code}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Escape" || !isOpen) return;
+                    event.preventDefault();
+                    setOpenMarker(undefined);
+                    event.currentTarget.querySelector("button")?.focus();
+                  }}
+                >
+                  <button
+                    type="button"
+                    aria-label={t.marker(country, mapped.length)}
+                    aria-expanded={isOpen}
+                    aria-controls={panelId}
+                    onClick={() => setOpenMarker(isOpen ? undefined : code)}
+                  >
+                    {mapped.length}
+                    <span>{code}</span>
+                  </button>
+                  <div id={panelId} hidden={!isOpen}>
+                    {mapped.map((f) => (
+                      <Link href={`/festivals/${f.slug}/`} key={f.slug}>
+                        <strong>{f.name}</strong>
+                        <small>{f.city}</small>
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-              </details>
-            ) : null;
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
+        <details className="mapTextList">
+          <summary>{t.places}</summary>
+          {mapGroups.length ? (
+            <ul>
+              {mapGroups.map(([code, { country, items }]) => (
+                <li key={code}>
+                  <strong>{country}</strong>
+                  <ul>
+                    {items.map((f) => (
+                      <li key={f.slug}>
+                        <Link href={`/festivals/${f.slug}/`}>
+                          {f.name}
+                          {f.city ? ` · ${f.city}` : ""}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>{t.emptyMap}</p>
+          )}
+        </details>
       </section>
     </>
   );
