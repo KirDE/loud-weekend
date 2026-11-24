@@ -105,6 +105,34 @@ test("database reads do not retain a process-lifetime catalogue snapshot", async
   }
 });
 
+test("cancelled artists do not count as announced in the public catalogue", async () => {
+  const entry = await db.lineupEntry.findFirstOrThrow({
+    where: { edition: { recordState: "CURRENT", festival: { slug: "synthetic-fest" } } },
+  });
+  const playlist = await db.festivalPlaylist.create({
+    data: {
+      editionId: entry.editionId,
+      provider: "spotify",
+      url: "https://open.spotify.com/playlist/synthetic",
+    },
+  });
+  await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "CANCELLED" } });
+  try {
+    const snapshot = await readCatalog({ database: db });
+    assert.deepEqual(snapshot.festivals[0].headliners, []);
+    assert.deepEqual(
+      snapshot.editions.find(({ recordState }) => recordState === "current")?.headliners,
+      [],
+    );
+    assert.deepEqual(snapshot.discoveryLineups.artistSlugsByFestival["synthetic-fest"], []);
+    assert.deepEqual(snapshot.artists, []);
+    assert.equal(snapshot.playlists["synthetic-fest"].artists, 0);
+  } finally {
+    await db.festivalPlaylist.delete({ where: { id: playlist.id } });
+    await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "ANNOUNCED" } });
+  }
+});
+
 test("public freshness separates edition-bound checks, publication and source failures", async () => {
   await clearCatalog();
   const slug = `freshness-${randomUUID()}`;
@@ -352,6 +380,25 @@ test("public freshness separates edition-bound checks, publication and source fa
     });
     await db.festivalEdition.update({ where: { id: current.id }, data: { snapshotAt: ago(-72) } });
     assert.deepEqual(await sitemapDates(), dates, "future evidence may not change the sitemap");
+
+    const arrival = await db.catalogPublication.create({
+      data: {
+        source: "INGESTION",
+        sourceId: `${slug}-reviewed-arrival`,
+        festivalSlug: slug,
+        editionYear: current.year,
+        actorLabel: "fixture",
+        fields: ["arrival"],
+        createdAt: new Date(),
+      },
+    });
+    const arrivalDates = await sitemapDates();
+    const arrivalDate = arrival.createdAt.toISOString();
+    assert.equal(arrivalDates[`/festivals/${slug}/`], arrivalDate);
+    assert.equal(arrivalDates[`/festivals/${slug}/2027/`], arrivalDate);
+    for (const path of ["/archive/", "/editions/2027/", "/countries/de/", "/months/06/"]) {
+      assert.equal(arrivalDates[path], dates[path], path);
+    }
 
     const provenanceUrl = "https://official.example.test/ticket-update";
     const reviewedTicket = await db.$transaction((tx) =>

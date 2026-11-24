@@ -23,9 +23,11 @@ export type Festival = {
   dateLabel?: string;
   headliners: string[];
   lineup: string[];
+  finalLineup?: true;
   officialUrl: string;
   ticketsUrl?: string;
   playlistUrl?: string;
+  reviewedPlaylistLinks?: { spotify?: string; youtube_music?: string };
   freshness?: EditionFreshness;
   sourceDeprecated?: boolean;
   sourceDeprecatedAt?: string;
@@ -33,7 +35,14 @@ export type Festival = {
   editionYear?: number;
   completeness?: "complete" | "partial" | "tba";
   ticketStatus:
-    "available" | "low" | "not_on_sale" | "sold_out" | "sales_ended" | "unavailable" | "unknown";
+    | "available"
+    | "low"
+    | "not_on_sale"
+    | "sold_out"
+    | "sales_ended"
+    | "free"
+    | "unavailable"
+    | "unknown";
   updatedAt: string;
   genres: string[];
   coordinates?: { latitude: number; longitude: number };

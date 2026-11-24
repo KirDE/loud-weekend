@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { supportedLanguages } from "@/lib/catalog/public";
 import { DatabaseCatalogRepository } from "@/lib/catalog/repository";
 import { editionKey, latestDate } from "@/lib/catalog/freshness";
 import { readSitemapPublications } from "@/lib/catalog/sitemap-publications";
@@ -91,5 +92,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   add("/archive/", latestDate(archiveDates));
   add("/submit/");
   for (const topic of guideTopics) addLocalized(`/guides/${topic}/`);
+  for (const language of supportedLanguages) {
+    add(`/${language}/about/`);
+    add(`/${language}/faq/`);
+  }
   return [...entries.values()];
 }

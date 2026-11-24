@@ -407,6 +407,10 @@
   margin-top: 1rem;
 }
 
+.siteInformation p {
+  line-height: 1.6;
+}
+
 .plannerSection details p {
   max-width: 54rem;
 }
@@ -619,6 +623,14 @@
   background: var(--paper);
   border: 2px solid var(--ink);
   box-shadow: 7px 7px 0 #17171244;
+}
+
+.personalCalendar a:where(:not(.primaryButton)) {
+  text-decoration: underline;
+}
+
+.siteInformation a {
+  text-decoration: underline;
 }
 
 .mapMarker > div a {
@@ -1457,6 +1469,18 @@ main {
   background-image: radial-gradient(circle at 90% 20%, #574d10, transparent 30%);
 }
 
+.editionDetailBody {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.editionDetailHero .status {
+  display: inline-block;
+  max-width: 100%;
+  white-space: normal;
+}
+
 .detailHero h1 {
   font-size: clamp(45px, 7vw, 96px);
   max-width: 920px;
@@ -1723,6 +1747,29 @@ main {
   border: 2px solid #9b2f1d;
   color: #7c2113;
   font-weight: 800;
+}
+
+.timetableFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-block: 12px;
+}
+
+.timetableFilters label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.timetableFilters select {
+  max-width: 100%;
+  min-width: 0;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
 }
 
 .timetableDay {
@@ -2170,10 +2217,6 @@ main {
 
   .siteHeader .accountMenu {
     margin-left: auto;
-  }
-
-  .siteHeader nav a:last-child {
-    display: none;
   }
 
   .hero {
@@ -3266,6 +3309,10 @@ select:not(:disabled) {
   cursor: pointer;
 }
 
+.discoveryOrder select {
+  max-width: 100%;
+}
+
 select:not(:disabled):is(:hover, :focus-visible) {
   background: var(--acid);
   color: var(--solid);
@@ -3275,6 +3322,14 @@ select option,
 select optgroup {
   background: var(--paper);
   color: var(--ink);
+}
+
+.discoveryOrder label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 summary:is(:hover, :focus-visible),
@@ -3414,4 +3469,114 @@ summary:focus-visible {
 
 .plannerReset [role="status"] {
   max-width: 28rem;
+}
+
+.siteFooterLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.siteInformation {
+  max-width: 760px;
+  margin-inline: auto;
+  padding: 36px clamp(20px, 6vw, 44px);
+}
+
+.siteInformation h1 {
+  margin-block: 0 12px;
+}
+
+.siteInformation details {
+  border-block-start: 1px solid var(--line);
+  padding-block: 12px;
+}
+
+.siteInformation summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding-block: 8px;
+}
+
+.siteInformation details:last-of-type {
+  border-block-end: 1px solid var(--line);
+  margin-block-end: 20px;
+}
+
+.discoveryDates {
+  grid-column: 1 / -1;
+  flex: 1 1 100%;
+  color: white;
+}
+
+.discoveryDates summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.discoveryDates fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.filterBar .discoveryDates label {
+  flex: 1 1 140px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.discoveryDates input:not([type="checkbox"]) {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  padding: 8px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.filterBar .discoveryDates label.discoveryWeekend {
+  display: flex;
+  flex: 1 1 200px;
+  align-items: center;
+}
+
+.filterBar .discoveryDates p {
+  font-size: 13px;
+  margin: 6px 0;
+}
+
+.discoveryDates .dateShareFallback {
+  display: block;
+  margin-top: 6px;
+}
+
+.discoveryDates [role="status"] {
+  margin-inline-start: 6px;
+}
+
+.discoveryOrder {
+  display: flex;
+  justify-content: flex-end;
+  margin-block: 12px 0;
+}
+
+.personalCalendar li {
+  margin-block: 8px;
+}
+
+.personalCalendarConflicts {
+  margin-block: 16px;
+  padding: 12px 16px;
+  border-inline-start: 4px solid var(--orange);
+}
+
+.personalCalendarConflicts h3 {
+  margin: 0;
 }

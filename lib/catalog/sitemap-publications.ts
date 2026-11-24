@@ -25,14 +25,14 @@ export async function readSitemapPublications(
       MAX("createdAt") FILTER (WHERE fields && ARRAY[
         'name', 'city', 'country', 'countryCode', 'genres', 'officialUrl',
         'startDate', 'endDate', 'dateLabel', 'status', 'completeness', 'ticketStatus',
-        'ticketsUrl', 'lineup', 'headliners', 'lineupDays', 'timetable', 'recordState'
+        'ticketsUrl', 'lineup', 'headliners', 'lineupDays', 'timetable', 'recordState', 'arrival'
       ]) AS festival,
       MAX("createdAt") FILTER (WHERE fields && ARRAY[
         'city', 'country', 'countryCode', 'genres', 'startDate', 'endDate', 'status',
         'ticketStatus', 'ticketsUrl', 'lineup', 'headliners', 'recordState'
       ]) AS directory,
       MAX("createdAt") FILTER (WHERE fields && ARRAY[
-        'startDate', 'endDate', 'status', 'completeness', 'lineup', 'headliners', 'recordState'
+        'startDate', 'endDate', 'status', 'completeness', 'lineup', 'headliners', 'recordState', 'arrival'
       ] OR (
         source = 'ADMIN'
         AND evidence->>'reviewPolicy' = 'openclaw-import-conflicts-v1'

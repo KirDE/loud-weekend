@@ -44,6 +44,7 @@ export function festivalMusicEvent(item: Festival) {
     },
     url: `${SITE_ORIGIN}/festivals/${item.slug}/`,
     sameAs: item.officialUrl,
+    ...(item.ticketStatus === "free" ? { isAccessibleForFree: true } : {}),
     ...(item.ticketsUrl && availability
       ? { offers: { "@type": "Offer", url: item.ticketsUrl, availability } }
       : {}),

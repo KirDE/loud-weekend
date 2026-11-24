@@ -64,6 +64,14 @@ for (const locale of ["en", "de", "ru"]) {
         month: "all",
         announcedOnly: false,
         ticketsOnly: false,
+        genre: "all",
+        origin: "berlin",
+        maxDistance: "all",
+        dateFrom: "",
+        dateTo: "",
+        weekendOnly: false,
+        maxDays: "all",
+        sort: "date",
       });
     const state = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("festival-radar-planner-v1")),
