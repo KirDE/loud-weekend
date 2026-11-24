@@ -65,10 +65,8 @@ export type FestivalCandidate = Partial<
   artistListMode?: "additive";
   /** Explicit producer provenance; persisted with normalized candidate evidence. */
   ticketSupplement?: { sourceUrl: string; ticketUrl: string; editionYear: number };
-  /** Edition observations from the strategy that supplied each merged ticket field. */
-  ticketEditionYears?: Partial<Record<"ticketsUrl" | "ticketStatus", number[]>>;
-  /** Edition observations from the strategy that supplied each merged roster field. */
-  rosterEditionYears?: Partial<Record<"lineup" | "headliners", number[]>>;
+  /** Edition observations from the strategy that supplied each merged proposal field. */
+  fieldEditionYears?: Partial<Record<Exclude<FieldEvidence["field"], "timetable">, number[]>>;
   timetable?: { date: string; stage: string; start: string; artist: string }[];
   schemaVersion: typeof INGESTION_SCHEMA_VERSION;
   festivalSlug: string;

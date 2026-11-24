@@ -31,7 +31,7 @@ const missingFormatWarnings = new Set([
   "HTML fallback did not find explicitly marked festival fields",
 ]);
 
-const supportedFields: FieldEvidence["field"][] = [
+const supportedFields: Exclude<FieldEvidence["field"], "timetable">[] = [
   "startDate",
   "endDate",
   "city",
@@ -206,12 +206,8 @@ function extractConfiguredCandidate(
       if (merged[field] !== undefined || candidate[field] === undefined) continue;
       Object.assign(merged, { [field]: candidate[field] });
       suppliedFields.add(field);
-      if (field === "ticketsUrl" || field === "ticketStatus") {
-        (merged.ticketEditionYears ??= {})[field] = candidate.observedEditionYears;
-      }
-      if (field === "lineup" || field === "headliners") {
-        (merged.rosterEditionYears ??= {})[field] = candidate.observedEditionYears;
-      }
+      (merged.fieldEditionYears ??= {})[field] =
+        candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
     }
     for (const evidence of candidate.evidence) {
       if (suppliedFields.delete(evidence.field)) merged.evidence.push(evidence);
@@ -281,7 +277,7 @@ export function extractFestivalCandidate(
   // A failed current ticket check must not publish an older stock assertion
   // from another format as if the current inventory had been verified.
   delete candidate.ticketStatus;
-  if (candidate.ticketEditionYears) delete candidate.ticketEditionYears.ticketStatus;
+  if (candidate.fieldEditionYears) delete candidate.fieldEditionYears.ticketStatus;
   candidate.evidence = candidate.evidence.filter((evidence) => evidence.field !== "ticketStatus");
   if (ticket.warning) candidate.warnings.push(ticket.warning);
   if (ticket.status) {
@@ -292,7 +288,13 @@ export function extractFestivalCandidate(
     };
     candidate.ticketStatus = ticket.status;
     candidate.ticketsUrl = ticket.ticketsUrl ?? envelope.ticket.url;
-    candidate.ticketEditionYears = {
+    candidate.fieldEditionYears = {
+      ...Object.fromEntries(
+        supportedFields.map((field) => [
+          field,
+          candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears,
+        ]),
+      ),
       ticketStatus: [source.editionYear],
       ticketsUrl: [source.editionYear],
     };

@@ -560,35 +560,24 @@ async function refreshSource(
     if (candidate.observedEditionYears.some((year) => year !== active.editionYear))
       throw new Error("Official source returned another edition");
     const reviewReasons = [...result.reviewReasons];
-    const fields = [
-      "startDate",
-      "endDate",
-      "city",
-      "headliners",
-      "lineup",
-      "ticketsUrl",
-      "ticketStatus",
-      "status",
-    ] as const;
-    const proposals = fields.flatMap((field) => {
+    const fields = {
+      startDate: "Start date",
+      endDate: "End date",
+      city: "City",
+      headliners: "Headliners",
+      lineup: "Lineup",
+      ticketsUrl: "Ticket URL",
+      ticketStatus: "Ticket availability",
+      status: "Status",
+    } as const;
+    const proposals = (Object.keys(fields) as (keyof typeof fields)[]).flatMap((field) => {
       const differences = result.changes.filter((item) => item.field === field);
       const evidence = candidate.evidence.filter((item) => item.field === field);
       if (!differences.length || !evidence.length) return [];
-      if (field === "ticketsUrl" || field === "ticketStatus") {
-        const ticketYears = candidate.ticketEditionYears?.[field] ?? candidate.observedEditionYears;
-        if (!ticketYears.includes(active.editionYear)) {
-          const detail = field === "ticketsUrl" ? "Ticket URL" : "Ticket availability";
-          reviewReasons.push(`${detail} could not be verified for the selected edition.`);
-          return [];
-        }
-      }
-      if (field === "lineup" || field === "headliners") {
-        const rosterYears = candidate.rosterEditionYears?.[field] ?? candidate.observedEditionYears;
-        if (!rosterYears.includes(active.editionYear)) {
-          const detail = field === "lineup" ? "Lineup" : "Headliners";
-          reviewReasons.push(`${detail} could not be verified for the selected edition.`);
-          return [];
-        }
+      const observedYears = candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
+      if (!observedYears.includes(active.editionYear)) {
+        reviewReasons.push(`${fields[field]} could not be verified for the selected edition.`);
+        return [];
       }
       const afterValue =
         field === "lineup" || field === "headliners"

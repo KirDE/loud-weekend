@@ -23,6 +23,7 @@ let primaryOffersWithoutEdition = false;
 let primaryHasDatedFallback = false;
 let observedTicketsUrl = ticketsUrl;
 let includePerformer = false;
+let observedCity = "Wacken Preview";
 const performer = "Example Metal Band";
 const replacementTicketsUrl = "https://tickets.example.test/replacement";
 let originalStartDate = "2027-07-28";
@@ -45,7 +46,7 @@ const sourceServer = createServer((request, response) => {
     startDate,
     ...(includePerformer && { performer: [{ "@type": "MusicGroup", name: performer }] }),
     endDate: "2027-07-31",
-    location: { "@type": "Place", address: { addressLocality: "Wacken Preview" } },
+    location: { "@type": "Place", address: { addressLocality: observedCity } },
     offers: {
       "@type": "Offer",
       url: observedTicketsUrl,
@@ -1135,6 +1136,42 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     /Example Metal Band/,
   );
   includePerformer = false;
+
+  // A date from the HTML parser does not date a different parser's venue.
+  primaryOffersWithoutEdition = true;
+  observedCity = "Example Festival City";
+  const unscopedCity = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(unscopedCity.status, 201);
+  const unscopedCityRun = await unscopedCity.json();
+  assert.equal(unscopedCityRun.queued, 0);
+  assert.equal(unscopedCityRun.status, "PARTIAL");
+  const cityLog = await (
+    await admin.json(`/api/admin/parser-runs/${unscopedCityRun.id}/log`)
+  ).json();
+  assert.ok(
+    cityLog.log.some(({ reviewReasons }) =>
+      reviewReasons?.includes("City could not be verified for the selected edition."),
+    ),
+  );
+
+  primaryOffersWithoutEdition = false;
+  const scopedCity = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(scopedCity.status, 201);
+  const scopedCityRun = await scopedCity.json();
+  assert.equal(scopedCityRun.queued, 1);
+  const scopedCityChange = await db.adminChange.findFirstOrThrow({
+    where: { parserRunId: scopedCityRun.id, field: "city" },
+  });
+  assert.equal(scopedCityChange.afterValue, observedCity);
+  assert.equal(
+    (await admin.json(`/api/admin/changes/${scopedCityChange.id}`, "POST", { decision: "approve" }))
+      .status,
+    200,
+  );
+  assert.equal(
+    (await db.festival.findUniqueOrThrow({ where: { slug: "wacken-open-air" } })).city,
+    observedCity,
+  );
 
   primaryFails = true;
   assert.equal((await admin.json(refreshPath, "POST")).status, 502);
