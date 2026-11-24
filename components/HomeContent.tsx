@@ -1,11 +1,21 @@
 "use client";
 
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
+import type { CatalogFreshness } from "@/lib/domain/freshness";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { useLanguage } from "./LanguageProvider";
 import { hasAnnouncedLineup } from "@/lib/festival-lineup";
 
-export function HomeContent({ festivals }: { festivals: Festival[] }) {
+export function HomeContent({
+  festivals,
+  freshness,
+  discoveryLineups,
+}: {
+  festivals: Festival[];
+  freshness: CatalogFreshness;
+  discoveryLineups?: DiscoveryLineups;
+}) {
   const { t } = useLanguage();
   const announced = festivals.filter(hasAnnouncedLineup).length;
   const countries = new Set(festivals.map((item) => item.countryCode)).size;
@@ -31,7 +41,11 @@ export function HomeContent({ festivals }: { festivals: Festival[] }) {
           </span>
         </div>
       </section>
-      <FestivalExplorer festivals={festivals} />
+      <FestivalExplorer
+        festivals={festivals}
+        freshness={freshness}
+        discoveryLineups={discoveryLineups}
+      />
     </>
   );
 }
