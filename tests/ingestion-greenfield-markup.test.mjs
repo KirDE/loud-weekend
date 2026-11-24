@@ -40,25 +40,50 @@ test("Greenfield extracts the edition-matched 2027 lineup and billing tiers", ()
   assert.deepEqual(candidate.observedEditionYears, [2027]);
   assert.deepEqual(candidate.headliners, ["Parkway Drive", "Evanescence", "Billy Talent"]);
   assert.deepEqual(candidate.lineup, [
-    "Lorna Shore", "Dropkick Murphys", "Arch Enemy", "Feine Sahne Fischfilet",
-    "Enter Shikari", "Kreator", "Feuerschwanz", "Beartooth", "The Interrupters",
-    "Eisbrecher", "Sondaschule", "Fit for a King", "Danko Jones", "The Amity Affliction",
-    "Holding Absence", "Speed", "Mittel Alta", "Hot Milk",
+    "Lorna Shore",
+    "Dropkick Murphys",
+    "Arch Enemy",
+    "Feine Sahne Fischfilet",
+    "Enter Shikari",
+    "Kreator",
+    "Feuerschwanz",
+    "Beartooth",
+    "The Interrupters",
+    "Eisbrecher",
+    "Sondaschule",
+    "Fit for a King",
+    "Danko Jones",
+    "The Amity Affliction",
+    "Holding Absence",
+    "Speed",
+    "Mittel Alta",
+    "Hot Milk",
   ]);
   assert.equal(candidate.status, "partial");
   assert.deepEqual(candidate.warnings, []);
-  assert.deepEqual(candidate.evidence.map(({ field }) => field), ["startDate", "endDate", "headliners", "lineup", "status"]);
+  assert.deepEqual(
+    candidate.evidence.map(({ field }) => field),
+    ["startDate", "endDate", "headliners", "lineup", "status"],
+  );
 });
 
 test("Greenfield fails closed without both official billing tiers", () => {
   const source = getFestivalSource("greenfield");
-  const candidate = extractFestivalCandidate(markup.replaceAll("h1", "h2"), source, "2026-09-29T11:11:00Z");
+  const candidate = extractFestivalCandidate(
+    markup.replaceAll("h1", "h2"),
+    source,
+    "2026-09-29T11:11:00Z",
+  );
   assert.deepEqual(candidate.evidence, []);
   assert.match(candidate.warnings[0], /found no trustworthy fields/);
 });
 
 test("Greenfield records a mismatched edition year for publication review", () => {
   const source = getFestivalSource("greenfield");
-  const candidate = extractFestivalCandidate(markup.replaceAll("2027", "2026"), source, "2026-09-29T11:11:00Z");
+  const candidate = extractFestivalCandidate(
+    markup.replaceAll("2027", "2026"),
+    source,
+    "2026-09-29T11:11:00Z",
+  );
   assert.deepEqual(candidate.observedEditionYears, [2026]);
 });

@@ -8,13 +8,26 @@ import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
 import { fetchSource } from "../lib/ingestion/fetch.ts";
 import { evaluateCandidate } from "../lib/ingestion/policy.ts";
 import { dueFestivalSources } from "../lib/ingestion/schedule.ts";
-import { notificationEventsForChanges, uniqueNotificationEvents } from "../lib/ingestion/notification-events.ts";
+import {
+  notificationEventsForChanges,
+  uniqueNotificationEvents,
+} from "../lib/ingestion/notification-events.ts";
 import { db } from "../lib/db.ts";
 import { publishIngestionResult } from "../lib/catalog/publication.ts";
 import { readCatalog } from "../lib/catalog/repository.ts";
-import { claimDueSources, completeSourceLease, releaseOwnedSourceLease, startSourceLeaseRenewal } from "../lib/ingestion/lease.ts";
+import {
+  claimDueSources,
+  completeSourceLease,
+  releaseOwnedSourceLease,
+  startSourceLeaseRenewal,
+} from "../lib/ingestion/lease.ts";
 import { randomUUID } from "node:crypto";
-import { createIngestionRun, finishIngestionRun, ingestionQueries, persistAttempt } from "../lib/ingestion/repository.ts";
+import {
+  createIngestionRun,
+  finishIngestionRun,
+  ingestionQueries,
+  persistAttempt,
+} from "../lib/ingestion/repository.ts";
 
 const args = new Set(process.argv.slice(2));
 const slugArg = process.argv.find((value) => value.startsWith("--slug="))?.slice(7);
@@ -25,31 +38,71 @@ const publish = args.has("--publish");
 const force = args.has("--force");
 // Explicit opt-in only: the scheduler and manual --due path remain unchanged.
 const dbDue = args.has("--db-due");
-if (dbDue && (!process.env.DATABASE_URL || !publish || force || slugArg || args.has("--due"))) throw new Error("--db-due requires database and --publish, without --force, --due or --slug");
-const maxFetchErrorsArg = process.argv.find((value) => value.startsWith("--max-fetch-errors="))?.slice(19) ?? process.env.INGESTION_MAX_FETCH_ERRORS;
-const failureThresholdArg = process.argv.find((value) => value.startsWith("--failure-threshold="))?.slice(20) ?? process.env.INGESTION_FAILURE_THRESHOLD ?? "3";
+if (dbDue && (!process.env.DATABASE_URL || !publish || force || slugArg || args.has("--due")))
+  throw new Error("--db-due requires database and --publish, without --force, --due or --slug");
+const maxFetchErrorsArg =
+  process.argv.find((value) => value.startsWith("--max-fetch-errors="))?.slice(19) ??
+  process.env.INGESTION_MAX_FETCH_ERRORS;
+const failureThresholdArg =
+  process.argv.find((value) => value.startsWith("--failure-threshold="))?.slice(20) ??
+  process.env.INGESTION_FAILURE_THRESHOLD ??
+  "3";
 const failureThreshold = Number(failureThresholdArg);
-if (!Number.isInteger(failureThreshold) || failureThreshold < 1) throw new Error(`Invalid consecutive failure threshold: ${failureThresholdArg}`);
+if (!Number.isInteger(failureThreshold) || failureThreshold < 1)
+  throw new Error(`Invalid consecutive failure threshold: ${failureThresholdArg}`);
 const persistenceEnabled = Boolean(process.env.DATABASE_URL);
 // Sources and catalogue always come from the database, including --fixture HTML runs.
 if (!persistenceEnabled) throw new Error("Database-backed sources require DATABASE_URL");
 const runtimeFestivals = (await readCatalog({ database: db })).festivals;
 // Include archived artists too: aliases must not shadow a non-current identity.
-const aliasArtists = await db.artist.findMany({ select: { id: true, slug: true, name: true, aliases: true } });
+const aliasArtists = await db.artist.findMany({
+  select: { id: true, slug: true, name: true, aliases: true },
+});
 const configuredSources = dbDue ? [] : await listConfiguredSources(db);
-if (persistenceEnabled && !dbDue && configuredSources.length === 0) throw new Error("No configured database sources");
+if (persistenceEnabled && !dbDue && configuredSources.length === 0)
+  throw new Error("No configured database sources");
 const dueOnly = args.has("--due") && !force;
-const persistedStates = dueOnly && persistenceEnabled ? await ingestionQueries.sourceStates(db) : [];
-const lastSuccessfulChecks = new Map(persistedStates.map((state) => [state.festivalSlug, state.lastSuccessfulCheck?.toISOString()]));
-const hydratedSources = configuredSources.map((source) => ({ ...source, lastSuccessfulCheck: lastSuccessfulChecks.get(source.festivalSlug) ?? source.lastSuccessfulCheck }));
-const eligible = dueOnly ? dueFestivalSources(hydratedSources) : hydratedSources.filter((source) => source.enabled);
+const persistedStates =
+  dueOnly && persistenceEnabled ? await ingestionQueries.sourceStates(db) : [];
+const lastSuccessfulChecks = new Map(
+  persistedStates.map((state) => [state.festivalSlug, state.lastSuccessfulCheck?.toISOString()]),
+);
+const hydratedSources = configuredSources.map((source) => ({
+  ...source,
+  lastSuccessfulCheck: lastSuccessfulChecks.get(source.festivalSlug) ?? source.lastSuccessfulCheck,
+}));
+const eligible = dueOnly
+  ? dueFestivalSources(hydratedSources)
+  : hydratedSources.filter((source) => source.enabled);
 let selected = eligible.filter((source) => !slugArg || source.festivalSlug === slugArg);
-const notificationEndpoint = !dbDue && (process.env.NOTIFICATION_EVENTS_URL || (process.env.APP_URL ? new URL("/api/notifications/events/", process.env.APP_URL).toString() : undefined));
-const notificationDeliveryEnabled = Boolean(notificationEndpoint || process.env.INTERNAL_API_SECRET || process.env.NOTIFICATION_DELIVERY_REQUIRED === "true");
-if (publish && !dbDue && notificationDeliveryEnabled && (!notificationEndpoint || !process.env.INTERNAL_API_SECRET)) throw new Error("Published ingestion requires APP_URL (or NOTIFICATION_EVENTS_URL) and INTERNAL_API_SECRET");
+const notificationEndpoint =
+  !dbDue &&
+  (process.env.NOTIFICATION_EVENTS_URL ||
+    (process.env.APP_URL
+      ? new URL("/api/notifications/events/", process.env.APP_URL).toString()
+      : undefined));
+const notificationDeliveryEnabled = Boolean(
+  notificationEndpoint ||
+  process.env.INTERNAL_API_SECRET ||
+  process.env.NOTIFICATION_DELIVERY_REQUIRED === "true",
+);
+if (
+  publish &&
+  !dbDue &&
+  notificationDeliveryEnabled &&
+  (!notificationEndpoint || !process.env.INTERNAL_API_SECRET)
+)
+  throw new Error(
+    "Published ingestion requires APP_URL (or NOTIFICATION_EVENTS_URL) and INTERNAL_API_SECRET",
+  );
 // Reject malformed controls before acquiring a lease; no invalid invocation
 // should strand a claimed source until its TTL expires.
-if (dbDue && maxFetchErrorsArg !== undefined && (!Number.isInteger(Number(maxFetchErrorsArg)) || Number(maxFetchErrorsArg) < 0)) throw new Error("Invalid maximum fetch error count");
+if (
+  dbDue &&
+  maxFetchErrorsArg !== undefined &&
+  (!Number.isInteger(Number(maxFetchErrorsArg)) || Number(maxFetchErrorsArg) < 0)
+)
+  throw new Error("Invalid maximum fetch error count");
 if (dbDue) await mkdir(outputDirectory, { recursive: true });
 // On failed work, acknowledge only a still-current revision. If completion
 // returns false OR throws, release only our owner without touching schedule or counters.
@@ -57,8 +110,14 @@ if (dbDue) await mkdir(outputDirectory, { recursive: true });
 async function recoverSourceLease(lease, outcome) {
   try {
     if (await completeSourceLease(db, { ...lease, now: new Date(), outcome })) return;
-  } catch { /* completion may fail while a release-only write still succeeds */ }
-  try { await releaseOwnedSourceLease(db, lease); } catch { /* retain the original failure */ }
+  } catch {
+    /* completion may fail while a release-only write still succeeds */
+  }
+  try {
+    await releaseOwnedSourceLease(db, lease);
+  } catch {
+    /* retain the original failure */
+  }
 }
 
 let sourceLease = null;
@@ -83,28 +142,75 @@ if (dbDue) {
     leaseRenewal = startSourceLeaseRenewal(db, sourceLease);
     // Resolve after claim to avoid parsing a stale pre-claim configuration.
     const row = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceLease.id } });
-    if (row.updatedAt.getTime() !== sourceLease.updatedAt.getTime()) throw new Error("Claimed source was edited after claim");
-    selected = (await listConfiguredSources(db, row.festivalSlug)).filter((source) => source.id === row.id);
+    if (row.updatedAt.getTime() !== sourceLease.updatedAt.getTime())
+      throw new Error("Claimed source was edited after claim");
+    selected = (await listConfiguredSources(db, row.festivalSlug)).filter(
+      (source) => source.id === row.id,
+    );
     if (selected.length !== 1) throw new Error("Claimed source is not configured");
-    run = await createIngestionRun(db, { trigger: process.env.GITHUB_EVENT_NAME === "schedule" ? "SCHEDULE" : "MANUAL", sourceCommit: process.env.GITHUB_SHA || "local", totalSources: selected.length });
+    run = await createIngestionRun(db, {
+      trigger: process.env.GITHUB_EVENT_NAME === "schedule" ? "SCHEDULE" : "MANUAL",
+      sourceCommit: process.env.GITHUB_SHA || "local",
+      totalSources: selected.length,
+    });
   } catch (error) {
     console.error("db_due_failure_stage=source_setup");
-    try { await leaseRenewal?.stop(); } catch { /* retain the original setup error */ }
     try {
-      if (run) await db.ingestionRun.update({ where: { id: run.id }, data: { status: "FAILED", endedAt: new Date(), failed: 1 } });
-    } catch { /* retain the original setup error */ }
+      await leaseRenewal?.stop();
+    } catch {
+      /* retain the original setup error */
+    }
+    try {
+      if (run)
+        await db.ingestionRun.update({
+          where: { id: run.id },
+          data: { status: "FAILED", endedAt: new Date(), failed: 1 },
+        });
+    } catch {
+      /* retain the original setup error */
+    }
     await recoverSourceLease(sourceLease, "pre_attempt_error");
     throw error;
   }
 }
-if (selected.length === 0) throw new Error(slugArg ? `Unknown or disabled festival source: ${slugArg}` : "No enabled festival sources");
-const maxFetchErrors = maxFetchErrorsArg === undefined ? Math.max(0, selected.length - 1) : Number(maxFetchErrorsArg);
-if (!Number.isInteger(maxFetchErrors) || maxFetchErrors < 0) throw new Error(`Invalid maximum fetch error count: ${maxFetchErrorsArg}`);
+if (selected.length === 0)
+  throw new Error(
+    slugArg ? `Unknown or disabled festival source: ${slugArg}` : "No enabled festival sources",
+  );
+const maxFetchErrors =
+  maxFetchErrorsArg === undefined ? Math.max(0, selected.length - 1) : Number(maxFetchErrorsArg);
+if (!Number.isInteger(maxFetchErrors) || maxFetchErrors < 0)
+  throw new Error(`Invalid maximum fetch error count: ${maxFetchErrorsArg}`);
 
 if (!dbDue) await mkdir(outputDirectory, { recursive: true });
 const trigger = process.env.GITHUB_EVENT_NAME === "schedule" ? "SCHEDULE" : "MANUAL";
-if (!dbDue && persistenceEnabled) run = await createIngestionRun(db, { trigger, sourceCommit: process.env.GITHUB_SHA || "local", totalSources: selected.length });
-const summary = { schemaVersion: 1, ingestionRunId: run?.id ?? null, generatedAt: new Date().toISOString(), dryRun: !publish, totalSources: selected.length, attempted: 0, processed: 0, changed: 0, publishable: 0, published: 0, playlistRefreshRequested: 0, reviewRequired: 0, fetchErrors: 0, escalatedFailures: 0, notificationEvents: 0, maxFetchErrors, failureThreshold, status: "RUNNING", results: [] };
+if (!dbDue && persistenceEnabled)
+  run = await createIngestionRun(db, {
+    trigger,
+    sourceCommit: process.env.GITHUB_SHA || "local",
+    totalSources: selected.length,
+  });
+const summary = {
+  schemaVersion: 1,
+  ingestionRunId: run?.id ?? null,
+  generatedAt: new Date().toISOString(),
+  dryRun: !publish,
+  totalSources: selected.length,
+  attempted: 0,
+  processed: 0,
+  changed: 0,
+  publishable: 0,
+  published: 0,
+  playlistRefreshRequested: 0,
+  reviewRequired: 0,
+  fetchErrors: 0,
+  escalatedFailures: 0,
+  notificationEvents: 0,
+  maxFetchErrors,
+  failureThreshold,
+  status: "RUNNING",
+  results: [],
+};
 
 for (const source of selected) {
   let leaseCompleted = false;
@@ -113,123 +219,258 @@ for (const source of selected) {
   // Fixed labels only; never interpolate source URLs or exception text.
   let failureStage = "source_lookup";
   try {
-  summary.attempted += 1;
-  const current = runtimeFestivals.find(({ slug }) => slug === source.festivalSlug);
-  if (!current) throw new Error(`No current festival for ${source.festivalSlug}`);
-  const fetchedAt = new Date().toISOString();
-  const startedAt = new Date();
-  let response;
-  let html;
-  failureStage = "fetch";
-  try {
-    if (!fixturePath) {
-      const fetched = await fetchSource(source);
-      response = fetched.response;
-      if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`), { httpStatus: response.status, attempts: fetched.attempts });
+    summary.attempted += 1;
+    const current = runtimeFestivals.find(({ slug }) => slug === source.festivalSlug);
+    if (!current) throw new Error(`No current festival for ${source.festivalSlug}`);
+    const fetchedAt = new Date().toISOString();
+    const startedAt = new Date();
+    let response;
+    let html;
+    failureStage = "fetch";
+    try {
+      if (!fixturePath) {
+        const fetched = await fetchSource(source);
+        response = fetched.response;
+        if (!response.ok)
+          throw Object.assign(new Error(`HTTP ${response.status}`), {
+            httpStatus: response.status,
+            attempts: fetched.attempts,
+          });
+      }
+      html = fixturePath
+        ? await readFile(path.resolve(fixturePath), "utf8")
+        : await response.text();
+    } catch (error) {
+      const attempts = Number(error?.attempts) || 1;
+      if (run) {
+        failureStage = "attempt_persistence";
+        await persistAttempt(db, {
+          runId: run.id,
+          festivalSlug: source.festivalSlug,
+          requestedUrl: source.url,
+          httpStatus: Number(error?.httpStatus) || undefined,
+          durationMs: Date.now() - startedAt.getTime(),
+          retryCount: attempts - 1,
+          startedAt,
+          endedAt: new Date(),
+          error: error instanceof Error ? error.message : String(error),
+        });
+        failureOutcome = "post_attempt_error";
+      }
+      failureStage = "result_recording";
+      const consecutiveFailures = persistenceEnabled
+        ? await ingestionQueries.consecutiveFailures(db, source.festivalSlug)
+        : 1;
+      const escalated = consecutiveFailures >= failureThreshold;
+      summary.fetchErrors += 1;
+      if (escalated) summary.escalatedFailures += 1;
+      const lastExtraction = persistenceEnabled
+        ? await ingestionQueries.lastSuccessfulExtraction(db, source.festivalSlug)
+        : null;
+      summary.results.push({
+        festivalSlug: source.festivalSlug,
+        status: escalated ? "escalated_failure" : "fetch_error",
+        extractionPath: source.strategies,
+        manualReviewReason: source.manualReviewReason ?? null,
+        evidenceFields: [],
+        lastSuccessfulExtraction: lastExtraction?.observedAt.toISOString() ?? null,
+        error: error instanceof Error ? error.message : String(error),
+        attempts,
+        consecutiveFailures,
+      });
+      failureStage = "lease_completion";
+      if (sourceLease) await leaseRenewal.stop();
+      if (
+        sourceLease &&
+        !(await completeSourceLease(db, {
+          ...sourceLease,
+          now: new Date(),
+          outcome: "fetch_error",
+        }))
+      )
+        throw new Error("Ingestion source lease is no longer active");
+      if (dbDue) console.error("db_due_failure_stage=fetch");
+      continue;
     }
-    html = fixturePath ? await readFile(path.resolve(fixturePath), "utf8") : await response.text();
-  } catch (error) {
-    const attempts = Number(error?.attempts) || 1;
-    if (run) {
-      failureStage = "attempt_persistence";
-      await persistAttempt(db, { runId: run.id, festivalSlug: source.festivalSlug, requestedUrl: source.url, httpStatus: Number(error?.httpStatus) || undefined, durationMs: Date.now() - startedAt.getTime(), retryCount: attempts - 1, startedAt, endedAt: new Date(), error: error instanceof Error ? error.message : String(error) });
-      failureOutcome = "post_attempt_error";
+
+    let candidate;
+    let result;
+    failureStage = "extraction";
+    try {
+      candidate = extractFestivalCandidate(html, source, fetchedAt);
+      result = evaluateCandidate(current, candidate, aliasArtists);
+    } catch (error) {
+      failureOutcome = "parser_error";
+      if (run)
+        await persistAttempt(db, {
+          runId: run.id,
+          festivalSlug: source.festivalSlug,
+          requestedUrl: source.url,
+          httpStatus: response?.status ?? null,
+          durationMs: Date.now() - startedAt.getTime(),
+          startedAt,
+          endedAt: new Date(),
+          error: "parser_error",
+        });
+      throw error;
+    }
+    const status = result.reviewReasons.length
+      ? "review"
+      : result.publishable
+        ? "publishable"
+        : "unchanged";
+    const artifact = {
+      status,
+      source: {
+        ...source,
+        httpStatus: response?.status ?? null,
+        finalUrl: response?.url ?? source.url,
+      },
+      result,
+    };
+    failureStage = "attempt_persistence";
+    const attempt = run
+      ? await persistAttempt(db, {
+          runId: run.id,
+          festivalSlug: source.festivalSlug,
+          requestedUrl: source.url,
+          finalUrl: response?.url ?? source.url,
+          httpStatus: response?.status ?? null,
+          durationMs: Date.now() - startedAt.getTime(),
+          startedAt,
+          endedAt: new Date(),
+          result,
+        })
+      : null;
+    if (attempt) failureOutcome = "post_attempt_error";
+    failureStage = "artifact_write";
+    await writeFile(
+      path.join(outputDirectory, `${source.festivalSlug}.json`),
+      `${JSON.stringify(artifact, null, 2)}\n`,
+    );
+    summary.processed += 1;
+    if (result.changes.length) summary.changed += 1;
+    if (result.publishable) summary.publishable += 1;
+    if (result.reviewReasons.length) summary.reviewRequired += 1;
+    let outcome = result.changes.length
+      ? result.reviewReasons.length
+        ? "review_required"
+        : "dry_run"
+      : "unchanged";
+    let catalogPublication = null;
+    failureStage = "publication";
+    if (publish && result.publishable && !result.reviewReasons.length) {
+      leaseRenewal?.assertActive();
+      const stagedNotificationEvents = sourceLease
+        ? notificationEventsForChanges(current, result.changes, fetchedAt)
+        : undefined;
+      catalogPublication = attempt
+        ? await publishIngestionResult(db, {
+            attemptId: attempt.id,
+            result,
+            sourceCommit: process.env.GITHUB_SHA || "local",
+            ...(sourceLease ? { sourceLease, notificationEvents: stagedNotificationEvents } : {}),
+          })
+        : null;
+      if (catalogPublication) {
+        publicationCommitted = Boolean(catalogPublication);
+        if (dbDue)
+          summary.notificationEvents += uniqueNotificationEvents(stagedNotificationEvents).length;
+        summary.published += 1;
+        if (catalogPublication?.playlistRefreshRequested) summary.playlistRefreshRequested += 1;
+        outcome = "published";
+        // Do not call external notification storage until a committed catalog
+        // change is acknowledged; delivery failure must not schedule a retry.
+        if (sourceLease) {
+          failureStage = "lease_completion";
+          await leaseRenewal.stop();
+          if (
+            !(await completeSourceLease(db, {
+              ...sourceLease,
+              now: new Date(),
+              outcome: "success",
+            }))
+          )
+            throw new Error("Ingestion source lease is no longer active");
+          leaseCompleted = true;
+        }
+        if (!dbDue && notificationDeliveryEnabled) {
+          const events = notificationEventsForChanges(current, result.changes, fetchedAt);
+          for (const event of events) {
+            const notificationResponse = await fetch(notificationEndpoint, {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${process.env.INTERNAL_API_SECRET}`,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify(event),
+              signal: AbortSignal.timeout(20_000),
+            });
+            if (!notificationResponse.ok)
+              throw new Error(
+                `Notification event persistence failed with HTTP ${notificationResponse.status}`,
+              );
+            summary.notificationEvents += 1;
+          }
+        }
+      } else outcome = "unchanged";
     }
     failureStage = "result_recording";
-    const consecutiveFailures = persistenceEnabled ? await ingestionQueries.consecutiveFailures(db, source.festivalSlug) : 1;
-    const escalated = consecutiveFailures >= failureThreshold;
-    summary.fetchErrors += 1;
-    if (escalated) summary.escalatedFailures += 1;
-    const lastExtraction = persistenceEnabled ? await ingestionQueries.lastSuccessfulExtraction(db, source.festivalSlug) : null;
-    summary.results.push({ festivalSlug: source.festivalSlug, status: escalated ? "escalated_failure" : "fetch_error", extractionPath: source.strategies, manualReviewReason: source.manualReviewReason ?? null, evidenceFields: [], lastSuccessfulExtraction: lastExtraction?.observedAt.toISOString() ?? null, error: error instanceof Error ? error.message : String(error), attempts, consecutiveFailures });
-    failureStage = "lease_completion";
-    if (sourceLease) await leaseRenewal.stop();
-    if (sourceLease && !await completeSourceLease(db, { ...sourceLease, now: new Date(), outcome: "fetch_error" })) throw new Error("Ingestion source lease is no longer active");
-    if (dbDue) console.error("db_due_failure_stage=fetch");
-    continue;
-  }
-
-  let candidate;
-  let result;
-  failureStage = "extraction";
-  try {
-    candidate = extractFestivalCandidate(html, source, fetchedAt);
-    result = evaluateCandidate(current, candidate, aliasArtists);
-  } catch (error) {
-    failureOutcome = "parser_error";
-    if (run) await persistAttempt(db, { runId: run.id, festivalSlug: source.festivalSlug, requestedUrl: source.url,
-      httpStatus: response?.status ?? null, durationMs: Date.now() - startedAt.getTime(), startedAt, endedAt: new Date(), error: "parser_error" });
-    throw error;
-  }
-  const status = result.reviewReasons.length ? "review" : result.publishable ? "publishable" : "unchanged";
-  const artifact = { status, source: { ...source, httpStatus: response?.status ?? null, finalUrl: response?.url ?? source.url }, result };
-  failureStage = "attempt_persistence";
-  const attempt = run ? await persistAttempt(db, { runId: run.id, festivalSlug: source.festivalSlug, requestedUrl: source.url, finalUrl: response?.url ?? source.url, httpStatus: response?.status ?? null, durationMs: Date.now() - startedAt.getTime(), startedAt, endedAt: new Date(), result }) : null;
-  if (attempt) failureOutcome = "post_attempt_error";
-  failureStage = "artifact_write";
-  await writeFile(path.join(outputDirectory, `${source.festivalSlug}.json`), `${JSON.stringify(artifact, null, 2)}\n`);
-  summary.processed += 1;
-  if (result.changes.length) summary.changed += 1;
-  if (result.publishable) summary.publishable += 1;
-  if (result.reviewReasons.length) summary.reviewRequired += 1;
-  let outcome = result.changes.length ? (result.reviewReasons.length ? "review_required" : "dry_run") : "unchanged";
-  let catalogPublication = null;
-  failureStage = "publication";
-  if (publish && result.publishable && !result.reviewReasons.length) {
-    leaseRenewal?.assertActive();
-    const stagedNotificationEvents = sourceLease ? notificationEventsForChanges(current, result.changes, fetchedAt) : undefined;
-    catalogPublication = attempt
-      ? await publishIngestionResult(db, { attemptId: attempt.id, result, sourceCommit: process.env.GITHUB_SHA || "local", ...(sourceLease ? { sourceLease, notificationEvents: stagedNotificationEvents } : {}) })
+    const lastExtraction = persistenceEnabled
+      ? await ingestionQueries.lastSuccessfulExtraction(db, source.festivalSlug)
       : null;
-    if (catalogPublication) {
-      publicationCommitted = Boolean(catalogPublication);
-      if (dbDue) summary.notificationEvents += uniqueNotificationEvents(stagedNotificationEvents).length;
-      summary.published += 1;
-      if (catalogPublication?.playlistRefreshRequested) summary.playlistRefreshRequested += 1;
-      outcome = "published";
-      // Do not call external notification storage until a committed catalog
-      // change is acknowledged; delivery failure must not schedule a retry.
-      if (sourceLease) {
-        failureStage = "lease_completion";
-        await leaseRenewal.stop();
-        if (!await completeSourceLease(db, { ...sourceLease, now: new Date(), outcome: "success" })) throw new Error("Ingestion source lease is no longer active");
-        leaseCompleted = true;
-      }
-      if (!dbDue && notificationDeliveryEnabled) {
-        const events = notificationEventsForChanges(current, result.changes, fetchedAt);
-        for (const event of events) {
-          const notificationResponse = await fetch(notificationEndpoint, { method: "POST", headers: { authorization: `Bearer ${process.env.INTERNAL_API_SECRET}`, "content-type": "application/json" }, body: JSON.stringify(event), signal: AbortSignal.timeout(20_000) });
-          if (!notificationResponse.ok) throw new Error(`Notification event persistence failed with HTTP ${notificationResponse.status}`);
-          summary.notificationEvents += 1;
-        }
-      }
+    summary.results.push({
+      festivalSlug: source.festivalSlug,
+      status,
+      outcome,
+      catalogPublicationId: catalogPublication?.id ?? null,
+      playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false,
+      catalogFields: catalogPublication?.fields ?? [],
+      extractionPath: source.strategies,
+      manualReviewReason: source.manualReviewReason ?? null,
+      evidenceFields: candidate.evidence.map(({ field }) => field),
+      lastSuccessfulExtraction:
+        lastExtraction?.observedAt.toISOString() ?? (candidate.evidence.length ? fetchedAt : null),
+      changes: result.changes.length,
+      reviewReasons: result.reviewReasons,
+    });
+    if (sourceLease && !leaseCompleted) {
+      failureStage = "lease_completion";
+      await leaseRenewal.stop();
+      if (!(await completeSourceLease(db, { ...sourceLease, now: new Date(), outcome: "success" })))
+        throw new Error("Ingestion source lease is no longer active");
+      leaseCompleted = true;
     }
-    else outcome = "unchanged";
-  }
-  failureStage = "result_recording";
-  const lastExtraction = persistenceEnabled ? await ingestionQueries.lastSuccessfulExtraction(db, source.festivalSlug) : null;
-  summary.results.push({ festivalSlug: source.festivalSlug, status, outcome, catalogPublicationId: catalogPublication?.id ?? null, playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false, catalogFields: catalogPublication?.fields ?? [], extractionPath: source.strategies, manualReviewReason: source.manualReviewReason ?? null, evidenceFields: candidate.evidence.map(({ field }) => field), lastSuccessfulExtraction: lastExtraction?.observedAt.toISOString() ?? (candidate.evidence.length ? fetchedAt : null), changes: result.changes.length, reviewReasons: result.reviewReasons });
-  if (sourceLease && !leaseCompleted) {
-    failureStage = "lease_completion";
-    await leaseRenewal.stop();
-    if (!await completeSourceLease(db, { ...sourceLease, now: new Date(), outcome: "success" })) throw new Error("Ingestion source lease is no longer active");
-    leaseCompleted = true;
-  }
   } catch (error) {
     if (dbDue) console.error(`db_due_failure_stage=${failureStage}`);
     // Preserve a terminal run even if lease cleanup itself fails. A committed
     // publication must never be converted into a parser backoff retry.
-    try { await leaseRenewal?.stop(); } catch { /* preserve the original error; cleanup remains fenced */ }
     try {
-      if (run && sourceLease) await db.ingestionRun.update({ where: { id: run.id }, data: { status: "FAILED", endedAt: new Date(), failed: 1 } });
-    } catch { /* retain the original error and still attempt lease cleanup */ }
-    if (sourceLease && !leaseCompleted) await recoverSourceLease(sourceLease, publicationCommitted ? "success" : failureOutcome);
+      await leaseRenewal?.stop();
+    } catch {
+      /* preserve the original error; cleanup remains fenced */
+    }
+    try {
+      if (run && sourceLease)
+        await db.ingestionRun.update({
+          where: { id: run.id },
+          data: { status: "FAILED", endedAt: new Date(), failed: 1 },
+        });
+    } catch {
+      /* retain the original error and still attempt lease cleanup */
+    }
+    if (sourceLease && !leaseCompleted)
+      await recoverSourceLease(sourceLease, publicationCommitted ? "success" : failureOutcome);
     throw error;
   } finally {
     // The importer itself requests repair after persisting the result and
     // releasing its lease. The ordinary tick only recovers interrupted delivery.
     if (publish && transportConfigured()) {
-      try { await drainImportEvents(db, sendImportEvent, 1); } catch { /* retain durable request and original import outcome */ }
+      try {
+        await drainImportEvents(db, sendImportEvent, 1);
+      } catch {
+        /* retain durable request and original import outcome */
+      }
     }
   }
 }
@@ -239,12 +480,24 @@ if (run) {
     await finishIngestionRun(db, run.id);
   } catch (error) {
     if (dbDue) console.error("db_due_failure_stage=run_finalization");
-    if (dbDue) await db.ingestionRun.update({ where: { id: run.id }, data: { status: "FAILED", endedAt: new Date(), failed: 1 } });
+    if (dbDue)
+      await db.ingestionRun.update({
+        where: { id: run.id },
+        data: { status: "FAILED", endedAt: new Date(), failed: 1 },
+      });
     throw error;
   }
 }
-summary.status = summary.fetchErrors === 0 ? "COMPLETED" : summary.fetchErrors <= maxFetchErrors && summary.escalatedFailures === 0 ? "PARTIAL" : "FAILED";
-await writeFile(path.join(outputDirectory, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
+summary.status =
+  summary.fetchErrors === 0
+    ? "COMPLETED"
+    : summary.fetchErrors <= maxFetchErrors && summary.escalatedFailures === 0
+      ? "PARTIAL"
+      : "FAILED";
+await writeFile(
+  path.join(outputDirectory, "summary.json"),
+  `${JSON.stringify(summary, null, 2)}\n`,
+);
 console.log(JSON.stringify(summary));
 if (summary.status === "FAILED") process.exitCode = 2;
 if (persistenceEnabled) await db.$disconnect();
