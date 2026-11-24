@@ -305,10 +305,10 @@ async function applyFestivalChanges(
   const dateChanges = input.changes.filter(
     ({ field }) => field === "startDate" || field === "endDate",
   );
+  const proposed = new Map(
+    dateChanges.map(({ field, after }) => [field, after === "" ? null : after]),
+  );
   if (dateChanges.length) {
-    const proposed = new Map(
-      dateChanges.map(({ field, after }) => [field, after === "" ? null : after]),
-    );
     if (proposed.size !== dateChanges.length) throw new Error("Duplicate festival date changes");
     const start = proposed.has("startDate")
       ? proposed.get("startDate")
@@ -342,12 +342,14 @@ async function applyFestivalChanges(
       case "startDate":
       case "endDate": {
         current = isoDate(edition[change.field]);
-        if (input.strictBefore && !same(current, change.before) && !same(current, change.after))
+        const next = proposed.get(change.field);
+        const before = change.before === "" ? null : change.before;
+        if (input.strictBefore && !same(current, before) && !same(current, next))
           throw new Error(`Stale ${change.field} value for ${input.festivalSlug}`);
-        if (!same(current, change.after)) {
+        if (!same(current, next)) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { [change.field]: dateOnly(change.after) },
+            data: { [change.field]: dateOnly(next) },
           });
           changed = true;
         }

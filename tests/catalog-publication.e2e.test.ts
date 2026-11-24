@@ -3143,3 +3143,54 @@ test("publishing a changed festival city advances the current edition's source f
     (error) => error === rollback,
   );
 });
+
+test("an already unknown date does not record a new catalogue publication", async () => {
+  const slug = "synthetic-fest";
+  const rollback = new Error("rollback blank-date fixture");
+  await assert.rejects(
+    db.$transaction(async (tx) => {
+      const edition = await tx.festivalEdition.findFirstOrThrow({
+        where: { festival: { slug }, recordState: "CURRENT" },
+      });
+      const observedAt = new Date("2026-01-01T10:00:00Z");
+      const endDate = new Date("2027-06-13");
+      await tx.festivalEdition.update({
+        where: { id: edition.id },
+        data: {
+          startDate: null,
+          endDate,
+          sourceUpdatedAt: observedAt,
+        },
+      });
+      const change = {
+        id: randomUUID(),
+        resourceKey: slug,
+        field: "startDate",
+        beforeValue: null,
+        afterValue: "",
+        sourceEvidence: [],
+        parserRunId: null,
+      };
+      assert.equal(
+        await publishAdminFestivalChange(tx, { actorLabel: "synthetic-review", change }),
+        null,
+      );
+      const unchanged = await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } });
+      assert.deepEqual(
+        [unchanged.startDate, unchanged.endDate, unchanged.sourceUpdatedAt],
+        [null, endDate, observedAt],
+      );
+
+      const cleared = await publishAdminFestivalChange(tx, {
+        actorLabel: "synthetic-review",
+        change: { ...change, id: randomUUID(), field: "endDate", beforeValue: "2027-06-13" },
+      });
+      assert.deepEqual(cleared?.fields, ["endDate"]);
+      const current = await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } });
+      assert.equal(current.endDate, null);
+      assert.ok(current.sourceUpdatedAt > observedAt);
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
+});
