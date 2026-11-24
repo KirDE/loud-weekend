@@ -140,6 +140,30 @@ export function AccountSyncPanel({
     setBusyState(value);
     onBusyChange?.(value);
   }
+  async function readDocuments() {
+    const entries = await Promise.all(
+      kinds.map(async (kind) => {
+        const response = await fetch("/api/sync/" + kind, { cache: "no-store" });
+        if (!response.ok) throw new Error(t.failed);
+        const { document } = (await response.json()) as { document?: Document | null };
+        if (
+          document !== null &&
+          (!document ||
+            typeof document.id !== "string" ||
+            !Number.isInteger(document.revision) ||
+            document.revision < 0 ||
+            document.payload === undefined)
+        )
+          throw new Error(t.failed);
+        if (kind === "collections" && document) readCollections(document.payload);
+        return [kind, document] as const;
+      }),
+    );
+    return Object.fromEntries(entries.filter(([, document]) => document)) as Partial<
+      Record<Kind, Document>
+    >;
+  }
+
   async function load() {
     try {
       const me = await fetch("/api/auth/me", { cache: "no-store" });
@@ -150,16 +174,7 @@ export function AccountSyncPanel({
       }
       setUser((await me.json()).user);
       setDocs({});
-      const entries = await Promise.all(
-        kinds.map(async (kind) => {
-          const response = await fetch("/api/sync/" + kind, { cache: "no-store" });
-          if (!response.ok) throw new Error(t.failed);
-          const document = (await response.json()).document as Document | null;
-          if (kind === "collections" && document) readCollections(document.payload);
-          return [kind, document] as const;
-        }),
-      );
-      setDocs(Object.fromEntries(entries.filter(([, document]) => document)));
+      setDocs(await readDocuments());
     } catch {
       setStatus(t.failed);
     }
@@ -195,7 +210,9 @@ export function AccountSyncPanel({
     setConflict(null);
     try {
       if (mode === "remote") {
-        planner.replace(plannerFrom(docs));
+        const latest = await readDocuments();
+        planner.replace(plannerFrom(latest));
+        setDocs(latest);
         setStatus(t.current);
         return;
       }
