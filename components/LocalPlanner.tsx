@@ -26,7 +26,7 @@ const Context = createContext<
   | (PlannerState & {
       ready: boolean;
       toggleFestival: (v: string) => void;
-      toggleArtist: (v: string) => void;
+      toggleArtist: (v: string, legacyValues: readonly string[]) => void;
       setAttendance: (v: string, a?: Attendance) => void;
       togglePlaylistFestival: (v: string) => void;
       setSavedFilters: (value: DiscoveryPreferences) => void;
@@ -69,11 +69,16 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           ...s,
           favoriteFestivals: toggle(s.favoriteFestivals, v),
         })),
-      toggleArtist: (v: string) =>
-        setState((s) => ({
-          ...s,
-          favoriteArtists: toggle(s.favoriteArtists, v),
-        })),
+      toggleArtist: (v: string, legacyValues: readonly string[]) =>
+        setState((s) => {
+          const matches = new Set([v, ...legacyValues]);
+          return {
+            ...s,
+            favoriteArtists: s.favoriteArtists.some((value) => matches.has(value))
+              ? s.favoriteArtists.filter((value) => !matches.has(value))
+              : [...s.favoriteArtists, v],
+          };
+        }),
       setAttendance: (v: string, a?: Attendance) =>
         setState((s) => {
           const attendance = { ...s.attendance };
@@ -121,16 +126,29 @@ export function useLocalPlanner() {
   if (!value) throw new Error("Missing LocalPlannerProvider");
   return value;
 }
-export function FavoriteButton({ kind, value }: { kind: "festival" | "artist"; value: string }) {
+export function FavoriteButton({
+  kind,
+  value,
+  legacyValues = [],
+}: {
+  kind: "festival" | "artist";
+  value: string;
+  legacyValues?: readonly string[];
+}) {
   const p = useLocalPlanner();
   const { t } = useLanguage();
-  const selected = (kind === "festival" ? p.favoriteFestivals : p.favoriteArtists).includes(value);
+  const selected =
+    kind === "festival"
+      ? p.favoriteFestivals.includes(value)
+      : p.favoriteArtists.some((saved) => saved === value || legacyValues.includes(saved));
   return (
     <button
       className={`favoriteButton${selected ? " selected" : ""}`}
       type="button"
       aria-pressed={selected}
-      onClick={() => (kind === "festival" ? p.toggleFestival(value) : p.toggleArtist(value))}
+      onClick={() =>
+        kind === "festival" ? p.toggleFestival(value) : p.toggleArtist(value, legacyValues)
+      }
     >
       {t(selected ? "saved" : "save")}
     </button>
