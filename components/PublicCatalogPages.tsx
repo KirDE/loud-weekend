@@ -5,6 +5,7 @@ import { editionRecordCompleteness } from "@/lib/edition-status";
 import { festivalDateInterval } from "@/lib/festival-dates";
 import { lineupPresentation } from "@/lib/festival-lineup";
 import type { Festival } from "@/lib/domain/festival";
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { FestivalEdition } from "@/lib/domain/edition";
 import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
 import { FestivalArrival } from "./FestivalArrival";
@@ -249,12 +250,15 @@ export function EditionYearContent({
   year,
   items,
   years,
+  hasArchive,
 }: {
   year: number;
   items: FestivalEdition[];
   years: readonly number[];
+  hasArchive: boolean;
 }) {
   const { t } = usePublicCopy();
+  const { t: ui } = useLanguage();
   return (
     <div className="directoryPage">
       <p className="eyebrow">{t.editionYear}</p>
@@ -272,8 +276,8 @@ export function EditionYearContent({
           />
         ))}
       </section>
-      <Link className="textLink" href="/archive/">
-        {t.archiveBack}
+      <Link className="textLink" href={hasArchive ? "/archive/" : "/browse/"}>
+        {hasArchive ? t.archiveBack : ui("browseCatalogue")}
       </Link>
     </div>
   );
@@ -416,22 +420,32 @@ export function CountryContent({
   countryCode,
   country,
   festivals,
+  discoveryLineups,
 }: {
   countryCode: string;
   country: string;
   festivals: Festival[];
+  discoveryLineups?: DiscoveryLineups;
 }) {
   const { t, locale } = usePublicCopy();
   const name = new Intl.DisplayNames([locale], { type: "region" }).of(countryCode) || country;
   return (
     <div className="directoryPage">
       <h1>{t.country(name)}</h1>
-      <FestivalExplorer festivals={festivals} />
+      <FestivalExplorer festivals={festivals} discoveryLineups={discoveryLineups} />
     </div>
   );
 }
 
-export function MonthContent({ month, festivals }: { month: string; festivals: Festival[] }) {
+export function MonthContent({
+  month,
+  festivals,
+  discoveryLineups,
+}: {
+  month: string;
+  festivals: Festival[];
+  discoveryLineups?: DiscoveryLineups;
+}) {
   const { t, locale } = usePublicCopy();
   const russianMonths = [
     "январе",
@@ -456,7 +470,7 @@ export function MonthContent({ month, festivals }: { month: string; festivals: F
   return (
     <div className="directoryPage">
       <h1>{t.month(name || month)}</h1>
-      <FestivalExplorer festivals={festivals} />
+      <FestivalExplorer festivals={festivals} discoveryLineups={discoveryLineups} />
     </div>
   );
 }

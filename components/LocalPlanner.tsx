@@ -13,12 +13,14 @@ import {
   readDiscoveryPreferences,
   type DiscoveryPreferences,
 } from "@/lib/discovery-preferences";
+import { readPlaylistExclusions } from "@/lib/playlist-selection";
 export type PlannerState = {
   favoriteFestivals: string[];
   favoriteArtists: string[];
   attendance: Record<string, Attendance>;
   seasonAttendance?: Record<string, Attendance>;
   playlistFestivals: string[];
+  playlistExcludedArtists?: string[];
   savedFilters: DiscoveryPreferences;
 };
 export const emptyPlannerState: PlannerState = {
@@ -36,6 +38,8 @@ const Context = createContext<
       setAttendance: (v: string, a?: Attendance) => void;
       editionAttendance: (slug: string, year: number) => Attendance | undefined;
       setEditionAttendance: (slug: string, year: number, attendance?: Attendance) => void;
+      setPlaylistExclusions: (value: string[]) => void;
+      togglePlaylistArtist: (slug: string) => void;
       togglePlaylistFestival: (v: string) => void;
       setSavedFilters: (value: DiscoveryPreferences) => void;
       updateSavedFilters: (patch: Partial<DiscoveryPreferences>) => void;
@@ -109,6 +113,15 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           else delete selections[key];
           return { ...current, [field]: selections };
         }),
+      setPlaylistExclusions: (value: string[]) => {
+        const exclusions = readPlaylistExclusions(value);
+        if (exclusions) setState((s) => ({ ...s, playlistExcludedArtists: exclusions }));
+      },
+      togglePlaylistArtist: (slug: string) =>
+        setState((s) => {
+          const exclusions = readPlaylistExclusions(toggle(s.playlistExcludedArtists ?? [], slug));
+          return exclusions ? { ...s, playlistExcludedArtists: exclusions } : s;
+        }),
       togglePlaylistFestival: (v: string) =>
         setState((s) => ({
           ...s,
@@ -142,9 +155,10 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           playlistFestivals: Array.from(
             new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]),
           ),
+          playlistExcludedArtists: next.playlistExcludedArtists ?? current.playlistExcludedArtists,
           savedFilters: readDiscoveryPreferences({ ...current.savedFilters, ...next.savedFilters }),
         })),
-      clear: () => setState(emptyPlannerState),
+      clear: () => setState({ ...emptyPlannerState, playlistExcludedArtists: [] }),
     }),
     [ready, state],
   );

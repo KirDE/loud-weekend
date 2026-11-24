@@ -1,3 +1,5 @@
+import { readPlaylistExclusions } from "./playlist-selection.ts";
+
 export const legacyPlannerYear = 2027;
 export type Attendance = "going" | "maybe" | "not-going";
 
@@ -7,6 +9,7 @@ type PlannerState = {
   attendance: Record<string, Attendance>;
   seasonAttendance?: Record<string, Attendance>;
   playlistFestivals: string[];
+  playlistExcludedArtists?: string[];
   savedFilters?: unknown;
 };
 
@@ -30,5 +33,6 @@ export function parsePlannerState(value: string): Partial<PlannerState> {
     playlistFestivals: Array.isArray(parsed.playlistFestivals)
       ? parsed.playlistFestivals.filter((item): item is string => typeof item === "string")
       : [],
+    playlistExcludedArtists: readPlaylistExclusions(parsed.playlistExcludedArtists),
   };
 }

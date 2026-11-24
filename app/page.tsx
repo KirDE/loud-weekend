@@ -10,12 +10,16 @@ export async function generateMetadata() {
 }
 
 export default async function Home() {
-  const { festivals, editions, freshness } = await getHomeCatalog();
+  const { festivals, editions, freshness, discoveryLineups, matchingArtists, suggestionArtists } =
+    await getHomeCatalog();
   return (
     <HomeContent
       festivals={festivals}
       freshness={freshness}
+      discoveryLineups={discoveryLineups}
       years={seasonYears(publicSeasonEditions(editions))}
+      matchingArtists={matchingArtists}
+      suggestionArtists={suggestionArtists}
     />
   );
 }

@@ -1,4 +1,7 @@
 "use client";
+import Link from "next/link";
+import { correctionQueueLabel } from "./CorrectionQueue";
+
 import { AdminBiographyReview } from "./AdminBiographyReview";
 import { AdminSocialLinkReview } from "./AdminSocialLinkReview";
 import { useEffect, useMemo, useState } from "react";
@@ -82,7 +85,9 @@ export function AdminConsole({
   const [festivalDraft, setFestivalDraft] = useState<Record<string, string>>({});
   const [assetDraft, setAssetDraft] = useState<Record<string, string>>({});
   const [operator, setOperator] = useState<Operator | null>(null);
-  const [playlistDraft, setPlaylistDraft] = useState<Record<string, string>>({});
+  const [playlistProvider, setPlaylistProvider] = useState<"spotify" | "youtube_music">("spotify");
+  const [playlistDraft, setPlaylistDraft] = useState<string | undefined>();
+  const reviewedPlaylistUrl = selected?.reviewedPlaylistLinks?.[playlistProvider];
   const [openLog, setOpenLog] = useState<string | null>(null);
   const { language, setLanguage, ta } = useLanguage();
   const matchingArtists = useMemo(
@@ -230,6 +235,7 @@ export function AdminConsole({
             <option value="ru">Русский</option>
           </select>
         </label>
+        <Link href="/admin/corrections/">{correctionQueueLabel[language]}</Link>
         <a href="/">← {ta("publicSite")}</a>
       </nav>
       <section className="adminMain">
@@ -607,7 +613,7 @@ export function AdminConsole({
                   onChange={(event) => {
                     setSelectedSlug(event.target.value);
                     setAssetDraft({});
-                    setPlaylistDraft({});
+                    setPlaylistDraft(undefined);
                   }}
                 >
                   {festivals.map((item) => (
@@ -670,51 +676,55 @@ export function AdminConsole({
             <div>
               <div className="adminPanel">
                 <h3>{ta("playlistEditor")}</h3>
-                <p>{ta("playlistPublicationUnavailable")}</p>
-                <label>
-                  {ta("playlistAddress")}
-                  <input
-                    type="url"
-                    defaultValue={selected.playlistUrl}
-                    placeholder="https://open.spotify.com/playlist/…"
-                    onChange={(event) =>
-                      setPlaylistDraft((value) => ({ ...value, url: event.target.value }))
-                    }
-                  />
-                </label>
+                <p>{ta("playlistPublicationReview")}</p>
                 <label>
                   {ta("platform")}
                   <select
-                    defaultValue="spotify"
-                    onChange={(event) =>
-                      setPlaylistDraft((value) => ({ ...value, platform: event.target.value }))
-                    }
+                    value={playlistProvider}
+                    onChange={(event) => {
+                      setPlaylistProvider(
+                        event.target.value === "youtube_music" ? "youtube_music" : "spotify",
+                      );
+                      setPlaylistDraft(undefined);
+                    }}
                   >
                     <option value="spotify">Spotify</option>
                     <option value="youtube_music">YouTube Music</option>
                   </select>
                 </label>
                 <label>
-                  {ta("publicationStatus")}
-                  <select
-                    defaultValue="published"
-                    onChange={(event) =>
-                      setPlaylistDraft((value) => ({ ...value, status: event.target.value }))
-                    }
-                  >
-                    {(["published", "draft", "disabled"] as const).map((status) => (
-                      <option value={status} key={status}>
-                        {ta(status)}
-                      </option>
-                    ))}
-                  </select>
+                  {ta("playlistAddress")}
+                  <input
+                    type="url"
+                    value={playlistDraft ?? reviewedPlaylistUrl ?? ""}
+                    onChange={(event) => setPlaylistDraft(event.target.value)}
+                  />
                 </label>
                 <button
-                  disabled={!Object.keys(playlistDraft).length}
-                  onClick={() => save("playlist", selected.slug, playlistDraft)}
+                  disabled={!selected.editionYear || !playlistDraft?.trim()}
+                  onClick={() =>
+                    save(
+                      "playlist",
+                      `${selected.slug}:${selected.editionYear}:${playlistProvider}`,
+                      { url: playlistDraft?.trim() ?? null },
+                    )
+                  }
                 >
                   {ta("savePlaylist")}
                 </button>
+                {reviewedPlaylistUrl && selected.editionYear && (
+                  <button
+                    onClick={() =>
+                      save(
+                        "playlist",
+                        `${selected.slug}:${selected.editionYear}:${playlistProvider}`,
+                        { url: null },
+                      )
+                    }
+                  >
+                    {ta("removeReviewedPlaylist")}
+                  </button>
+                )}
               </div>
               <div className="adminPanel assetPreview">
                 <h3>{ta("validation")}</h3>

@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+import { hasArchiveRecords } from "@/lib/catalog/browse";
 import { ArchiveContent } from "@/components/PublicCatalogPages";
 import { getCatalog } from "@/lib/catalog/repository";
 import { publicSeasonEditions, seasonYears } from "@/lib/catalog/seasons";
@@ -12,6 +14,7 @@ export const metadata = {
 export default async function ArchivePage() {
   const { editions } = await getCatalog();
   const publicEditions = publicSeasonEditions(editions);
+  if (!hasArchiveRecords(publicEditions)) notFound();
   return (
     <ArchiveContent
       years={seasonYears(publicEditions)}
