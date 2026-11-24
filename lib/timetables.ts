@@ -170,6 +170,11 @@ export function groupTimetable(entries: TimetableEntry[]): TimetableDay[] {
     }));
 }
 
+export function isOfficialTimetableSource(sourceUrl: string, officialUrl: string) {
+  const official = URL.parse(officialUrl);
+  return official !== null && URL.parse(sourceUrl)?.hostname === official.hostname;
+}
+
 export function validateFestivalTimetable(festival: Festival, entries: TimetableEntry[]) {
   const parsed = entries.map((entry) => timetableEntrySchema.parse(entry));
   const errors: string[] = [];
@@ -180,9 +185,7 @@ export function validateFestivalTimetable(festival: Festival, entries: Timetable
       errors.push(`${entry.artist}: ${entry.date} precedes festival start`);
     if (festival.endDate && entry.date > festival.endDate)
       errors.push(`${entry.artist}: ${entry.date} follows festival end`);
-    const source = new URL(entry.sourceUrl);
-    const official = new URL(festival.officialUrl);
-    if (source.hostname !== official.hostname) {
+    if (!isOfficialTimetableSource(entry.sourceUrl, festival.officialUrl)) {
       errors.push(`${entry.artist}: source is not under the festival official URL`);
     }
     const identity = [
