@@ -234,18 +234,31 @@ test("visible singular and plural unavailable notices override an enabled genera
   };
   assert.equal(evaluateCandidate(current, extract()).publishable, true);
 
-  for (const notice of ["No disponible", "No disponibles", "Entradas no disponibles"]) {
-    const docs = envelope();
-    docs.documents[2].html += `<span id="product-availability">${notice}</span>`;
-    const candidate = extract(docs);
-    const result = evaluateCandidate(current, candidate);
-    assert.equal(candidate.ticketStatus, undefined, notice);
-    assert.equal(result.publishable, false, notice);
-    assert.equal(
-      result.changes.some(({ field }) => field === "ticketStatus"),
-      false,
-      notice,
-    );
+  for (const notice of [
+    "No disponible",
+    "No disponibles",
+    "Entradas no disponibles",
+    "<div>No</div><div>disponibles</div>",
+    '<span style="display: block !important">No</span><span>disponibles</span>',
+    "No dispo<strong>nibles</strong>",
+  ]) {
+    for (const scope of ["availability", "form"]) {
+      const docs = envelope();
+      const { html } = docs.documents[2];
+      docs.documents[2].html =
+        scope === "availability"
+          ? html + `<section id="product-availability">${notice}</section>`
+          : html.replace("</form>", `${notice}</form>`);
+      const candidate = extract(docs);
+      const result = evaluateCandidate(current, candidate);
+      assert.equal(candidate.ticketStatus, undefined, notice);
+      assert.equal(result.publishable, false, notice);
+      assert.equal(
+        result.changes.some(({ field }) => field === "ticketStatus"),
+        false,
+        notice,
+      );
+    }
   }
 });
 test("stale title or wrong general-pass edition fails closed", () => {

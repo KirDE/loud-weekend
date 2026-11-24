@@ -1,4 +1,5 @@
 import { load } from "cheerio";
+import { renderedTicketText } from "../rendered-ticket-text.ts";
 import type { FestivalCandidate, FestivalSource, FieldEvidence } from "../types.ts";
 import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 
@@ -410,8 +411,8 @@ export function extractRockImperiumCandidate(
   const negativeStock =
     /\b(?:agotad[oa]s?|sin stock|fuera de stock|out of stock|sold\s*out|no disponibles?)\b/i;
   const contradictory =
-    negativeStock.test(text(form.text())) ||
-    negativeStock.test(text($("#product-availability").text()));
+    negativeStock.test(renderedTicketText(form)) ||
+    negativeStock.test(renderedTicketText($("#product-availability")));
   if (forms.length === 1 && validAction && buttons.length === 1 && !contradictory) {
     add(
       "ticketStatus",
