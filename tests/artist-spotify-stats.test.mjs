@@ -310,10 +310,17 @@ test("repository projects serializable Spotify stats and suppresses a stale or u
     ticketStatus: "UNKNOWN",
     recordState: "CURRENT",
     completeness: "PARTIAL",
-    lineup: [{ billing: "LINEUP", artist: { name: "Synthetic", slug: f.artist.slug } }],
+    lineup: [
+      {
+        billing: "LINEUP",
+        status: "ANNOUNCED",
+        artist: { name: "Synthetic", slug: f.artist.slug },
+      },
+    ],
     timetable: [],
     provenance: [],
     playlists: [],
+    playlistLinks: [],
   };
   const repository = new DatabaseCatalogRepository({
     artist: { findMany: async () => [f.artist] },

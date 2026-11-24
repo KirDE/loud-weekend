@@ -92,6 +92,43 @@ test("first reviewed lineup creates one native job; replays and later updates do
   });
   assert.equal(later?.playlistRefreshRequested, false);
 });
+test("a delayed reviewed roster preserves the newer edition source timestamp", async () => {
+  const edition = await shell();
+  const value = input(edition);
+  const newerObservation = new Date(value.observedAt.getTime() + 60_000);
+  await db.festivalEdition.update({
+    where: { id: edition.id },
+    data: { sourceUpdatedAt: newerObservation },
+  });
+
+  const publication = await publish(value);
+  assert.ok(publication?.lineupChanged);
+  const updated = await db.festivalEdition.findUniqueOrThrow({
+    where: { id: edition.id },
+    include: { lineup: true },
+  });
+  assert.equal(updated.lineup.length, 1);
+  assert.equal(updated.sourceUpdatedAt.toISOString(), newerObservation.toISOString());
+
+  const newer = new Date(newerObservation.getTime() + 60_000);
+  const next = await publish({
+    ...value,
+    sourceId: `reviewed:${randomUUID()}`,
+    observedAt: newer,
+    facts: { ...value.facts, lineup: ["First Roster Artist", "Second Roster Artist"] },
+    evidence: value.evidence.map((item) => ({ ...item, checkedAt: newer.toISOString() })),
+  });
+  assert.ok(next?.lineupChanged);
+  assert.equal(
+    (
+      await db.festivalEdition.findUniqueOrThrow({
+        where: { id: edition.id },
+      })
+    ).sourceUpdatedAt.toISOString(),
+    newer.toISOString(),
+  );
+});
+
 for (const guard of [
   "binding",
   "previous-publication",
