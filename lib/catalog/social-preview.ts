@@ -2,6 +2,34 @@ import { db } from "../db.ts";
 import type { Language } from "../language-preference.ts";
 import { festivalPreviewDate, type PreviewCard, type PreviewKind } from "../social-preview.ts";
 
+async function hasPublishedIngestionDate(
+  slug: string,
+  year: number,
+  field: "startDate" | "endDate",
+  value: string | undefined,
+) {
+  if (!value) return false;
+  const receipt = await db.catalogPublication.findFirst({
+    where: { festivalSlug: slug, editionYear: year, fields: { has: field } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { source: true, sourceId: true },
+  });
+  if (receipt?.source !== "INGESTION" || !receipt.sourceId.startsWith("ingestion:")) return false;
+
+  // An observation alone is not proof that this exact value was published.
+  const diff = await db.ingestionDiff.findFirst({
+    where: {
+      candidateId: receipt.sourceId.slice("ingestion:".length),
+      field,
+      afterValue: { equals: value },
+      reviewRequired: false,
+      candidate: { festivalSlug: slug, reviewState: "PUBLISHED" },
+    },
+    select: { id: true },
+  });
+  return Boolean(diff);
+}
+
 export async function readSocialPreview(
   kind: PreviewKind,
   slug: string,
@@ -43,16 +71,24 @@ export async function readSocialPreview(
   if (!edition) return null;
   const evidence = new Set(edition.provenance.map(({ field }) => field));
   const date = (value: Date | null) => value?.toISOString().slice(0, 10);
-  const hasStart = evidence.has("dates") || evidence.has("startDate");
-  const hasEnd = evidence.has("dates") || evidence.has("endDate");
+  const startDate = date(edition.startDate);
+  const endDate = date(edition.endDate);
+  const [hasStart, hasEnd] = await Promise.all([
+    evidence.has("dates") ||
+      evidence.has("startDate") ||
+      hasPublishedIngestionDate(slug, edition.year, "startDate", startDate),
+    evidence.has("dates") ||
+      evidence.has("endDate") ||
+      hasPublishedIngestionDate(slug, edition.year, "endDate", endDate),
+  ]);
   const hasLineup = evidence.has("lineup") || evidence.has("headliners");
   const detail = festivalPreviewDate(
     edition.year,
     language,
     hasStart
       ? {
-          startDate: date(edition.startDate),
-          endDate: hasEnd ? date(edition.endDate) : undefined,
+          startDate,
+          endDate: hasEnd ? endDate : undefined,
         }
       : null,
   );

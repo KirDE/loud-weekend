@@ -2833,6 +2833,13 @@ test("invalid dates cannot publish or replace the last verified edition range", 
       (festival) => festival.slug === slug,
     );
     assert.deepEqual([visible?.startDate, visible?.endDate], ["2027-11-10", "2027-11-13"]);
+    const { readSocialPreview } = await import("../lib/catalog/social-preview.ts");
+    const { festivalPreviewDate } = await import("../lib/social-preview.ts");
+    assert.equal(
+      (await readSocialPreview("festivals", slug, "en", 2027))?.detail,
+      festivalPreviewDate(2027, "en", { startDate: "2027-11-10", endDate: "2027-11-13" }),
+    );
+
     assert.equal(
       (
         await publishIngestionResult(db, {
