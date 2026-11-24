@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
+import type { CatalogFreshness } from "@/lib/domain/freshness";
+import { formatFreshnessDate } from "@/lib/freshness-date";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
@@ -43,7 +45,13 @@ export function FestivalComparisonTicket({ item }: { item: Festival }) {
   );
 }
 
-export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
+export function FestivalExplorer({
+  festivals,
+  freshness,
+}: {
+  festivals: Festival[];
+  freshness?: CatalogFreshness;
+}) {
   const { locale, t } = useLanguage();
   const planner = useLocalPlanner();
   const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance } =
@@ -333,7 +341,29 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         <span>
           {visible.length} {t("festivals")}
         </span>
-        <span>{t("lastReview")}</span>
+        {freshness && (
+          <span>
+            {freshness.checkedAt ? (
+              <>
+                {t("latestSourceCheck")} ·{" "}
+                <time dateTime={freshness.checkedAt}>
+                  {formatFreshnessDate(freshness.checkedAt, locale)}
+                </time>
+              </>
+            ) : (
+              t("sourceCheckUnavailable")
+            )}
+            {freshness.lastPublishedAt && (
+              <>
+                {" "}
+                · {t("latestCatalogPublication")} ·{" "}
+                <time dateTime={freshness.lastPublishedAt}>
+                  {formatFreshnessDate(freshness.lastPublishedAt, locale)}
+                </time>
+              </>
+            )}
+          </span>
+        )}
       </div>
       <div className="festivalGrid">
         {visible.map((item) => {
