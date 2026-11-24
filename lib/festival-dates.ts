@@ -1,17 +1,13 @@
 import type { Festival } from "./domain/festival";
+import { isCalendarDate } from "./domain/edition-dates.ts";
 
 type Dates = Pick<Festival, "startDate" | "endDate">;
 
-function parseDate(value: string | undefined): Date | null {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const date = new Date(`${value}T00:00:00Z`);
-  return Number.isFinite(date.valueOf()) && date.toISOString().slice(0, 10) === value ? date : null;
-}
-
 export function festivalDateInterval(item: Dates): { start: Date; end: Date } | null {
-  const start = parseDate(item.startDate);
-  const end = parseDate(item.endDate ?? item.startDate);
-  return start && end && start <= end ? { start, end } : null;
+  const start = item.startDate;
+  const end = item.endDate ?? start;
+  if (!isCalendarDate(start) || !isCalendarDate(end) || start > end) return null;
+  return { start: new Date(start + "T00:00:00Z"), end: new Date(end + "T00:00:00Z") };
 }
 
 export function monthIndex(date: Date): number {
@@ -23,7 +19,8 @@ export function festivalOverlapsMonth(item: Dates, month: number, year?: number)
   if (!Number.isInteger(month) || month < 1 || month > 12) return false;
   const interval = festivalDateInterval(item);
   if (!interval) return false;
-  const first = monthIndex(interval.start), last = monthIndex(interval.end);
+  const first = monthIndex(interval.start),
+    last = monthIndex(interval.end);
   if (year !== undefined) {
     const target = year * 12 + month - 1;
     return target >= first && target <= last;
@@ -33,14 +30,22 @@ export function festivalOverlapsMonth(item: Dates, month: number, year?: number)
 }
 
 export function availableFestivalMonths(items: Dates[]): number[] {
-  return Array.from({ length: 12 }, (_, index) => index + 1)
-    .filter(month => items.some(item => festivalOverlapsMonth(item, month)));
+  return Array.from({ length: 12 }, (_, index) => index + 1).filter((month) =>
+    items.some((item) => festivalOverlapsMonth(item, month)),
+  );
 }
 
 export function formatFestivalDateRange(item: Dates, locale: string, unknown: string): string {
   const interval = festivalDateInterval(item);
   if (!interval) return unknown;
-  const formatter = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const formatter = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
   const start = formatter.format(interval.start);
-  return interval.start.valueOf() === interval.end.valueOf() ? start : `${start} – ${formatter.format(interval.end)}`;
+  return interval.start.valueOf() === interval.end.valueOf()
+    ? start
+    : `${start} – ${formatter.format(interval.end)}`;
 }
