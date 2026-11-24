@@ -139,6 +139,47 @@ for (const slug of ["rock-am-ring", "rock-im-park"]) {
       [],
     );
   });
+  for (const notice of [
+    "<div>Sold</div><div>out</div>",
+    '<span style="display: block">Sold</span><span style="display: block">out</span>',
+    "<span>Sold<br>out</span>",
+    "<span>aus<strong>verkauft</strong></span>",
+  ]) {
+    test(`${slug}: visible stock contradiction ${notice} prevents publication`, async () => {
+      const html = alter(($) => ordinary($).find(".header").append(notice));
+      const primary =
+        '<main>4-6 June 2027 <a href="/line-up/synthetic-artist">Synthetic Artist</a></main>';
+      const fetched = await fetchSource(source, {
+        maxAttempts: 1,
+        fetchImpl: async (target) =>
+          new Response(String(target) === url ? html : primary, {
+            headers: { "content-type": "text/html" },
+          }),
+      });
+      const candidate = extractFestivalCandidate(
+        await fetched.response.text(),
+        source,
+        "2026-11-22T10:30:00Z",
+      );
+      assert.equal(candidate.ticketStatus, undefined);
+      const result = evaluateCandidate(
+        {
+          slug,
+          editionYear: 2027,
+          startDate: candidate.startDate,
+          endDate: candidate.endDate,
+          status: "partial",
+          headliners: [],
+          lineup: ["Synthetic Artist"],
+          ticketStatus: "unknown",
+        },
+        candidate,
+      );
+      assert.ok(
+        !result.changes.some(({ field }) => ["ticketStatus", "ticketsUrl"].includes(field)),
+      );
+    });
+  }
   if (slug === "rock-im-park")
     test("Rock im Park: available ordinary admission beats sold-out other admission", () => {
       assert.equal(

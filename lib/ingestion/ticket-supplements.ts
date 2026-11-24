@@ -1,3 +1,4 @@
+import { renderedTicketText } from "./rendered-ticket-text.ts";
 import { RFP_STOCK, RFP_PURCHASE, observeRfpStock } from "./rfp-ticket-stock.ts";
 import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
@@ -274,7 +275,7 @@ export function observeTicketSupplement(
             return false;
           }
         });
-      const sold = /(?:sold out|ausverkauft)\b/i.test(text(header.text()));
+      const sold = /(?:sold out|ausverkauft)\b/i.test(renderedTicketText(header));
       if (buy.length > 1 || (sold && buy.length))
         return fail("conflicting ordinary admission inventory");
       if (buy.length === 1 && !sold) available = text(header.children(".title").text());
