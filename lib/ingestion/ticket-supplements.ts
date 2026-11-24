@@ -256,6 +256,9 @@ export function observeTicketSupplement(
       .filter((_, tier) => text($(tier).children(".tier__label").text()) === "Tarif normal");
     if (regular.length !== 1) return fail("regular price tier absent or duplicated");
     const tier = regular.first();
+    const disabled = "[disabled], [aria-disabled='true'], .disabled, .is-disabled";
+    const state = tier.children(".tier__state");
+    const price = tier.children(".tier__price");
     const buy = main.children("a.ticket__cta[href]").filter((_, anchor) => {
       const link = $(anchor);
       try {
@@ -269,25 +272,30 @@ export function observeTicketSupplement(
           !target.hash &&
           /^\/m\/\d+$/.test(target.pathname) &&
           text(link.text()) === "Prendre mon pass" &&
-          link.closest("[disabled], [aria-disabled='true'], .disabled, .is-disabled").length === 0
+          link.closest(disabled).length === 0
         );
       } catch {
         return false;
       }
     });
-    const state = text(tier.children(".tier__state").text());
     if (
       tier.hasClass("tier--on-sale") &&
       !tier.hasClass("tier--sold-out") &&
-      state === "En vente" &&
+      state.length === 1 &&
+      price.length === 1 &&
+      !state.closest(disabled).length &&
+      !price.closest(disabled).length &&
+      !state.find(disabled).length &&
+      !price.find(disabled).length &&
+      text(state.text()) === "En vente" &&
       buy.length === 1 &&
-      /^\d+(?:[.,]\d+)?\s*€$/.test(text(tier.children(".tier__price").text()))
+      /^\d+(?:[.,]\d+)?\s*€$/.test(text(price.text()))
     )
       return {
         status: "available",
         excerpt:
           `Motocultor Festival ${year}; Pass 4 jours; Tarif normal; ` +
-          `${text(tier.children(".tier__price").text())}; En vente; enabled official Fever Prendre mon pass control`,
+          `${text(price.text())}; En vente; enabled official Fever Prendre mon pass control`,
       };
     // Sold-out early-bird tiers and unknown day-pass inventory do not prove
     // whole-event sellout. Keep the last-good snapshot on any unsupported state.

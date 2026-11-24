@@ -141,6 +141,49 @@ test("Motocultor: merges ticket evidence without artist or provider changes", as
     [],
   );
 });
+for (const selector of [
+  ".tier--on-sale",
+  ".tiers",
+  ".tier--on-sale .tier__state",
+  ".tier--on-sale .tier__price",
+]) {
+  test(`Motocultor: disabled ${selector} cannot publish regular availability`, async () => {
+    const disabled = alter(($) => ordinary($).find(selector).attr("aria-disabled", "true"));
+    assert.equal(observe(disabled).status, undefined);
+    const fetched = await fetchSource(source, {
+      maxAttempts: 1,
+      fetchImpl: async (target) => {
+        const url = String(target);
+        const response = new Response(
+          url === source.url ? news : url === ticketUrl ? disabled : article,
+          {
+            headers: { "content-type": "text/html" },
+          },
+        );
+        Object.defineProperty(response, "url", { value: url });
+        return response;
+      },
+    });
+    const candidate = extractFestivalCandidate(
+      await fetched.response.text(),
+      source,
+      "2026-11-22T10:48:00Z",
+    );
+    const result = evaluateCandidate(
+      {
+        slug: source.festivalSlug,
+        editionYear: 2027,
+        status: "partial",
+        headliners: [],
+        lineup: candidate.lineup,
+        ticketStatus: "unknown",
+      },
+      candidate,
+    );
+    assert.equal(candidate.ticketStatus, undefined);
+    assert.ok(!result.changes.some(({ field }) => ["ticketStatus", "ticketsUrl"].includes(field)));
+  });
+}
 test("Motocultor: discovered article redirects fail source identity rather than blessing foreign content", async () => {
   await assert.rejects(
     fetchSource(source, {
