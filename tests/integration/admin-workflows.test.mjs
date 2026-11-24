@@ -22,6 +22,8 @@ let primaryFails = false;
 let primaryOffersWithoutEdition = false;
 let primaryHasDatedFallback = false;
 let observedTicketsUrl = ticketsUrl;
+let includePerformer = false;
+const performer = "Example Metal Band";
 const replacementTicketsUrl = "https://tickets.example.test/replacement";
 let originalStartDate = "2027-07-28";
 let datesChanged = false;
@@ -41,6 +43,7 @@ const sourceServer = createServer((request, response) => {
     "@type": "MusicEvent",
     name: "Wacken Open Air",
     startDate,
+    ...(includePerformer && { performer: [{ "@type": "MusicGroup", name: performer }] }),
     endDate: "2027-07-31",
     location: { "@type": "Place", address: { addressLocality: "Wacken Preview" } },
     offers: {
@@ -1092,6 +1095,46 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
       .ticketsUrl,
     replacementTicketsUrl,
   );
+
+  // A date from the HTML parser does not establish the edition of a JSON-LD roster.
+  primaryOffersWithoutEdition = true;
+  includePerformer = true;
+  const unscopedLineup = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(unscopedLineup.status, 201);
+  const unscopedLineupRun = await unscopedLineup.json();
+  assert.equal(unscopedLineupRun.queued, 0);
+  assert.equal(unscopedLineupRun.status, "PARTIAL");
+  const lineupLog = await (
+    await admin.json(`/api/admin/parser-runs/${unscopedLineupRun.id}/log`)
+  ).json();
+  assert.ok(
+    lineupLog.log.some(({ reviewReasons }) =>
+      reviewReasons?.includes("Lineup could not be verified for the selected edition."),
+    ),
+  );
+
+  primaryOffersWithoutEdition = false;
+  const scopedLineup = await admin.json(`${refreshPath}?year=2027`, "POST");
+  assert.equal(scopedLineup.status, 201);
+  const scopedLineupRun = await scopedLineup.json();
+  assert.equal(scopedLineupRun.queued, 1);
+  const scopedLineupChange = await db.adminChange.findFirstOrThrow({
+    where: { parserRunId: scopedLineupRun.id, field: "lineup" },
+  });
+  assert.deepEqual(scopedLineupChange.afterValue, [performer]);
+  assert.equal(
+    (
+      await admin.json(`/api/admin/changes/${scopedLineupChange.id}`, "POST", {
+        decision: "approve",
+      })
+    ).status,
+    200,
+  );
+  assert.match(
+    await (await anonymous.json("/festivals/wacken-open-air/")).text(),
+    /Example Metal Band/,
+  );
+  includePerformer = false;
 
   primaryFails = true;
   assert.equal((await admin.json(refreshPath, "POST")).status, 502);

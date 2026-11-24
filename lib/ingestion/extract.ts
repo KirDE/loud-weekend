@@ -201,16 +201,23 @@ function extractConfiguredCandidate(
   };
   for (const candidate of candidates) {
     if (candidate.artistListMode) merged.artistListMode = candidate.artistListMode;
+    const suppliedFields = new Set<FieldEvidence["field"]>();
     for (const field of supportedFields) {
       if (merged[field] !== undefined || candidate[field] === undefined) continue;
       Object.assign(merged, { [field]: candidate[field] });
+      suppliedFields.add(field);
       if (field === "ticketsUrl" || field === "ticketStatus") {
         (merged.ticketEditionYears ??= {})[field] = candidate.observedEditionYears;
       }
+      if (field === "lineup" || field === "headliners") {
+        (merged.rosterEditionYears ??= {})[field] = candidate.observedEditionYears;
+      }
+    }
+    for (const evidence of candidate.evidence) {
+      if (suppliedFields.delete(evidence.field)) merged.evidence.push(evidence);
     }
     if (candidate.lineupScope && merged.lineup === candidate.lineup)
       merged.lineupScope = candidate.lineupScope;
-    merged.evidence.push(...candidate.evidence.filter(({ field }) => merged[field] !== undefined));
     merged.observedEditionYears.push(...candidate.observedEditionYears);
     merged.warnings.push(...candidate.warnings);
   }
@@ -220,10 +227,6 @@ function extractConfiguredCandidate(
   if (merged.evidence.length > 0) {
     merged.warnings = merged.warnings.filter((warning) => !missingFormatWarnings.has(warning));
   }
-  merged.evidence = merged.evidence.filter(
-    ({ field }, index, values) =>
-      values.findIndex((evidence) => evidence.field === field) === index,
-  );
   merged.observedEditionYears = [...new Set(merged.observedEditionYears)];
   merged.warnings = [...new Set(merged.warnings)];
   // The JSON-LD format is optional for the verified Rock Werchter homepage.

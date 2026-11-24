@@ -559,7 +559,6 @@ async function refreshSource(
       throw new Error("Official source provided no supported evidence");
     if (candidate.observedEditionYears.some((year) => year !== active.editionYear))
       throw new Error("Official source returned another edition");
-    const editionObserved = candidate.observedEditionYears.includes(active.editionYear);
     const reviewReasons = [...result.reviewReasons];
     const fields = [
       "startDate",
@@ -583,7 +582,14 @@ async function refreshSource(
           return [];
         }
       }
-      if ((field === "lineup" || field === "headliners") && !editionObserved) return [];
+      if (field === "lineup" || field === "headliners") {
+        const rosterYears = candidate.rosterEditionYears?.[field] ?? candidate.observedEditionYears;
+        if (!rosterYears.includes(active.editionYear)) {
+          const detail = field === "lineup" ? "Lineup" : "Headliners";
+          reviewReasons.push(`${detail} could not be verified for the selected edition.`);
+          return [];
+        }
+      }
       const afterValue =
         field === "lineup" || field === "headliners"
           ? [
