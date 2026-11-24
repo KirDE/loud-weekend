@@ -19,6 +19,7 @@ export default defineConfig({
         "browser-editor@example.test",
         "browser-viewer@example.test",
         "browser-tier-admin@example.test",
+        "browser-corrections-editor@example.test",
         "browser-onboarding-editor@example.test",
       ].join(","),
       SUBMISSION_HASH_SALT: "browser-submission-test-salt",

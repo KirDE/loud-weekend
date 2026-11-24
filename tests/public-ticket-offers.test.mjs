@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { FestivalComparisonTicket } from "../components/FestivalExplorer.tsx";
+import { FestivalComparisonTicket } from "../components/FestivalComparison.tsx";
 import { FestivalDetail } from "../components/FestivalDetail.tsx";
 import { LanguageProvider } from "../components/LanguageProvider.tsx";
 import { LocalPlannerProvider } from "../components/LocalPlanner.tsx";

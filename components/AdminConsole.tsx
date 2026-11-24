@@ -1,6 +1,9 @@
 "use client";
 
 import { TicketOfferReviewQueue } from "./TicketOfferReviewQueue";
+import Link from "next/link";
+import { correctionQueueLabel } from "./CorrectionQueue";
+
 import { AdminBiographyReview } from "./AdminBiographyReview";
 import { AdminSocialLinkReview } from "./AdminSocialLinkReview";
 import { useEffect, useMemo, useState } from "react";
@@ -236,6 +239,7 @@ export function AdminConsole({
             <option value="ru">Русский</option>
           </select>
         </label>
+        <Link href="/admin/corrections/">{correctionQueueLabel[language]}</Link>
         <a href="/">← {ta("publicSite")}</a>
       </nav>
       <section className="adminMain">

@@ -971,3 +971,38 @@ model TicketOfferReviewDecision {
   snapshot     TicketOfferProposalSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   actor        User @relation(fields: [actorId], references: [id], onDelete: Restrict)
 }
+
+enum CorrectionKind {
+  DATE
+  LINEUP
+  TICKETS
+  IDENTITY
+}
+
+enum CorrectionStatus {
+  PENDING
+  ACCEPTED
+  DISMISSED
+}
+
+model CorrectionReport {
+  id           String           @id @default(cuid())
+  targetName   String
+  editionId    String?
+  editionYear  Int?
+  artistId     String?
+  kind         CorrectionKind
+  sourceUrl    String
+  notes        String?
+  fingerprint  String
+  reporterHash String
+  submittedAt  DateTime         @default(now())
+  status       CorrectionStatus @default(PENDING)
+  reviewedAt   DateTime?
+  reviewerId   String?
+
+  @@index([status, submittedAt])
+  @@index([reporterHash, submittedAt])
+  @@index([fingerprint, submittedAt])
+  @@index([submittedAt])
+}
