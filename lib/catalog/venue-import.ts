@@ -143,12 +143,28 @@ export async function importReviewedVenue(
         throw new Error("Persisted venue observation does not match the approved evidence");
 
       const receipt = { ...record, checkOnly: false, candidateId: candidate.id, fingerprint };
-      if (candidate.reviewState === "PUBLISHED") return receipt;
+      if (candidate.reviewState === "PUBLISHED" || candidate.reviewState === "APPROVED")
+        return receipt;
       if (
         candidate.reviewState !== "PENDING" ||
         scope.data.previousPublicationId !== (previous?.id ?? null)
       )
         throw new Error("The reviewed venue was superseded; stage the current observation again");
+
+      const now = new Date();
+      const checkedOn = new Date(proof.observedAt.toISOString().slice(0, 10));
+      const matchingVenue = { editionId: edition.id, ...stored };
+      if (await tx.editionVenue.findFirst({ where: matchingVenue, select: { editionId: true } })) {
+        await tx.editionVenue.updateMany({
+          where: { ...matchingVenue, checkedOn: { lt: checkedOn } },
+          data: { checkedOn },
+        });
+        await tx.ingestionCandidate.update({
+          where: { id: candidate.id },
+          data: { reviewState: "APPROVED", reviewActor: approval.actor, reviewedAt: now },
+        });
+        return receipt;
+      }
 
       const publication = await createPublication(tx, {
         source: "INGESTION",
@@ -165,8 +181,7 @@ export async function importReviewedVenue(
         },
       });
       if (!publication) throw new Error("Venue publication was not recorded");
-      const now = new Date();
-      const data = { ...stored, checkedOn: new Date(proof.observedAt.toISOString().slice(0, 10)) };
+      const data = { ...stored, checkedOn };
       await tx.editionVenue.upsert({
         where: { editionId: edition.id },
         create: { editionId: edition.id, ...data },

@@ -138,6 +138,37 @@ test("the public map shows only persisted venue evidence for the selected editio
     });
     expect(refreshed.latitude).toBeGreaterThan(preview.latitude);
 
+    const previousCheck = new Date("2024-01-01");
+    await db.editionVenue.updateMany({
+      where: { edition: { festivalId } },
+      data: { checkedOn: previousCheck },
+    });
+    const identical = await collectReviewedVenue(db, edition, { fetchImpl: response(changedHtml) });
+    await collect(changedHtml, identical.token);
+    await collect(changedHtml, identical.token);
+    const rechecked = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { id: identical.candidateId },
+      include: { evidence: true },
+    });
+    expect(
+      await db.catalogPublication.findMany({
+        where: { festivalSlug, editionYear: edition, fields: { has: "venue" } },
+        select: { id: true },
+      }),
+    ).toEqual([{ id: applied.catalogueVersion }]);
+    expect(rechecked).toMatchObject({
+      reviewState: "APPROVED",
+      reviewActor: actor,
+      reviewedAt: expect.any(Date),
+      publishedAt: null,
+      catalogueVersion: null,
+    });
+    expect(rechecked.evidence).toHaveLength(1);
+    const checkedOn = await db.editionVenue.findFirstOrThrow({
+      where: { edition: { festivalId } },
+    });
+    expect(checkedOn.checkedOn.toISOString().slice(0, 10)).toBe(identical.checkedOn);
+
     for (const [lang, confirmed] of Object.entries(labels)) {
       const page = await browser.newPage({ viewport: { width: 320, height: 844 } });
       try {
