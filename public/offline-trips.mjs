@@ -234,6 +234,7 @@ export function parseOfflineTrip(value) {
     !shortText(value.name) ||
     !(value.startDate === null || isoDate(value.startDate)) ||
     !(value.endDate === null || isoDate(value.endDate)) ||
+    (value.startDate !== null && value.endDate !== null && value.endDate < value.startDate) ||
     !(value.location === null || shortText(value.location)) ||
     !instant(value.updatedAt) ||
     !Array.isArray(value.timetable) ||

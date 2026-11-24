@@ -195,3 +195,21 @@ test("a download with an invalid time zone cannot replace a valid saved schedule
     trip: { ...fact, timetable: [] },
   });
 });
+
+test("a download with dates in reverse order cannot replace a valid saved trip", async (t) => {
+  const trip = { ...fact, startDate: "2027-06-12", endDate: "2027-06-10", timetable: [] };
+  t.mock.method(globalThis, "fetch", async () => Response.json(trip));
+  const storage = memoryStorage();
+  const saved = saveOfflineTrip(storage, fact, updatedAt);
+  await assert.rejects(async () => {
+    saveOfflineTrip(storage, await fetchOfflineTrip("", fact.slug, fact.year), updatedAt);
+  }, /Unexpected trip download/);
+  assert.deepEqual(readOfflineTrip(storage, fact.slug, fact.year), saved);
+
+  // Also hide contradictory records cached by older builds of the web app.
+  storage.setItem(
+    offlineTripKey(trip.slug, trip.year),
+    JSON.stringify({ trip, savedAt: updatedAt }),
+  );
+  assert.deepEqual(listOfflineTrips(storage), []);
+});
