@@ -2,7 +2,7 @@ import type { CatalogSnapshot } from "./repository";
 import { latestDate } from "./freshness";
 import { festivalDateInterval } from "../festival-dates";
 import { hasAnnouncedLineup } from "../festival-lineup";
-import { timetableEntrySchema } from "../timetables";
+import { isOfficialTimetableSource, timetableEntrySchema } from "../timetables";
 
 export function summarizeDataQuality(
   catalog: Pick<CatalogSnapshot, "festivals" | "editions">,
@@ -37,6 +37,7 @@ export function summarizeDataQuality(
         (!festival.startDate || entry.date >= festival.startDate) &&
         (!festival.endDate || entry.date <= festival.endDate) &&
         timetableEntrySchema.safeParse(entry).success &&
+        isOfficialTimetableSource(entry.sourceUrl, festival.officialUrl) &&
         (scheduleYear === undefined || Number(entry.date.slice(0, 4)) === scheduleYear),
     );
     if (hasUsableSchedule) summary.timetable += 1;
