@@ -174,7 +174,7 @@ test("review history reaches older dismissed reports after newer accepted report
   await expect(page.getByRole("link", { name: "Previous" })).toBeVisible();
 });
 
-test("an artist with a visible cancelled appearance can report an identity correction", async ({
+test("correction intake accepts an artist with a cancelled appearance and no public profile", async ({
   page,
   baseURL,
 }) => {
@@ -182,7 +182,7 @@ test("an artist with a visible cancelled appearance can report an identity corre
   const appearance = await db.lineupEntry.findFirstOrThrow({ where: { artistId: artist.id } });
   await db.lineupEntry.update({ where: { id: appearance.id }, data: { status: "CANCELLED" } });
   try {
-    expect((await page.goto("/en/artists/second-artist/")).status()).toBe(200);
+    expect((await page.request.get("/en/artists/second-artist/")).status()).toBe(404);
     const response = await page.request.post("/api/corrections", {
       headers: { origin: baseURL, "x-real-ip": "192.0.2.25" },
       data: {
