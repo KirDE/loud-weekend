@@ -64,6 +64,10 @@ export async function stageArrivalFixture(
       Object.defineProperty(response, "url", { value: requestUrl });
       return response;
     },
+    {
+      startDate: edition.startDate?.toISOString().slice(0, 10),
+      endDate: edition.endDate?.toISOString().slice(0, 10),
+    },
   );
   await persistAttempt(db, {
     runId: run.id,
