@@ -507,6 +507,7 @@ test("an invalid public-looking catalogue cannot replace or revalidate a good of
         },
       ],
     },
+    { ...payload(), festivals: [festival, { ...festival, name: "Conflicting festival" }] },
     { ...payload(), dataVersion: "different-edition" },
     { ...payload(), editionYear: 2029 },
     { ...payload(), privateNote: "not part of the public projection" },

@@ -183,6 +183,7 @@ function validCatalog(body) {
     !body.festivals.every((festival) => catalogFestival(festival, validTimeZones))
   )
     return false;
+  if (new Set(body.festivals.map(({ slug }) => slug)).size !== body.festivals.length) return false;
   const hasTimetable = body.festivals.some((festival) => festival.timetable.length);
   return body.timetableStatus === (hasTimetable ? "published" : "not-published");
 }
