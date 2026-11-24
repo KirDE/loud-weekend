@@ -9,7 +9,16 @@ test("language changes stay inside every admin route", () => {
 });
 
 test("language changes never navigate public routes or lose query/hash", () => {
-  for (const path of ["/", "/planner/", "/en/planner/?filter=artist#calendar", "/notifications/?tab=channels", "/de/notifications/", "/ru/artists/example/", "/festivals/example/2027/", "/share/token/"]) {
+  for (const path of [
+    "/",
+    "/planner/",
+    "/en/planner/?filter=artist#calendar",
+    "/notifications/?tab=channels",
+    "/de/notifications/",
+    "/ru/artists/example/",
+    "/festivals/example/2027/",
+    "/share/token/",
+  ]) {
     for (const locale of ["en", "de", "ru"]) assert.equal(languageDestination(path, locale), null);
   }
 });
