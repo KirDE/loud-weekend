@@ -317,6 +317,9 @@ async function applyFestivalChanges(
     if (problem) throw new Error(problem);
   }
 
+  // A delayed observation must not make the edition's latest source check appear older.
+  const sourceUpdatedAt =
+    input.observedAt > edition.sourceUpdatedAt ? input.observedAt : edition.sourceUpdatedAt;
   const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
   for (const change of input.changes) {
@@ -349,7 +352,7 @@ async function applyFestivalChanges(
         if (!same(current, change.after)) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { [change.field]: dateOnly(change.after), sourceUpdatedAt: input.observedAt },
+            data: { [change.field]: dateOnly(change.after), sourceUpdatedAt },
           });
           changed = true;
         }
@@ -370,7 +373,7 @@ async function applyFestivalChanges(
             where: { id: edition.id },
             data: {
               ticketsUrl: change.after as string | null | undefined,
-              sourceUpdatedAt: input.observedAt,
+              sourceUpdatedAt,
             },
           });
           changed = true;
@@ -390,7 +393,7 @@ async function applyFestivalChanges(
         if (current !== change.after) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { completeness: "PARTIAL", sourceUpdatedAt: input.observedAt },
+            data: { completeness: "PARTIAL", sourceUpdatedAt },
           });
           changed = true;
         }
@@ -408,7 +411,7 @@ async function applyFestivalChanges(
         if (edition.status !== next) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { status: next, sourceUpdatedAt: input.observedAt },
+            data: { status: next, sourceUpdatedAt },
           });
           changed = true;
         }
@@ -424,7 +427,7 @@ async function applyFestivalChanges(
         if (edition.ticketStatus !== next) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { ticketStatus: next, sourceUpdatedAt: input.observedAt },
+            data: { ticketStatus: next, sourceUpdatedAt },
           });
           changed = true;
         }
