@@ -228,6 +228,19 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
       where: { editionId_artistId: { editionId: edition.id, artistId: artist.id } },
       data: { status: "CANCELLED" },
     });
+    const playlist = await db.festivalPlaylist.create({
+      data: {
+        editionId: edition.id,
+        provider: "spotify",
+        url: "https://open.spotify.com/playlist/synthetic",
+      },
+    });
+    try {
+      const { playlists } = await readCatalog({ database: db });
+      assert.equal(playlists[slug].artists, 1);
+    } finally {
+      await db.festivalPlaylist.delete({ where: { id: playlist.id } });
+    }
     const afterCancellation = await read();
     assert.ok(
       ![...afterCancellation.headliners, ...afterCancellation.lineup].includes(artist.name),
