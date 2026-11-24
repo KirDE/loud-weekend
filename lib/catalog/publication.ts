@@ -67,14 +67,16 @@ function artistSlug(name: string) {
 }
 
 function stringList(value: unknown, field: string) {
-  const values = Array.isArray(value)
+  // A structured roster is a full replacement, so dropping an invalid slot
+  // could silently remove existing artists. Only text accepts blank separators.
+  if (Array.isArray(value) && value.some((item) => typeof item !== "string" || !item.trim()))
+    throw new Error(`Invalid ${field} list`);
+  const values: string[] = Array.isArray(value)
     ? value
     : typeof value === "string"
       ? value.split(/\r?\n|,/)
       : [];
-  const cleaned = values
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter(Boolean);
+  const cleaned = values.map((item) => item.trim()).filter(Boolean);
   if (!cleaned.length && value !== "" && (!Array.isArray(value) || value.length))
     throw new Error(`Invalid ${field} list`);
   const keys = cleaned.map((item) => item.toLocaleLowerCase());

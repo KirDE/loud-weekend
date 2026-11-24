@@ -414,6 +414,42 @@ test("admin roster edits preserve retained and cancelled rows without reinstatin
   }
 });
 
+test("malformed reviewed roster arrays cannot remove published artists", async () => {
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+  });
+  const currentRoster = () =>
+    db.lineupEntry.findMany({
+      where: { editionId: edition.id, billing: "HEADLINER" },
+      orderBy: { position: "asc" },
+      include: { artist: true },
+    });
+  const before = await currentRoster();
+  assert.ok(before.length > 0);
+  for (const invalid of [null, 7, "  "]) {
+    const id = randomUUID();
+    await assert.rejects(
+      db.$transaction((tx) =>
+        publishAdminFestivalChange(tx, {
+          change: {
+            id,
+            resourceKey: "synthetic-fest",
+            field: "headliners",
+            beforeValue: before.map(({ artist }) => artist.name),
+            afterValue: [`Reviewed invalid replacement ${suffix}`, invalid],
+            sourceEvidence: null,
+            parserRunId: null,
+          },
+          actorLabel: "test reviewer",
+        }),
+      ),
+      /Invalid headliners list/,
+    );
+    assert.deepEqual(await currentRoster(), before);
+    assert.equal(await db.catalogPublication.count({ where: { sourceId: `admin:${id}` } }), 0);
+  }
+});
+
 test("fails closed and rolls back every catalog row when artist identity is ambiguous", async () => {
   const requestedName = `Ambiguous Artist ${suffix}`;
   const slug = encodeURIComponent(
