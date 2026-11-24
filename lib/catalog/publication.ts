@@ -6,6 +6,7 @@ import {
 } from "../ingestion/adapters/tolminator-stock.ts";
 import { POLANDROCK_NEWSROOM } from "../ingestion/adapters/polandrock-admission.ts";
 import { editionDateProblem } from "../domain/edition-dates.ts";
+import { publishArrivalObservation, type ArrivalObservation } from "./arrival-import.ts";
 import {
   ticketSupplementUrl,
   ticketSupplementPurchaseUrl,
@@ -476,28 +477,47 @@ export async function publishIngestionResult(
           diffs: true,
           evidence: true,
           attempt: {
-            select: { requestedUrl: true, finalUrl: true, httpStatus: true, endedAt: true },
+            select: {
+              festivalSlug: true,
+              requestedUrl: true,
+              finalUrl: true,
+              httpStatus: true,
+              endedAt: true,
+            },
           },
         },
       });
       if (!candidate || !candidate.publishable)
         throw new Error("Publishable ingestion candidate was not persisted");
+      const observed = input.result.candidate;
+      const stored = candidate.normalized as unknown as FestivalCandidate;
       if (
-        input.sourceLease &&
-        (candidate.festivalSlug !== input.result.festivalSlug ||
-          candidate.attempt.requestedUrl !== input.result.sourceUrl)
-      )
-        throw new Error("Leased candidate source does not match persisted attempt");
+        !stored ||
+        [
+          candidate.festivalSlug,
+          candidate.attempt.festivalSlug,
+          observed.festivalSlug,
+          stored.festivalSlug,
+        ].some((slug) => slug !== input.result.festivalSlug) ||
+        [candidate.attempt.requestedUrl, observed.sourceUrl, stored.sourceUrl].some(
+          (url) => url !== input.result.sourceUrl,
+        ) ||
+        !Array.isArray(stored.observedEditionYears) ||
+        !same(stored.observedEditionYears, observed.observedEditionYears) ||
+        stored.observedEditionYears.length > 1
+      ) {
+        throw new Error(
+          "Ingestion publication scope does not match the persisted festival, source and edition",
+        );
+      }
       // Admission-only observations cannot turn a camping link or missing proof
       // into free general entry. Bind request, normalized data and durable evidence.
-      const admission = input.result.candidate;
-      const savedAdmission = candidate.normalized as unknown as FestivalCandidate;
       if (
         (input.result.festivalSlug === "polandrock" || candidate.festivalSlug === "polandrock") &&
         (candidate.attempt.requestedUrl === POLANDROCK_NEWSROOM ||
           input.result.sourceUrl === POLANDROCK_NEWSROOM ||
-          admission.ticketStatus === "free" ||
-          savedAdmission?.ticketStatus === "free")
+          observed.ticketStatus === "free" ||
+          stored?.ticketStatus === "free")
       ) {
         const at = Date.parse(input.result.fetchedAt);
         const valid =
@@ -506,7 +526,7 @@ export async function publishIngestionResult(
           candidate.attempt.requestedUrl === POLANDROCK_NEWSROOM &&
           input.result.sourceUrl === POLANDROCK_NEWSROOM &&
           Number.isFinite(at) &&
-          [admission, savedAdmission].every(
+          [observed, stored].every(
             (c) =>
               c &&
               c.festivalSlug === "polandrock" &&
@@ -515,8 +535,8 @@ export async function publishIngestionResult(
               c.ticketStatus === "free" &&
               c.observedEditionYears?.length === 1 &&
               c.observedEditionYears[0] === candidate.sourceYear &&
-              c.startDate === admission.startDate &&
-              c.endDate === admission.endDate &&
+              c.startDate === observed.startDate &&
+              c.endDate === observed.endDate &&
               c.warnings?.length === 0 &&
               ["lineup", "headliners", "ticketsUrl", "status"].every(
                 (f) => (c as unknown as Record<string, unknown>)[f] === undefined,
@@ -533,7 +553,7 @@ export async function publishIngestionResult(
           input.result.changes.every(
             (change) =>
               ["startDate", "endDate", "ticketStatus"].includes(change.field) &&
-              same(change.after, (admission as unknown as Record<string, unknown>)[change.field]),
+              same(change.after, (observed as unknown as Record<string, unknown>)[change.field]),
           ) &&
           ["startDate", "endDate", "ticketStatus"].every((field) =>
             candidate.evidence.some(
@@ -541,7 +561,7 @@ export async function publishIngestionResult(
                 e.field === field &&
                 e.sourceUrl === POLANDROCK_NEWSROOM &&
                 e.observedAt.getTime() === at &&
-                same(e.observedValue, (admission as unknown as Record<string, unknown>)[field]),
+                same(e.observedValue, (observed as unknown as Record<string, unknown>)[field]),
             ),
           );
         if (!valid)
@@ -579,10 +599,7 @@ export async function publishIngestionResult(
       );
       if (!same(expected, persisted))
         throw new Error("Persisted ingestion diff does not match publication request");
-      const expectedYear =
-        input.result.candidate.observedEditionYears.length === 1
-          ? input.result.candidate.observedEditionYears[0]
-          : (candidate.sourceYear ?? undefined);
+      const expectedYear = stored.observedEditionYears[0] ?? candidate.sourceYear ?? undefined;
       if (
         !expectedYear &&
         input.result.changes.some(({ field }) => field === "lineup" || field === "headliners")
@@ -591,8 +608,6 @@ export async function publishIngestionResult(
       // Secondary ticket observations are publishable only with the same exact
       // source, edition, value and durable evidence that passed the producer.
       // Do not extend the separate Impericon/I-Days publication paths here (#497).
-      const observed = input.result.candidate;
-      const stored = candidate.normalized as unknown as FestivalCandidate;
       // Scope this stock-only guard to the product route, never the festival
       // slug: the primary homepage still publishes its independent date fields.
       // Durable route identities keep caller slug/source stripping fail-closed.
@@ -1144,6 +1159,22 @@ export async function publishAdminFestivalChange(
     actorLabel: input.actorLabel,
     fields: applied.changedFields,
     evidence: { adminChangeId: input.change.id, sourceEvidence: input.change.sourceEvidence },
+  });
+}
+
+export async function publishAgentArrivalResolution(
+  db: Prisma.TransactionClient,
+  input: { sourceId: string; arrival: ArrivalObservation; evidence: unknown },
+) {
+  if (!(await publishArrivalObservation(db, input.arrival))) return null;
+  return createPublication(db, {
+    source: CatalogPublicationSource.INGESTION,
+    sourceId: input.sourceId,
+    festivalSlug: input.arrival.festivalSlug,
+    editionYear: input.arrival.editionYear,
+    actorLabel: "OpenClaw import-conflict agent",
+    fields: ["arrival"],
+    evidence: input.evidence,
   });
 }
 
