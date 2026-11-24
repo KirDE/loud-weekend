@@ -45,7 +45,8 @@ cleanup_install() {
     if [[ "$cleanup_failed" == true ]]; then
       echo "asset cleanup failed; recovery snapshots retained: $scheduler_backup $db_due_backup" >&2
     else
-      echo "active release uncertain; old assets not restored; recovery snapshots retained: $scheduler_backup $db_due_backup" >&2
+      echo "active release uncertain; old assets not restored; recovery snapshots retained: $sc\
+heduler_backup $db_due_backup" >&2
     fi
     [[ "$status" -ne 0 ]] || status=1
   else
@@ -91,7 +92,8 @@ if [[ ! -e "$shared/ingestion/source-fetch.lock" && ! -L "$shared/ingestion/sour
   install -o www-data -g www-data -m 0640 /dev/null "$shared/ingestion/source-fetch.lock"
 fi
 [[ -f "$shared/ingestion/source-fetch.lock" && ! -L "$shared/ingestion/source-fetch.lock" &&
-   "$(stat -c %U:%a -- "$shared/ingestion/source-fetch.lock")" == www-data:640 ]] || { echo 'ingestion lock unsafe' >&2; exit 4; }
+   "$(stat -c %U:%a -- "$shared/ingestion/source-fetch.lock")" == www-data:640 ]] || { echo\
+ 'ingestion lock unsafe' >&2; exit 4; }
 # activate-release already holds the deployment lock. Serialize release changes
 # with all supported fetch paths too; no source execution occurs here.
 exec 8<"$shared/ingestion/source-fetch.lock"
@@ -107,7 +109,8 @@ fi
 db_due_timer_was_armed=false
 db_due_timer=/etc/systemd/system/festival-radar-db-due.timer
 if [[ -e "$db_due_timer" || -L "$db_due_timer" ]]; then
-  [[ -f "$db_due_timer" && ! -L "$db_due_timer" ]] || { echo "DB-due timer unit unsafe; deployment refused" >&2; exit 6; }
+  [[ -f "$db_due_timer" && ! -L "$db_due_timer" ]] || { echo\
+ "DB-due timer unit unsafe; deployment refused" >&2; exit 6; }
   due_enabled="$(systemctl is-enabled festival-radar-db-due.timer 2>/dev/null || true)"
   due_active="$(systemctl is-active festival-radar-db-due.timer 2>/dev/null || true)"
   if [[ "$due_enabled" == enabled && "$due_active" == active ]]; then
@@ -161,7 +164,8 @@ for provider in spotify youtube_music; do
   if [[ ! -e "$provider_lock" && ! -L "$provider_lock" ]]; then
     install -o www-data -g www-data -m 0640 /dev/null "$provider_lock"
   fi
-  [[ -f "$provider_lock" && ! -L "$provider_lock" && "$(stat -c %U:%a "$provider_lock")" == www-data:640 ]] || { echo 'provider lock unsafe' >&2; exit 4; }
+  [[ -f "$provider_lock" && ! -L "$provider_lock" && "$(stat -c %U:%a "$provider_lock")" ==\
+ www-data:640 ]] || { echo 'provider lock unsafe' >&2; exit 4; }
 done
 exec 7<"$provider_lock_dir/refresh-spotify.lock"
 flock -w 600 7 || { echo 'Spotify operation still active' >&2; exit 5; }
@@ -225,8 +229,10 @@ TimeoutStartSec=7500
 UNIT
 install -o root -g root -m 0755 "$release/scripts/deploy/start-db-due" "$db_due_wrapper"
 
-install -o root -g root -m 0755 "$release/scripts/deploy/db-due-scheduler" /usr/local/libexec/festival-radar/db-due-scheduler
-install -o root -g root -m 0755 "$release/scripts/deploy/check-db-due-tick-ready" /usr/local/libexec/festival-radar/check-db-due-tick-ready
+install -o root -g root -m 0755 "$release/scripts/deploy/db-due-scheduler"\
+ /usr/local/libexec/festival-radar/db-due-scheduler
+install -o root -g root -m 0755 "$release/scripts/deploy/check-db-due-tick-ready"\
+ /usr/local/libexec/festival-radar/check-db-due-tick-ready
 cat > "/etc/systemd/system/$service-db-due-scheduler.service" <<UNIT
 [Unit]
 Description=Serialized bounded Loud Weekend DB due tick
@@ -452,7 +458,8 @@ if [[ "$healthy" != true ]]; then
         "$(cat "$previous/DEPLOYED_COMMIT" 2>/dev/null)" == "$previous_commit" ]]; then
     ln -sfn "$previous" "$app_root/current"
   fi
-  prior_release_is_active || { echo "release health check failed; prior stamped release not restored; active assets retained" >&2; exit 1; }
+  prior_release_is_active || { echo\
+ "release health check failed; prior stamped release not restored; active assets retained" >&2; exit 1; }
   scheduler_restore_assets "$scheduler_backup"
   scheduler_assets_armed=false
   db_due_restore_assets "$db_due_unit" "$db_due_wrapper" "$db_due_backup"
@@ -482,9 +489,13 @@ if [[ "$db_due_timer_was_armed" == true ]]; then
      "$(systemctl is-enabled "$service-db-due.timer" 2>/dev/null || true)" == disabled &&
      "$(systemctl is-active "$service-db-due.timer" 2>/dev/null || true)" == inactive &&
      "$(systemctl is-active "$service-db-due-scheduler.service" 2>/dev/null || true)" == inactive &&
-     "$(systemctl is-active "$service-db-due@tick.service" 2>/dev/null || true)" == inactive ]] || { echo "DB-due rearm state ambiguous; deployment refused" >&2; exit 6; }
-  due_health="$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:$port/api/health/deployment/")" || { echo "DB-due deployment health unavailable; deployment refused" >&2; exit 6; }
-  if [[ ${#due_health} -gt 2048 ]] || ! "$release/.runtime/node" -e 'const h=JSON.parse(process.argv[1]); if (h.status!=="ok" || h.database!=="ok" || h.catalog!=="database" || h.commit!==process.argv[2]) process.exit(1)' "$due_health" "$commit" >/dev/null 2>&1; then
+     "$(systemctl is-active "$service-db-due@tick.service" 2>/dev/null || true)" == inactive ]] || {\
+ echo "DB-due rearm state ambiguous; deployment refused" >&2; exit 6; }
+  due_health="$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:$port/api/hea\
+lth/deployment/")" || { echo "DB-due deployment health unavailable; deployment refused" >&2; exit 6; }
+  if [[ ${#due_health} -gt 2048 ]] || ! "$release/.runtime/node" -e\
+ 'const h=JSON.parse(process.argv[1]); if (h.status!=="ok" || h.database!=="ok" || h.catalog!=='\
+'"database" || h.commit!==process.argv[2]) process.exit(1)' "$due_health" "$commit" >/dev/null 2>&1; then
     echo "DB-due exact-SHA health failed; deployment refused" >&2
     exit 6
   fi

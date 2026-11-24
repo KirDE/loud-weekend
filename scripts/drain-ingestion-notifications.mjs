@@ -10,8 +10,15 @@ if (process.argv.length !== 3 || process.argv[2] !== "--db-due" || !process.env.
 try {
   // Existing importer tick drains its own durable events, including after an idle/failed fetch.
   // No OpenClaw-side timer, model health probe or queue observer is involved.
-  const events = transportConfigured() ? await drainImportEvents(db, sendImportEvent) : { delivered: 0, failed: 0 };
-  console.log(JSON.stringify({ delivered: await drainIngestionNotificationOutbox(db, { limit: 100 }), importEvents: events }));
+  const events = transportConfigured()
+    ? await drainImportEvents(db, sendImportEvent)
+    : { delivered: 0, failed: 0 };
+  console.log(
+    JSON.stringify({
+      delivered: await drainIngestionNotificationOutbox(db, { limit: 100 }),
+      importEvents: events,
+    }),
+  );
 } finally {
   await db.$disconnect();
 }

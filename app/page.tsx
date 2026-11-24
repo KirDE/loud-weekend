@@ -9,6 +9,14 @@ export async function generateMetadata() {
 }
 
 export default async function Home() {
-  const { festivals, discoveryLineups, matchingArtists, suggestionArtists } = await getHomeCatalog();
-  return <HomeContent festivals={festivals} discoveryLineups={discoveryLineups} matchingArtists={matchingArtists} suggestionArtists={suggestionArtists} />;
+  const { festivals, discoveryLineups, matchingArtists, suggestionArtists } =
+    await getHomeCatalog();
+  return (
+    <HomeContent
+      festivals={festivals}
+      discoveryLineups={discoveryLineups}
+      matchingArtists={matchingArtists}
+      suggestionArtists={suggestionArtists}
+    />
+  );
 }
