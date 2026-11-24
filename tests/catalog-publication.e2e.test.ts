@@ -2269,12 +2269,13 @@ for (const slug of ["wacken-open-air", "download", "rock-am-ring", "rock-im-park
     const { TICKET_SUPPLEMENT, ticketSupplementUrl } =
       await import("../lib/ingestion/ticket-supplements.ts");
     const source = parserSource(slug, {
-      url:
-        slug === "download"
-          ? "https://downloadfestival.co.uk/"
-          : slug === "wacken-open-air"
-            ? "https://www.wacken.com/"
-            : `https://www.${slug}.com/`,
+      url: {
+        download: "https://downloadfestival.co.uk/",
+        motocultor: "https://www.motocultor-festival.com/",
+        "wacken-open-air": "https://www.wacken.com/",
+        "rock-am-ring": "https://www.rock-am-ring.com/",
+        "rock-im-park": "https://www.rock-im-park.com/",
+      }[slug]!,
       strategies: ["html_fallback"],
     });
     const ticketUrl = ticketSupplementUrl(source)!;
