@@ -221,12 +221,13 @@ export function extractJsonLdCandidate(
     }
   }
 
-  const eventStatus = text(selected.event.eventStatus)?.toLowerCase();
-  if (eventStatus?.includes("cancelled") || eventStatus?.includes("postponed")) {
-    candidate.warnings.push(
-      `Official event status requires review: ${text(selected.event.eventStatus)}`,
-    );
-  }
+  const eventStatus = selected.event.eventStatus;
+  const statuses = Array.isArray(eventStatus) ? eventStatus : [eventStatus];
+  const reviewStatus = statuses
+    .map((status) => text((status as JsonLd | null | undefined)?.["@id"]) ?? text(status))
+    .find((status) => status && /cancelled|postponed|rescheduled|movedonline/i.test(status));
+  if (reviewStatus)
+    candidate.warnings.push(`Official event status requires review: ${reviewStatus}`);
   if (matching.length > 1)
     candidate.warnings.push(
       "Multiple JSON-LD Events match catalogue edition " +

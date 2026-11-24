@@ -110,6 +110,41 @@ test("fallback evidence never silences event cancellation or wrong-edition warni
   }
 });
 
+for (const [status, eventStatus] of [
+  ["EventCancelled", { "@id": "https://schema.org/EventCancelled" }],
+  ["EventPostponed", ["https://schema.org/EventScheduled", "https://schema.org/EventPostponed"]],
+  ["EventRescheduled", "https://schema.org/EventRescheduled"],
+  ["EventMovedOnline", { "@id": "https://schema.org/EventMovedOnline" }],
+]) {
+  test(`${status} holds otherwise publishable ticket changes for review`, () => {
+    const event = { "@type": "MusicEvent", startDate: current.startDate, eventStatus };
+    const candidate = extract(
+      `<script type="application/ld+json">${JSON.stringify(event)}</script>${ticket}`,
+    );
+    const result = evaluateCandidate(current, candidate);
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [
+      `Official event status requires review: https://schema.org/${status}`,
+    ]);
+  });
+}
+
+test("scheduled JSON-LD events do not hold verified ticket changes", () => {
+  const event = {
+    "@type": "MusicEvent",
+    startDate: current.startDate,
+    eventStatus: { "@id": "https://schema.org/EventScheduled" },
+  };
+  const candidate = extract(
+    `<script type="application/ld+json">${JSON.stringify(event)}</script>${ticket}`,
+  );
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
+});
+
 test("fallback evidence never silences ambiguous JSON-LD events or invalid lineup", () => {
   const event = { "@type": "MusicEvent", startDate: "2027-07-28" };
   const ambiguous = extract(
