@@ -25,6 +25,8 @@ function eventRecords(html: string): { event: JsonLd; excerpt: string }[] {
     try {
       const parsed = JSON.parse(source);
       for (const record of records(parsed)) {
+        // A linked performance or side event is not evidence for its parent festival.
+        if (record.superEvent != null) continue;
         const types = Array.isArray(record["@type"]) ? record["@type"] : [record["@type"]];
         if (
           types.some((type) => typeof type === "string" && type.toLowerCase().endsWith("event"))
