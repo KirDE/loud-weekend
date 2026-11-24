@@ -311,7 +311,7 @@ test("repository projects serializable Spotify stats and suppresses a stale or u
     recordState: "CURRENT",
     completeness: "PARTIAL",
     lineupDays: [],
-    lineup: [{ billing: "LINEUP", artist: { name: "Synthetic" } }],
+    lineup: [{ billing: "LINEUP", status: "ANNOUNCED", artist: { name: "Synthetic" } }],
     timetable: [],
     provenance: [],
     playlists: [],
