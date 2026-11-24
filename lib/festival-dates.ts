@@ -3,6 +3,10 @@ import { isCalendarDate } from "./domain/edition-dates.ts";
 
 type Dates = Pick<Festival, "startDate" | "endDate">;
 
+export function parseFestivalDate(value: string | undefined): Date | null {
+  return isCalendarDate(value) ? new Date(value + "T00:00:00Z") : null;
+}
+
 export function festivalDateInterval(item: Dates): { start: Date; end: Date } | null {
   const start = item.startDate;
   const end = item.endDate ?? start;

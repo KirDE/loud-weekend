@@ -32,6 +32,7 @@ const Context = createContext<
       setSavedFilters: (value: DiscoveryPreferences) => void;
       updateSavedFilters: (patch: Partial<DiscoveryPreferences>) => void;
       replace: (value: PlannerState) => void;
+      replaceFields: (value: Partial<PlannerState>) => void;
       merge: (value: Partial<PlannerState>) => void;
       clear: () => void;
     })
@@ -101,6 +102,8 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           ...next,
           savedFilters: readDiscoveryPreferences(next.savedFilters),
         }),
+      replaceFields: (fields: Partial<PlannerState>) =>
+        setState((current) => ({ ...current, ...fields })),
       merge: (next: Partial<PlannerState>) =>
         setState((current) => ({
           favoriteFestivals: Array.from(
