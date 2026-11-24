@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { importReviewedVenue } from "../catalog/venue-import.ts";
 import {
@@ -43,10 +42,17 @@ async function readVenuePage(fetchImpl: typeof fetch) {
 export async function collectReviewedVenue(
   db: PrismaClient,
   editionYear: number,
-  options: { approval?: string; fetchImpl?: typeof fetch } = {},
+  options: { approval?: string; actor?: string; fetchImpl?: typeof fetch } = {},
 ) {
   if (!Number.isInteger(editionYear) || editionYear < 2000 || editionYear > 2099)
     throw new Error("A supported edition year is required");
+  const token = options.approval?.match(/^([a-z0-9]+):([a-f0-9]{64})$/);
+  const actor = options.actor?.trim();
+  if (options.approval !== undefined && (!token || !actor || !/^[a-z0-9_.-]{1,80}$/i.test(actor)))
+    throw new Error(
+      "Approval requires an exact candidate token and a non-personal operator identifier",
+    );
+  const observedAt = new Date();
   const html = await readVenuePage(options.fetchImpl ?? fetch);
   const observation = parseBrutalAssaultVenue(html, editionYear);
   if (!observation) throw new Error("No unambiguous organizer venue evidence for this edition");
@@ -55,11 +61,12 @@ export async function collectReviewedVenue(
     editionYear,
     ...observation,
   };
-  const fingerprint = createHash("sha256").update(JSON.stringify(record)).digest("hex");
-  if (options.approval !== undefined && options.approval !== fingerprint)
-    throw new Error("Organizer venue evidence changed since preview");
-  const checkOnly = options.approval === undefined;
-  const checkedOn = new Date().toISOString().slice(0, 10);
-  await importReviewedVenue(db, { ...record, checkedOn }, checkOnly);
-  return { checkOnly, ...record, checkedOn, fingerprint };
+  const checkedOn = observedAt.toISOString().slice(0, 10);
+  const result = await importReviewedVenue(
+    db,
+    { ...record, checkedOn },
+    observedAt,
+    token && actor ? { candidateId: token[1], fingerprint: token[2], actor } : undefined,
+  );
+  return { ...result, token: `${result.candidateId}:${result.fingerprint}` };
 }

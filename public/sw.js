@@ -1,15 +1,20 @@
 /* Loud Weekend public-only service worker. DB catalogue freshness uses its ETag. */
-const CACHE_VERSION = "festival-radar-public-v4";
-const CATALOG = "/api/offline/catalog";
+const BASE = new URL(self.registration?.scope ?? self.location.origin).pathname.replace(/\/$/, "");
+const CACHE_SCOPE = BASE ? `:${encodeURIComponent(BASE)}` : "";
+const CACHE_VERSION = `festival-radar-public-v13${CACHE_SCOPE}`;
+const CATALOG = `${BASE}/api/offline/catalog`;
+const TRIP_MODULE = `${BASE}/offline-trips.mjs`;
+const TRIP_SHELL_QUERY = "?shell=13";
 const MAX_ENTRIES = 80;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const OFFLINE_PAGE = "/offline.html";
+const OFFLINE_PAGE = `${BASE}/offline.html`;
 const PRECACHE = [
   OFFLINE_PAGE,
-  "/manifest.webmanifest",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/icons/icon-maskable-512.png",
+  TRIP_MODULE,
+  `${BASE}/manifest.webmanifest`,
+  `${BASE}/icons/icon-192.png`,
+  `${BASE}/icons/icon-512.png`,
+  `${BASE}/icons/icon-maskable-512.png`,
 ];
 
 function sameOrigin(url) {
@@ -66,8 +71,16 @@ async function freshCached(cache, request) {
 }
 
 async function trim(cache) {
+  // Keep the installed shell and its modules usable when browsing fills the asset cache.
+  const pinned = new Set(
+    [...PRECACHE, CATALOG].map((path) => new URL(path, self.location.origin).href),
+  );
   const keys = await cache.keys();
-  for (const key of keys.slice(0, Math.max(0, keys.length - MAX_ENTRIES))) await cache.delete(key);
+  const evictable = keys.filter(
+    (key) => !pinned.has(new URL(key.url ?? key, self.location.origin).href),
+  );
+  for (const key of evictable.slice(0, Math.max(0, keys.length - MAX_ENTRIES)))
+    await cache.delete(key);
 }
 
 function publicCatalogHeaders(response) {
@@ -86,6 +99,95 @@ function publicCatalogHeaders(response) {
   );
 }
 
+function hasFields(value, fields) {
+  return (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === fields.length &&
+    fields.every((field) => Object.hasOwn(value, field))
+  );
+}
+
+const catalogDate = (value) =>
+  typeof value === "string" &&
+  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  Number.isFinite(Date.parse(value)) &&
+  new Date(value).toISOString().slice(0, 10) === value;
+const catalogText = (value) => typeof value === "string" && value.trim().length > 0;
+
+function catalogTimeZone(value, validTimeZones) {
+  if (!catalogText(value)) return false;
+  if (validTimeZones.has(value)) return true;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    validTimeZones.add(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function catalogPerformance(row, validTimeZones) {
+  return (
+    hasFields(row, ["date", "stage", "start", "artist", "timeZone", "status"]) &&
+    catalogDate(row.date) &&
+    catalogText(row.stage) &&
+    catalogText(row.artist) &&
+    catalogTimeZone(row.timeZone, validTimeZones) &&
+    typeof row.start === "string" &&
+    /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(row.start) &&
+    (row.status === "scheduled" || row.status === "cancelled")
+  );
+}
+
+function catalogFestival(row, validTimeZones) {
+  return (
+    hasFields(row, ["slug", "name", "startDate", "endDate", "timetable"]) &&
+    typeof row.slug === "string" &&
+    /^[a-z0-9-]+$/.test(row.slug) &&
+    catalogText(row.name) &&
+    (row.startDate === null || catalogDate(row.startDate)) &&
+    (row.endDate === null || catalogDate(row.endDate)) &&
+    (row.startDate === null || row.endDate === null || row.startDate <= row.endDate) &&
+    Array.isArray(row.timetable) &&
+    row.timetable.every(
+      (performance) =>
+        catalogPerformance(performance, validTimeZones) &&
+        (row.startDate === null || row.startDate <= performance.date) &&
+        (row.endDate === null || performance.date <= row.endDate),
+    )
+  );
+}
+
+function validCatalog(body) {
+  // Only persist the known public projection, never extra response fields.
+  const validTimeZones = new Set();
+  if (
+    !hasFields(body, [
+      "schemaVersion",
+      "dataVersion",
+      "editionYear",
+      "generatedAt",
+      "timetableStatus",
+      "festivals",
+    ]) ||
+    body.schemaVersion !== 1 ||
+    !Number.isInteger(body.editionYear) ||
+    body.editionYear < 1000 ||
+    body.editionYear > 9999 ||
+    body.dataVersion !== `festivals-${body.editionYear}-v1` ||
+    body.generatedAt !== null ||
+    !Array.isArray(body.festivals) ||
+    !body.festivals.length ||
+    !body.festivals.every((festival) => catalogFestival(festival, validTimeZones))
+  )
+    return false;
+  if (new Set(body.festivals.map(({ slug }) => slug)).size !== body.festivals.length) return false;
+  const hasTimetable = body.festivals.some((festival) => festival.timetable.length);
+  return body.timetableStatus === (hasTimetable ? "published" : "not-published");
+}
+
 async function usableCatalog(response) {
   if (
     !response ||
@@ -95,31 +197,37 @@ async function usableCatalog(response) {
   )
     return false;
   try {
-    const body = await response.clone().json();
-    return (
-      body.schemaVersion === 1 &&
-      body.editionYear === 2027 &&
-      Array.isArray(body.festivals) &&
-      body.festivals.length > 0
-    );
+    return validCatalog(await response.clone().json());
   } catch {
     return false;
   }
 }
 
+// Keep cache mutations ordered without making one network request wait for another.
+let catalogCacheWork = Promise.resolve();
+let nextCatalogRequest = 0;
+let lastCachedRequest = 0;
+
+function accessCatalogCache(operation) {
+  const result = catalogCacheWork.then(operation);
+  catalogCacheWork = result.catch(() => undefined);
+  return result;
+}
+
+async function readCachedCatalog(cache) {
+  const candidate = await freshCached(cache, CATALOG);
+  if (await usableCatalog(candidate)) return candidate;
+  if (candidate) await cache.delete(CATALOG);
+  return undefined;
+}
+
 async function catalogResponse() {
+  const order = ++nextCatalogRequest;
   // Cache Storage may be unavailable (quota/privacy settings). First fetch must still work.
   const cache = await caches.open(CACHE_VERSION).catch(() => undefined);
-  let cached;
-  if (cache) {
-    try {
-      const candidate = await freshCached(cache, CATALOG);
-      if (await usableCatalog(candidate)) cached = candidate;
-      else if (candidate) await cache.delete(CATALOG);
-    } catch {
-      /* Fetch unconditionally if storage cannot be read. */
-    }
-  }
+  const cached = cache
+    ? await accessCatalogCache(() => readCachedCatalog(cache)).catch(() => undefined)
+    : undefined;
   // Next's trailingSlash configuration redirects the bare API path. Fetch its canonical URL.
   const request = (etag) =>
     new Request(new URL(`${CATALOG}/`, self.location.origin), {
@@ -129,15 +237,15 @@ async function catalogResponse() {
       headers: { Accept: "application/json", ...(etag ? { "If-None-Match": etag } : {}) },
     });
   const save = async (response) => {
-    if (cache) {
-      try {
-        await cache.put(CATALOG, await stamped(response));
-        await trim(cache);
-      } catch {
-        /* A successful network response remains usable even when storage fails. */
-      }
-    }
-    return response;
+    if (!cache) return response;
+    return accessCatalogCache(async () => {
+      // An earlier 304 only describes the body used for that request, not the newer cache entry.
+      if (order < lastCachedRequest) return (await readCachedCatalog(cache)) ?? response;
+      await cache.put(CATALOG, await stamped(response));
+      lastCachedRequest = order;
+      await trim(cache);
+      return response;
+    }).catch(() => response);
   };
   let response;
   try {
@@ -156,9 +264,10 @@ async function catalogResponse() {
     if (cached) return cached;
     throw error;
   }
-  if (response.status === 304)
+  if (await usableCatalog(response)) return save(response);
+  if (response.ok || response.status === 304) {
     return new Response(null, { status: 502, headers: { "Cache-Control": "no-store" } });
-  if (await usableCatalog(response)) await save(response);
+  }
   return response;
 }
 
@@ -189,7 +298,16 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE_VERSION).map((key) => caches.delete(key))),
+        Promise.all(
+          keys
+            .filter(
+              (key) =>
+                key !== CACHE_VERSION &&
+                /^festival-radar-public-v\d+/.test(key) &&
+                key.replace(/^festival-radar-public-v\d+/, "") === CACHE_SCOPE,
+            )
+            .map((key) => caches.delete(key)),
+        ),
       )
       .then(() => self.clients.claim()),
   );
@@ -199,8 +317,19 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
+  if (!sameOrigin(url) || (BASE && !url.pathname.startsWith(BASE + "/"))) return;
+  const localPath = url.pathname.slice(BASE.length);
+  if (url.pathname === TRIP_MODULE && (!url.search || url.search === TRIP_SHELL_QUERY)) {
+    event.respondWith(
+      caches
+        .open(CACHE_VERSION)
+        .then((cache) => cache.match(TRIP_MODULE))
+        .catch(() => undefined)
+        .then((cached) => cached ?? fetch(request)),
+    );
+    return;
+  }
   if (
-    sameOrigin(url) &&
     (url.pathname === CATALOG || url.pathname === `${CATALOG}/`) &&
     !url.search &&
     request.mode !== "navigate" &&
@@ -210,7 +339,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(catalogResponse());
     return;
   }
-  if (!sameOrigin(url) || isPrivatePath(url.pathname)) return;
+  if (isPrivatePath(localPath)) return;
 
   if (request.mode === "navigate") {
     event.respondWith(
@@ -223,16 +352,20 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (!isPublicAsset(url)) return;
+  if (!isPublicAsset({ pathname: localPath })) return;
   event.respondWith(
     (async () => {
-      const cache = await caches.open(CACHE_VERSION);
-      const cached = await freshCached(cache, request);
+      const cache = await caches.open(CACHE_VERSION).catch(() => undefined);
+      const cached = cache && (await freshCached(cache, request).catch(() => undefined));
       if (cached) return cached;
       const response = await fetch(request);
-      if (cacheable(response)) {
-        await cache.put(request, await stamped(response));
-        await trim(cache);
+      if (cache && cacheable(response)) {
+        try {
+          await cache.put(request, await stamped(response));
+          await trim(cache);
+        } catch {
+          /* Use the successful network response even when cache storage fails. */
+        }
       }
       return response;
     })(),
