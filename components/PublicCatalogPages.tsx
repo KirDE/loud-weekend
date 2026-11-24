@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { editionRecordCompleteness } from "@/lib/edition-status";
+import { festivalDateInterval } from "@/lib/festival-dates";
+import { lineupPresentation } from "@/lib/festival-lineup";
 import type { Festival } from "@/lib/domain/festival";
 import type { FestivalEdition } from "@/lib/domain/edition";
 import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
@@ -23,8 +26,7 @@ const copy = {
     future: "Future tracking",
     futureEmpty: "No officially announced future editions are being tracked yet.",
     datesTba: "Dates TBA",
-    lineupTba: "Lineup TBA",
-    archivedArtists: (n: number) => n + " archived artists (partial snapshot)",
+    archivedArtists: (n: number) => n + " archived artists",
     openEdition: "Open edition →",
     editionYear: "EDITION YEAR",
     editionHeading: (year: number) => year + " festival editions",
@@ -40,15 +42,15 @@ const copy = {
     edition: "EDITION",
     completeRecord: "complete record",
     partialRecord: "partial record",
-    officialTba: "Official dates and lineup TBA",
+    pendingRecord: "Catalogue record pending",
     lineupStatus: "Lineup status",
-    noArtists: "No artists published",
+    noArtists: "No current acts listed",
     trackingNotice: "This is an explicit tracking state, not an empty confirmed lineup.",
     provenance: "Provenance",
     snapshot: "Immutable snapshot captured",
     officialSource: "Official source ↗",
     checked: "checked",
-    fields: { edition: "edition", dates: "dates", lineup: "lineup" },
+    fields: { edition: "edition", dates: "dates", lineup: "lineup", finalLineup: "full lineup" },
     sharedEyebrow: "PUBLIC FESTIVAL PLAN",
     sharedTitle: "Shared plan",
     updated: "Last updated",
@@ -70,8 +72,7 @@ const copy = {
     future: "Künftige Ausgaben",
     futureEmpty: "Derzeit werden keine offiziell angekündigten künftigen Ausgaben verfolgt.",
     datesTba: "Termine offen",
-    lineupTba: "Line-up offen",
-    archivedArtists: (n: number) => n + " archivierte Künstler (unvollständiger Stand)",
+    archivedArtists: (n: number) => n + " archivierte Künstler",
     openEdition: "Ausgabe öffnen →",
     editionYear: "AUSGABEJAHR",
     editionHeading: (year: number) => "Festivalausgaben " + year,
@@ -85,16 +86,21 @@ const copy = {
     edition: "AUSGABE",
     completeRecord: "vollständiger Datensatz",
     partialRecord: "unvollständiger Datensatz",
-    officialTba: "Offizielle Termine und Line-up noch offen",
+    pendingRecord: "Katalogeintrag noch offen",
     lineupStatus: "Line-up-Status",
-    noArtists: "Noch keine Künstler veröffentlicht",
+    noArtists: "Derzeit keine Acts gelistet",
     trackingNotice:
       "Dieser Status bedeutet, dass die Ausgabe beobachtet wird; das Line-up ist nicht als vollständig bestätigt.",
     provenance: "Quellenangaben",
     snapshot: "Unveränderlicher Stand gespeichert am",
     officialSource: "Offizielle Quelle ↗",
     checked: "geprüft",
-    fields: { edition: "Ausgabe", dates: "Termine", lineup: "Line-up" },
+    fields: {
+      edition: "Ausgabe",
+      dates: "Termine",
+      lineup: "Line-up",
+      finalLineup: "vollständiges Line-up",
+    },
     sharedEyebrow: "ÖFFENTLICHER FESTIVALPLAN",
     sharedTitle: "Geteilter Plan",
     updated: "Zuletzt aktualisiert",
@@ -116,8 +122,7 @@ const copy = {
     future: "Будущие выпуски",
     futureEmpty: "Пока нет официально объявленных будущих выпусков.",
     datesTba: "Даты уточняются",
-    lineupTba: "Лайнап уточняется",
-    archivedArtists: (n: number) => "Артистов в архиве: " + n + " (неполный снимок)",
+    archivedArtists: (n: number) => "Артистов в архиве: " + n,
     openEdition: "Открыть выпуск →",
     editionYear: "ГОД ВЫПУСКА",
     editionHeading: (year: number) => "Выпуски фестивалей " + year + " года",
@@ -132,15 +137,15 @@ const copy = {
     edition: "ВЫПУСК",
     completeRecord: "полная запись",
     partialRecord: "частичная запись",
-    officialTba: "Официальные даты и лайнап уточняются",
+    pendingRecord: "Запись каталога уточняется",
     lineupStatus: "Состояние лайнапа",
-    noArtists: "Артисты пока не опубликованы",
+    noArtists: "Нет действующих анонсов",
     trackingNotice: "Выпуск отслеживается; пустой лайнап не означает подтверждённый состав.",
     provenance: "Источники данных",
     snapshot: "Неизменяемый снимок сохранён",
     officialSource: "Официальный источник ↗",
     checked: "проверено",
-    fields: { edition: "выпуск", dates: "даты", lineup: "лайнап" },
+    fields: { edition: "выпуск", dates: "даты", lineup: "лайнап", finalLineup: "полный лайнап" },
     sharedEyebrow: "ОБЩИЙ ПЛАН ФЕСТИВАЛЕЙ",
     sharedTitle: "Общий план",
     updated: "Обновлено",
@@ -154,7 +159,7 @@ const copy = {
 } as const;
 
 function usePublicCopy() {
-  const { language, locale } = useLanguage();
+  const { language, locale, t: translateLabel } = useLanguage();
   const t = copy[language];
   const date = (value: string) =>
     new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
@@ -167,11 +172,11 @@ function usePublicCopy() {
       timeZone: "UTC",
     }).format(new Date(value));
   const range = (item: FestivalEdition) =>
-    item.startDate
+    festivalDateInterval(item) && item.startDate
       ? date(item.startDate) +
         (item.endDate && item.endDate !== item.startDate ? " — " + date(item.endDate) : "")
       : t.datesTba;
-  return { t, date, dateTime, range, locale };
+  return { t, date, dateTime, range, locale, translateLabel };
 }
 
 function EditionRow({
@@ -183,15 +188,10 @@ function EditionRow({
   archive?: boolean;
   planning?: boolean;
 }) {
-  const { t, range } = usePublicCopy();
+  const { t, range, translateLabel } = usePublicCopy();
   const count = item.headliners.length + item.lineup.length;
-  const summary = archive
-    ? count
-      ? t.archivedArtists(count)
-      : t.lineupTba
-    : item.status === "tba" || (item.recordState === "tracking" && !count)
-      ? t.lineupTba
-      : t.artistsRecorded(count);
+  const summary =
+    count === 0 ? t.noArtists : archive ? t.archivedArtists(count) : t.artistsRecorded(count);
   return (
     <article className={planning ? "directoryRow seasonEditionRow" : "directoryRow"}>
       <div>
@@ -200,6 +200,7 @@ function EditionRow({
         </strong>
         <span>
           {range(item)} · {summary}
+          {item.finalLineup && count > 0 ? " · " + translateLabel("finalLineup") : ""}
         </span>
       </div>
       <Link className="textLink" href={`/festivals/${item.slug}/${item.editionYear}/`}>
@@ -287,16 +288,16 @@ export function FestivalEditionContent({
   artistSlugs?: Readonly<Record<string, string>>;
   arrivalFacts?: readonly PublicArrivalFact[];
 }) {
-  const { t, date, dateTime, range } = usePublicCopy();
+  const { t, date, dateTime, range, translateLabel } = usePublicCopy();
   const artists = [...item.headliners, ...item.lineup];
-  const status =
-    item.completeness !== "tba"
-      ? item.completeness === "complete"
-        ? t.completeRecord
-        : t.partialRecord
-      : item.startDate || item.endDate || artists.length
-        ? t.partialRecord
-        : t.officialTba;
+  const completeness = editionRecordCompleteness(item);
+  const recordLabel = {
+    complete: t.completeRecord,
+    partial: t.partialRecord,
+    tba: t.pendingRecord,
+  }[completeness];
+  const recordTone = completeness === "complete" ? "confirmed" : completeness;
+  const lineup = lineupPresentation(item);
   return (
     <div className="detailPage">
       <Link className="back" href={"/editions/" + item.editionYear + "/"}>
@@ -311,11 +312,12 @@ export function FestivalEditionContent({
             {item.name} {item.editionYear}
           </h1>
           <p className="detailDate">{range(item)}</p>
-          <span className={"status " + item.status}>{status}</span>
+          <span className={"status " + recordTone}>{recordLabel}</span>
         </div>
       </section>
       <section className="lineupSection">
         <h2>{t.lineupStatus}</h2>
+        {artists.length > 0 && <p>{translateLabel(lineup.label)}</p>}
         {artists.length ? (
           <div className="lineupGrid">
             {artists.map((artist) =>
@@ -331,7 +333,7 @@ export function FestivalEditionContent({
         ) : (
           <div className="lineupEmpty">
             <strong>{t.noArtists}</strong>
-            <span>{t.trackingNotice}</span>
+            {item.recordState === "tracking" && <span>{t.trackingNotice}</span>}
           </div>
         )}
       </section>
