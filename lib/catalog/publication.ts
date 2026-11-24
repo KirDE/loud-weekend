@@ -299,6 +299,13 @@ async function addLineupArtist(
   return true;
 }
 
+async function advanceEditionSourceClock(db: Database, editionId: string, observedAt: Date) {
+  await db.festivalEdition.updateMany({
+    where: { id: editionId, sourceUpdatedAt: { lt: observedAt } },
+    data: { sourceUpdatedAt: observedAt },
+  });
+}
+
 async function applyFestivalChanges(
   db: Database,
   input: {
@@ -307,9 +314,8 @@ async function applyFestivalChanges(
     expectedEditionId?: string;
     changes: CatalogChange[];
     strictBefore: boolean;
-    observedAt: Date;
   },
-  ensureArtist = artistResolver(db, input.observedAt),
+  ensureArtist: EnsureArtist,
 ) {
   const festival = await db.festival.findUnique({
     where: { slug: input.festivalSlug },
@@ -474,14 +480,6 @@ async function applyFestivalChanges(
         throw new Error(`Unsupported catalogue publication field: ${change.field}`);
     }
     if (changed) changedFields.push(change.field);
-  }
-  // Public festival facts and edition details share this source clock.
-  // A delayed publication must not move it backwards.
-  if (changedFields.length) {
-    await db.festivalEdition.updateMany({
-      where: { id: edition.id, sourceUpdatedAt: { lt: input.observedAt } },
-      data: { sourceUpdatedAt: input.observedAt },
-    });
   }
   return { edition, changedFields: [...new Set(changedFields)] };
 }
@@ -804,10 +802,11 @@ export async function publishIngestionResult(
           expectedYear,
           changes: input.result.changes,
           strictBefore: true,
-          observedAt,
         },
         ensureArtist,
       );
+      if (applied.changedFields.length)
+        await advanceEditionSourceClock(db, applied.edition.id, observedAt);
       // Rockharz 2027 publications retain exact edition/source/field and persisted
       // evidence guards. Verified lineup changes use the normal provider queue.
       const sourceField =
@@ -1234,14 +1233,19 @@ export async function publishAdminFestivalChange(
       "Refresh proposal is missing its edition binding. Run an edition-scoped refresh and review the new proposal.",
     );
   }
-  const applied = await applyFestivalChanges(db, {
-    festivalSlug: input.change.resourceKey,
-    expectedYear: scoped?.editionYear,
-    expectedEditionId: scoped?.editionId,
-    changes: [{ field: input.change.field, before: input.change.beforeValue, after: afterValue }],
-    strictBefore: Boolean(input.change.parserRunId),
-    observedAt,
-  });
+  const applied = await applyFestivalChanges(
+    db,
+    {
+      festivalSlug: input.change.resourceKey,
+      expectedYear: scoped?.editionYear,
+      expectedEditionId: scoped?.editionId,
+      changes: [{ field: input.change.field, before: input.change.beforeValue, after: afterValue }],
+      strictBefore: Boolean(input.change.parserRunId),
+    },
+    artistResolver(db, observedAt),
+  );
+  if (applied.changedFields.length)
+    await advanceEditionSourceClock(db, applied.edition.id, observedAt);
   return createPublication(db, {
     source: CatalogPublicationSource.ADMIN,
     sourceId,
@@ -1297,7 +1301,7 @@ export async function publishAgentFestivalResolution(
     reason: string;
     facts: NonNullable<AgentDecision["facts"]>;
     evidence: AgentDecision["evidence"];
-    observedAt: Date;
+    reviewedAt: Date;
   },
 ) {
   const replay = await db.catalogPublication.findUnique({
@@ -1337,7 +1341,7 @@ export async function publishAgentFestivalResolution(
         lineupChanged: true,
       },
     })) === 0;
-  const ensureArtist = artistResolver(db, input.observedAt);
+  const ensureArtist = artistResolver(db, input.reviewedAt);
   const changedFields: string[] = [];
   if (input.facts.headliners !== undefined && input.facts.lineup !== undefined) {
     const headliners = stringList(input.facts.headliners, "headliners"),
@@ -1380,10 +1384,6 @@ export async function publishAgentFestivalResolution(
         ...rosterPositions("LINEUP", artistIds.slice(headliners.length), cancelled),
       ]);
       changedFields.push("headliners", "lineup");
-      await db.festivalEdition.updateMany({
-        where: { id: edition.id, sourceUpdatedAt: { lt: input.observedAt } },
-        data: { sourceUpdatedAt: input.observedAt },
-      });
     }
   }
   // A reviewed edition status is not evidence about catalogue completeness.
@@ -1391,13 +1391,16 @@ export async function publishAgentFestivalResolution(
     .filter(([field]) => field !== "headliners" && field !== "lineup" && field !== "finalLineup")
     .map(([field, after]) => ({ field, after }));
   if (scalar.length) {
-    const applied = await applyFestivalChanges(db, {
-      festivalSlug: input.festivalSlug,
-      expectedYear: edition.year,
-      changes: scalar,
-      strictBefore: false,
-      observedAt: input.observedAt,
-    });
+    const applied = await applyFestivalChanges(
+      db,
+      {
+        festivalSlug: input.festivalSlug,
+        expectedYear: edition.year,
+        changes: scalar,
+        strictBefore: false,
+      },
+      ensureArtist,
+    );
     changedFields.push(...applied.changedFields);
   }
   if (finalLineup) {
@@ -1419,19 +1422,31 @@ export async function publishAgentFestivalResolution(
     });
     changedFields.push("finalLineup");
   }
+  let latestObservation = -Infinity;
   for (const field of new Set(changedFields)) {
     const evidence = input.evidence.find((e) => e.field === field);
     if (!evidence) throw new Error("Reviewed field has no official evidence");
+    const checkedAt = new Date(evidence.checkedAt);
+    if (field !== "finalLineup")
+      latestObservation = Math.max(latestObservation, checkedAt.getTime());
     await db.editionProvenance.create({
       data: {
         editionId: edition.id,
         field,
         url: evidence.url,
-        checkedAt: new Date(evidence.checkedAt),
+        checkedAt,
         note: evidence.excerpt,
       },
     });
   }
+  // Keep the existing clock-skew allowance for review evidence without
+  // displaying future freshness or counting unchanged facts as new data.
+  if (Number.isFinite(latestObservation))
+    await advanceEditionSourceClock(
+      db,
+      edition.id,
+      new Date(Math.min(latestObservation, input.reviewedAt.getTime())),
+    );
   return createPublication(db, {
     source: CatalogPublicationSource.ADMIN,
     sourceId: input.sourceId,

@@ -163,6 +163,42 @@ test("verified resolution commits audit/provenance once, replays safely and enqu
   const future = await listAgentIssues(db, new Date(Date.now() + 8 * 86400000));
   assert.equal(future.ready, 1);
 });
+test("reviewed catalogue freshness uses only evidence for committed facts", async () => {
+  const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
+  const where = { id: source.editionId! };
+  const checkedAt = new Date(Date.now() - 3_600_000);
+  const previous = new Date(checkedAt.getTime() - 3_600_000);
+  await db.festivalEdition.update({ where, data: { sourceUpdatedAt: previous } });
+  const first = await claim();
+  const decision = {
+    ...checked,
+    facts: { ...checked.facts, headliners: first.current.headliners, lineup: first.current.lineup },
+    evidence: [
+      { ...evidence("city"), checkedAt: checkedAt.toISOString() },
+      evidence("headliners"),
+      evidence("lineup"),
+    ],
+  };
+  const receipt = await resolveCase(first, decision);
+  assert.ok(receipt.publicationId);
+  assert.deepEqual(
+    (await db.festivalEdition.findUniqueOrThrow({ where })).sourceUpdatedAt,
+    checkedAt,
+  );
+
+  await db.operationalState.delete({ where: { key: first.key } });
+  const second = await claim();
+  const delayed = await resolveCase(second, {
+    ...checked,
+    facts: { city: "Another Verified City" },
+    evidence: [{ ...evidence("city"), checkedAt: previous.toISOString() }],
+  });
+  assert.ok(delayed.publicationId);
+  assert.deepEqual(
+    (await db.festivalEdition.findUniqueOrThrow({ where })).sourceUpdatedAt,
+    checkedAt,
+  );
+});
 for (const [before, after, completeness] of [
   ["TBA", "confirmed", "PARTIAL"],
   ["CONFIRMED", "partial", "COMPLETE"],
