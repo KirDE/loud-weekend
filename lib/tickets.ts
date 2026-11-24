@@ -2,6 +2,7 @@ import type { Festival } from "@/lib/domain/festival";
 
 type TicketLabel =
   | "ticketsInfo"
+  | "ticketsFree"
   | "officialTickets"
   | "ticketsLow"
   | "ticketsNotOnSale"
@@ -16,6 +17,10 @@ export type TicketPresentation = {
 };
 
 export function ticketPresentation(item: Festival): TicketPresentation {
+  // Free, unticketed admission has no purchase flow. Ancillary camping/VIP
+  // ticket URLs must not become a misleading general-admission CTA.
+  if (item.ticketStatus === "free")
+    return { status: "free", href: item.officialUrl || undefined, label: "ticketsFree" };
   // Reviewed mixed categories are not a whole-festival stock claim. The
   // official source is information only, never an inferred resale purchase.
   if (item.ticketOffers)

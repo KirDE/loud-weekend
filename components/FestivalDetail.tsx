@@ -4,10 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalTicketOffers } from "./FestivalTicketOffers";
+import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
+import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
+import { FestivalArrival } from "./FestivalArrival";
 import { PlanningTools } from "./PlanningTools";
 import type { PlaylistStatus } from "@/lib/domain/festival";
+import { formatFreshnessDate } from "@/lib/freshness-date";
 import { ticketPresentation } from "@/lib/tickets";
 import { festivalSetlistHistoryUrl } from "@/lib/setlist-history";
 import {
@@ -24,11 +28,13 @@ export function FestivalDetail({
   artistSlugs,
   playlist,
   artistPopularity = {},
+  arrivalFacts = [],
 }: {
   item: Festival;
   festivals: Festival[];
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
+  arrivalFacts?: readonly PublicArrivalFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
   const { locale, language, t } = useLanguage();
@@ -108,7 +114,15 @@ export function FestivalDetail({
             data-ticket-status={tickets.status}
           >
             <small>{t(tickets.status === "available" ? "passes" : tickets.label)}</small>
-            <strong>{t(tickets.status === "available" ? tickets.label : "ticketsInfo")}</strong>
+            <strong>
+              {t(
+                tickets.status === "available"
+                  ? tickets.label
+                  : tickets.status === "free"
+                    ? "festivalWebsite"
+                    : "ticketsInfo",
+              )}
+            </strong>
           </a>
         ) : (
           <div className="disabled" data-ticket-status={tickets.status}>
@@ -157,6 +171,13 @@ export function FestivalDetail({
         )}
       </div>
       {item.ticketOffers && <FestivalTicketOffers value={item.ticketOffers} locale={language} />}
+      {item.editionYear && (
+        <OfflineTripDownload
+          key={`${item.slug}:${item.editionYear}`}
+          slug={item.slug}
+          year={item.editionYear}
+        />
+      )}
       <section className="lineupSection">
         <div className="sectionHeading">
           <div>
@@ -212,9 +233,30 @@ export function FestivalDetail({
         )}
       </section>
       <PlanningTools item={item} festivals={festivals} />
+      <FestivalArrival facts={arrivalFacts} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
-        <p>{t("catalogUpdated", { date: prettyDate(item.updatedAt.slice(0, 10)) })}</p>
+        <p>
+          {item.freshness?.checkedAt ? (
+            <>
+              {t("latestSourceCheck")} ·{" "}
+              <time dateTime={item.freshness.checkedAt}>
+                {formatFreshnessDate(item.freshness.checkedAt, locale)}
+              </time>
+            </>
+          ) : (
+            t("sourceCheckUnavailable")
+          )}
+        </p>
+        {item.freshness?.sourceCheckStale && <p>{t("sourceCheckStale")}</p>}
+        {item.freshness?.lastPublishedAt && (
+          <p>
+            {t("latestCatalogPublication")} ·{" "}
+            <time dateTime={item.freshness.lastPublishedAt}>
+              {formatFreshnessDate(item.freshness.lastPublishedAt, locale)}
+            </time>
+          </p>
+        )}
         <p>{item.sourceDeprecated ? t("sourceDeprecatedHelp") : t("sourceText")}</p>
         <a href={item.officialUrl} target="_blank" rel="noreferrer">
           {t("primarySource")}
