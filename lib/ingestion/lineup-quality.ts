@@ -47,6 +47,7 @@ export function validateGenericLineup(
 ): LineupQuality {
   const names: string[] = [];
   const warnings = new Set<string>();
+  const exactSpellings = new Set<string>();
   for (const [index, raw] of values.entries()) {
     const name = normalize(raw);
     if (!name || navigationLabel.test(name)) {
@@ -67,12 +68,16 @@ export function validateGenericLineup(
       warnings.add(`Ambiguous long lineup container requires review: ${name.slice(0, 120)}`);
       continue;
     }
-    if (
-      !names.some(
-        (existing) => existing.localeCompare(name, undefined, { sensitivity: "base" }) === 0,
-      )
-    )
-      names.push(name);
+    const spelling = name.normalize("NFC").toLocaleLowerCase();
+    if (exactSpellings.has(spelling)) continue;
+
+    // Case and encoding variants are duplicates; a looser match is not identity proof.
+    const competingName = names.find(
+      (existing) => existing.localeCompare(name, undefined, { sensitivity: "base" }) === 0,
+    );
+    if (competingName) warnings.add(`Ambiguous lineup spellings: ${competingName} / ${name}`);
+    exactSpellings.add(spelling);
+    names.push(name);
   }
   return { names, warnings: [...warnings] };
 }

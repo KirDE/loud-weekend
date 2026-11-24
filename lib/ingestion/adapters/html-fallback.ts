@@ -143,14 +143,8 @@ function markedNames(
     }
   }
   const quality = validateGenericLineup(values, combinedFlags);
-  const byNormalizedName = new Map<string, string>();
-  for (const value of quality.names) {
-    const normalized = value.toLocaleLowerCase();
-    if (!byNormalizedName.has(normalized)) byNormalizedName.set(normalized, value);
-  }
-  const unique = [...byNormalizedName.values()];
-  return unique.length || quality.warnings.length
-    ? { values: unique, excerpt, warnings: quality.warnings }
+  return quality.names.length || quality.warnings.length
+    ? { values: quality.names, excerpt, warnings: quality.warnings }
     : undefined;
 }
 
