@@ -131,6 +131,65 @@ function artistResolver(db: Database, observedAt: Date) {
 
 type EnsureArtist = ReturnType<typeof artistResolver>;
 
+type RosterEntry = {
+  artistId: string;
+  billing: LineupBilling;
+  position: number;
+};
+
+function rosterPositions(
+  billing: LineupBilling,
+  artistIds: string[],
+  cancelled: RosterEntry[],
+): RosterEntry[] {
+  const occupied = new Set(
+    cancelled.filter((entry) => entry.billing === billing).map((entry) => entry.position),
+  );
+  let position = 0;
+  return artistIds.map((artistId) => {
+    while (occupied.has(position)) position++;
+    return { artistId, billing, position: position++ };
+  });
+}
+
+async function updateAnnouncedRoster(
+  db: Database,
+  editionId: string,
+  announced: (RosterEntry & { id: string })[],
+  cancelled: RosterEntry[],
+  next: RosterEntry[],
+) {
+  const byArtist = new Map(announced.map((entry) => [entry.artistId, entry]));
+  const nextIds = new Set(next.map((entry) => entry.artistId));
+  const removed = announced.filter((entry) => !nextIds.has(entry.artistId));
+  if (removed.length)
+    await db.lineupEntry.deleteMany({ where: { id: { in: removed.map((entry) => entry.id) } } });
+
+  const additions: RosterEntry[] = [];
+  const moves: { id: string; billing: LineupBilling; position: number }[] = [];
+  for (const { artistId, billing, position } of next) {
+    const existing = byArtist.get(artistId);
+    if (!existing) additions.push({ artistId, billing, position });
+    else if (existing.billing !== billing || existing.position !== position)
+      moves.push({ id: existing.id, billing, position });
+  }
+
+  // Move surviving rows temporarily out of occupied positions before swaps
+  // or billing changes. The caller's transaction hides intermediate positions.
+  const occupied = new Set([...announced, ...cancelled, ...next].map((entry) => entry.position));
+  let temporary = -1;
+  for (const { id } of moves) {
+    while (occupied.has(temporary)) temporary--;
+    await db.lineupEntry.update({ where: { id }, data: { position: temporary-- } });
+  }
+  for (const { id, billing, position } of moves) {
+    await db.lineupEntry.update({ where: { id }, data: { billing, position } });
+  }
+
+  if (additions.length)
+    await db.lineupEntry.createMany({ data: additions.map((entry) => ({ ...entry, editionId })) });
+}
+
 async function replaceLineup(
   db: Database,
   editionId: string,
@@ -177,16 +236,17 @@ async function replaceLineup(
     )
   )
     return false;
-  await db.lineupEntry.deleteMany({ where: { editionId, billing, status: "ANNOUNCED" } });
-  const occupied = new Set(cancelled.map(({ position }) => position));
-  let position = 0;
-  if (artists.length)
-    await db.lineupEntry.createMany({
-      data: artists.map((artist) => {
-        while (occupied.has(position)) position++;
-        return { editionId, artistId: artist.id, billing, position: position++ };
-      }),
-    });
+  await updateAnnouncedRoster(
+    db,
+    editionId,
+    announced,
+    cancelled,
+    rosterPositions(
+      billing,
+      artists.map((a) => a.id),
+      cancelled,
+    ),
+  );
   return true;
 }
 
@@ -1181,44 +1241,38 @@ export async function publishAgentFestivalResolution(
       headliners.length + lineup.length
     )
       throw new Error("Ambiguous reviewed billing");
-    const oldHeadliners = edition.lineup
-      .filter((l) => l.billing === "HEADLINER" && l.status === "ANNOUNCED")
-      .map((l) => l.artist.name);
-    const oldLineup = edition.lineup
-      .filter((l) => l.billing === "LINEUP" && l.status === "ANNOUNCED")
-      .map((l) => l.artist.name);
-    if (!same(oldHeadliners, headliners) || !same(oldLineup, lineup)) {
-      const artists = [];
-      for (const name of [...headliners, ...lineup]) artists.push(await ensureArtist(name));
+    const announced = edition.lineup.filter((entry) => entry.status === "ANNOUNCED");
+    const oldHeadliners = announced.filter((entry) => entry.billing === "HEADLINER");
+    const oldLineup = announced.filter((entry) => entry.billing === "LINEUP");
+    const previousIds = [...oldHeadliners, ...oldLineup].map((entry) => entry.artistId);
+    const rosterNamesChanged =
+      !same(
+        oldHeadliners.map((entry) => entry.artist.name),
+        headliners,
+      ) ||
+      !same(
+        oldLineup.map((entry) => entry.artist.name),
+        lineup,
+      );
+    const artistIds = [];
+    if (rosterNamesChanged) {
+      for (const name of [...headliners, ...lineup]) artistIds.push((await ensureArtist(name)).id);
+      if (new Set(artistIds).size !== artistIds.length)
+        throw new Error("Ambiguous reviewed billing or duplicate alias identities");
+    }
+
+    // A reviewed spelling or alias does not change the published roster.
+    if (
+      rosterNamesChanged &&
+      (headliners.length !== oldHeadliners.length || !same(previousIds, artistIds))
+    ) {
       const cancelled = edition.lineup.filter((l) => l.status === "CANCELLED");
-      if (artists.some((a) => cancelled.some((l) => l.artistId === a.id)))
+      if (artistIds.some((id) => cancelled.some((l) => l.artistId === id)))
         throw new Error("Cancellation requires separate explicit review");
-      // Replace both billing classes together so promotion/demotion cannot
-      // collide with an artist temporarily present in the opposite class.
-      await db.lineupEntry.deleteMany({
-        where: { editionId: edition.id, status: "ANNOUNCED" },
-      });
-      for (const [billing, names, offset] of [
-        ["HEADLINER", headliners, 0],
-        ["LINEUP", lineup, headliners.length],
-      ] as const) {
-        const occupied = new Set(
-          cancelled.filter((l) => l.billing === billing).map((l) => l.position),
-        );
-        let position = 0;
-        for (let n = 0; n < names.length; n++) {
-          while (occupied.has(position)) position++;
-          await db.lineupEntry.create({
-            data: {
-              editionId: edition.id,
-              artistId: artists[offset + n].id,
-              billing,
-              position: position++,
-              status: "ANNOUNCED",
-            },
-          });
-        }
-      }
+      await updateAnnouncedRoster(db, edition.id, announced, cancelled, [
+        ...rosterPositions("HEADLINER", artistIds.slice(0, headliners.length), cancelled),
+        ...rosterPositions("LINEUP", artistIds.slice(headliners.length), cancelled),
+      ]);
       changedFields.push("headliners", "lineup");
       await db.festivalEdition.update({
         where: { id: edition.id },
