@@ -265,7 +265,10 @@ export function AccountSyncPanel({
             favoriteFestivals: state.favoriteFestivals,
             favoriteArtists: state.favoriteArtists,
           },
-          collections: playlistSelection(remote.payload),
+          collections: {
+            playlistFestivals: state.playlistFestivals,
+            playlistExcludedArtists: state.playlistExcludedArtists,
+          },
           "saved-filters": { savedFilters: state.savedFilters },
           plans: { attendance: state.attendance },
         };

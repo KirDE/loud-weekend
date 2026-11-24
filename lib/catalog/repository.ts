@@ -264,9 +264,8 @@ export class DatabaseCatalogRepository implements CatalogRepository {
             ...new Set(
               row.lineup
                 .filter(
-                  (entry) =>
-                    entry.status !== "CANCELLED" &&
-                    (entry.billing === "HEADLINER" || entry.billing === "LINEUP"),
+                  ({ status, billing }) =>
+                    status === "ANNOUNCED" && (billing === "HEADLINER" || billing === "LINEUP"),
                 )
                 .map((entry) => entry.artist.slug),
             ),
