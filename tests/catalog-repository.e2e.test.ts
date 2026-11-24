@@ -106,6 +106,13 @@ test("cancelled artists do not count as announced in the public catalogue", asyn
   const entry = await db.lineupEntry.findFirstOrThrow({
     where: { edition: { recordState: "CURRENT", festival: { slug: "synthetic-fest" } } },
   });
+  const playlist = await db.festivalPlaylist.create({
+    data: {
+      editionId: entry.editionId,
+      provider: "spotify",
+      url: "https://open.spotify.com/playlist/synthetic",
+    },
+  });
   await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "CANCELLED" } });
   try {
     const snapshot = await readCatalog({ database: db });
@@ -115,7 +122,9 @@ test("cancelled artists do not count as announced in the public catalogue", asyn
       [],
     );
     assert.deepEqual(snapshot.artists, []);
+    assert.equal(snapshot.playlists["synthetic-fest"].artists, 0);
   } finally {
+    await db.festivalPlaylist.delete({ where: { id: playlist.id } });
     await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "ANNOUNCED" } });
   }
 });

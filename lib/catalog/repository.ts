@@ -231,7 +231,8 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         youtubeMusicUrl: youtube?.url,
         youtubeMusicArtists: youtube?.artistCount ?? undefined,
         youtubeMusicTracks: youtube?.trackCount ?? undefined,
-        artists: spotify.artistCount ?? row.lineup.length,
+        artists:
+          spotify.artistCount ?? row.lineup.filter(({ status }) => status === "ANNOUNCED").length,
         tracks: spotify.trackCount ?? 0,
         updatedAt: instant(spotify.syncedAt) ?? row.sourceUpdatedAt.toISOString(),
       };

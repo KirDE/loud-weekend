@@ -5,6 +5,7 @@ import {
   matchesTolminatorStockEdition,
 } from "../ingestion/adapters/tolminator-stock.ts";
 import { rosterFingerprint } from "./lineup-proof.ts";
+import { editionDateProblem } from "../domain/edition-dates.ts";
 import {
   ticketSupplementUrl,
   ticketSupplementPurchaseUrl,
@@ -237,6 +238,22 @@ async function applyFestivalChanges(
     throw new Error(
       `Candidate edition ${input.expectedYear} does not match catalogue edition ${edition.year}`,
     );
+
+  const dateChanges = input.changes.filter(
+    ({ field }) => field === "startDate" || field === "endDate",
+  );
+  if (dateChanges.length) {
+    const proposed = new Map(
+      dateChanges.map(({ field, after }) => [field, after === "" ? null : after]),
+    );
+    if (proposed.size !== dateChanges.length) throw new Error("Duplicate festival date changes");
+    const start = proposed.has("startDate")
+      ? proposed.get("startDate")
+      : isoDate(edition.startDate);
+    const end = proposed.has("endDate") ? proposed.get("endDate") : isoDate(edition.endDate);
+    const problem = editionDateProblem(edition.year, start, end);
+    if (problem) throw new Error(problem);
+  }
 
   const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
@@ -1100,14 +1117,12 @@ export async function publishAgentFestivalResolution(
   const finalLineup = input.facts.finalLineup;
   if (finalLineup && finalLineup.year !== edition.year)
     throw new Error("Reviewed lineup edition mismatch");
-  const dateStart = input.facts.startDate ?? isoDate(edition.startDate),
-    dateEnd = input.facts.endDate ?? isoDate(edition.endDate);
-  if (
-    (dateStart && Number(dateStart.slice(0, 4)) !== edition.year) ||
-    (dateEnd && Number(dateEnd.slice(0, 4)) !== edition.year) ||
-    (dateStart && dateEnd && dateStart > dateEnd)
-  )
-    throw new Error("Reviewed dates mismatch");
+  const dateProblem = editionDateProblem(
+    edition.year,
+    input.facts.startDate ?? isoDate(edition.startDate),
+    input.facts.endDate ?? isoDate(edition.endDate),
+  );
+  if (dateProblem) throw new Error(`Reviewed dates mismatch: ${dateProblem}`);
   // Only a genuinely new edition's first reviewed roster enters the native
   // provider queue. Existing/cancelled rosters and prior generations stay gated.
   const initialPlaylistGeneration =
