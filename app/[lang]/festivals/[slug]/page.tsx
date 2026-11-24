@@ -1,3 +1,6 @@
+import { EditionHistory } from "@/components/EditionHistory";
+import { db } from "@/lib/db";
+import { readEditionHistory } from "@/lib/catalog/public-history";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { Language } from "@/components/LanguageProvider";
@@ -5,7 +8,6 @@ import { FestivalDetail } from "@/components/FestivalDetail";
 import { supportedLanguages } from "@/lib/catalog/public";
 import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
-import { db } from "@/lib/db";
 import { getCatalog } from "@/lib/catalog/repository";
 import { festivalMusicEvent } from "@/lib/seo";
 
@@ -48,6 +50,8 @@ export default async function LocalizedFestivalPage({
   const item = festivals.find((festival) => festival.slug === slug);
   if (!item) notFound();
   const overview = await readFestivalOverview(db, item);
+  const history =
+    item.editionYear === undefined ? [] : await readEditionHistory(db, item.slug, item.editionYear);
   const arrivalFacts = await readArrivalFacts(db, item);
   const event = festivalMusicEvent(item, lang);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
@@ -69,6 +73,7 @@ export default async function LocalizedFestivalPage({
         )}
         playlist={playlists[item.slug]}
       />
+      <EditionHistory entries={history} officialUrl={item.officialUrl} />
     </>
   );
 }

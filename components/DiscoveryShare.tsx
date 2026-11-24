@@ -43,6 +43,7 @@ export function DiscoveryShare({
     <details className="discoveryDates">
       <summary>{t("shareDiscovery")}</summary>
       <p>{t("shareDiscoveryPrivacy")}</p>
+      {!!filters.artistSelection?.length && <p>{t("shareMatchArtists")}</p>}
       {filters.query && filters.query.length <= 120 && (
         <label className="discoveryWeekend">
           <input
