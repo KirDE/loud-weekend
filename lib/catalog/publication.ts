@@ -4,6 +4,7 @@ import {
   isTolminatorStockRoute,
   matchesTolminatorStockEdition,
 } from "../ingestion/adapters/tolminator-stock.ts";
+import { rosterFingerprint } from "./lineup-proof.ts";
 import { editionDateProblem } from "../domain/edition-dates.ts";
 import { publishArrivalObservation, type ArrivalObservation } from "./arrival-import.ts";
 import {
@@ -201,6 +202,7 @@ async function replaceLineup(
   billing: LineupBilling,
   names: string[],
   ensureArtist: EnsureArtist,
+  expected?: string[],
 ) {
   const otherBilling =
     billing === LineupBilling.HEADLINER ? LineupBilling.LINEUP : LineupBilling.HEADLINER;
@@ -211,13 +213,9 @@ async function replaceLineup(
   });
   const announced = existing.filter(({ status }) => status === "ANNOUNCED");
   const cancelled = existing.filter(({ status }) => status === "CANCELLED");
-  if (
-    same(
-      announced.map(({ artist }) => artist.name),
-      names,
-    )
-  )
-    return false;
+  const current = announced.map(({ artist }) => artist.name);
+  if (same(current, names)) return false;
+  if (expected && !same(current, expected)) throw new Error("Stale reviewed lineup");
   const other = await db.lineupEntry.findMany({
     where: { editionId, billing: otherBilling },
     include: { artist: true },
@@ -287,6 +285,7 @@ async function applyFestivalChanges(
   input: {
     festivalSlug: string;
     expectedYear?: number;
+    expectedEditionId?: string;
     changes: CatalogChange[];
     strictBefore: boolean;
     observedAt: Date;
@@ -300,6 +299,8 @@ async function applyFestivalChanges(
   if (festival.editions.length !== 1)
     throw new Error(`Ambiguous current edition for ${input.festivalSlug}`);
   const edition = festival.editions[0];
+  if (input.expectedEditionId !== undefined && edition.id !== input.expectedEditionId)
+    throw new Error("Reviewed edition is no longer current");
   if (input.expectedYear !== undefined && edition.year !== input.expectedYear)
     throw new Error(
       `Candidate edition ${input.expectedYear} does not match catalogue edition ${edition.year}`,
@@ -441,6 +442,7 @@ async function applyFestivalChanges(
             billing,
             stringList(change.after, change.field),
             ensureArtist,
+            input.expectedEditionId ? stringList(change.before, change.field) : undefined,
           );
         } else {
           if (typeof change.after !== "string" || !change.after.trim())
@@ -1175,8 +1177,18 @@ export async function publishAdminFestivalChange(
     input.change.field === "lineup" || input.change.field === "headliners"
       ? stringList(input.change.afterValue, input.change.field)
       : input.change.afterValue;
+  const evidence = input.change.sourceEvidence as {
+    kind?: string;
+    editionYear?: number;
+    editionId?: string;
+  } | null;
+  const scoped = input.change.parserRunId && evidence?.kind === "scoped-refresh" ? evidence : null;
+  if (scoped && (!scoped.editionId || !Number.isInteger(scoped.editionYear)))
+    throw new Error("Reviewed edition binding is incomplete");
   const applied = await applyFestivalChanges(db, {
     festivalSlug: input.change.resourceKey,
+    expectedYear: scoped?.editionYear,
+    expectedEditionId: scoped?.editionId,
     changes: [{ field: input.change.field, before: input.change.beforeValue, after: afterValue }],
     strictBefore: Boolean(input.change.parserRunId),
     observedAt,
@@ -1236,6 +1248,9 @@ export async function publishAgentFestivalResolution(
   });
   if (edition.festival.slug !== input.festivalSlug || edition.recordState !== "CURRENT")
     throw new Error("Reviewed edition mismatch");
+  const finalLineup = input.facts.finalLineup;
+  if (finalLineup && finalLineup.year !== edition.year)
+    throw new Error("Reviewed lineup edition mismatch");
   const dateProblem = editionDateProblem(
     edition.year,
     input.facts.startDate ?? isoDate(edition.startDate),
@@ -1308,7 +1323,7 @@ export async function publishAgentFestivalResolution(
   }
   // A reviewed edition status is not evidence about catalogue completeness.
   const scalar = Object.entries(input.facts)
-    .filter(([field]) => field !== "headliners" && field !== "lineup")
+    .filter(([field]) => field !== "headliners" && field !== "lineup" && field !== "finalLineup")
     .map(([field, after]) => ({ field, after }));
   if (scalar.length) {
     const applied = await applyFestivalChanges(db, {
@@ -1319,6 +1334,25 @@ export async function publishAgentFestivalResolution(
       observedAt: input.observedAt,
     });
     changedFields.push(...applied.changedFields);
+  }
+  if (finalLineup) {
+    const entries = finalLineup.complete
+      ? await db.lineupEntry.findMany({
+          where: { editionId: edition.id },
+          select: { artistId: true, billing: true, status: true },
+        })
+      : [];
+    if (finalLineup.complete && !entries.some((entry) => entry.status === "ANNOUNCED"))
+      throw new Error("A final lineup requires announced artists");
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: {
+        finalLineupFingerprint: finalLineup.complete
+          ? rosterFingerprint(edition.id, entries)
+          : null,
+      },
+    });
+    changedFields.push("finalLineup");
   }
   for (const field of new Set(changedFields)) {
     const evidence = input.evidence.find((e) => e.field === field);

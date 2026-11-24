@@ -18,6 +18,7 @@ import {
   releaseAgentIssue,
   resumeAgentIssue,
 } from "../lib/ingestion/agent-issues.ts";
+import { readCatalog } from "../lib/catalog/repository.ts";
 import { GET, POST } from "../app/api/ingestion/agent/route.ts";
 import { createIngestionRun, persistAttempt } from "../lib/ingestion/repository.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
@@ -1417,4 +1418,96 @@ test("identical supplied source cannot pretend to repair a failed probe or bypas
   assert.ok(receipt.retryAt);
   assert.equal(receipt.parserRepairId, null);
   assert.deepEqual(await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } }), source);
+});
+
+test("only an explicitly reviewed edition and roster can show a final lineup", async () => {
+  const c = await claim();
+  const editionId = c.current.editionId!;
+  const decision = {
+    action: "apply",
+    reason: "The official edition announcement explicitly confirms the final roster.",
+    facts: {
+      finalLineup: { year: c.current.year, complete: true },
+      headliners: c.current.headliners,
+      lineup: c.current.lineup,
+    },
+    evidence: ["headliners", "lineup", "finalLineup"].map((field) => evidence(field)),
+  };
+  const current = async () =>
+    (await readCatalog({ database: db })).festivals.find((f) => f.slug === c.festivalSlug)!;
+  assert.equal(
+    (await current()).finalLineup,
+    undefined,
+    "legacy completeness is not final lineup evidence",
+  );
+  await assert.rejects(
+    resolveCase(c, {
+      ...decision,
+      facts: { ...decision.facts, finalLineup: { year: c.current.year + 1, complete: true } },
+    }),
+    /invalid/,
+  );
+  await assert.rejects(
+    resolveCase(c, {
+      ...decision,
+      facts: { finalLineup: decision.facts.finalLineup },
+    }),
+    /complete reviewed roster/,
+  );
+  await assert.rejects(
+    resolveCase(c, {
+      ...decision,
+      evidence: decision.evidence.filter((e) => e.field !== "finalLineup"),
+    }),
+    /invalid/,
+  );
+  const receipt = await resolveCase(c, decision);
+  assert.ok(receipt.publicationId);
+  assert.equal(receipt.providerJobs, 0);
+  assert.equal(receipt.parserRepairId, null);
+  assert.deepEqual(await resolveCase(c, decision), receipt);
+  const snapshot = await readCatalog({ database: db });
+  assert.equal((await current()).finalLineup, true);
+  assert.equal((await current()).completeness, c.current.completeness);
+  assert.ok(
+    snapshot.editions
+      .find((e) => e.slug === c.festivalSlug && e.editionYear === c.current.year)
+      ?.provenance.some((p) => p.field === "finalLineup"),
+  );
+  assert.ok(
+    snapshot.editions.filter((e) => e.editionYear !== c.current.year).every((e) => !e.finalLineup),
+  );
+
+  // A display-order edit can recreate entries with new row IDs. The same
+  // artists, billing and announcement states still match the review.
+  const before = await db.lineupEntry.findFirstOrThrow({ where: { editionId } });
+  const entry = await db.$transaction(async (tx) => {
+    await tx.lineupEntry.delete({ where: { id: before.id } });
+    const { id: _previousId, ...data } = before;
+    return tx.lineupEntry.create({ data: { ...data, position: before.position + 100 } });
+  });
+  assert.notEqual(entry.id, before.id);
+  assert.equal((await current()).finalLineup, true);
+
+  await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "CANCELLED" } });
+  const after = await current();
+  assert.equal(after.finalLineup, undefined);
+  assert.equal(
+    after.headliners.length + after.lineup.length,
+    c.current.headliners.length + c.current.lineup.length - 1,
+  );
+
+  // The next manual review can explicitly revoke the old evidence even when
+  // the badge has already fallen back after a roster change.
+  await db.operationalState.delete({ where: { key: c.key } });
+  const next = await claim();
+  const revoked = await resolveCase(next, {
+    action: "apply",
+    reason: "The official source no longer presents this roster as final.",
+    facts: { finalLineup: { year: next.current.year, complete: false } },
+    evidence: [evidence("finalLineup")],
+  });
+  assert.ok(revoked.publicationId);
+  await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "ANNOUNCED" } });
+  assert.equal((await current()).finalLineup, undefined);
 });
