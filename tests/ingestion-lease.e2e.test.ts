@@ -1,12 +1,20 @@
 import type { PrismaClient } from "@prisma/client";
-import { createPrismaClient } from '../lib/prisma-client.mjs';
+import { createPrismaClient } from "../lib/prisma-client.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { claimDueSourceIds, claimDueSources, completeSourceLease, releaseOwnedSourceLease, renewSourceLease, startSourceLeaseRenewal } from "../lib/ingestion/lease.ts";
+import {
+  claimDueSourceIds,
+  claimDueSources,
+  completeSourceLease,
+  releaseOwnedSourceLease,
+  renewSourceLease,
+  startSourceLeaseRenewal,
+} from "../lib/ingestion/lease.ts";
 
 const url = process.env.DATABASE_URL;
-if (!url || !/(?:test|integration)/i.test(new URL(url).pathname)) throw new Error("A disposable test/integration DATABASE_URL is required");
+if (!url || !/(?:test|integration)/i.test(new URL(url).pathname))
+  throw new Error("A disposable test/integration DATABASE_URL is required");
 const first = createPrismaClient();
 const second = createPrismaClient();
 const slug = "lease-fixture-" + randomUUID().slice(0, 8);
@@ -19,20 +27,50 @@ const options = (owner: string, now = base) => ({ owner, now, limit: 1, ttlMs: 6
 test.before(async () => {
   if (process.env.TEST_DB_TIMEZONE) {
     for (const client of [first, second]) {
-      const [session] = await client.$queryRaw<Array<{ TimeZone: string }>>`SELECT current_setting('TimeZone') AS "TimeZone"`;
+      const [session] = await client.$queryRaw<
+        Array<{ TimeZone: string }>
+      >`SELECT current_setting('TimeZone') AS "TimeZone"`;
       assert.equal(session.TimeZone, process.env.TEST_DB_TIMEZONE);
     }
   }
-  const festival = await first.festival.create({ data: {
-    slug, name: "Lease Fixture", country: "Test", countryCode: "DE", officialUrl: "https://example.test/lease", genres: [],
-    editions: { create: { year: 2027, status: "TBA", ticketStatus: "UNKNOWN", recordState: "TRACKING", completeness: "TBA", sourceUpdatedAt: base } },
-  } });
-  const edition = await first.festivalEdition.findFirstOrThrow({ where: { festivalId: festival.id } });
-  const source = await first.festivalSource.create({ data: {
-    festivalSlug: slug, festivalId: festival.id, editionId: edition.id, url: "https://example.test/lease",
-    strategies: ["manual_review"], parserKey: "manual_review", refreshPolicy: "daily", cadenceSeconds: 86400,
-    enabled: true, editionYear: 2027, configurationBackfilledAt: base,
-  } });
+  const festival = await first.festival.create({
+    data: {
+      slug,
+      name: "Lease Fixture",
+      country: "Test",
+      countryCode: "DE",
+      officialUrl: "https://example.test/lease",
+      genres: [],
+      editions: {
+        create: {
+          year: 2027,
+          status: "TBA",
+          ticketStatus: "UNKNOWN",
+          recordState: "TRACKING",
+          completeness: "TBA",
+          sourceUpdatedAt: base,
+        },
+      },
+    },
+  });
+  const edition = await first.festivalEdition.findFirstOrThrow({
+    where: { festivalId: festival.id },
+  });
+  const source = await first.festivalSource.create({
+    data: {
+      festivalSlug: slug,
+      festivalId: festival.id,
+      editionId: edition.id,
+      url: "https://example.test/lease",
+      strategies: ["manual_review"],
+      parserKey: "manual_review",
+      refreshPolicy: "daily",
+      cadenceSeconds: 86400,
+      enabled: true,
+      editionYear: 2027,
+      configurationBackfilledAt: base,
+    },
+  });
   id = source.id;
 });
 test.after(async () => {
@@ -42,22 +80,55 @@ test.after(async () => {
 });
 
 test("atomic claim excludes concurrent workers and fenced completion schedules next run", async () => {
-  const [a, b] = await Promise.all([claimDueSourceIds(first, options(ownerA)), claimDueSourceIds(second, options(ownerB))]);
+  const [a, b] = await Promise.all([
+    claimDueSourceIds(first, options(ownerA)),
+    claimDueSourceIds(second, options(ownerB)),
+  ]);
   assert.equal(a.length + b.length, 1);
   assert.equal([...a, ...b][0], id);
   const winner = a.length ? ownerA : ownerB;
   const loser = a.length ? ownerB : ownerA;
   const claimed = await first.festivalSource.findUniqueOrThrow({ where: { id } });
-  assert.equal(await completeSourceLease(first, { id, owner: loser, now: base, updatedAt: claimed.updatedAt, outcome: "success" }), false);
-  assert.equal(await completeSourceLease(first, { id, owner: winner, now: base, updatedAt: claimed.updatedAt, outcome: "fetch_error" }), true);
+  assert.equal(
+    await completeSourceLease(first, {
+      id,
+      owner: loser,
+      now: base,
+      updatedAt: claimed.updatedAt,
+      outcome: "success",
+    }),
+    false,
+  );
+  assert.equal(
+    await completeSourceLease(first, {
+      id,
+      owner: winner,
+      now: base,
+      updatedAt: claimed.updatedAt,
+      outcome: "fetch_error",
+    }),
+    true,
+  );
   const failed = await first.festivalSource.findUniqueOrThrow({ where: { id } });
   assert.equal(failed.consecutiveFailures, 1);
   assert.equal(failed.lastError, "fetch_error");
   assert.equal(failed.nextRunAt?.toISOString(), "2027-03-01T01:00:00.000Z");
-  assert.deepEqual(await claimDueSourceIds(second, options(ownerB, new Date("2027-03-01T00:59:59.000Z"))), []);
+  assert.deepEqual(
+    await claimDueSourceIds(second, options(ownerB, new Date("2027-03-01T00:59:59.000Z"))),
+    [],
+  );
   assert.deepEqual(await claimDueSourceIds(second, options(ownerB, failed.nextRunAt!)), [id]);
   const reclaimed = await second.festivalSource.findUniqueOrThrow({ where: { id } });
-  assert.equal(await completeSourceLease(second, { id, owner: ownerB, now: failed.nextRunAt!, updatedAt: reclaimed.updatedAt, outcome: "success" }), true);
+  assert.equal(
+    await completeSourceLease(second, {
+      id,
+      owner: ownerB,
+      now: failed.nextRunAt!,
+      updatedAt: reclaimed.updatedAt,
+      outcome: "success",
+    }),
+    true,
+  );
   const completed = await second.festivalSource.findUniqueOrThrow({ where: { id } });
   assert.equal(completed.consecutiveFailures, 0);
   assert.equal(completed.lastError, null);
@@ -65,14 +136,35 @@ test("atomic claim excludes concurrent workers and fenced completion schedules n
 });
 
 test("expired lease can be reclaimed but old worker cannot acknowledge", async () => {
-  await first.festivalSource.update({ where: { id }, data: { nextRunAt: base, leaseOwner: null, leaseExpiresAt: null } });
+  await first.festivalSource.update({
+    where: { id },
+    data: { nextRunAt: base, leaseOwner: null, leaseExpiresAt: null },
+  });
   assert.deepEqual(await claimDueSourceIds(first, options(ownerA)), [id]);
   const firstClaim = await first.festivalSource.findUniqueOrThrow({ where: { id } });
   const afterExpiry = new Date("2027-03-01T00:01:01.000Z");
   assert.deepEqual(await claimDueSourceIds(second, options(ownerB, afterExpiry)), [id]);
   const secondClaim = await second.festivalSource.findUniqueOrThrow({ where: { id } });
-  assert.equal(await completeSourceLease(first, { id, owner: ownerA, now: afterExpiry, updatedAt: firstClaim.updatedAt, outcome: "success" }), false);
-  assert.equal(await completeSourceLease(second, { id, owner: ownerB, now: afterExpiry, updatedAt: secondClaim.updatedAt, outcome: "parser_error" }), true);
+  assert.equal(
+    await completeSourceLease(first, {
+      id,
+      owner: ownerA,
+      now: afterExpiry,
+      updatedAt: firstClaim.updatedAt,
+      outcome: "success",
+    }),
+    false,
+  );
+  assert.equal(
+    await completeSourceLease(second, {
+      id,
+      owner: ownerB,
+      now: afterExpiry,
+      updatedAt: secondClaim.updatedAt,
+      outcome: "parser_error",
+    }),
+    true,
+  );
   const row = await first.festivalSource.findUniqueOrThrow({ where: { id } });
   assert.equal(row.consecutiveFailures, 1);
   assert.equal(row.lastError, "parser_error");
@@ -80,26 +172,81 @@ test("expired lease can be reclaimed but old worker cannot acknowledge", async (
 });
 
 test("operator source edits prevent old worker schedule updates", async () => {
-  await first.festivalSource.update({ where: { id }, data: { enabled: true, parserKey: "manual_review", nextRunAt: base, leaseOwner: null, leaseExpiresAt: null } });
+  await first.festivalSource.update({
+    where: { id },
+    data: {
+      enabled: true,
+      parserKey: "manual_review",
+      nextRunAt: base,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  });
   assert.deepEqual(await claimDueSourceIds(first, options(ownerA)), [id]);
   const claimed = await first.festivalSource.findUniqueOrThrow({ where: { id } });
-  const rescheduled = await second.festivalSource.update({ where: { id }, data: { nextRunAt: new Date("2027-04-01T00:00:00.000Z"), updatedAt: new Date("2030-01-01T00:00:00.000Z") } });
-  assert.equal(await completeSourceLease(first, { id, owner: ownerA, now: base, updatedAt: claimed.updatedAt, outcome: "success" }), false);
+  const rescheduled = await second.festivalSource.update({
+    where: { id },
+    data: {
+      nextRunAt: new Date("2027-04-01T00:00:00.000Z"),
+      updatedAt: new Date("2030-01-01T00:00:00.000Z"),
+    },
+  });
+  assert.equal(
+    await completeSourceLease(first, {
+      id,
+      owner: ownerA,
+      now: base,
+      updatedAt: claimed.updatedAt,
+      outcome: "success",
+    }),
+    false,
+  );
   assert.deepEqual(await first.festivalSource.findUniqueOrThrow({ where: { id } }), rescheduled);
-  const disabled = await second.festivalSource.update({ where: { id }, data: { enabled: false, updatedAt: new Date("2031-01-01T00:00:00.000Z") } });
-  assert.equal(await completeSourceLease(first, { id, owner: ownerA, now: base, updatedAt: rescheduled.updatedAt, outcome: "fetch_error" }), false);
+  const disabled = await second.festivalSource.update({
+    where: { id },
+    data: { enabled: false, updatedAt: new Date("2031-01-01T00:00:00.000Z") },
+  });
+  assert.equal(
+    await completeSourceLease(first, {
+      id,
+      owner: ownerA,
+      now: base,
+      updatedAt: rescheduled.updatedAt,
+      outcome: "fetch_error",
+    }),
+    false,
+  );
   assert.deepEqual(await first.festivalSource.findUniqueOrThrow({ where: { id } }), disabled);
 });
 
 test("release-only CAS preserves edited revision and schedule, but never clears a reclaimed owner", async () => {
-  await first.festivalSource.update({ where: { id }, data: {
-    enabled: true, parserKey: "manual_review", nextRunAt: base, leaseOwner: null, leaseExpiresAt: null,
-  } });
+  await first.festivalSource.update({
+    where: { id },
+    data: {
+      enabled: true,
+      parserKey: "manual_review",
+      nextRunAt: base,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  });
   const [claim] = await claimDueSources(first, options(ownerA));
-  const edited = await second.festivalSource.update({ where: { id }, data: {
-    nextRunAt: new Date("2027-05-01T00:00:00.000Z"), updatedAt: new Date("2030-05-01T00:00:00.000Z"),
-  } });
-  assert.equal(await completeSourceLease(first, { ...claim, owner: ownerA, now: base, outcome: "parser_error" }), false);
+  const edited = await second.festivalSource.update({
+    where: { id },
+    data: {
+      nextRunAt: new Date("2027-05-01T00:00:00.000Z"),
+      updatedAt: new Date("2030-05-01T00:00:00.000Z"),
+    },
+  });
+  assert.equal(
+    await completeSourceLease(first, {
+      ...claim,
+      owner: ownerA,
+      now: base,
+      outcome: "parser_error",
+    }),
+    false,
+  );
   assert.equal(await releaseOwnedSourceLease(first, { ...claim, owner: ownerA }), true);
   const released = await first.festivalSource.findUniqueOrThrow({ where: { id } });
   assert.deepEqual(released, { ...edited, leaseOwner: null, leaseExpiresAt: null });
@@ -108,45 +255,104 @@ test("release-only CAS preserves edited revision and schedule, but never clears 
   await first.festivalSource.update({ where: { id }, data: { nextRunAt: base } });
   const [secondClaim] = await claimDueSources(first, options(ownerA));
   assert.equal(secondClaim.id, id);
-  await first.festivalSource.update({ where: { id }, data: { leaseExpiresAt: new Date("2027-02-28T00:00:00.000Z") } });
+  await first.festivalSource.update({
+    where: { id },
+    data: { leaseExpiresAt: new Date("2027-02-28T00:00:00.000Z") },
+  });
   const [reclaimed] = await claimDueSources(second, options(ownerB));
   assert.equal(reclaimed.id, id);
   const before = await second.festivalSource.findUniqueOrThrow({ where: { id } });
   assert.equal(await releaseOwnedSourceLease(first, { ...secondClaim, owner: ownerA }), false);
   assert.deepEqual(await first.festivalSource.findUniqueOrThrow({ where: { id } }), before);
-  assert.equal(await completeSourceLease(second, { ...reclaimed, owner: ownerB, now: base, outcome: "success" }), true);
+  assert.equal(
+    await completeSourceLease(second, {
+      ...reclaimed,
+      owner: ownerB,
+      now: base,
+      outcome: "success",
+    }),
+    true,
+  );
 });
 
 test("invalid claim arguments fail before database access", async () => {
-  const unavailable = { $queryRaw: () => { throw new Error("database accessed"); } } as unknown as PrismaClient;
-  await assert.rejects(claimDueSourceIds(unavailable, { ...options(ownerA), limit: 0 }), /Invalid ingestion batch size/);
-  await assert.rejects(claimDueSourceIds(unavailable, options("not-a-uuid")), /Invalid ingestion lease owner/);
-  await assert.rejects(claimDueSourceIds(unavailable, { ...options(ownerA), ttlMs: 1 }), /Invalid ingestion lease duration/);
+  const unavailable = {
+    $queryRaw: () => {
+      throw new Error("database accessed");
+    },
+  } as unknown as PrismaClient;
+  await assert.rejects(
+    claimDueSourceIds(unavailable, { ...options(ownerA), limit: 0 }),
+    /Invalid ingestion batch size/,
+  );
+  await assert.rejects(
+    claimDueSourceIds(unavailable, options("not-a-uuid")),
+    /Invalid ingestion lease owner/,
+  );
+  await assert.rejects(
+    claimDueSourceIds(unavailable, { ...options(ownerA), ttlMs: 1 }),
+    /Invalid ingestion lease duration/,
+  );
 });
 
 test("disabled and unconfigured rows cannot be claimed", async () => {
-  await first.festivalSource.update({ where: { id }, data: { enabled: false, nextRunAt: base, leaseOwner: null, leaseExpiresAt: null } });
+  await first.festivalSource.update({
+    where: { id },
+    data: { enabled: false, nextRunAt: base, leaseOwner: null, leaseExpiresAt: null },
+  });
   assert.deepEqual(await claimDueSourceIds(first, options(ownerA)), []);
   await first.festivalSource.update({ where: { id }, data: { enabled: true, parserKey: null } });
   assert.deepEqual(await claimDueSourceIds(second, options(ownerB)), []);
 });
 
 test("claim returns the exact revision used by publication and completion fences", async () => {
-  await first.festivalSource.update({ where: { id }, data: { enabled: true, parserKey: "manual_review", nextRunAt: base, leaseOwner: null, leaseExpiresAt: null } });
+  await first.festivalSource.update({
+    where: { id },
+    data: {
+      enabled: true,
+      parserKey: "manual_review",
+      nextRunAt: base,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  });
   const [claim] = await claimDueSources(first, options(ownerA));
   assert.equal(claim.id, id);
   const row = await first.festivalSource.findUniqueOrThrow({ where: { id } });
   assert.equal(claim.updatedAt.toISOString(), row.updatedAt.toISOString());
   const staleRevision = new Date(claim.updatedAt.getTime() + 1_000);
-  assert.equal(await completeSourceLease(first, { ...claim, updatedAt: staleRevision, owner: ownerA, now: base, outcome: "success" }), false);
-  assert.equal((await first.festivalSource.findUniqueOrThrow({ where: { id } })).leaseOwner, ownerA);
-  assert.equal(await completeSourceLease(first, { ...claim, owner: ownerA, now: base, outcome: "success" }), true);
+  assert.equal(
+    await completeSourceLease(first, {
+      ...claim,
+      updatedAt: staleRevision,
+      owner: ownerA,
+      now: base,
+      outcome: "success",
+    }),
+    false,
+  );
+  assert.equal(
+    (await first.festivalSource.findUniqueOrThrow({ where: { id } })).leaseOwner,
+    ownerA,
+  );
+  assert.equal(
+    await completeSourceLease(first, { ...claim, owner: ownerA, now: base, outcome: "success" }),
+    true,
+  );
 });
-
 
 test("renewal preserves revision/configuration and fails closed on expiry, reclaim and edit", async () => {
   const now = new Date();
-  await first.festivalSource.update({ where: { id }, data: { enabled: true, parserKey: "manual_review", nextRunAt: now, leaseOwner: null, leaseExpiresAt: null } });
+  await first.festivalSource.update({
+    where: { id },
+    data: {
+      enabled: true,
+      parserKey: "manual_review",
+      nextRunAt: now,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  });
   const [claim] = await claimDueSources(first, options(ownerA, now));
   assert.equal(claim.id, id);
   const before = await first.festivalSource.findUniqueOrThrow({ where: { id } });
@@ -158,7 +364,13 @@ test("renewal preserves revision/configuration and fails closed on expiry, recla
   assert.equal(renewed.nextRunAt?.getTime(), before.nextRunAt?.getTime());
   assert.equal(renewed.leaseOwner, ownerA);
   assert.ok(renewed.leaseExpiresAt! > new Date());
-  await first.$executeRaw`UPDATE "FestivalSource" SET "leaseExpiresAt" = (${new Date(Date.now() - 1000).toISOString()}::timestamptz AT TIME ZONE 'UTC') WHERE id = ${id}`;
+  await first.$executeRaw`
+UPDATE "FestivalSource" SET "leaseExpiresAt" = (
+${new Date(Date.now() - 1000).toISOString()}
+::timestamptz AT TIME ZONE 'UTC') WHERE id =
+${id}
+
+`;
   const expired = await first.festivalSource.findUniqueOrThrow({ where: { id } });
   assert.equal(await renewSourceLease(first, { ...claim, owner: ownerA }, 30_000), false);
   assert.deepEqual(await first.festivalSource.findUniqueOrThrow({ where: { id } }), expired);
@@ -167,21 +379,40 @@ test("renewal preserves revision/configuration and fails closed on expiry, recla
   const ownedByB = await second.festivalSource.findUniqueOrThrow({ where: { id } });
   assert.equal(await renewSourceLease(first, { ...claim, owner: ownerA }, 30_000), false);
   assert.deepEqual(await first.festivalSource.findUniqueOrThrow({ where: { id } }), ownedByB);
-  const edited = await second.festivalSource.update({ where: { id }, data: { cadenceSeconds: 172800, updatedAt: new Date(Date.now() + 60_000) } });
+  const edited = await second.festivalSource.update({
+    where: { id },
+    data: { cadenceSeconds: 172800, updatedAt: new Date(Date.now() + 60_000) },
+  });
   assert.equal(await renewSourceLease(first, { ...reclaim, owner: ownerB }, 30_000), false);
   assert.deepEqual(await first.festivalSource.findUniqueOrThrow({ where: { id } }), edited);
 });
 
 test("concurrent edit holding a row lock prevents the queued renewal from changing it", async () => {
   const now = new Date();
-  await first.festivalSource.update({ where: { id }, data: { enabled: true, parserKey: "manual_review", nextRunAt: now, leaseOwner: null, leaseExpiresAt: null } });
+  await first.festivalSource.update({
+    where: { id },
+    data: {
+      enabled: true,
+      parserKey: "manual_review",
+      nextRunAt: now,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  });
   const [claim] = await claimDueSources(first, options(ownerA, now));
   let release!: () => void;
   let locked!: () => void;
-  const lockedPromise = new Promise<void>((resolve) => { locked = resolve; });
-  const releasePromise = new Promise<void>((resolve) => { release = resolve; });
+  const lockedPromise = new Promise<void>((resolve) => {
+    locked = resolve;
+  });
+  const releasePromise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   const editing = second.$transaction(async (tx) => {
-    await tx.festivalSource.update({ where: { id }, data: { parserKey: "json_ld_event", updatedAt: new Date(Date.now() + 60_000) } });
+    await tx.festivalSource.update({
+      where: { id },
+      data: { parserKey: "json_ld_event", updatedAt: new Date(Date.now() + 60_000) },
+    });
     locked();
     await releasePromise;
   });
@@ -197,10 +428,29 @@ test("concurrent edit holding a row lock prevents the queued renewal from changi
 
 test("heartbeat extends a shortened lease during asynchronous work and detects stolen ownership", async () => {
   const now = new Date();
-  await first.festivalSource.update({ where: { id }, data: { enabled: true, parserKey: "manual_review", nextRunAt: now, leaseOwner: null, leaseExpiresAt: null } });
+  await first.festivalSource.update({
+    where: { id },
+    data: {
+      enabled: true,
+      parserKey: "manual_review",
+      nextRunAt: now,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  });
   const [claim] = await claimDueSources(first, options(ownerA, now));
-  await first.$executeRaw`UPDATE "FestivalSource" SET "leaseExpiresAt" = (${new Date(Date.now() + 200).toISOString()}::timestamptz AT TIME ZONE 'UTC') WHERE id = ${id}`;
-  const heartbeat = startSourceLeaseRenewal(first, { ...claim, owner: ownerA }, { intervalMs: 30, ttlMs: 30_000 });
+  await first.$executeRaw`
+UPDATE "FestivalSource" SET "leaseExpiresAt" = (
+${new Date(Date.now() + 200).toISOString()}
+::timestamptz AT TIME ZONE 'UTC') WHERE id =
+${id}
+
+`;
+  const heartbeat = startSourceLeaseRenewal(
+    first,
+    { ...claim, owner: ownerA },
+    { intervalMs: 30, ttlMs: 30_000 },
+  );
   try {
     await new Promise((resolve) => setTimeout(resolve, 90));
     heartbeat.assertActive();
@@ -211,5 +461,11 @@ test("heartbeat extends a shortened lease during asynchronous work and detects s
     await new Promise((resolve) => setTimeout(resolve, 90));
     assert.throws(() => heartbeat.assertActive(), /renewal failed/);
     await assert.rejects(heartbeat.stop(), /renewal failed/);
-  } finally { try { await heartbeat.stop(); } catch { /* expected after takeover */ } }
+  } finally {
+    try {
+      await heartbeat.stop();
+    } catch {
+      /* expected after takeover */
+    }
+  }
 });

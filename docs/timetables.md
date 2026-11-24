@@ -11,16 +11,18 @@ Prepare an input document outside the repository:
 {
   "festivalSlug": "wacken-open-air",
   "editionYear": 2027,
-  "entries": [{
-    "date": "2027-07-28",
-    "stage": "Faster",
-    "start": "18:30",
-    "artist": "Artist name",
-    "timeZone": "Europe/Berlin",
-    "status": "scheduled",
-    "sourceUrl": "https://www.wacken.com/...official-schedule...",
-    "observedAt": "2027-07-01T10:00:00.000Z"
-  }]
+  "entries": [
+    {
+      "date": "2027-07-28",
+      "stage": "Faster",
+      "start": "18:30",
+      "artist": "Artist name",
+      "timeZone": "Europe/Berlin",
+      "status": "scheduled",
+      "sourceUrl": "https://www.wacken.com/...official-schedule...",
+      "observedAt": "2027-07-01T10:00:00.000Z"
+    }
+  ]
 }
 ```
 

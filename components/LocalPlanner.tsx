@@ -8,14 +8,26 @@ export type PlannerState = {
   favoriteArtists: string[];
   attendance: Record<string, Attendance>;
   playlistFestivals: string[];
-  savedFilters: { query: string; country: string; announcedOnly: boolean; month: string; ticketsOnly: boolean };
+  savedFilters: {
+    query: string;
+    country: string;
+    announcedOnly: boolean;
+    month: string;
+    ticketsOnly: boolean;
+  };
 };
 export const emptyPlannerState: PlannerState = {
   favoriteFestivals: [],
   favoriteArtists: [],
   attendance: {},
   playlistFestivals: [],
-  savedFilters: { query: "", country: "all", announcedOnly: false, month: "all", ticketsOnly: false },
+  savedFilters: {
+    query: "",
+    country: "all",
+    announcedOnly: false,
+    month: "all",
+    ticketsOnly: false,
+  },
 };
 const plannerStorageKey = "festival-radar-planner-v1";
 const Context = createContext<
@@ -32,11 +44,7 @@ const Context = createContext<
     })
   | null
 >(null);
-export function LocalPlannerProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function LocalPlannerProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState(emptyPlannerState);
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -51,10 +59,10 @@ export function LocalPlannerProvider({
   useEffect(() => {
     if (!ready) return;
     const serialized = serializePlannerState(state);
-    if (localStorage.getItem(plannerStorageKey) !== serialized) localStorage.setItem(plannerStorageKey, serialized);
+    if (localStorage.getItem(plannerStorageKey) !== serialized)
+      localStorage.setItem(plannerStorageKey, serialized);
   }, [ready, state]);
-  const toggle = (a: string[], v: string) =>
-    a.includes(v) ? a.filter((x) => x !== v) : [...a, v];
+  const toggle = (a: string[], v: string) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]);
   const value = useMemo(
     () => ({
       ...state,
@@ -81,15 +89,23 @@ export function LocalPlannerProvider({
           ...s,
           playlistFestivals: toggle(s.playlistFestivals, v),
         })),
-      setSavedFilters: (savedFilters: PlannerState["savedFilters"]) => setState((s) => ({ ...s, savedFilters })),
+      setSavedFilters: (savedFilters: PlannerState["savedFilters"]) =>
+        setState((s) => ({ ...s, savedFilters })),
       replace: (next: PlannerState) => setState({ ...emptyPlannerState, ...next }),
-      merge: (next: Partial<PlannerState>) => setState((current) => ({
-        favoriteFestivals: Array.from(new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])])),
-        favoriteArtists: Array.from(new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])])),
-        attendance: { ...(next.attendance || {}), ...current.attendance },
-        playlistFestivals: Array.from(new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])])),
-        savedFilters: { ...current.savedFilters, ...(next.savedFilters || {}) },
-      })),
+      merge: (next: Partial<PlannerState>) =>
+        setState((current) => ({
+          favoriteFestivals: Array.from(
+            new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])]),
+          ),
+          favoriteArtists: Array.from(
+            new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])]),
+          ),
+          attendance: { ...next.attendance, ...current.attendance },
+          playlistFestivals: Array.from(
+            new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]),
+          ),
+          savedFilters: { ...current.savedFilters, ...next.savedFilters },
+        })),
       clear: (clearRelatedData: () => void) => {
         const previous = localStorage.getItem(plannerStorageKey);
         localStorage.setItem(plannerStorageKey, serializePlannerState(emptyPlannerState));
@@ -112,26 +128,16 @@ export function useLocalPlanner() {
   if (!value) throw new Error("Missing LocalPlannerProvider");
   return value;
 }
-export function FavoriteButton({
-  kind,
-  value,
-}: {
-  kind: "festival" | "artist";
-  value: string;
-}) {
+export function FavoriteButton({ kind, value }: { kind: "festival" | "artist"; value: string }) {
   const p = useLocalPlanner();
   const { t } = useLanguage();
-  const selected = (
-    kind === "festival" ? p.favoriteFestivals : p.favoriteArtists
-  ).includes(value);
+  const selected = (kind === "festival" ? p.favoriteFestivals : p.favoriteArtists).includes(value);
   return (
     <button
       className={`favoriteButton${selected ? " selected" : ""}`}
       type="button"
       aria-pressed={selected}
-      onClick={() =>
-        kind === "festival" ? p.toggleFestival(value) : p.toggleArtist(value)
-      }
+      onClick={() => (kind === "festival" ? p.toggleFestival(value) : p.toggleArtist(value))}
     >
       {t(selected ? "saved" : "save")}
     </button>

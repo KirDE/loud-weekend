@@ -4,7 +4,9 @@ export function requestHasTrustedOrigin(request: Request, configuredAppUrl = pro
   const origin = request.headers.get("origin");
   if (!origin) return false;
   try {
-    const expected = configuredAppUrl ? new URL(configuredAppUrl).origin : new URL(request.url).origin;
+    const expected = configuredAppUrl
+      ? new URL(configuredAppUrl).origin
+      : new URL(request.url).origin;
     return new URL(origin).origin === expected && origin === new URL(origin).origin;
   } catch {
     return false;
