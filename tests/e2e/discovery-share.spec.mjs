@@ -68,7 +68,9 @@ for (const [locale, t] of Object.entries(labels)) {
             JSON.stringify({ savedFilters: { query: "Synthetic Alpine" } }),
           );
       }, storageKey);
-      await recipient.goto(link);
+      const attributedLink = new URL(link);
+      attributedLink.searchParams.set("ref", "festival-guide");
+      await recipient.goto(attributedLink.href);
       const recipientSearch = recipient.locator(".search input");
       await expect(recipientSearch).toHaveValue("Synthetic Fest");
       await expect(recipient.locator(".festivalCard h2")).toHaveText(["Synthetic Fest"]);
@@ -77,7 +79,7 @@ for (const [locale, t] of Object.entries(labels)) {
         new RegExp(`/${locale}/$`),
       );
       await recipientSearch.fill("Synthetic West");
-      await expect(recipient).toHaveURL(link);
+      await expect(recipient).toHaveURL(attributedLink.href);
       await expect
         .poll(() =>
           recipient.evaluate(
@@ -103,7 +105,7 @@ for (const [locale, t] of Object.entries(labels)) {
       await expect(recipientSearch).toHaveValue("Synthetic Fest");
 
       await recipient.locator(".clearFilters").click();
-      await expect(recipient).toHaveURL(`/${locale}/`);
+      await expect(recipient).toHaveURL(`/${locale}/?ref=festival-guide`);
       await expect(recipientSearch).toHaveValue("Synthetic Alpine");
       await recipient.goBack();
       await expect(recipientSearch).toHaveValue("Synthetic Fest");
