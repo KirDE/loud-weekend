@@ -57,6 +57,7 @@ test("install stamps the offline shell and warms a revision-aware DB catalogue t
     "/icons/icon-192.png",
     "/icons/icon-512.png",
     "/icons/icon-maskable-512.png",
+    "/offline-trips.mjs",
   ]) {
     const response = await dispatch(listeners, new Request(`https://festivals.test${path}`));
     assert.equal(
@@ -417,6 +418,7 @@ test("install succeeds without static snapshots when the DB catalogue is unavail
         "/icons/icon-maskable-512.png",
         "/manifest.webmanifest",
         "/offline.html",
+        "/offline-trips.mjs",
       ].sort(),
     );
     assert.equal(await cache.match("/offline/festivals-2027-v1.json"), undefined);
