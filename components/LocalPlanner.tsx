@@ -163,9 +163,11 @@ export function FavoriteButton({ value }: { value: string }) {
 
 export function ArtistFavoriteButton({
   slug,
+  name,
   legacySlugs,
 }: {
   slug: string;
+  name: string;
   legacySlugs: Readonly<Record<string, string>>;
 }) {
   const p = useLocalPlanner();
@@ -177,6 +179,7 @@ export function ArtistFavoriteButton({
       type="button"
       disabled={!p.ready}
       aria-pressed={selected}
+      aria-label={t(selected ? "saved" : "save") + ": " + name}
       onClick={() => p.toggleArtist(slug, legacySlugs)}
     >
       {t(selected ? "saved" : "save")}

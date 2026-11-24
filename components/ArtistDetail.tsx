@@ -28,7 +28,7 @@ export function ArtistDetail({
         <Link className="back" href="/">
           ← {t("festivalDirectory")}
         </Link>
-        <ArtistFavoriteButton slug={artist.slug} legacySlugs={legacySlugs} />
+        <ArtistFavoriteButton slug={artist.slug} name={artist.name} legacySlugs={legacySlugs} />
       </div>
       <div className="artistHero">
         {artist.image ? (
