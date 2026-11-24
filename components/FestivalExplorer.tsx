@@ -2,17 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CatalogFreshness } from "@/lib/domain/freshness";
+import { formatFreshnessDate } from "@/lib/freshness-date";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import { lineupOverlap } from "@/lib/planning";
-import { emptyPlannerState, useLocalPlanner } from "./LocalPlanner";
-import { hasAvailableTickets } from "@/lib/tickets";
+import { useLocalPlanner } from "./LocalPlanner";
+import { hasAvailableTickets, ticketPresentation } from "@/lib/tickets";
 import {
   distanceKm,
   festivalGenres,
   festivalMatchesDiscoveryFilters,
-  type Coordinates,
 } from "@/lib/festival-discovery";
 import {
   availableFestivalMonths,
@@ -21,26 +22,44 @@ import {
 } from "@/lib/festival-dates";
 import { announcedArtists, hasAnnouncedLineup, lineupPreviewArtists } from "@/lib/festival-lineup";
 
+import {
+  defaultDiscoveryPreferences,
+  discoveryDistances,
+  discoveryOrigins as origins,
+  type DiscoveryPreferences,
+} from "@/lib/discovery-preferences";
+
 const RESULT_BATCH_SIZE = 48;
 
-const origins: Record<string, { label: string; coordinates: Coordinates }> = {
-  berlin: { label: "Berlin, Germany", coordinates: { latitude: 52.52, longitude: 13.405 } },
-  cologne: { label: "Cologne, Germany", coordinates: { latitude: 50.9375, longitude: 6.9603 } },
-  amsterdam: {
-    label: "Amsterdam, Netherlands",
-    coordinates: { latitude: 52.3676, longitude: 4.9041 },
-  },
-  london: {
-    label: "London, United Kingdom",
-    coordinates: { latitude: 51.5072, longitude: -0.1276 },
-  },
-  prague: { label: "Prague, Czechia", coordinates: { latitude: 50.0755, longitude: 14.4378 } },
-};
+export function FestivalComparisonTicket({ item }: { item: Festival }) {
+  const { t } = useLanguage();
+  const tickets = ticketPresentation(item);
+  return (
+    <td data-ticket-status={tickets.status}>
+      {tickets.href ? (
+        <a href={tickets.href} rel="noreferrer" target="_blank">
+          {t(tickets.label)}
+        </a>
+      ) : (
+        t(tickets.label)
+      )}
+    </td>
+  );
+}
 
-export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
+export function FestivalExplorer({
+  festivals,
+  freshness,
+}: {
+  festivals: Festival[];
+  freshness?: CatalogFreshness;
+}) {
   const { language, locale, t } = useLanguage();
   const planner = useLocalPlanner();
-  const [query, setQuery] = useState(planner.savedFilters.query);
+  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance } =
+    planner.savedFilters;
+  const filtersReady = planner.ready;
+  const updateFilters = planner.updateSavedFilters;
   const searchRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const nextFocusIndex = useRef<number | null>(null);
@@ -50,23 +69,18 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
     de: "Mehr Festivals anzeigen",
     ru: "Показать ещё фестивали",
   }[language];
-  const [country, setCountry] = useState(planner.savedFilters.country);
-  const [announcedOnly, setAnnouncedOnly] = useState(planner.savedFilters.announcedOnly);
-  const [month, setMonth] = useState(planner.savedFilters.month);
-  const [ticketsOnly, setTicketsOnly] = useState(planner.savedFilters.ticketsOnly);
-  const [filtersReady, setFiltersReady] = useState(false);
-  const [genre, setGenre] = useState("all");
-  const [origin, setOrigin] = useState("berlin");
-  const [maxDistance, setMaxDistance] = useState("all");
   const [selected, setSelected] = useState<string[]>([]);
   const [comparisonStatus, setComparisonStatus] = useState("");
   const displayNames = useMemo(() => new Intl.DisplayNames([locale], { type: "region" }), [locale]);
   const countries = useMemo(
     () =>
-      Array.from(new Set(festivals.map((item) => item.countryCode))).sort((a, b) =>
-        (displayNames.of(a) || a).localeCompare(displayNames.of(b) || b, locale),
-      ),
-    [festivals, displayNames, locale],
+      Array.from(
+        new Set([
+          ...festivals.map((item) => item.countryCode),
+          ...(country === "all" ? [] : [country]),
+        ]),
+      ).sort((a, b) => (displayNames.of(a) || a).localeCompare(displayNames.of(b) || b, locale)),
+    [festivals, country, displayNames, locale],
   );
   const months = useMemo(() => {
     const available = availableFestivalMonths(festivals);
@@ -76,8 +90,11 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
       ? [...new Set([...available, Number(month)])].sort((a, b) => a - b)
       : available;
   }, [festivals, month]);
-  const genres = useMemo(() => festivalGenres(festivals), [festivals]);
-  const originCoordinates = origins[origin]?.coordinates;
+  const genres = useMemo(() => {
+    const available = festivalGenres(festivals);
+    return genre === "all" || available.includes(genre) ? available : [...available, genre].sort();
+  }, [festivals, genre]);
+  const originCoordinates = origins[origin].coordinates;
   const visible = useMemo(
     () =>
       festivals
@@ -142,31 +159,8 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
       setComparisonStatus(t("comparisonSelected", { festival: item.name, count: next.length }));
       return next;
     });
-  useEffect(() => {
-    if (planner.ready && !filtersReady) {
-      setQuery(planner.savedFilters.query);
-      setCountry(planner.savedFilters.country);
-      setAnnouncedOnly(planner.savedFilters.announcedOnly);
-      setMonth(planner.savedFilters.month);
-      setTicketsOnly(planner.savedFilters.ticketsOnly);
-      setFiltersReady(true);
-    }
-  }, [planner.ready, filtersReady]);
-  useEffect(() => {
-    if (filtersReady)
-      planner.setSavedFilters({ query, country, announcedOnly, month, ticketsOnly });
-  }, [query, country, announcedOnly, month, ticketsOnly, filtersReady]);
-
   const clearFilters = () => {
-    const defaults = emptyPlannerState.savedFilters;
-    setQuery(defaults.query);
-    setCountry(defaults.country);
-    setMonth(defaults.month);
-    setAnnouncedOnly(defaults.announcedOnly);
-    setTicketsOnly(defaults.ticketsOnly);
-    setGenre("all");
-    setOrigin("berlin");
-    setMaxDistance("all");
+    planner.setSavedFilters(defaultDiscoveryPreferences);
     searchRef.current?.focus();
   };
 
@@ -179,7 +173,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
             ref={searchRef}
             aria-label={t("filterSearch")}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => updateFilters({ query: event.target.value })}
             placeholder={t("search")}
           />
           {query && (
@@ -187,7 +181,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
               type="button"
               aria-label={t("clearSearch")}
               onClick={() => {
-                setQuery("");
+                updateFilters({ query: "" });
                 searchRef.current?.focus();
               }}
             >
@@ -198,7 +192,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         <select
           aria-label={t("countries")}
           value={country}
-          onChange={(event) => setCountry(event.target.value)}
+          onChange={(event) => updateFilters({ country: event.target.value })}
         >
           <option value="all">{t("allCountries")}</option>
           {countries.map((value) => (
@@ -210,7 +204,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         <select
           aria-label={t("filterMonth")}
           value={month}
-          onChange={(event) => setMonth(event.target.value)}
+          onChange={(event) => updateFilters({ month: event.target.value })}
         >
           <option value="all">{t("allMonths")}</option>
           {months.map((value) => (
@@ -224,7 +218,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         <select
           aria-label={t("filterGenre")}
           value={genre}
-          onChange={(event) => setGenre(event.target.value)}
+          onChange={(event) => updateFilters({ genre: event.target.value })}
         >
           <option value="all">{t("allGenres")}</option>
           {genres.map((value) => (
@@ -236,7 +230,9 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         <select
           aria-label={t("filterOrigin")}
           value={origin}
-          onChange={(event) => setOrigin(event.target.value)}
+          onChange={(event) =>
+            updateFilters({ origin: event.target.value as DiscoveryPreferences["origin"] })
+          }
         >
           {Object.entries(origins).map(([value, item]) => (
             <option key={value} value={value}>
@@ -247,12 +243,12 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
         <select
           aria-label={t("filterDistance")}
           value={maxDistance}
-          onChange={(event) => setMaxDistance(event.target.value)}
+          onChange={(event) => updateFilters({ maxDistance: event.target.value })}
         >
           <option value="all">{t("anyDistance")}</option>
-          {[100, 250, 500, 1000, 2000].map((value) => (
+          {discoveryDistances.map((value) => (
             <option key={value} value={value}>
-              {t("withinDistance", { distance: value.toLocaleString(locale) })}
+              {t("withinDistance", { distance: Number(value).toLocaleString(locale) })}
             </option>
           ))}
         </select>
@@ -269,7 +265,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
             <input
               type="checkbox"
               checked={announcedOnly}
-              onChange={(event) => setAnnouncedOnly(event.target.checked)}
+              onChange={(event) => updateFilters({ announcedOnly: event.target.checked })}
             />
             <span />
             {t("lineupAnnounced")}
@@ -278,7 +274,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
             <input
               type="checkbox"
               checked={ticketsOnly}
-              onChange={(event) => setTicketsOnly(event.target.checked)}
+              onChange={(event) => updateFilters({ ticketsOnly: event.target.checked })}
             />
             <span aria-hidden="true" />
             {t("officialTicketsOnly")}
@@ -342,17 +338,7 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
                   <tr>
                     <th scope="row">{t("tickets")}</th>
                     {compared.map((item) => (
-                      <td key={item.slug}>
-                        {item.ticketsUrl ? (
-                          <a href={item.ticketsUrl} rel="noreferrer" target="_blank">
-                            {t("officialTickets")}
-                          </a>
-                        ) : item.ticketStatus === "unavailable" ? (
-                          t("unavailable")
-                        ) : (
-                          t("availabilityNotConfirmed")
-                        )}
-                      </td>
+                      <FestivalComparisonTicket key={item.slug} item={item} />
                     ))}
                   </tr>
                   <tr>
@@ -380,7 +366,29 @@ export function FestivalExplorer({ festivals }: { festivals: Festival[] }) {
           {shownCount < visible.length && `${shownCount} / `}
           {visible.length} {t("festivals")}
         </span>
-        <span>{t("lastReview")}</span>
+        {freshness && (
+          <span>
+            {freshness.checkedAt ? (
+              <>
+                {t("latestSourceCheck")} ·{" "}
+                <time dateTime={freshness.checkedAt}>
+                  {formatFreshnessDate(freshness.checkedAt, locale)}
+                </time>
+              </>
+            ) : (
+              t("sourceCheckUnavailable")
+            )}
+            {freshness.lastPublishedAt && (
+              <>
+                {" "}
+                · {t("latestCatalogPublication")} ·{" "}
+                <time dateTime={freshness.lastPublishedAt}>
+                  {formatFreshnessDate(freshness.lastPublishedAt, locale)}
+                </time>
+              </>
+            )}
+          </span>
+        )}
       </div>
       <div className="festivalGrid" ref={gridRef}>
         {visible.slice(0, shownCount).map((item) => {
