@@ -57,6 +57,11 @@ test("large catalogue keeps comparison and search across rendered batches", asyn
     await page.getByRole("button", { name: "Clear search", exact: true }).click();
     await expect(headers).toHaveCount(48);
     await expect(page.getByRole("button", { name: "Show more festivals (2)" })).toBeVisible();
+
+    await page.goto("/en/?filters=1");
+    await expect(headers).toHaveCount(48);
+    await page.getByRole("button", { name: "Show more festivals (2)" }).click();
+    await expect(headers).toHaveCount(50);
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);

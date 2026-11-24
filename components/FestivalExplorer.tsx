@@ -90,9 +90,13 @@ export function FestivalExplorer({
   // Leaving a shared URL discards its temporary edits. Browser history
   // restores the URL's own snapshot, not edits that were never in that URL.
   if (draft && draft.key !== linkKey) setDraft(undefined);
-  const activeFilters = shared
-    ? { ...shared.filters, ...(draft?.key === linkKey ? draft.patch : {}) }
-    : planner.savedFilters;
+  const activeFilters = useMemo(
+    () =>
+      shared
+        ? { ...shared.filters, ...(draft?.key === linkKey ? draft.patch : {}) }
+        : planner.savedFilters,
+    [shared, draft, linkKey, planner.savedFilters],
+  );
   const {
     query,
     country,
