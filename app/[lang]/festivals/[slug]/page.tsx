@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import type { Language } from "@/components/LanguageProvider";
 import { FestivalDetail } from "@/components/FestivalDetail";
 import { supportedLanguages } from "@/lib/catalog/public";
+import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
+import { db } from "@/lib/db";
 import { getCatalog } from "@/lib/catalog/repository";
 import { festivalMusicEvent } from "@/lib/seo";
 
@@ -39,10 +41,11 @@ export default async function LocalizedFestivalPage({
 }) {
   const { lang, slug } = await params;
   if (!supportedLanguages.includes(lang as Language)) notFound();
-  const { festivals, artists, playlists } = await getCatalog();
+  const { festivals, artists, playlists } = await getCatalog({ includeFreshness: true });
   const item = festivals.find((festival) => festival.slug === slug);
   if (!item) notFound();
-  const event = festivalMusicEvent(item);
+  const arrivalFacts = await readArrivalFacts(db, item);
+  const event = festivalMusicEvent(item, lang);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
     <>
@@ -52,6 +55,7 @@ export default async function LocalizedFestivalPage({
       />
       <FestivalDetail
         item={item}
+        arrivalFacts={arrivalFacts}
         festivals={festivals}
         artistSlugs={artistSlugs}
         artistPopularity={Object.fromEntries(

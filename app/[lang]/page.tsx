@@ -25,11 +25,12 @@ export async function generateMetadata({ params }: { params: Promise<{ lang: str
 export default async function LocalizedHome({ params }: { params: Promise<{ lang: string }> }) {
   const lang = (await params).lang;
   if (!supportedLanguages.some((value) => value === lang)) notFound();
-  const { festivals, discoveryLineups, matchingArtists, suggestionArtists } =
+  const { festivals, freshness, discoveryLineups, matchingArtists, suggestionArtists } =
     await getHomeCatalog();
   return (
     <HomeContent
       festivals={festivals}
+      freshness={freshness}
       discoveryLineups={discoveryLineups}
       matchingArtists={matchingArtists}
       suggestionArtists={suggestionArtists}
