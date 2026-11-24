@@ -134,3 +134,31 @@ test("only exact verified windows become schedule ranges, including overnight an
     assert.throws(() => validateFestivalTimetable(festival, [invalid]), /window/);
   }
 });
+
+test("repeated local hours keep verified instants distinct without guessing for start-only rows", () => {
+  const edition = { ...festival, startDate: undefined, endDate: undefined };
+  const first = {
+    ...base,
+    date: "2027-10-31",
+    start: "02:30",
+    window: { startsAt: "2027-10-31T02:30:00+02:00", endsAt: "2027-10-31T02:50:00+02:00" },
+  };
+  const second = {
+    ...first,
+    artist: "Other artist",
+    window: { startsAt: "2027-10-31T02:30:00+01:00", endsAt: "2027-10-31T02:50:00+01:00" },
+  };
+  assert.deepEqual(validateFestivalTimetable(edition, [first, second]), [first, second]);
+  assert.throws(
+    () =>
+      validateFestivalTimetable(edition, [
+        first,
+        { ...second, window: { ...first.window, startsAt: "2027-10-31T00:30:00Z" } },
+      ]),
+    /conflict/,
+  );
+  assert.throws(
+    () => validateFestivalTimetable(edition, [first, { ...second, window: undefined }]),
+    /conflict/,
+  );
+});

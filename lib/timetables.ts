@@ -91,19 +91,31 @@ export type TimetableDay = { date: string; stages: TimetableStage[] };
 const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
 export function findTimetableConflicts(entries: TimetableEntry[]): TimetableConflict[] {
-  const slots = new Map<string, Set<string>>();
+  const slots = new Map<string, Map<number | undefined, Set<string>>>();
   for (const entry of entries.filter(({ status }) => status === "scheduled")) {
     const key = `${entry.date}\u0000${entry.stage.toLocaleLowerCase()}\u0000${entry.start}`;
-    const artists = slots.get(key) ?? new Set<string>();
+    const instants = slots.get(key) ?? new Map<number | undefined, Set<string>>();
+    const instant = entry.window ? Date.parse(entry.window.startsAt) : undefined;
+    const artists = instants.get(instant) ?? new Set<string>();
     artists.add(entry.artist);
-    slots.set(key, artists);
+    instants.set(instant, artists);
+    slots.set(key, instants);
   }
-  return [...slots.entries()]
-    .filter(([, artists]) => artists.size > 1)
-    .map(([key, artists]) => {
-      const [date, stage, start] = key.split("\u0000");
-      return { date, stage, start, artists: [...artists].sort(collator.compare) };
-    });
+
+  const conflicts: TimetableConflict[] = [];
+  for (const [key, instants] of slots) {
+    const [date, stage, start] = key.split("\u0000");
+    // A start-only row cannot establish which occurrence of a repeated hour it uses.
+    const groups = instants.has(undefined)
+      ? [new Set([...instants.values()].flatMap((artists) => [...artists]))]
+      : instants.values();
+    for (const artists of groups) {
+      if (artists.size > 1) {
+        conflicts.push({ date, stage, start, artists: [...artists].sort(collator.compare) });
+      }
+    }
+  }
+  return conflicts;
 }
 
 export function groupTimetable(entries: TimetableEntry[]): TimetableDay[] {
