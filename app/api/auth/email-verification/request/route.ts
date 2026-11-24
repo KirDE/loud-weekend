@@ -6,9 +6,11 @@ export async function POST() {
   const sessionUser = await requireUser();
   if (!sessionUser) return error("Authentication required.", 401);
   if (sessionUser.emailVerified) return Response.json({ verified: true });
-  if (!process.env.EMAIL_WEBHOOK_URL || !process.env.APP_URL) return error("Email verification is unavailable.", 503);
+  if (!process.env.EMAIL_WEBHOOK_URL || !process.env.APP_URL)
+    return error("Email verification is unavailable.", 503);
   const created = await createEmailVerification(sessionUser);
-  if (created.status === "rate_limited") return error("A verification email was sent recently. Try again later.", 429);
+  if (created.status === "rate_limited")
+    return error("A verification email was sent recently. Try again later.", 429);
   try {
     await sendEmailVerification(sessionUser, created.token, created.record.id);
   } catch {

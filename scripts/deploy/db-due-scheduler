@@ -19,7 +19,8 @@ unit_status() {
   local unit="$1" kind="$2" record line load='' active='' enabled=''
   local load_seen=0 active_seen=0 enabled_seen=0
   unit_active=error; unit_enabled=error
-  if ! record="$(systemctl show --all --property=LoadState,ActiveState,UnitFileState "$unit" 2>/dev/null)"; then return 0; fi
+  if ! record="$(systemctl show --all --property=LoadState,ActiveState,UnitFileState "$unit" 2>\
+/dev/null)"; then return 0; fi
   [[ ${#record} -le 256 ]] || return 0
   while IFS= read -r line; do
     case "$line" in
@@ -53,7 +54,9 @@ if [[ "$action" == health ]]; then
   fi
   unit_status "$due_timer" timer; due_enabled="$unit_enabled"; due_active="$unit_active"
   unit_status "$due_service" service; due_service_active="$unit_active"
-  printf 'DB_DUE_SCHEDULER_HEALTH {"tickMissing":%d,"tickStale":%d,"fetchError":%d,"drainError":%d,"dueTimerEnabled":"%s","dueTimerActive":"%s","dueServiceActive":"%s"}\n' "$tick_missing" "$tick_stale" "$fetch_error" "$drain_error" "$due_enabled" "$due_active" "$due_service_active"
+  printf 'DB_DUE_SCHEDULER_HEALTH {"tickMissing":%d,"tickStale":%d,"fetchError":%d,"drainError"'\
+':%d,"dueTimerEnabled":"%s","dueTimerActive":"%s","dueServiceActive":"%s"}\n' "$tick_missing"\
+ "$tick_stale" "$fetch_error" "$drain_error" "$due_enabled" "$due_active" "$due_service_active"
   exit 0
 fi
 lock="$root/shared/ingestion/source-fetch.lock"
@@ -70,9 +73,11 @@ if [[ "$action" == tick ]]; then
   trap 'rm -f -- "$audit"' EXIT
   status=0
   systemctl start "$due_service" >/dev/null 2>&1 || status=1
-  [[ -f "$audit" && ! -L "$audit" && "$(stat -c %u:%a "$audit")" == 0:600 && "$(stat -c %s "$audit")" -le 160 ]] || exit 6
+  [[ -f "$audit" && ! -L "$audit" && "$(stat -c %u:%a "$audit")" == 0:600 &&\
+ "$(stat -c %s "$audit")" -le 160 ]] || exit 6
   record="$(cat "$audit")"
-  pattern='^DB_DUE_TICK fetch_ok=([01]) idle=([01]) fetch_error=([01]) drain_ok=([01]) drain_error=([01]) delivered=(0|[1-9][0-9]?|100)$'
+  pattern='^DB_DUE_TICK fetch_ok=([01]) idle=([01]) fetch_error=([01]) drain_ok=([01]) drain_er'\
+'ror=([01]) delivered=(0|[1-9][0-9]?|100)$'
   [[ "$record" =~ $pattern ]] || exit 6
   fetch_ok="${BASH_REMATCH[1]}"; idle="${BASH_REMATCH[2]}"; fetch_error="${BASH_REMATCH[3]}"
   drain_ok="${BASH_REMATCH[4]}"; drain_error="${BASH_REMATCH[5]}"; delivered="${BASH_REMATCH[6]}"

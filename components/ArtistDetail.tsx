@@ -14,8 +14,7 @@ export function ArtistDetail({
   appearances: Festival[];
 }) {
   const { language, locale, t } = useLanguage();
-  const festivalWord =
-    appearances.length === 1 ? t("europeanFestival") : t("europeanFestivals");
+  const festivalWord = appearances.length === 1 ? t("europeanFestival") : t("europeanFestivals");
   const sentence =
     language === "ru"
       ? `${t("announcedFor")}: ${appearances.length} ${festivalWord}`
@@ -30,37 +29,68 @@ export function ArtistDetail({
       </div>
       <div className="artistHero">
         {artist.image ? (
-          <img className="artistPortrait" src={artist.image.url} alt={artist.image.alt} width={artist.image.width} height={artist.image.height} />
+          <img
+            className="artistPortrait"
+            src={artist.image.url}
+            alt={artist.image.alt}
+            width={artist.image.width}
+            height={artist.image.height}
+          />
         ) : (
-          <div className="artistMonogram" aria-hidden="true">{artist.name[0]}</div>
+          <div className="artistMonogram" aria-hidden="true">
+            {artist.name[0]}
+          </div>
         )}
         <div>
           <div className="eyebrow">{t("artist")}</div>
           <h1>{artist.name}</h1>
           <p>{sentence}</p>
           {artist.aliases.length > 0 && (
-            <small>{t("alsoKnownAs")} {artist.aliases.join(", ")}</small>
+            <small>
+              {t("alsoKnownAs")} {artist.aliases.join(", ")}
+            </small>
           )}
         </div>
       </div>
       <section className="artistStats" aria-label="Spotify">
-        <p><strong>{t("spotifyFollowers")}:</strong> {artist.spotifyStats?.followers == null ? t("statsUnknown") : new Intl.NumberFormat(locale).format(artist.spotifyStats.followers)}</p>
-        {artist.spotifyStats && <small>
-          <a href={`https://open.spotify.com/artist/${artist.spotifyStats.artistId}`} target="_blank" rel="noreferrer">Spotify ↗</a>
-          {" · "}{t("checked")} <time dateTime={artist.spotifyStats.checkedAt}>{new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(new Date(artist.spotifyStats.checkedAt))}</time>
-        </small>}
+        <p>
+          <strong>{t("spotifyFollowers")}:</strong>{" "}
+          {artist.spotifyStats?.followers == null
+            ? t("statsUnknown")
+            : new Intl.NumberFormat(locale).format(artist.spotifyStats.followers)}
+        </p>
+        {artist.spotifyStats && (
+          <small>
+            <a
+              href={`https://open.spotify.com/artist/${artist.spotifyStats.artistId}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Spotify ↗
+            </a>
+            {" · "}
+            {t("checked")}{" "}
+            <time dateTime={artist.spotifyStats.checkedAt}>
+              {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
+                new Date(artist.spotifyStats.checkedAt),
+              )}
+            </time>
+          </small>
+        )}
       </section>
       <div className="artistActions">
-        {artist.links.filter((link) => link.verified).map((link) => (
-          <a
-            href={link.url}
-            key={`${link.source}-${link.label}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {link.label} ↗
-          </a>
-        ))}
+        {artist.links
+          .filter((link) => link.verified)
+          .map((link) => (
+            <a
+              href={link.url}
+              key={`${link.source}-${link.label}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {link.label} ↗
+            </a>
+          ))}
       </div>
       {(artist.biography || artist.genres.length > 0) && (
         <section className="artistMetadata">
@@ -92,13 +122,22 @@ export function ArtistDetail({
       )}
       {artist.recentSetlists.length > 0 && (
         <section className="artistSetlists" aria-labelledby="recent-setlists-heading">
-          <div className="eyebrow" id="recent-setlists-heading">{t("recentSetlists")}</div>
+          <div className="eyebrow" id="recent-setlists-heading">
+            {t("recentSetlists")}
+          </div>
           <ul>
             {artist.recentSetlists.map((setlist) => (
               <li key={`${setlist.date}-${setlist.url}`}>
                 <time dateTime={setlist.date}>{setlist.date}</time>
                 <span>{setlist.venue}</span>
-                <a href={setlist.url} target="_blank" rel="noreferrer" aria-label={`${t("viewSetlist")} ${artist.name} ${setlist.date}`}>{t("viewSetlist")} ↗</a>
+                <a
+                  href={setlist.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`${t("viewSetlist")} ${artist.name} ${setlist.date}`}
+                >
+                  {t("viewSetlist")} ↗
+                </a>
               </li>
             ))}
           </ul>
@@ -106,16 +145,20 @@ export function ArtistDetail({
       )}
       <section className="appearances">
         <div className="eyebrow">{t("appearances")}</div>
-        {[...appearances].sort((a, b) =>
-          (a.startDate || "9999").localeCompare(b.startDate || "9999") || a.slug.localeCompare(b.slug)
-        ).map((festival) => (
-          <Link href={`/festivals/${festival.slug}/`} key={festival.slug}>
-            <span>{festival.countryCode}</span>
-            <strong>{festival.name}</strong>
-            <em>{festival.city}</em>
-            <b>→</b>
-          </Link>
-        ))}
+        {[...appearances]
+          .sort(
+            (a, b) =>
+              (a.startDate || "9999").localeCompare(b.startDate || "9999") ||
+              a.slug.localeCompare(b.slug),
+          )
+          .map((festival) => (
+            <Link href={`/festivals/${festival.slug}/`} key={festival.slug}>
+              <span>{festival.countryCode}</span>
+              <strong>{festival.name}</strong>
+              <em>{festival.city}</em>
+              <b>→</b>
+            </Link>
+          ))}
       </section>
       <details className="artistSources">
         <summary>{t("sourcesAndIdentities")}</summary>
@@ -127,21 +170,21 @@ export function ArtistDetail({
               </code>
             ),
         )}
-        {artist.spotifyStats && <a href={artist.spotifyStats.sourceUrl} target="_blank" rel="noreferrer">
-          {t("spotifyFollowers")}: Spotify Web API · {t("checked")} {artist.spotifyStats.checkedAt}
-        </a>}
+        {artist.spotifyStats && (
+          <a href={artist.spotifyStats.sourceUrl} target="_blank" rel="noreferrer">
+            {t("spotifyFollowers")}: Spotify Web API · {t("checked")}{" "}
+            {artist.spotifyStats.checkedAt}
+          </a>
+        )}
         {artist.provenance.map((item, index) => (
-          <a
-            href={item.url}
-            key={`${item.source}-${index}`}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a href={item.url} key={`${item.source}-${index}`} target="_blank" rel="noreferrer">
             {item.field}: {item.source} · {t("checked")} {item.checkedAt}
           </a>
         ))}
         <p className="freshnessNote">
-          {t("freshnessProfile")} {artist.freshness.profile.cadenceDays} {t("freshnessDays")}; {t("freshnessMusic")} {artist.freshness.music.cadenceDays} {t("freshnessDays")}; {t("freshnessSetlists")} {artist.freshness.setlists.cadenceDays} {t("freshnessDays")}.
+          {t("freshnessProfile")} {artist.freshness.profile.cadenceDays} {t("freshnessDays")};{" "}
+          {t("freshnessMusic")} {artist.freshness.music.cadenceDays} {t("freshnessDays")};{" "}
+          {t("freshnessSetlists")} {artist.freshness.setlists.cadenceDays} {t("freshnessDays")}.
         </p>
       </details>
     </div>
