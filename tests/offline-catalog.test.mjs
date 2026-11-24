@@ -1,23 +1,39 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { projectOfflineCatalog, readOfflineCatalog, serveOfflineCatalog } from "../lib/catalog/offline.ts";
+import {
+  projectOfflineCatalog,
+  readOfflineCatalog,
+  serveOfflineCatalog,
+} from "../lib/catalog/offline.ts";
 
-const request = (tag) => new Request("http://localhost/api/offline/catalog", {
-  headers: tag ? { "If-None-Match": tag } : {},
-});
+const request = (tag) =>
+  new Request("http://localhost/api/offline/catalog", {
+    headers: tag ? { "If-None-Match": tag } : {},
+  });
 function edition(slug = "sample") {
   return {
     festival: { slug, name: "Sample Festival", internalNote: "private" },
-    startDate: new Date("2027-06-04"), endDate: null,
+    startDate: new Date("2027-06-04"),
+    endDate: null,
     sourceUpdatedAt: new Date("2026-01-01"),
-    timetable: [{ date: new Date("2027-06-04"), stage: "Main", start: "20:00",
-      artistName: "Artist", timeZone: "Europe/Berlin", status: "ANNOUNCED",
-      sourceUrl: "https://private.invalid", observedAt: new Date(), id: "internal" }],
+    timetable: [
+      {
+        date: new Date("2027-06-04"),
+        stage: "Main",
+        start: "20:00",
+        artistName: "Artist",
+        timeZone: "Europe/Berlin",
+        status: "ANNOUNCED",
+        sourceUrl: "https://private.invalid",
+        observedAt: new Date(),
+        id: "internal",
+      },
+    ],
   };
 }
 
-test("safe existing projection, stable bytes and strong ETag; row order and metadata do not affect revision", async () => {
+test("stable ETag ignores row order and private metadata", async () => {
   const rows = [edition("z"), edition("a")];
   rows[0].timetable.push({ ...rows[0].timetable[0], artistName: "Other", status: "CANCELLED" });
   const read = () => Promise.resolve(projectOfflineCatalog(rows, 2027));
@@ -31,14 +47,32 @@ test("safe existing projection, stable bytes and strong ETag; row order and meta
   assert.equal(first.headers.get("set-cookie"), null);
   assert.match(first.headers.get("content-type"), /application\/json/);
   const payload = JSON.parse(body);
-  assert.deepEqual(Object.keys(payload), ["schemaVersion", "dataVersion", "editionYear", "generatedAt", "timetableStatus", "festivals"]);
+  assert.deepEqual(Object.keys(payload), [
+    "schemaVersion",
+    "dataVersion",
+    "editionYear",
+    "generatedAt",
+    "timetableStatus",
+    "festivals",
+  ]);
   assert.equal(payload.schemaVersion, 1);
   assert.equal(payload.editionYear, 2027);
   assert.equal(payload.generatedAt, null);
   assert.equal(payload.timetableStatus, "published");
-  assert.deepEqual(Object.keys(payload.festivals[0]), ["slug", "name", "startDate", "endDate", "timetable"]);
+  assert.deepEqual(Object.keys(payload.festivals[0]), [
+    "slug",
+    "name",
+    "startDate",
+    "endDate",
+    "timetable",
+  ]);
   assert.deepEqual(payload.festivals[0].timetable[0], {
-    date: "2027-06-04", stage: "Main", start: "20:00", artist: "Artist", timeZone: "Europe/Berlin", status: "scheduled",
+    date: "2027-06-04",
+    stage: "Main",
+    start: "20:00",
+    artist: "Artist",
+    timeZone: "Europe/Berlin",
+    status: "scheduled",
   });
   assert.equal(payload.festivals[0].endDate, null);
   assert.doesNotMatch(body, /private|sourceUpdatedAt|observedAt|internal/);
@@ -54,7 +88,10 @@ test("safe existing projection, stable bytes and strong ETag; row order and meta
 
 test("conditional GET supports weak/list/wildcard validators after a fresh read", async () => {
   let reads = 0;
-  const read = async () => { reads++; return projectOfflineCatalog([edition()], 2027); };
+  const read = async () => {
+    reads++;
+    return projectOfflineCatalog([edition()], 2027);
+  };
   const first = await serveOfflineCatalog(request(), read);
   const etag = first.headers.get("etag");
   for (const tag of [etag, `W/${etag}`, `"other", W/${etag}`, "*"]) {
@@ -63,7 +100,10 @@ test("conditional GET supports weak/list/wildcard validators after a fresh read"
     assert.equal(await response.text(), "");
     assert.equal(response.headers.get("etag"), etag);
     assert.equal(response.headers.get("cache-control"), first.headers.get("cache-control"));
-    assert.equal(response.headers.get("x-catalog-revision"), first.headers.get("x-catalog-revision"));
+    assert.equal(
+      response.headers.get("x-catalog-revision"),
+      first.headers.get("x-catalog-revision"),
+    );
   }
   assert.equal(reads, 5);
   for (const tag of ['"other"', etag.slice(1, -1), `W/${etag}trailing`]) {
@@ -76,10 +116,18 @@ test("public content changes invalidate old validators without timestamp updates
   const read = async () => projectOfflineCatalog([row], 2027);
   let etag = (await serveOfflineCatalog(request(), read)).headers.get("etag");
   for (const mutate of [
-    () => { row.festival.name = "Changed"; },
-    () => { row.startDate = new Date("2027-06-03"); },
-    () => { row.timetable[0].start = "21:00"; },
-    () => { row.timetable = []; },
+    () => {
+      row.festival.name = "Changed";
+    },
+    () => {
+      row.startDate = new Date("2027-06-03");
+    },
+    () => {
+      row.timetable[0].start = "21:00";
+    },
+    () => {
+      row.timetable = [];
+    },
   ]) {
     mutate();
     const response = await serveOfflineCatalog(request(etag), read);
@@ -95,20 +143,41 @@ test("DB query selects only current-season public fields; missing/failed DB fail
   t.mock.timers.enable({ apis: ["Date"], now });
   let query;
   const findFirst = async (args) => {
-    assert.deepEqual(args, { where: { recordState: "CURRENT" }, orderBy: { year: "desc" }, select: { year: true } });
+    assert.deepEqual(args, {
+      where: { recordState: "CURRENT" },
+      orderBy: { year: "desc" },
+      select: { year: true },
+    });
     return { year: 2029 };
   };
-  const database = { festivalEdition: { findFirst, findMany: async (args) => { query = args; return [edition()]; } } };
+  const database = {
+    festivalEdition: {
+      findFirst,
+      findMany: async (args) => {
+        query = args;
+        return [edition()];
+      },
+    },
+  };
   const payload = await readOfflineCatalog(database);
   assert.equal(payload.editionYear, 2029);
   assert.equal(payload.dataVersion, "festivals-2029-v1");
   assert.deepEqual(query.where, { year: 2029, recordState: "CURRENT" });
   assert.deepEqual(Object.keys(query.select), ["festival", "startDate", "endDate", "timetable"]);
   assert.deepEqual(query.select.timetable.where, {
-    timeZone: { not: null }, sourceUrl: { not: null }, observedAt: { lte: now },
+    timeZone: { not: null },
+    sourceUrl: { not: null },
+    observedAt: { lte: now },
   });
-  for (const findMany of [async () => [], async () => { throw new Error("secret connection error"); }]) {
-    const response = await serveOfflineCatalog(request("*"), () => readOfflineCatalog({ festivalEdition: { findFirst, findMany } }));
+  for (const findMany of [
+    async () => [],
+    async () => {
+      throw new Error("secret connection error");
+    },
+  ]) {
+    const response = await serveOfflineCatalog(request("*"), () =>
+      readOfflineCatalog({ festivalEdition: { findFirst, findMany } }),
+    );
     assert.equal(response.status, 503);
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.equal(response.headers.get("etag"), null);
@@ -124,11 +193,16 @@ test("actual GET route reads DB on each call and never returns 304 during DB fai
   let fail = false;
   let reads = 0;
   const previous = globalThis.prisma;
-  globalThis.prisma = { festivalEdition: { findFirst: async () => ({ year: 2027 }), findMany: async () => {
-    reads++;
-    if (fail) throw new Error("DB unavailable");
-    return rows;
-  } } };
+  globalThis.prisma = {
+    festivalEdition: {
+      findFirst: async () => ({ year: 2027 }),
+      findMany: async () => {
+        reads++;
+        if (fail) throw new Error("DB unavailable");
+        return rows;
+      },
+    },
+  };
   try {
     const { GET, dynamic, runtime } = await import("../app/api/offline/catalog/route.ts");
     assert.equal(dynamic, "force-dynamic");
