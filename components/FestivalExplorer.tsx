@@ -1,12 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import type { CatalogFreshness } from "@/lib/domain/freshness";
 import { formatFreshnessDate } from "@/lib/freshness-date";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
+import { DiscoveryDateFilters } from "./DiscoveryDateFilters";
+import {
+  datesFromQuery,
+  hasDiscoveryDates,
+  matchesDiscoveryDates,
+  removeDateQuery,
+  type DiscoveryDates,
+} from "@/lib/discovery-dates";
 import { lineupOverlap } from "@/lib/planning";
 import { useLocalPlanner } from "./LocalPlanner";
 import { hasAvailableTickets, ticketPresentation } from "@/lib/tickets";
@@ -62,6 +71,13 @@ export function FestivalExplorer({
   const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance } =
     planner.savedFilters;
   const filtersReady = planner.ready;
+  const queryParams = useSearchParams();
+  const linkedDates = useMemo(
+    () => (queryParams ? datesFromQuery(queryParams) : null),
+    [queryParams],
+  );
+  const dateFilters = linkedDates ?? planner.savedFilters;
+  const dateFiltersActive = hasDiscoveryDates(dateFilters);
   const updateFilters = planner.updateSavedFilters;
   const searchRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<string[]>([]);
@@ -103,6 +119,7 @@ export function FestivalExplorer({
             (!announcedOnly || hasAnnouncedLineup(item)) &&
             (month === "all" || festivalOverlapsMonth(item, Number(month))) &&
             (!ticketsOnly || hasAvailableTickets(item)) &&
+            matchesDiscoveryDates(item, dateFilters) &&
             festivalMatchesDiscoveryFilters(item, {
               genre: genre === "all" ? undefined : genre,
               origin: originCoordinates,
@@ -121,6 +138,7 @@ export function FestivalExplorer({
       genre,
       originCoordinates,
       maxDistance,
+      dateFilters,
     ],
   );
   const compared = festivals.filter((item) => selected.includes(item.slug));
@@ -140,7 +158,17 @@ export function FestivalExplorer({
       setComparisonStatus(t("comparisonSelected", { festival: item.name, count: next.length }));
       return next;
     });
+  const clearLinkedDates = () => {
+    const url = new URL(window.location.href);
+    removeDateQuery(url);
+    window.history.replaceState(null, "", url);
+  };
+  const updateDates = (patch: Partial<DiscoveryDates>) => {
+    updateFilters({ ...linkedDates, ...patch });
+    if (linkedDates) clearLinkedDates();
+  };
   const clearFilters = () => {
+    if (linkedDates) clearLinkedDates();
     planner.setSavedFilters(defaultDiscoveryPreferences);
     searchRef.current?.focus();
   };
@@ -241,6 +269,7 @@ export function FestivalExplorer({
         >
           {t("clearAllFilters")}
         </button>
+        <DiscoveryDateFilters filters={dateFilters} onChange={updateDates} />
         <div className="filterToggles">
           <label className="toggle">
             <input
@@ -422,7 +451,7 @@ export function FestivalExplorer({
       {!visible.length && (
         <div className="empty">
           <strong>{t("noMatches")}</strong>
-          <p>{t("noDiscoveryMatches")}</p>
+          <p>{t(dateFiltersActive ? "noDateMatches" : "noDiscoveryMatches")}</p>
         </div>
       )}
     </section>

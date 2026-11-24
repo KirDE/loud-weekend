@@ -53,7 +53,10 @@ export function FestivalDetail({
     }).format(new Date(`${value}T12:00:00Z`));
   const setlistUrl = festivalSetlistHistoryUrl(item.slug);
   const tickets = ticketPresentation(item);
-  const playlistUrl = playlist?.spotifyUrl || item.playlistUrl;
+  const reviewedSpotify = item.reviewedPlaylistLinks?.spotify;
+  const reviewedYoutube = item.reviewedPlaylistLinks?.youtube_music;
+  const playlistUrl = reviewedSpotify || playlist?.spotifyUrl || item.playlistUrl;
+  const youtubePlaylistUrl = reviewedYoutube || playlist?.youtubeMusicUrl;
   const artistCount = announcedArtists(item).length;
   const hasArtists = hasAnnouncedLineup(item);
   const lineupStatus = lineupPresentation(item);
@@ -134,7 +137,7 @@ export function FestivalDetail({
           <a href={playlistUrl} target="_blank" rel="noreferrer">
             <small>
               {t("listen")}
-              {playlist
+              {playlist && !reviewedSpotify
                 ? ` · ${playlist.artists} ${t("artists")} · ${playlist.tracks} ${t("tracks")}`
                 : ""}
             </small>
@@ -146,11 +149,12 @@ export function FestivalDetail({
             <strong>{t("playlistSoon")}</strong>
           </div>
         )}
-        {playlist?.youtubeMusicUrl ? (
-          <a href={playlist.youtubeMusicUrl} target="_blank" rel="noreferrer">
+        {youtubePlaylistUrl ? (
+          <a href={youtubePlaylistUrl} target="_blank" rel="noreferrer">
             <small>
               {t("listen")}
-              {playlist.youtubeMusicArtists !== undefined &&
+              {!reviewedYoutube &&
+              playlist?.youtubeMusicArtists !== undefined &&
               playlist.youtubeMusicTracks !== undefined
                 ? ` · ${playlist.youtubeMusicArtists} ${t("artists")} · ${playlist.youtubeMusicTracks} ${t("tracks")}`
                 : ""}

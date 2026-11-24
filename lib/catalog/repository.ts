@@ -46,6 +46,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
           timetable: { orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }] },
           playlists: { orderBy: { provider: "asc" } },
+          playlistLinks: { select: { provider: true, url: true } },
         },
         orderBy: [{ year: "asc" }, { festival: { catalogOrder: "asc" } }],
       }),
@@ -120,6 +121,15 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         startDate: dateOnly(row.startDate),
         endDate: dateOnly(row.endDate),
         dateLabel: row.dateLabel ?? undefined,
+        reviewedPlaylistLinks:
+          row.recordState === "CURRENT" && row.playlistLinks.length
+            ? {
+                spotify: row.playlistLinks.find(({ provider }) => provider === "spotify")?.url,
+                youtube_music: row.playlistLinks.find(
+                  ({ provider }) => provider === "youtube_music",
+                )?.url,
+              }
+            : undefined,
         headliners,
         lineup,
         ...(row.finalLineupFingerprint &&
@@ -172,7 +182,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           checkedAt: source.checkedAt.toISOString(),
           note: source.note,
         })),
-      } satisfies FestivalEdition;
+      } satisfies FestivalEdition & Pick<Festival, "reviewedPlaylistLinks">;
     });
     const currentEditions = editions.filter(({ recordState }) => recordState === "current");
     const currentArtistNames = new Set(

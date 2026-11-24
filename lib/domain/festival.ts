@@ -29,6 +29,7 @@ export type Festival = {
   ticketsUrl?: string;
   ticketOffers?: PublicTicketOffers;
   playlistUrl?: string;
+  reviewedPlaylistLinks?: { spotify?: string; youtube_music?: string };
   freshness?: EditionFreshness;
   sourceDeprecated?: boolean;
   sourceDeprecatedAt?: string;
