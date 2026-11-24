@@ -136,7 +136,10 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
 
     // A failed document read must not replace any local data.
     const filtersRoute = "**/api/sync/saved-filters*";
-    for (const response of [{ status: 503 }, { json: {} }]) {
+    const invalidPayload = {
+      json: { document: { ...previous, payload: { savedFilters: "invalid" } } },
+    };
+    for (const response of [{ status: 503 }, { json: {} }, invalidPayload]) {
       await secondPage.route(filtersRoute, (route) => route.fulfill(response));
       await pull.click();
       await expect(secondPage.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
