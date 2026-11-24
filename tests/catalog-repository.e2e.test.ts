@@ -245,7 +245,7 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
       data: {
         editionId: edition.id,
         provider: "spotify",
-        url: "https://open.spotify.com/playlist/synthetic",
+        url: "https://open.spotify.com/playlist/3234567890123456789012",
       },
     });
     try {
