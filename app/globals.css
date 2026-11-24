@@ -1458,6 +1458,18 @@ main {
   background-image: radial-gradient(circle at 90% 20%, #574d10, transparent 30%);
 }
 
+.editionDetailBody {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.editionDetailHero .status {
+  display: inline-block;
+  max-width: 100%;
+  white-space: normal;
+}
+
 .detailHero h1 {
   font-size: clamp(45px, 7vw, 96px);
   max-width: 920px;
@@ -1724,6 +1736,29 @@ main {
   border: 2px solid #9b2f1d;
   color: #7c2113;
   font-weight: 800;
+}
+
+.timetableFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-block: 12px;
+}
+
+.timetableFilters label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.timetableFilters select {
+  max-width: 100%;
+  min-width: 0;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
 }
 
 .timetableDay {
