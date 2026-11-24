@@ -1,3 +1,5 @@
+import type { EditionFreshness } from "./freshness.ts";
+
 // Catalogue shapes are independent of the live, repository-backed seed data.
 export type TimetableEntry = {
   date: string;
@@ -21,27 +23,44 @@ export type Festival = {
   dateLabel?: string;
   headliners: string[];
   lineup: string[];
+  finalLineup?: true;
   officialUrl: string;
   ticketsUrl?: string;
   playlistUrl?: string;
+  reviewedPlaylistLinks?: { spotify?: string; youtube_music?: string };
+  freshness?: EditionFreshness;
   sourceDeprecated?: boolean;
   sourceDeprecatedAt?: string;
   status: "confirmed" | "partial" | "tba";
   editionYear?: number;
   completeness?: "complete" | "partial" | "tba";
   ticketStatus:
-    "available" | "low" | "not_on_sale" | "sold_out" | "sales_ended" | "unavailable" | "unknown";
+    | "available"
+    | "low"
+    | "not_on_sale"
+    | "sold_out"
+    | "sales_ended"
+    | "free"
+    | "unavailable"
+    | "unknown";
   updatedAt: string;
   genres: string[];
   coordinates?: { latitude: number; longitude: number };
   timetable?: TimetableEntry[];
 };
 
+export type PlaylistCoverage = {
+  matchedArtists: number;
+  tracks: number;
+  recordedAt: string;
+};
+
 export type PlaylistStatus = {
-  spotifyUrl: string;
+  spotifyUrl?: string;
   youtubeMusicUrl?: string;
   youtubeMusicArtists?: number;
   youtubeMusicTracks?: number;
+  coverage?: { spotify?: PlaylistCoverage; youtubeMusic?: PlaylistCoverage };
   artists: number;
   tracks: number;
   updatedAt: string;
