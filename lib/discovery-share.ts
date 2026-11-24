@@ -1,3 +1,4 @@
+import { readArtistSelection } from "./discovery-artists.ts";
 import { datesFromQuery, dateShareQuery, removeDateQuery } from "./discovery-dates.ts";
 import {
   defaultDiscoveryPreferences,
@@ -39,6 +40,10 @@ export function discoveryShareQuery(
   if (filters.maxDistance !== "all") query.set("radius", filters.maxDistance);
   if (boundedText(filters.query, 120)) query.set("q", filters.query);
   for (const [key, value] of new URLSearchParams(dateShareQuery(filters))) query.set(key, value);
+  for (const slug of readArtistSelection(filters.artistSelection).sort())
+    query.append("matchArtist", slug);
+  if (filters.artistSelection?.length && filters.artistMatch === "any")
+    query.set("artistMatch", "any");
   if (filters.sort === "favorites" && favorites.length <= favoriteLimit) {
     for (const slug of [...new Set(favorites)].sort()) query.append("artist", slug);
   }
@@ -68,6 +73,14 @@ export function discoveryFromQuery(
           lineups,
         ).map((slug) => `artist:${slug}`)
       : [];
+  const selection = readArtistSelection(query.getAll("matchArtist"));
+  if (selection.length) {
+    filters.artistSelection = shareableFavoriteSlugs(
+      selection.map((slug) => `artist:${slug}`),
+      lineups,
+    );
+    if (query.get("artistMatch") === "any") filters.artistMatch = "any";
+  }
   return { filters, favorites };
 }
 

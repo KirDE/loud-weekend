@@ -9,6 +9,10 @@ const explorer = await readFile(
   new URL("../components/FestivalExplorer.tsx", import.meta.url),
   "utf8",
 );
+const search = await readFile(
+  new URL("../components/DiscoverySearch.tsx", import.meta.url),
+  "utf8",
+);
 const provider = await readFile(
   new URL("../components/LanguageProvider.tsx", import.meta.url),
   "utf8",
@@ -73,7 +77,10 @@ test("planning filters and comparison controls expose accessible names and state
     '<th scope="row"',
     'className="comparisonScroll" tabIndex={0}',
   ])
-    assert.ok((explorer + comparison).includes(marker), `missing accessible behavior: ${marker}`);
+    assert.ok(
+      (explorer + search + comparison).includes(marker),
+      `missing accessible behavior: ${marker}`,
+    );
 });
 
 test("planning UI has no remaining hard-coded English control or comparison copy", () => {
