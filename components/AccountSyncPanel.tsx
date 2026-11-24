@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { readDiscoveryPreferences } from "@/lib/discovery-preferences";
 import { readCollections, mergeCollections } from "@/lib/collections";
 import { readSeasonAttendance } from "@/lib/planner-storage";
 import { useLanguage } from "./LanguageProvider";
@@ -107,7 +108,7 @@ function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
     ...emptyPlannerState,
     ...value("favorites"),
     playlistFestivals: readCollections(documents.collections?.payload).playlistFestivals,
-    ...value("saved-filters"),
+    savedFilters: readDiscoveryPreferences(value("saved-filters").savedFilters),
     ...value("plans"),
     seasonAttendance: documents["season-attendance"]
       ? readSeasonAttendance(value("season-attendance").seasonAttendance)
@@ -272,6 +273,8 @@ export function AccountSyncPanel({
             ...payloadFromDevice(),
             playlistFestivals: readCollections(conflict.remote.payload).playlistFestivals,
           });
+        } else if (conflict.kind === "saved-filters") {
+          planner.setSavedFilters(plannerFrom(next).savedFilters);
         } else {
           planner.replace({ ...plannerFrom(next), seasonAttendance: undefined });
         }

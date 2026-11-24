@@ -164,6 +164,9 @@ test("verified resolution commits audit/provenance once, replays safely and enqu
 });
 test("billing promotion is atomic and keeps artist identity, completeness and provider boundaries", async () => {
   const c = await claim();
+  const original = await db.lineupEntry.findFirstOrThrow({
+    where: { editionId: c.current.editionId!, artist: { slug: "sample-artist" } },
+  });
   const receipt = await resolveCase(c, {
     action: "apply",
     reason: checked.reason,
@@ -182,6 +185,10 @@ test("billing promotion is atomic and keeps artist identity, completeness and pr
   assert.equal(edition.completeness, "PARTIAL");
   assert.equal(edition.lineup.find((l) => l.artist.name === "Sample Artist")?.billing, "LINEUP");
   assert.equal(
+    edition.lineup.find((entry) => entry.artistId === original.artistId)?.id,
+    original.id,
+  );
+  assert.equal(
     edition.lineup.find((l) => l.artist.name === "Verified New Headliner")?.billing,
     "HEADLINER",
   );
@@ -192,6 +199,78 @@ test("billing promotion is atomic and keeps artist identity, completeness and pr
     0,
   );
 });
+test("a reviewed alias keeps the published roster and does not emit a lineup change", async () => {
+  await db.artist.update({
+    where: { slug: "sample-artist" },
+    data: { aliases: ["Reviewed Artist Alias"] },
+  });
+  const c = await claim();
+  const where = { editionId: c.current.editionId! };
+  const before = await db.lineupEntry.findMany({ where, orderBy: { id: "asc" } });
+  const receipt = await resolveCase(c, {
+    ...checked,
+    facts: { headliners: ["Reviewed Artist Alias"], lineup: [], city: "Verified City" },
+    evidence: ["headliners", "lineup", "city"].map((field) => evidence(field)),
+  });
+  assert.deepEqual(await db.lineupEntry.findMany({ where, orderBy: { id: "asc" } }), before);
+  assert.ok(typeof receipt.publicationId === "string");
+  const publication = await db.catalogPublication.findUniqueOrThrow({
+    where: { id: receipt.publicationId },
+  });
+  assert.deepEqual(publication.fields, ["city"]);
+  assert.equal(publication.lineupChanged, false);
+  assert.equal(
+    await db.catalogPlaylistRefresh.count({ where: { publicationId: publication.id } }),
+    0,
+  );
+});
+
+test("an alias-only decision does not queue parser repair", async () => {
+  await db.artist.update({
+    where: { slug: "sample-artist" },
+    data: { aliases: ["Reviewed Artist Alias"] },
+  });
+  const c = await claim();
+  const receipt = await resolveCase(c, {
+    ...checked,
+    facts: { headliners: ["Reviewed Artist Alias"], lineup: [] },
+    evidence: ["headliners", "lineup"].map((field) => evidence(field)),
+  });
+  assert.equal(receipt.status, "resolved");
+  assert.equal(receipt.publicationId, null);
+  assert.equal(receipt.parserRepairId, null);
+  assert.equal(
+    await db.operationalState.count({ where: { key: { startsWith: "parser-repair-" } } }),
+    0,
+  );
+});
+
+test("two reviewed names for one canonical artist reject both billing and same-list duplicates", async () => {
+  await db.artist.update({
+    where: { slug: "sample-artist" },
+    data: { aliases: ["Reviewed Artist Alias"] },
+  });
+  const c = await claim();
+  const where = { editionId: c.current.editionId! };
+  const before = await db.lineupEntry.findMany({ where, orderBy: { id: "asc" } });
+  for (const roster of [
+    { headliners: ["Sample Artist"], lineup: ["Reviewed Artist Alias"] },
+    { headliners: ["Sample Artist", "Reviewed Artist Alias"], lineup: [] },
+  ]) {
+    await assert.rejects(
+      resolveCase(c, {
+        ...checked,
+        facts: { ...roster, city: "Verified City" },
+        evidence: ["headliners", "lineup", "city"].map((field) => evidence(field)),
+      }),
+      /duplicate alias identities/,
+    );
+  }
+  assert.deepEqual(await db.lineupEntry.findMany({ where, orderBy: { id: "asc" } }), before);
+  const festival = await db.festival.findUniqueOrThrow({ where: { slug: "synthetic-fest" } });
+  assert.equal(festival.city, "Sample City");
+});
+
 test("wrong edition, untrusted evidence and cross-billing duplicates roll back catalog writes", async () => {
   const c = await claim();
   await assert.rejects(

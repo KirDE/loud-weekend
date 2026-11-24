@@ -22,6 +22,7 @@ type PlannerState = {
   attendance: Record<string, Attendance>;
   seasonAttendance?: Record<string, Attendance>;
   playlistFestivals: string[];
+  savedFilters?: unknown;
 };
 
 export function serializePlannerState(state: PlannerState) {
