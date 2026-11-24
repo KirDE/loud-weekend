@@ -3,6 +3,7 @@
 import { favoriteArtistLabels, type FavoriteArtistIdentity } from "@/lib/favorite-artist";
 import Link from "next/link";
 import { useState } from "react";
+import { playlistDepths, type PlaylistDepth } from "@/lib/playlist-depth";
 import { playlistLineup } from "@/lib/playlist-selection";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import { festivalDateInterval } from "@/lib/festival-dates";
@@ -186,6 +187,42 @@ const playlistCopy = {
   },
 };
 
+const depthCopy = {
+  en: {
+    label: "Playlist depth",
+    quick: "Quick discovery (1 per artist)",
+    preview: "Preview (up to 4 per artist)",
+    deep: "Deep dive (up to 8 per artist)",
+    help: "The number of tracks depends on verified Spotify matches.",
+    quota:
+      "Spotify's request limit was reached before creating the playlist. Try again later or export the artist list.",
+    unconfirmed:
+      "Spotify did not confirm the complete playlist. Check your Spotify library before trying again.",
+  },
+  de: {
+    label: "Playlist-Umfang",
+    quick: "Schnell entdecken (1 pro Künstler)",
+    preview: "Vorschau (bis zu 4 pro Künstler)",
+    deep: "Vertiefen (bis zu 8 pro Künstler)",
+    help: "Die Anzahl der Titel hängt von den bestätigten Spotify-Treffern ab.",
+    quota:
+      "Spotify-Anfragelimit erreicht. Versuche es später erneut oder exportiere die Künstlerliste.",
+    unconfirmed:
+      "Vollständige Playlist nicht bestätigt. Prüfe deine Spotify-Bibliothek vor einem erneuten Versuch.",
+  },
+  ru: {
+    label: "Объём плейлиста",
+    quick: "Знакомство (1 трек на артиста)",
+    preview: "Подборка (до 4 треков на артиста)",
+    deep: "Погружение (до 8 треков на артиста)",
+    help: "Число треков зависит от подтверждённых совпадений в Spotify.",
+    quota:
+      "Лимит запросов Spotify исчерпан до создания плейлиста. Попробуйте позже или экспортируйте список артистов.",
+    unconfirmed:
+      "Spotify не подтвердил создание полного плейлиста. Проверьте медиатеку Spotify перед повторной попыткой.",
+  },
+};
+
 export function PlannerPage({
   festivals,
   catalogueArtists,
@@ -199,6 +236,8 @@ export function PlannerPage({
   const t = plannerLabels[language];
   const p = useLocalPlanner();
   const copy = playlistCopy[language];
+  const depthText = depthCopy[language];
+  const [depth, setDepth] = useState<PlaylistDepth>("quick");
   const [syncBusy, setSyncBusy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [playlist, setPlaylist] = useState<{
@@ -249,14 +288,26 @@ export function PlannerPage({
       const response = await fetch("/api/spotify/selection-playlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ artists, festivals: selected.map((festival) => festival.name) }),
+        body: JSON.stringify({
+          artists,
+          festivals: selected.map((festival) => festival.name),
+          ...(depth === "quick" ? {} : { depth }),
+        }),
       });
       const result = (await response.json()) as {
         error?: string;
+        code?: string;
         playlistUrl?: string;
         trackCount?: number;
         unresolved?: string[];
       };
+      if (response.status === 429 || result.code === "write_unconfirmed") {
+        setPlaylist({
+          status: "error",
+          message: response.status === 429 ? depthText.quota : depthText.unconfirmed,
+        });
+        return;
+      }
       if (!response.ok || !result.playlistUrl) throw new Error(t.playlistFailed);
       setPlaylist({
         status: "created",
@@ -397,6 +448,23 @@ export function PlannerPage({
             )}
             {!!artists.length && (
               <div>
+                <label className="lineupSort">
+                  {depthText.label}
+                  <select
+                    value={depth}
+                    disabled={playlist.status === "creating"}
+                    onChange={(event) => {
+                      setDepth(event.target.value as PlaylistDepth);
+                      setPlaylist({ status: "idle" });
+                    }}
+                  >
+                    {playlistDepths.map((value) => (
+                      <option key={value} value={value}>
+                        {depthText[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="playlistActions">
                   <button
                     className="primaryButton"
@@ -411,7 +479,9 @@ export function PlannerPage({
                   </a>
                 </div>
                 <p className={`playlistStatus ${playlist.status}`} role="status">
-                  {exceedsProviderLimit ? copy.limit : playlist.message || t.playlistIntro}
+                  {exceedsProviderLimit
+                    ? copy.limit
+                    : playlist.message || (depth === "quick" ? t.playlistIntro : depthText.help)}
                   {playlist.url && (
                     <>
                       {" "}
