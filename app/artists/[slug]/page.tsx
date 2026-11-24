@@ -1,41 +1,28 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArtistDetail } from "@/components/ArtistDetail";
-import { getCatalog } from "@/lib/catalog/repository";
+import { artistMetadata, readArtistPage } from "@/lib/artist-page";
 
 export const dynamic = "force-dynamic";
 export const dynamicParams = true;
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
-  const { artists } = await getCatalog();
-  const requestedSlug = (await params).slug;
-  const artist = artists.find(({ slug }) => slug === requestedSlug);
-  return artist
-    ? { title: artist.name, alternates: { canonical: `/artists/${artist.slug}/` } }
-    : {};
+type Props = { params: Promise<{ slug: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const data = await readArtistPage(slug);
+  return data ? artistMetadata(data.artist, data.appearances) : {};
 }
 
-export default async function ArtistPage({ params }: { params: Promise<{ slug: string }> }) {
-  const slug = (await params).slug;
-  const { artists, festivals, discoveryLineups } = await getCatalog();
-  const artist = artists.find((item) => item.slug === slug);
-  if (!artist) notFound();
-  const appearances = festivals.filter((festival) =>
-    discoveryLineups.artistSlugsByFestival[festival.slug]?.includes(artist.slug),
-  );
+export default async function ArtistPage({ params }: Props) {
+  const { slug } = await params;
+  const data = await readArtistPage(slug);
+  if (!data) notFound();
   return (
     <ArtistDetail
-      artist={artist}
-      legacySlugs={Object.fromEntries(
-        Object.entries(discoveryLineups.legacyFavoriteSlugs).filter(
-          ([, slug]) => slug === artist.slug,
-        ),
-      )}
-      appearances={appearances}
+      artist={data.artist}
+      appearances={data.appearances}
+      legacySlugs={data.legacySlugs}
     />
   );
 }
-import type { Metadata } from "next";

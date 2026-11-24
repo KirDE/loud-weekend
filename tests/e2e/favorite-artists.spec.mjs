@@ -21,13 +21,17 @@ for (const [locale, [title, search, empty]] of Object.entries(localized)) {
     await page.getByRole("link", { name: title, exact: true }).click();
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
     await expect(page.getByText(empty)).toBeVisible();
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+      "href",
+      new RegExp("/" + locale + "/planner/artists/$"),
+    );
     await page
       .getByRole("searchbox", { name: search })
       .fill(locale === "de" ? "fixture stage name" : "Second Artist");
     const result = page
       .locator("section")
       .filter({ has: page.getByRole("searchbox") })
-      .getByRole("button");
+      .getByRole("button", { name: /Second Artist/ });
     await result.click();
     await expect(result).toHaveAttribute("aria-pressed", "true");
     const heading = page.getByRole("heading", { name: "Second Artist" });

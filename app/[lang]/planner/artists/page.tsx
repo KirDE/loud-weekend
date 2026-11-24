@@ -8,7 +8,11 @@ export async function generateMetadata({ params }: { params: Promise<{ lang: str
   const { lang } = await params;
   const titles = { en: "My artists", de: "Meine Künstler", ru: "Мои артисты" };
   if (!isLanguage(lang)) return {};
-  return { ...baseMetadata, title: titles[lang] };
+  return {
+    ...baseMetadata,
+    title: titles[lang],
+    alternates: { ...baseMetadata.alternates, canonical: baseMetadata.alternates.languages[lang] },
+  };
 }
 
 export default async function LocalizedMyArtists({

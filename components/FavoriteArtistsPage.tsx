@@ -105,8 +105,16 @@ export function FavoriteArtistsPage({
       : date.format(start);
   };
 
+  const nameCounts = new Map<string, number>();
+  for (const { name } of artists) {
+    const key = name.toLocaleLowerCase(locale);
+    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+  }
+  const artistLabel = ({ name, slug }: Artist) =>
+    (nameCounts.get(name.toLocaleLowerCase(locale)) ?? 0) > 1 ? name + " · " + slug : name;
+
   function artistLink(artist: Artist) {
-    return <Link href={`/${language}/artists/${artist.slug}/`}>{artist.name}</Link>;
+    return <Link href={`/${language}/artists/${artist.slug}/`}>{artistLabel(artist)}</Link>;
   }
 
   return (
@@ -162,6 +170,7 @@ export function FavoriteArtistsPage({
                       </div>
                       <ArtistFavoriteButton
                         slug={artist.slug}
+                        name={artistLabel(artist)}
                         legacySlugs={lineups.legacyFavoriteSlugs}
                       />
                     </article>
@@ -203,6 +212,7 @@ export function FavoriteArtistsPage({
                   <div>{artistLink(artist)}</div>
                   <ArtistFavoriteButton
                     slug={artist.slug}
+                    name={artistLabel(artist)}
                     legacySlugs={lineups.legacyFavoriteSlugs}
                   />
                 </article>
