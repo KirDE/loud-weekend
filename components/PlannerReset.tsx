@@ -27,7 +27,7 @@ const labels = {
     undo: "Undo local reset",
     failed: "Browser storage could not be updated.",
     overLimit:
-      "Undo would exceed the budget limit. Download the backup or remove a newer estimate, then try again.",
+      "Undo would exceed a plan limit. Download the backup or remove a newer item, then try again.",
   },
   de: {
     clear: "Lokale Daten löschen",
@@ -43,8 +43,8 @@ const labels = {
     undo: "Lokales Zurücksetzen rückgängig machen",
     failed: "Der Browserspeicher konnte nicht aktualisiert werden.",
     overLimit:
-      "Dadurch würde das Budgetlimit überschritten. Lade die Sicherung herunter oder " +
-      "entferne eine neuere Schätzung und versuche es erneut.",
+      "Dadurch würde ein Planlimit überschritten. Lade die Sicherung herunter oder " +
+      "entferne einen neueren Eintrag und versuche es erneut.",
   },
   ru: {
     clear: "Удалить локальные данные",
@@ -60,7 +60,7 @@ const labels = {
     undo: "Отменить локальный сброс",
     failed: "Не удалось обновить хранилище браузера.",
     overLimit:
-      "Отмена превысит лимит бюджетов. Скачайте резервную копию или удалите новую оценку и повторите попытку.",
+      "Отмена превысит лимит плана. Скачайте резервную копию или удалите новую запись и повторите попытку.",
   },
 };
 
@@ -142,8 +142,9 @@ export function PlannerReset({
       setBackup(null);
       setUndoError(false);
       setFailed(false);
-    } catch {
-      setFailed(true);
+    } catch (error) {
+      if (error instanceof RangeError) setUndoError(true);
+      else setFailed(true);
     }
   }
   function close() {
