@@ -69,7 +69,9 @@ export function validateBarcelonaFetch(
       attempts: 0,
     });
   }
-  if (result?.response.url && result.response.url !== new URL(source.url).href) {
+  // The homepage negotiates /en, /es or /ca using Accept-Language. These
+  // are the same reviewed source; archives and other origins remain rejected.
+  if (result?.response.url && !isBarcelonaSource({ ...source, url: result.response.url })) {
     throw Object.assign(new Error("Barcelona homepage identity changed"), {
       attempts: result.attempts,
     });

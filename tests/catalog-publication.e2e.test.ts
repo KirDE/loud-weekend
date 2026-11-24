@@ -2263,21 +2263,28 @@ test("explicit ticket states survive reviewed publication and canonical public r
   }
 });
 
-for (const slug of ["wacken-open-air", "download"]) {
+for (const slug of ["wacken-open-air", "download", "rock-am-ring", "rock-im-park"]) {
   test(`${slug}: fetch → producer → durable ticket evidence → canonical readback and replay`, async () => {
     const { fetchSource } = await import("../lib/ingestion/fetch.ts");
     const { TICKET_SUPPLEMENT, ticketSupplementUrl } =
       await import("../lib/ingestion/ticket-supplements.ts");
     const source = parserSource(slug, {
-      url: slug === "download" ? "https://downloadfestival.co.uk/" : "https://www.wacken.com/",
+      url:
+        slug === "download"
+          ? "https://downloadfestival.co.uk/"
+          : slug === "wacken-open-air"
+            ? "https://www.wacken.com/"
+            : `https://www.${slug}.com/`,
       strategies: ["html_fallback"],
     });
     const ticketUrl = ticketSupplementUrl(source)!;
+    const fixtureBySlug: Record<string, string> = {
+      download: "download-regular-admission",
+      "wacken-open-air": "wacken-standard-pass",
+    };
+    const fixtureName = fixtureBySlug[slug] ?? `${slug}-regular-admission`;
     const fixture = await readFile(
-      new URL(
-        `./fixtures/ticket-status/${slug === "download" ? "download-regular-admission" : "wacken-standard-pass"}.html`,
-        import.meta.url,
-      ),
+      new URL(`./fixtures/ticket-status/${fixtureName}.html`, import.meta.url),
       "utf8",
     );
     const festival = await db.festival.upsert({
@@ -3210,7 +3217,13 @@ test("admin parser approval retains the source check time rather than the approv
         field: "ticketsUrl",
         beforeValue: edition.ticketsUrl,
         afterValue: source,
-        sourceEvidence: [],
+        sourceEvidence: {
+          kind: "scoped-refresh",
+          refreshId: randomUUID(),
+          editionId: edition.id,
+          editionYear: edition.year,
+          evidence: [],
+        },
         parserRunId: run.id,
       };
       for (const data of [
@@ -3278,7 +3291,13 @@ test("publishing a changed festival city advances the current edition's source f
         field: "city",
         beforeValue: edition.festival.city,
         afterValue: "Synthetic Harbour",
-        sourceEvidence: [],
+        sourceEvidence: {
+          kind: "scoped-refresh",
+          refreshId: randomUUID(),
+          editionId: edition.id,
+          editionYear: edition.year,
+          evidence: [],
+        },
         parserRunId: run.id,
       };
       const publication = await publishAdminFestivalChange(tx, {
@@ -3452,7 +3471,13 @@ test("a parser proposal compares festival facts using their canonical whitespace
         field: "city",
         beforeValue: "Synthetic Harbour",
         afterValue: "  Synthetic Harbour",
-        sourceEvidence: [],
+        sourceEvidence: {
+          kind: "scoped-refresh",
+          refreshId: randomUUID(),
+          editionId: edition.id,
+          editionYear: edition.year,
+          evidence: [],
+        },
         parserRunId: run.id,
       };
       const publish = (patch: Partial<typeof change>) =>

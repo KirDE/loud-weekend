@@ -369,3 +369,39 @@ test("responsive Barcelona sale evidence must share a viewport with the dated ba
   assert.equal(parse(separate).startDate, "2027-07-01");
   assert.equal(parse(separate).ticketStatus, undefined);
 });
+
+// Production requests negotiate English and the official root redirects to /en.
+test("Barcelona fetch accepts only official localized homepage redirects", async () => {
+  const { fetchSource } = await import("../lib/ingestion/fetch.ts");
+  for (const path of ["/en", "/en/", "/es", "/ca/"]) {
+    const response = new Response(html);
+    Object.defineProperty(response, "url", {
+      value: "https://www.barcelonarockfest.com" + path,
+    });
+    const fetched = await fetchSource(source, {
+      maxAttempts: 1,
+      fetchImpl: async () => response,
+    });
+    const candidate = parse(await fetched.response.text());
+    assert.equal(candidate.startDate, "2027-07-01");
+    assert.equal(candidate.endDate, "2027-07-04");
+    assert.equal(candidate.ticketStatus, "available");
+    assert.equal(candidate.lineup, undefined);
+  }
+  for (const url of [
+    "https://www.barcelonarockfest.com/en/archive",
+    "https://www.barcelonarockfest.com/en?year=2026",
+    "https://www.barcelonarockfest.com/en#2026",
+    "https://foreign.test/en",
+    "https://user@www.barcelonarockfest.com/en",
+    "https://www.barcelonarockfest.com:444/en",
+    "http://www.barcelonarockfest.com/en",
+  ]) {
+    const response = new Response(html);
+    Object.defineProperty(response, "url", { value: url });
+    await assert.rejects(
+      fetchSource(source, { maxAttempts: 1, fetchImpl: async () => response }),
+      /identity/,
+    );
+  }
+});
