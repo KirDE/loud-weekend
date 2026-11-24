@@ -6,10 +6,30 @@ export const campingSources = {
 } as const;
 export type CampingSlug = keyof typeof campingSources;
 
+const alcatrazCampingUrl = "https://alcatraz.be/en/camping";
+const wackenCampingPrefix = "https://www.wacken.com/en/news-details/woa-camping-";
+
+export const campingSourceFilters = [
+  { requestedUrl: alcatrazCampingUrl },
+  {
+    requestedUrl: {
+      startsWith: wackenCampingPrefix,
+      endsWith: "-all-info-regarding-the-pre-sale/",
+    },
+  },
+];
+
 export function campingSourceUrl(slug: CampingSlug, year: number) {
   return slug === "alcatraz"
-    ? "https://alcatraz.be/en/camping"
-    : `https://www.wacken.com/en/news-details/woa-camping-${year}-all-info-regarding-the-pre-sale/`;
+    ? alcatrazCampingUrl
+    : `${wackenCampingPrefix}${year}-all-info-regarding-the-pre-sale/`;
+}
+
+export function isCampingSourceUrl(slug: string, url: string) {
+  if (!Object.hasOwn(campingSources, slug)) return false;
+  if (slug === "alcatraz") return url === alcatrazCampingUrl;
+  const year = url.match(/-camping-(20\d{2})-all-info-regarding-the-pre-sale\/$/)?.[1];
+  return !!year && campingSourceUrl(slug as CampingSlug, Number(year)) === url;
 }
 
 const copy = {

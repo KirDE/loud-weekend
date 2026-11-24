@@ -1,4 +1,12 @@
 import { Prisma, type PrismaClient, type Prisma as PrismaTypes } from "@prisma/client";
+import { campingObservation } from "../catalog/camping-import.ts";
+import { CAMPING_ADAPTER, registeredCampingSource } from "./camping-collector.ts";
+import { arrivalObservation } from "../catalog/arrival-import.ts";
+import {
+  ARRIVAL_ADAPTER,
+  allowedArrivalEvidenceUrl,
+  registeredArrivalSource,
+} from "./arrival-collector.ts";
 import { failureRetryAt } from "./failure-policy.ts";
 import { enqueueParserRepair } from "./parser-repairs.ts";
 import { randomUUID } from "node:crypto";
@@ -9,7 +17,11 @@ import {
   type AgentDecision,
 } from "./agent-contract.ts";
 import { mapSource, validateSource } from "../sources/repository.ts";
-import { publishAgentFestivalResolution } from "../catalog/publication.ts";
+import {
+  publishAgentArrivalResolution,
+  publishAgentCampingResolution,
+  publishAgentFestivalResolution,
+} from "../catalog/publication.ts";
 
 type Database = PrismaClient | PrismaTypes.TransactionClient;
 const prefix = "ingestion-agent-";
@@ -48,6 +60,7 @@ export async function inspectSource(db: Database, sourceId: string) {
       festival: true,
       edition: {
         include: {
+          campingFacts: { orderBy: { field: "asc" } },
           lineup: {
             include: {
               artist: { select: { id: true, name: true, slug: true } },
@@ -93,6 +106,33 @@ export async function inspectSource(db: Database, sourceId: string) {
   if (!manual && !failed && !review) return null;
   const kind = failed ? "failure" : manual ? "manual_source" : "review";
   const normalized = (c?.normalized ?? {}) as Record<string, unknown>;
+  const parsedCamping = campingObservation.safeParse(normalized.camping);
+  const camping = parsedCamping.success ? parsedCamping.data : null;
+  const campingEvidence =
+    c?.evidence.filter((e) => e.field === "camping" && e.adapter === CAMPING_ADAPTER) ?? [];
+  const campingFingerprint = camping
+    ? fingerprint({
+        camping,
+        evidence: campingEvidence.map((e) => ({
+          url: e.sourceUrl,
+          observedAt: e.observedAt.toISOString(),
+          contentHash: e.contentHash,
+        })),
+      })
+    : null;
+  const parsedArrival = arrivalObservation.safeParse(normalized.arrival);
+  const arrival = parsedArrival.success ? parsedArrival.data : null;
+  const arrivalEvidence = (c?.evidence ?? [])
+    .filter((e) => e.field === "arrival" && e.adapter === ARRIVAL_ADAPTER)
+    .map((e) => ({
+      field: "arrival",
+      url: e.sourceUrl,
+      checkedAt: e.observedAt.toISOString(),
+      contentHash: e.contentHash,
+      excerpt: e.excerpt ?? "",
+    }))
+    .sort((a, b) => a.url.localeCompare(b.url));
+  const arrivalFingerprint = arrival ? fingerprint({ arrival, evidence: arrivalEvidence }) : null;
   const facts = Object.fromEntries(
     fields.filter((k) => Object.hasOwn(normalized, k)).map((k) => [k, normalized[k]]),
   );
@@ -122,6 +162,12 @@ export async function inspectSource(db: Database, sourceId: string) {
     source: config(s),
     kind,
     facts,
+    ...(arrival && {
+      arrival: {
+        ...arrival,
+        facts: arrival.facts.map(({ checkedOn: _checkedOn, ...fact }) => fact),
+      },
+    }),
     warnings: c?.warnings ?? [],
     diffs:
       c?.diffs
@@ -170,6 +216,21 @@ export async function inspectSource(db: Database, sourceId: string) {
     candidateId: c?.id ?? null,
     attemptId: a?.id ?? null,
     current,
+    ...(camping && {
+      campingFingerprint,
+      currentCamping: s.edition.campingFacts.map((fact) => ({
+        ...fact,
+        earliestDate: fact.earliestDate?.toISOString(),
+        checkedOn: fact.checkedOn.toISOString(),
+      })),
+      campingCountry: s.festival.countryCode,
+      campingOfficialUrl: s.festival.officialUrl,
+    }),
+    ...(arrival && {
+      arrivalFingerprint,
+      country: s.festival.countryCode,
+      officialUrl: s.festival.officialUrl,
+    }),
   });
   // Request headers, credentials and raw server errors never enter agent data.
   const error = s.lastError ?? a?.error ?? "";
@@ -206,9 +267,13 @@ export async function inspectSource(db: Database, sourceId: string) {
       ? {
           id: c.id,
           facts,
+          ...(arrival && { arrival, arrivalFingerprint }),
+          ...(camping && { camping, campingFingerprint }),
+          reviewState: c.reviewState,
           warnings: c.warnings,
           evidence: c.evidence.map((e) => ({
             field: e.field,
+            adapter: e.adapter,
             url: e.sourceUrl,
             observedAt: e.observedAt,
             contentHash: e.contentHash,
@@ -465,6 +530,107 @@ TIME ZONE 'UTC')) FOR UPDATE
 `;
       if (sources.length !== 1) throw new ImportAgentError("busy");
       allowedEvidence(i, d, now);
+      const candidateCamping = i.candidate && "camping" in i.candidate ? i.candidate.camping : null;
+      const campingDocuments =
+        i.candidate?.evidence.filter(
+          (e) => e.field === "camping" && e.adapter === CAMPING_ADAPTER,
+        ) ?? [];
+      const campingSource = registeredCampingSource(i.source);
+      const [campingDocument] = campingDocuments;
+      if (
+        d.camping &&
+        (!campingSource ||
+          !candidateCamping ||
+          i.candidate?.reviewState !== "PENDING" ||
+          i.kind === "failure" ||
+          i.attempt?.status !== "REVIEW" ||
+          i.candidate.campingFingerprint !== d.camping ||
+          candidateCamping.editionId !== i.current.editionId ||
+          candidateCamping.editionYear !== i.current.year ||
+          candidateCamping.festivalSlug !== i.festivalSlug ||
+          candidateCamping.sourceUrl !== i.source.url ||
+          campingDocuments.length !== 1 ||
+          campingDocument.url !== i.source.url ||
+          !/^[a-f0-9]{64}$/.test(campingDocument.contentHash) ||
+          campingDocument.observedAt > now ||
+          campingDocument.observedAt.getTime() < now.getTime() - 86_400_000 ||
+          campingDocument.observedAt.toISOString().slice(0, 10) !== candidateCamping.checkedOn)
+      )
+        throw new ImportAgentError("invalid");
+      if (d.action === "apply" && campingSource && !d.camping && (!d.source || d.facts))
+        throw new ImportAgentError("invalid");
+      const candidateArrival = i.candidate && "arrival" in i.candidate ? i.candidate.arrival : null;
+      const arrivalEvidence =
+        i.candidate?.evidence.filter(
+          (e) => e.field === "arrival" && e.adapter === ARRIVAL_ADAPTER,
+        ) ?? [];
+      const guidanceSource = registeredArrivalSource(i.source);
+      // An evidence-backed source-only repair must remain available after an import failure.
+      // It cannot also publish unrelated facts or approve a guidance candidate.
+      if (d.action === "apply" && guidanceSource && !d.arrival && (!d.source || d.facts))
+        throw new ImportAgentError("invalid");
+      if (d.arrival) {
+        const expectedUrls = candidateArrival?.facts.flatMap((fact) =>
+          fact.supportingSourceUrl ? [fact.sourceUrl, fact.supportingSourceUrl] : [fact.sourceUrl],
+        );
+        if (
+          !guidanceSource ||
+          !candidateArrival ||
+          i.candidate?.reviewState !== "PENDING" ||
+          i.kind === "failure" ||
+          i.attempt?.status !== "REVIEW" ||
+          i.candidate.arrivalFingerprint !== d.arrival ||
+          candidateArrival.editionId !== i.current.editionId ||
+          candidateArrival.editionYear !== i.current.year ||
+          candidateArrival.festivalSlug !== i.festivalSlug ||
+          !expectedUrls?.includes(i.source.url) ||
+          !expectedUrls.every((url) =>
+            arrivalEvidence.some((e) => e.url === url && e.contentHash),
+          ) ||
+          arrivalEvidence.some(
+            (e) =>
+              !expectedUrls.includes(e.url) ||
+              !allowedArrivalEvidenceUrl(i.festivalSlug, i.current.year, e.url) ||
+              !/^[a-f0-9]{64}$/.test(e.contentHash) ||
+              e.observedAt > now ||
+              e.observedAt.getTime() < now.getTime() - 86_400_000,
+          )
+        )
+          throw new ImportAgentError("invalid");
+      }
+      const publicationSourceId = "openclaw:" + i.issueId + ":" + i.snapshot;
+      const persistedCampingEvidence = campingDocuments.map((e) => ({
+        ...e,
+        observedAt: e.observedAt.toISOString(),
+      }));
+      const campingPublication =
+        d.camping && candidateCamping
+          ? await publishAgentCampingResolution(tx, {
+              sourceId: publicationSourceId,
+              camping: candidateCamping,
+              evidence: {
+                candidateId: i.candidate?.id,
+                fingerprint: d.camping,
+                documents: persistedCampingEvidence,
+              },
+            })
+          : null;
+      const persistedArrivalEvidence = arrivalEvidence.map((e) => ({
+        ...e,
+        observedAt: e.observedAt.toISOString(),
+      }));
+      const arrivalPublication =
+        d.arrival && candidateArrival
+          ? await publishAgentArrivalResolution(tx, {
+              sourceId: publicationSourceId,
+              arrival: candidateArrival,
+              evidence: {
+                candidateId: i.candidate?.id,
+                fingerprint: d.arrival,
+                documents: persistedArrivalEvidence,
+              },
+            })
+          : null;
       // A stored candidate is not proof of a parser problem. In particular,
       // manual no-op reviews (including unchanged supplied facts/source) must
       // not manufacture repair tasks. Actual corrections and rejected/review
@@ -487,13 +653,13 @@ TIME ZONE 'UTC')) FOR UPDATE
           i.candidate.diffs.length > 0 ||
           !Array.isArray(i.candidate.warnings) ||
           i.candidate.warnings.length > 0);
-      let publication = null;
+      let publication = arrivalPublication ?? campingPublication;
       if (d.action === "apply") {
         if (d.facts && changedFacts)
           publication = await publishAgentFestivalResolution(tx, {
             editionId: i.current.editionId!,
             festivalSlug: i.festivalSlug,
-            sourceId: "openclaw:" + i.issueId + ":" + i.snapshot,
+            sourceId: publicationSourceId,
             reason: d.reason,
             facts: d.facts,
             evidence: d.evidence,
@@ -552,6 +718,8 @@ TIME ZONE 'UTC')) FOR UPDATE
             : null;
       const parserRepairId =
         ["apply", "dismiss"].includes(d.action) &&
+        !d.arrival &&
+        !d.camping &&
         (changedFacts || changedSource || candidateFeedback)
           ? await enqueueParserRepair(tx, {
               sourceId: i.sourceId,
@@ -579,6 +747,8 @@ TIME ZONE 'UTC')) FOR UPDATE
         reason: d.reason,
         question: d.question ?? null,
         publicationId: publication?.id ?? null,
+        ...(d.arrival && { arrivalPublished: !!arrivalPublication }),
+        ...(d.camping && { campingPublished: !!campingPublication }),
         parserRepairId,
         providerJobs: publication?.playlistRefreshRequested ? 1 : 0,
         at: now.toISOString(),
@@ -618,8 +788,14 @@ TIME ZONE 'UTC')) FOR UPDATE
             ...receipt,
             facts: d.facts ?? {},
             sourceChange: d.source ?? null,
+            ...(d.arrival && { arrival: candidateArrival, arrivalFingerprint: d.arrival }),
+            ...(d.camping && { camping: candidateCamping, campingFingerprint: d.camping }),
           },
-          evidence: d.evidence,
+          evidence: d.arrival
+            ? persistedArrivalEvidence
+            : d.camping
+              ? persistedCampingEvidence
+              : d.evidence,
           metadata: {
             issueId: i.issueId,
             reason: d.reason,
