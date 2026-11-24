@@ -54,6 +54,7 @@ const editions = Array.from({ length: 550 }, (_, index) => {
       provenance: [],
       sources: [],
       playlists: [],
+      playlistLinks: [],
       lineup,
       timetable: lineup.map(({ artist }) => ({
         date,
