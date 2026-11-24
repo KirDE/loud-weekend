@@ -11,7 +11,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    return Response.json(await pruneAnalytics(db, process.env.ANALYTICS_RETENTION_DAYS), { headers });
+    return Response.json(await pruneAnalytics(db, process.env.ANALYTICS_RETENTION_DAYS), {
+      headers,
+    });
   } catch (cause) {
     if (cause instanceof Error && cause.message.startsWith("ANALYTICS_RETENTION_DAYS")) {
       return Response.json({ error: cause.message }, { status: 503, headers });
