@@ -1,12 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useLanguage, type Language } from "./LanguageProvider";
 import { useTheme } from "./ThemeProvider";
+import { projectRepository } from "@/lib/site-information";
 import { AccountMenu } from "./AccountMenu";
 
 export function SiteHeader() {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
+  const pathname = usePathname() ?? "";
+  const browseSection =
+    /^\/(?:en\/|de\/|ru\/)?(?:countries|months|editions|archive|artists)(?:\/|$)/.test(pathname);
+  const browseCurrent = /^\/browse\/?$/.test(pathname)
+    ? "page"
+    : browseSection
+      ? "location"
+      : undefined;
   return (
     <header className="siteHeader">
       <Link className="brand" href="/">
@@ -17,7 +27,10 @@ export function SiteHeader() {
         <Link href="/">{t("festivals")}</Link>
         <Link href="/planner/">{t("myPlan")}</Link>
         <Link href="/notifications/">{t("notifications")}</Link>
-        <a href="https://github.com/KirDE/loud-weekend">{t("aboutData")}</a>
+        <Link href="/browse/" aria-current={browseCurrent}>
+          {t("browseCatalogue")}
+        </Link>
+        <Link href={`/${language}/about/`}>{t("aboutData")}</Link>
       </nav>
       <AccountMenu />
     </header>
@@ -31,8 +44,15 @@ export function SiteFooter() {
   return (
     <footer className="siteFooter">
       <span>Loud Weekend · {t("region")}</span>
-      <span>{t("footerNote")} · {t("privacy")}</span>
-      <Link href="/submit/">{t("submitFestival")}</Link>
+      <span>
+        {t("footerNote")} · {t("privacy")}
+      </span>
+      <div className="siteFooterLinks">
+        <Link href="/submit/">{t("submitFestival")}</Link>
+        <Link href={`/${language}/about/`}>{t("aboutData")}</Link>
+        <Link href={`/${language}/faq/`}>{t("siteFaq")}</Link>
+        <a href={projectRepository}>{t("sourceCode")}</a>
+      </div>
       <div className="footerPreferences">
         <label className="languagePicker">
           <span>{t("language")}</span>
@@ -46,7 +66,13 @@ export function SiteFooter() {
             <option value="ru">Русский</option>
           </select>
         </label>
-        <button type="button" className="themeToggle" role="switch" aria-checked={theme === "dark"} onClick={toggleTheme}>
+        <button
+          type="button"
+          className="themeToggle"
+          role="switch"
+          aria-checked={theme === "dark"}
+          onClick={toggleTheme}
+        >
           <span aria-hidden="true">{theme === "dark" ? "☾" : "☀"}</span> {themeLabel}
         </button>
       </div>

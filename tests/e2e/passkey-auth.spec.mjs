@@ -1,4 +1,4 @@
-import { createPrismaClient } from '../../lib/prisma-client.mjs';
+import { createPrismaClient } from "../../lib/prisma-client.mjs";
 import { expect, test } from "@playwright/test";
 
 const db = createPrismaClient();
@@ -13,7 +13,10 @@ test.afterAll(async () => {
   await db.$disconnect();
 });
 
-test("creates an account and signs back in with a discoverable passkey", async ({ context, page }) => {
+test("creates an account and signs back in with a discoverable passkey", async ({
+  context,
+  page,
+}) => {
   const cdp = await context.newCDPSession(page);
   await cdp.send("WebAuthn.enable");
   const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
@@ -46,7 +49,12 @@ test("creates an account and signs back in with a discoverable passkey", async (
   await page.locator(".accountButton").click();
   await page.getByRole("button", { name: "Sign in with passkey" }).click();
   await expect(page.locator(".accountButton")).toHaveText(email);
-  await expect.poll(async () => (await db.passkey.findUniqueOrThrow({ where: { id: stored.passkeys[0].id } })).lastUsedAt).not.toBeNull();
+  await expect
+    .poll(
+      async () =>
+        (await db.passkey.findUniqueOrThrow({ where: { id: stored.passkeys[0].id } })).lastUsedAt,
+    )
+    .not.toBeNull();
 
   await cdp.send("WebAuthn.removeVirtualAuthenticator", { authenticatorId });
 });

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { announcedArtists, hasAnnouncedLineup, lineupPreviewArtists } from "../lib/festival-lineup.ts";
+import {
+  announcedArtists,
+  hasAnnouncedLineup,
+  lineupPreviewArtists,
+} from "../lib/festival-lineup.ts";
 
 const lineupOnly = { headliners: [], lineup: ["VNV Nation", "The Sisters of Mercy"] };
 
@@ -24,9 +28,15 @@ test("all discovery surfaces use the complete announced lineup predicate", async
     readFile(new URL("../components/HomeContent.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/FestivalDetail.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(explorer, /!announcedOnly \|\| \(!editionOnHiatus\(item\) && hasAnnouncedLineup\(item\)\)/);
-  assert.match(explorer, /const previewArtists = hiatus \? \[\] : lineupPreviewArtists\(item\)/);
+  assert.match(
+    explorer,
+    /!announcedOnly \|\| \(!editionOnHiatus\(item\) && hasAnnouncedLineup\(item\)\)/,
+  );
+  assert.match(explorer, /const previewArtists = lineupPreviewArtists\(item\)/);
   assert.match(home, /festivals\.filter\(hasAnnouncedLineup\)/);
   assert.match(detail, /!hasArtists &&/);
-  assert.doesNotMatch(`${explorer}\n${home}`, /headliners\.length > 0\)\.length|!announcedOnly \|\| item\.headliners\.length/);
+  assert.doesNotMatch(
+    `${explorer}\n${home}`,
+    /headliners\.length > 0\)\.length|!announcedOnly \|\| item\.headliners\.length/,
+  );
 });

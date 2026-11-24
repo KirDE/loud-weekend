@@ -6,7 +6,9 @@ export function notificationProviderState(): NotificationProviderState {
   return {
     EMAIL: Boolean(process.env.EMAIL_WEBHOOK_URL),
     TELEGRAM: Boolean(process.env.TELEGRAM_BOT_TOKEN),
-    WEB_PUSH: Boolean(process.env.WEB_PUSH_WEBHOOK_URL && process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_KEY),
+    WEB_PUSH: Boolean(
+      process.env.WEB_PUSH_WEBHOOK_URL && process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_KEY,
+    ),
   };
 }
 

@@ -7,7 +7,7 @@ import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 import { extractMastersOfRockCandidate } from "./masters-of-rock.ts";
 import { extractSummerBreezeCandidate } from "./summer-breeze.ts";
 import { extractEurockeennesCandidate } from "./eurockeennes.ts";
-import { applyBarcelonaBanner } from "./barcelona-banner.ts";
+import { applyBarcelonaBanner, isBarcelonaSource } from "./barcelona-banner.ts";
 import { extractOfficialMarkupCandidate } from "./official-markup.ts";
 import { extractResurrectionCandidate } from "./resurrection.ts";
 import { extractSwedenRockCandidate } from "./sweden-rock.ts";
@@ -24,7 +24,9 @@ function decode(value: string): string {
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([\da-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&#x([\da-f]+);/gi, (_, code: string) =>
+      String.fromCodePoint(Number.parseInt(code, 16)),
+    )
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -45,7 +47,10 @@ function plainDate(value: string | undefined): string | undefined {
   return Number.isNaN(parsed.valueOf()) ? undefined : parsed.toISOString().slice(0, 10);
 }
 
-function metaContent(html: string, names: string[]): { value: string; excerpt: string } | undefined {
+function metaContent(
+  html: string,
+  names: string[],
+): { value: string; excerpt: string } | undefined {
   const expected = new Set(names.map((name) => name.toLowerCase()));
   for (const match of html.matchAll(/<meta\b[^>]*>/gi)) {
     const attrs = attributes(match[0]);
@@ -56,10 +61,14 @@ function metaContent(html: string, names: string[]): { value: string; excerpt: s
   return undefined;
 }
 
-function timeValue(html: string, role: "start" | "end"): { value: string; excerpt: string } | undefined {
+function timeValue(
+  html: string,
+  role: "start" | "end",
+): { value: string; excerpt: string } | undefined {
   for (const match of html.matchAll(/<time\b[^>]*>/gi)) {
     const attrs = attributes(match[0]);
-    const marker = `${attrs.get("itemprop") ?? ""} ${attrs.get("class") ?? ""} ${attrs.get("data-role") ?? ""}`.toLowerCase();
+    const marker =
+      `${attrs.get("itemprop") ?? ""} ${attrs.get("class") ?? ""} ${attrs.get("data-role") ?? ""}`.toLowerCase();
     if (!marker.includes(role)) continue;
     const value = attrs.get("datetime");
     if (value) return { value, excerpt: match[0].slice(0, 500) };
@@ -67,11 +76,23 @@ function timeValue(html: string, role: "start" | "end"): { value: string; excerp
   return undefined;
 }
 
-function ticketLink(html: string, sourceUrl: string): { value: string; excerpt: string } | undefined {
-  for (const match of html.matchAll(/<a\b[^>]*href\s*=\s*(?:"([^"]+)"|'([^']+)')[^>]*>([\s\S]*?)<\/a>/gi)) {
-    const tagAndText = decode(`${match[0].slice(0, match[0].indexOf(">") + 1)} ${match[3].replace(/<[^>]+>/g, " ")}`).toLowerCase();
+function ticketLink(
+  html: string,
+  sourceUrl: string,
+): { value: string; excerpt: string } | undefined {
+  for (const match of html.matchAll(
+    /<a\b[^>]*href\s*=\s*(?:"([^"]+)"|'([^']+)')[^>]*>([\s\S]*?)<\/a>/gi,
+  )) {
+    const tagAndText = decode(
+      `${match[0].slice(0, match[0].indexOf(">") + 1)} ${match[3].replace(/<[^>]+>/g, " ")}`,
+    ).toLowerCase();
     // Agent corrections: merchandise/sponsor/transport shops are not festival tickets.
-    if (/merch|souvenir|sponsor|shuttle|transport|parking|parkplatz|\btrain\b|car\s+park/.test(tagAndText)) continue;
+    if (
+      /merch|souvenir|sponsor|shuttle|transport|parking|parkplatz|\btrain\b|car\s+park/.test(
+        tagAndText,
+      )
+    )
+      continue;
     if (!/\b(ticket|tickets|karten|billet|billets|entradas)\b/.test(tagAndText)) continue;
     try {
       const url = new URL(decode(match[1] ?? match[2]), sourceUrl);
@@ -84,23 +105,40 @@ function ticketLink(html: string, sourceUrl: string): { value: string; excerpt: 
   return undefined;
 }
 
-function markedNames(html: string, barcelona = false): { values: string[]; excerpt: string; warnings: string[] } | undefined {
+function markedNames(
+  html: string,
+  barcelona = false,
+): { values: string[]; excerpt: string; warnings: string[] } | undefined {
   const values: string[] = [];
   const combinedFlags: boolean[] = [];
   let excerpt = "";
-  const pattern = /<([a-z][\w:-]*)\b([^>]*(?:data-artist|itemprop\s*=\s*["']performer["']|class\s*=\s*["'][^"']*(?:artist|lineup)[^"']*["'])[^>]*)>([\s\S]*?)<\/\1>/gi;
+  const pattern = new RegExp(
+    "<([a-z][\\w:-]*)\\b([^>]*(?:data-artist|itemprop\\s*=\\s*[\"']per" +
+      "former[\"']|class\\s*=\\s*[\"'][^\"']*(?:artist|lineup)[^\"']*[\"']" +
+      ")[^>]*)>([\\s\\S]*?)<\\/\\1>",
+    "gi",
+  );
   for (const match of html.matchAll(pattern)) {
     const attrs = attributes(`<${match[1]} ${match[2]}>`);
     const inner = match[3];
     // Barcelona's section title is decoration, not an artist assertion. Keep
     // malformed explicit performers and all other source warnings unchanged.
-    if (barcelona && match[1].toLowerCase() === "h2" &&
-        /(?:^|\s)lineup-text(?:\s|$)/.test(attrs.get("class") ?? "") &&
-        !attrs.has("data-artist") && !attrs.has("itemprop") && /^line up$/i.test(decode(inner))) continue;
+    if (
+      barcelona &&
+      match[1].toLowerCase() === "h2" &&
+      /(?:^|\s)lineup-text(?:\s|$)/.test(attrs.get("class") ?? "") &&
+      !attrs.has("data-artist") &&
+      !attrs.has("itemprop") &&
+      /^line up$/i.test(decode(inner))
+    )
+      continue;
     const value = decode(attrs.get("data-artist") ?? inner.replace(/<[^>]+>/g, " "));
     if (value) {
       values.push(value);
-      combinedFlags.push(!attrs.has("data-artist") && /<br\b|<li\b|data-artist|itemprop\s*=\s*["']performer/iu.test(inner));
+      combinedFlags.push(
+        !attrs.has("data-artist") &&
+          /<br\b|<li\b|data-artist|itemprop\s*=\s*["']performer/iu.test(inner),
+      );
       if (!excerpt) excerpt = match[0].slice(0, 500);
     }
   }
@@ -111,26 +149,39 @@ function markedNames(html: string, barcelona = false): { values: string[]; excer
     if (!byNormalizedName.has(normalized)) byNormalizedName.set(normalized, value);
   }
   const unique = [...byNormalizedName.values()];
-  return unique.length || quality.warnings.length ? { values: unique, excerpt, warnings: quality.warnings } : undefined;
+  return unique.length || quality.warnings.length
+    ? { values: unique, excerpt, warnings: quality.warnings }
+    : undefined;
 }
 
-export function extractHtmlFallbackCandidate(html: string, source: FestivalSource, fetchedAt: string): FestivalCandidate {
+export function extractHtmlFallbackCandidate(
+  html: string,
+  source: FestivalSource,
+  fetchedAt: string,
+): FestivalCandidate {
   if (isPolandrockSource(source)) return extractPolandrockCandidate(html, source, fetchedAt);
   const brutalAssault = extractBrutalAssaultCandidate(html, source, fetchedAt);
   if (brutalAssault) return brutalAssault;
   if (source.festivalSlug === "mystic") return extractMysticCandidate(html, source, fetchedAt);
-  if (source.festivalSlug === "masters-of-rock") return extractMastersOfRockCandidate(html, source, fetchedAt);
+  if (source.festivalSlug === "masters-of-rock")
+    return extractMastersOfRockCandidate(html, source, fetchedAt);
   if (source.festivalSlug === "idays") return extractIdaysCandidate(html, source, fetchedAt);
-  if (source.festivalSlug === "summer-breeze") return extractSummerBreezeCandidate(html, source, fetchedAt);
-  if (source.festivalSlug === "eurockeennes") return extractEurockeennesCandidate(html, source, fetchedAt);
-  if (source.festivalSlug === "sweden-rock") return extractSwedenRockCandidate(html, source, fetchedAt);
+  if (source.festivalSlug === "summer-breeze")
+    return extractSummerBreezeCandidate(html, source, fetchedAt);
+  if (source.festivalSlug === "eurockeennes")
+    return extractEurockeennesCandidate(html, source, fetchedAt);
+  if (source.festivalSlug === "sweden-rock")
+    return extractSwedenRockCandidate(html, source, fetchedAt);
   // Existing DB-owned generic Rock Werchter sources can consume the verified
   // homepage markup without a configuration edit or resetting source backoff.
   if (source.festivalSlug === "rock-werchter") {
     const official = extractOfficialMarkupCandidate(html, source, fetchedAt);
     if (official.evidence.length) return official;
   }
-  if (source.festivalSlug === "resurrection-fest" && new URL(source.url).hostname === "www.resurrectionfest.es") {
+  if (
+    source.festivalSlug === "resurrection-fest" &&
+    new URL(source.url).hostname === "www.resurrectionfest.es"
+  ) {
     return extractResurrectionCandidate(html, source, fetchedAt);
   }
   if (source.festivalSlug === "alcatraz") return extractAlcatrazCandidate(html, source, fetchedAt);
@@ -143,13 +194,29 @@ export function extractHtmlFallbackCandidate(html: string, source: FestivalSourc
     warnings: [],
     observedEditionYears: [],
   };
-  const start = metaContent(html, ["event:start_time", "event:start_date", "festival:start_date"]) ?? timeValue(html, "start");
-  const end = metaContent(html, ["event:end_time", "event:end_date", "festival:end_date"]) ?? timeValue(html, "end");
+  if (source.festivalSlug === "barcelona-rock-fest" && !isBarcelonaSource(source)) {
+    candidate.warnings.push("Barcelona source identity is not the reviewed homepage");
+    return candidate;
+  }
+  const start =
+    metaContent(html, ["event:start_time", "event:start_date", "festival:start_date"]) ??
+    timeValue(html, "start");
+  const end =
+    metaContent(html, ["event:end_time", "event:end_date", "festival:end_date"]) ??
+    timeValue(html, "end");
   const city = metaContent(html, ["event:location", "festival:city", "geo.placename"]);
   const tickets = ticketLink(html, source.url);
-  const lineup = markedNames(html, source.festivalSlug === "barcelona-rock-fest" && new URL(source.url).hostname === "www.barcelonarockfest.com");
+  const lineup = markedNames(
+    html,
+    source.festivalSlug === "barcelona-rock-fest" &&
+      new URL(source.url).hostname === "www.barcelonarockfest.com",
+  );
 
-  const add = (field: SupportedField, value: string | string[] | undefined, excerpt: string | undefined) => {
+  const add = (
+    field: SupportedField,
+    value: string | string[] | undefined,
+    excerpt: string | undefined,
+  ) => {
     if (value === undefined) return;
     Object.assign(candidate, { [field]: value });
     candidate.evidence.push({ field, sourceUrl: source.url, observedAt: fetchedAt, excerpt });
@@ -160,11 +227,15 @@ export function extractHtmlFallbackCandidate(html: string, source: FestivalSourc
   add("ticketsUrl", tickets?.value, tickets?.excerpt);
   add("lineup", lineup?.values, lineup?.excerpt);
   applyBarcelonaBanner(html, source, candidate);
-  if (start?.value) candidate.observedEditionYears.push(Number(plainDate(start.value)?.slice(0, 4)));
+  if (start?.value)
+    candidate.observedEditionYears.push(Number(plainDate(start.value)?.slice(0, 4)));
   if (end?.value) candidate.observedEditionYears.push(Number(plainDate(end.value)?.slice(0, 4)));
-  candidate.observedEditionYears = [...new Set(candidate.observedEditionYears.filter(Number.isFinite))];
+  candidate.observedEditionYears = [
+    ...new Set(candidate.observedEditionYears.filter(Number.isFinite)),
+  ];
   candidate.warnings.push(...(lineup?.warnings ?? []));
 
-  if (candidate.evidence.length === 0) candidate.warnings.push("HTML fallback did not find explicitly marked festival fields");
+  if (candidate.evidence.length === 0)
+    candidate.warnings.push("HTML fallback did not find explicitly marked festival fields");
   return candidate;
 }

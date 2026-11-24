@@ -126,6 +126,7 @@ enum TicketStatus {
   NOT_ON_SALE
   SOLD_OUT
   SALES_ENDED
+  FREE
   UNAVAILABLE
   UNKNOWN
 }
@@ -240,7 +241,7 @@ model FestivalSubmission {
   reviewedAt      DateTime?
   reviewedById    String?
   reviewNote      String?
-  reviewedBy      User?                     @relation("SubmissionReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+reviewedBy User? @relation("SubmissionReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
   audit           FestivalSubmissionAudit[]
 
   @@index([status, submittedAt])
@@ -315,19 +316,46 @@ model FestivalEdition {
   recordState     EditionRecordState
   completeness    EditionCompleteness
   sourceUpdatedAt DateTime
+  finalLineupFingerprint String?
   snapshotAt      DateTime?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   festival        Festival               @relation(fields: [festivalId], references: [id], onDelete: Cascade)
   lineup          LineupEntry[]
   provenance      EditionProvenance[]
+  arrivalFacts    EditionArrivalFact[]
   timetable       TimetablePerformance[]
   playlists       FestivalPlaylist[]
+  playlistLinks   FestivalPlaylistLink[]
   sources         FestivalSource[]
   lifecycleProposals EditionLifecycleProposalSnapshot[]
 
   @@unique([festivalId, year])
   @@index([year, recordState])
+}
+
+enum EditionArrivalKind {
+  venue
+  shuttle
+  railShuttle
+  camper
+}
+
+model EditionArrivalFact {
+  editionId           String
+  kind                EditionArrivalKind
+  editionYear         Int
+  countryCode         String             @db.Char(2)
+  organizerHost       String
+  descriptionEn       String
+  descriptionDe       String
+  descriptionRu       String
+  sourceUrl           String
+  supportingSourceUrl String?
+  checkedOn           DateTime           @db.Date
+  edition             FestivalEdition    @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, kind])
 }
 
 model Artist {
@@ -458,6 +486,16 @@ model FestivalPlaylist {
   @@unique([provider, url])
 }
 
+/// Reviewed public links are not managed provider bindings or write targets.
+model FestivalPlaylistLink {
+  editionId String
+  provider  String
+  url       String
+  edition   FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, provider])
+}
+
 model FestivalSource {
   id                 String    @id @default(cuid())
   festivalId         String?
@@ -547,7 +585,7 @@ model AdminChange {
   updatedAt      DateTime          @updatedAt
   draft          AdminDraft?       @relation(fields: [draftId], references: [id], onDelete: SetNull)
   parserRun      AdminParserRun?   @relation(fields: [parserRunId], references: [id], onDelete: SetNull)
-  decidedBy      User?             @relation("AdminChangeDecisionActor", fields: [decidedById], references: [id], onDelete: Restrict)
+decidedBy User? @relation("AdminChangeDecisionActor", fields: [decidedById], references: [id], onDelete: Restrict)
 
   @@index([status, createdAt])
   @@index([resourceKind, resourceKey, status])
@@ -760,7 +798,7 @@ model IngestionAttempt {
   startedAt      DateTime
   endedAt        DateTime
   priorAttemptId String?
-  priorAttempt   IngestionAttempt?      @relation("AttemptRetry", fields: [priorAttemptId], references: [id], onDelete: SetNull)
+priorAttempt IngestionAttempt? @relation("AttemptRetry", fields: [priorAttemptId], references: [id], onDelete: SetNull)
   retries        IngestionAttempt[]     @relation("AttemptRetry")
   run            IngestionRun           @relation(fields: [runId], references: [id], onDelete: Cascade)
   candidate      IngestionCandidate?
@@ -785,7 +823,7 @@ model IngestionCandidate {
   reviewedAt       DateTime?
   publishedAt      DateTime?
   supersedesId     String?
-  supersedes       IngestionCandidate?  @relation("CandidateVersion", fields: [supersedesId], references: [id], onDelete: SetNull)
+supersedes IngestionCandidate? @relation("CandidateVersion",fields: [supersedesId],references: [id],onDelete: SetNull)
   supersededBy     IngestionCandidate[] @relation("CandidateVersion")
   catalogueVersion String?
   createdAt        DateTime             @default(now())
@@ -936,4 +974,39 @@ model EditionLifecycleReviewDecision {
   snapshot    EditionLifecycleProposalSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
   actor       User @relation(fields: [actorId], references: [id], onDelete: Restrict)
   audit       AdminAuditEntry @relation(fields: [auditId], references: [id], onDelete: Restrict)
+}
+
+enum CorrectionKind {
+  DATE
+  LINEUP
+  TICKETS
+  IDENTITY
+}
+
+enum CorrectionStatus {
+  PENDING
+  ACCEPTED
+  DISMISSED
+}
+
+model CorrectionReport {
+  id           String           @id @default(cuid())
+  targetName   String
+  editionId    String?
+  editionYear  Int?
+  artistId     String?
+  kind         CorrectionKind
+  sourceUrl    String
+  notes        String?
+  fingerprint  String
+  reporterHash String
+  submittedAt  DateTime         @default(now())
+  status       CorrectionStatus @default(PENDING)
+  reviewedAt   DateTime?
+  reviewerId   String?
+
+  @@index([status, submittedAt])
+  @@index([reporterHash, submittedAt])
+  @@index([fingerprint, submittedAt])
+  @@index([submittedAt])
 }
