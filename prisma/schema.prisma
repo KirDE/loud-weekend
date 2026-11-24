@@ -196,6 +196,15 @@ model User {
   emailVerificationTokens   EmailVerificationToken[]
   passkeys                  Passkey[]
   googleIdentity            GoogleIdentity?
+  calendarSubscription      CalendarSubscription?
+}
+
+model CalendarSubscription {
+  userId    String   @id
+  keyDigest String   @unique
+  seasons   Int[]
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Passkey {

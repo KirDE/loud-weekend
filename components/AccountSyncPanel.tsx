@@ -1,4 +1,6 @@
 "use client";
+
+import { CalendarSubscription } from "./CalendarSubscription";
 import { useEffect, useState } from "react";
 import { readDiscoveryPreferences } from "@/lib/discovery-preferences";
 import { readCollections, mergeCollections } from "@/lib/collections";
@@ -462,6 +464,7 @@ export function AccountSyncPanel({
             <p>{t.empty}</p>
           )}
         </div>
+        <CalendarSubscription key={user.id} disabled={busy || disabled} />
       </div>
     </section>
   );
