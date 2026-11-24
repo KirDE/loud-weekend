@@ -1,6 +1,16 @@
+import { renderedTicketText } from "./rendered-ticket-text.ts";
+import { RFP_STOCK, RFP_PURCHASE, observeRfpStock } from "./rfp-ticket-stock.ts";
 import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
+import {
+  ALCATRAZ_STOCK,
+  ALCATRAZ_PURCHASE,
+  isAlcatrazStockSource,
+  observeAlcatrazStock,
+} from "./alcatraz-ticket-stock.ts";
+
+import { observeRemainingTicket, remainingTicketUrl } from "./remaining-ticket-stock.ts";
 
 export const TICKET_SUPPLEMENT = "official-ticket-supplement-v1";
 type TicketState = NonNullable<FestivalCandidate["ticketStatus"]>;
@@ -11,10 +21,23 @@ export type TicketObservation = {
   ticketsUrl?: string;
 };
 
+/** A same-document response or a source adapter's reviewed canonical homepage. */
+export function matchesTicketPrimaryUrl(source: FestivalSource, finalUrl: string): boolean {
+  return (
+    !finalUrl ||
+    finalUrl === source.url ||
+    (source.festivalSlug === "wacken-open-air" &&
+      source.url === "https://www.wacken.com/" &&
+      finalUrl === "https://www.wacken.com/de/")
+  );
+}
+
 /** Reviewed source routes, not URLs supplied by arbitrary markup or API clients. */
 export function ticketSupplementUrl(source: FestivalSource): string | undefined {
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review"))
     return;
+  const remaining = remainingTicketUrl(source);
+  if (remaining) return remaining;
   let url: URL;
   try {
     url = new URL(source.url);
@@ -30,6 +53,14 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
     url.hash
   )
     return;
+  if (isAlcatrazStockSource(source)) return ALCATRAZ_STOCK;
+  if (
+    source.festivalSlug === "rock-for-people" &&
+    source.editionYear === 2027 &&
+    url.href === "https://rockforpeople.cz/" &&
+    source.strategies.includes("official_markup")
+  )
+    return RFP_STOCK;
   if (
     source.festivalSlug === "full-rewind" &&
     url.href === "https://full-rewind.de/" &&
@@ -55,6 +86,12 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
   )
     return "https://downloadfestival.co.uk/tickets/";
   if (
+    ["rock-am-ring", "rock-im-park"].includes(source.festivalSlug) &&
+    url.hostname === `www.${source.festivalSlug}.com` &&
+    url.pathname === "/"
+  )
+    return `https://www.${source.festivalSlug}.com/en/tickets`;
+  if (
     source.festivalSlug === "wacken-open-air" &&
     url.hostname === "www.wacken.com" &&
     url.pathname === "/"
@@ -66,6 +103,8 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
 export function ticketSupplementPurchaseUrl(source: FestivalSource): string | undefined {
   const stockUrl = ticketSupplementUrl(source);
   if (!stockUrl) return;
+  if (stockUrl === ALCATRAZ_STOCK) return ALCATRAZ_PURCHASE;
+  if (stockUrl === RFP_STOCK) return RFP_PURCHASE;
   return source.festivalSlug === "full-rewind"
     ? `https://full-rewind.de/collections/tickets-${source.editionYear}`
     : stockUrl;
@@ -79,7 +118,9 @@ export function observeTicketSupplement(
   html: string,
   source: FestivalSource,
   url: string,
-  dates?: Pick<FestivalCandidate, "startDate" | "endDate">,
+  dates?: Partial<Pick<FestivalCandidate, "startDate" | "endDate" | "observedEditionYears">> & {
+    fetchedAt?: string;
+  },
 ): TicketObservation {
   const fail = (reason: string): TicketObservation => ({
     excerpt: "",
@@ -88,6 +129,8 @@ export function observeTicketSupplement(
   if (!isTicketSupplementUrl(source, url) || html.length > 2_000_000)
     return fail("source identity or size changed");
   if (source.festivalSlug === "idays") return observeIdaysTicketStock(html, source.editionYear);
+  if (source.festivalSlug === "rock-for-people")
+    return observeRfpStock(html, source.editionYear, dates);
   if (source.festivalSlug === "full-rewind") {
     const year = source.editionYear;
     try {
@@ -164,6 +207,8 @@ export function observeTicketSupplement(
       return fail("invalid public weekend product JSON");
     }
   }
+  if (url === ALCATRAZ_STOCK) return observeAlcatrazStock(html, source.editionYear, dates);
+  if (remainingTicketUrl(source)) return observeRemainingTicket(html, source, dates);
   const $ = load(html);
   const declaredEvents: Array<{
     name?: unknown;
@@ -190,6 +235,81 @@ export function observeTicketSupplement(
   const text = (value: string) => value.replace(/\s+/g, " ").trim();
   $("nav, footer").remove();
   const year = source.editionYear;
+  if (["rock-am-ring", "rock-im-park"].includes(source.festivalSlug)) {
+    const name = source.festivalSlug === "rock-am-ring" ? "Rock am Ring" : "Rock im Park";
+    const title = text($("title").text());
+    if (
+      !title.startsWith(`${name} | `) ||
+      !new RegExp(`\\b${year}\\b`).test(title) ||
+      $("link[rel='canonical']").length !== 1 ||
+      $("link[rel='canonical']").attr("href") !== url ||
+      text($("h1").text()) !== "Tickets"
+    )
+      return fail("current ticket-page identity absent");
+    const headings = $("h2").filter((_, element) => text($(element).text()) === "Festival tickets");
+    if (headings.length !== 1) return fail("ordinary admission group absent or ambiguous");
+    const expected =
+      source.festivalSlug === "rock-am-ring"
+        ? ["Festival Ticket"]
+        : ["FESTIVAL TICKET – GENERAL CAMPING", "FESTIVAL TICKET – GREEN CAMPING"];
+    const cards = headings
+      .parent()
+      .children(".ticketitem-block")
+      .filter((_, element) =>
+        expected.includes(text($(element).children(".header").children(".title").text())),
+      );
+    const titles = cards
+      .map((_, element) => text($(element).children(".header").children(".title").text()))
+      .get();
+    if (cards.length !== expected.length || new Set(titles).size !== expected.length)
+      return fail("standard admission card absent or duplicated");
+    let available: string | undefined;
+    for (const element of cards.toArray()) {
+      const card = $(element),
+        header = card.children(".header");
+      const description = text(card.children(".footer").children(".footer-content").text());
+      if (
+        !/valid (?:for|on) all three (?:event days|days of the event)/i.test(description) ||
+        !new RegExp(`\\b${year}\\b`).test(description) ||
+        /\b20\d{2}\b/g.test(description.replaceAll(String(year), ""))
+      )
+        return fail("ordinary admission product edition absent or conflicting");
+      const buy = header
+        .children(".ctas")
+        .find("a.btn-cta[href]")
+        .filter((_, anchor) => {
+          const link = $(anchor);
+          try {
+            const target = new URL(link.attr("href")!);
+            return (
+              target.protocol === "https:" &&
+              target.hostname === "www.eventim.de" &&
+              !target.username &&
+              !target.password &&
+              !target.port &&
+              !target.hash &&
+              /^\/noapp\/event\/\d+\/$/.test(target.pathname) &&
+              text(link.text()) === "Buy now" &&
+              link.closest("[disabled], [aria-disabled='true'], .disabled, .is-disabled").length ===
+                0
+            );
+          } catch {
+            return false;
+          }
+        });
+      const sold = /(?:sold out|ausverkauft)\b/i.test(renderedTicketText(card));
+      if (buy.length > 1 || (sold && buy.length))
+        return fail("conflicting ordinary admission inventory");
+      if (buy.length === 1 && !sold) available = text(header.children(".title").text());
+    }
+    if (available)
+      return {
+        status: "available",
+        excerpt: `${name} ${year}; ordinary three-day admission ${available}; enabled official Eventim Buy now control`,
+      };
+    // Hotel bundles or other admission may remain: do not infer global sellout.
+    return fail("no verified purchasable ordinary admission; whole-event sellout not established");
+  }
   if (source.festivalSlug === "wacken-open-air") {
     if (!new RegExp(`Ticket.*${year}`).test($("title").text()))
       return fail("current edition title absent");

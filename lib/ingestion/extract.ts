@@ -1,3 +1,4 @@
+import { isBarcelonaSource } from "./adapters/barcelona-banner.ts";
 import {
   observeTicketSupplement,
   ticketSupplementUrl,
@@ -30,7 +31,7 @@ const missingFormatWarnings = new Set([
   "HTML fallback did not find explicitly marked festival fields",
 ]);
 
-const supportedFields: FieldEvidence["field"][] = [
+const supportedFields: Exclude<FieldEvidence["field"], "timetable">[] = [
   "startDate",
   "endDate",
   "city",
@@ -58,6 +59,18 @@ function extractConfiguredCandidate(
   source: FestivalSource,
   fetchedAt: string,
 ): FestivalCandidate {
+  const barcelona = source.festivalSlug === "barcelona-rock-fest";
+  if (barcelona && !isBarcelonaSource(source)) {
+    return {
+      schemaVersion: INGESTION_SCHEMA_VERSION,
+      festivalSlug: source.festivalSlug,
+      sourceUrl: source.url,
+      fetchedAt,
+      evidence: [],
+      observedEditionYears: [],
+      warnings: ["Barcelona source identity is not the reviewed homepage"],
+    };
+  }
   const roskilde = extractRoskildeCandidate(html, source, fetchedAt);
   if (roskilde) return roskilde;
   const roadburn = extractRoadburnCandidate(html, source, fetchedAt);
@@ -114,16 +127,36 @@ function extractConfiguredCandidate(
   // Its trusted fallback owns this existing source, not generic Event guesses.
   if (source.festivalSlug === "alcatraz" && source.strategies.includes("html_fallback"))
     return extractHtmlFallbackCandidate(html, source, fetchedAt);
-  // Masters current scoped full-pass DOM owns stock, including absence/conflict.
-  // A generic stale JSON-LD offer must not restore an unavailable card.
+  // Scoped source DOM owns stock, including absence/conflicts; generic
+  // Event offers cannot restore unavailable or uncorroborated stock.
   if (source.festivalSlug === "masters-of-rock" && source.strategies.includes("html_fallback"))
     return extractHtmlFallbackCandidate(html, source, fetchedAt);
-  const candidates = source.strategies.flatMap((strategy) => {
-    if (strategy === "json_ld_event") return [extractJsonLdCandidate(html, source, fetchedAt)];
+  const strategies =
+    barcelona && source.strategies.includes("html_fallback")
+      ? ([
+          "html_fallback",
+          ...source.strategies.filter((strategy) => strategy !== "html_fallback"),
+        ] as const)
+      : source.strategies;
+  const candidates = strategies.flatMap((strategy) => {
     if (strategy === "html_fallback")
       return [extractHtmlFallbackCandidate(html, source, fetchedAt)];
-    if (strategy === "official_markup")
-      return [extractOfficialMarkupCandidate(html, source, fetchedAt)];
+    if (strategy === "json_ld_event" || strategy === "official_markup") {
+      const candidate =
+        strategy === "json_ld_event"
+          ? extractJsonLdCandidate(html, source, fetchedAt)
+          : extractOfficialMarkupCandidate(html, source, fetchedAt);
+      // Preserve non-ticket fields and cancellation warnings; only the
+      // corroborated visible banner may establish Barcelona ticket stock.
+      if (barcelona) {
+        delete candidate.ticketsUrl;
+        delete candidate.ticketStatus;
+        candidate.evidence = candidate.evidence.filter(
+          ({ field }) => field !== "ticketsUrl" && field !== "ticketStatus",
+        );
+      }
+      return [candidate];
+    }
     if (
       strategy === "manual_review" &&
       (isFullForceArchivedEdition(html, source) ||
@@ -168,13 +201,19 @@ function extractConfiguredCandidate(
   };
   for (const candidate of candidates) {
     if (candidate.artistListMode) merged.artistListMode = candidate.artistListMode;
+    const suppliedFields = new Set<FieldEvidence["field"]>();
     for (const field of supportedFields) {
-      if (merged[field] === undefined && candidate[field] !== undefined)
-        Object.assign(merged, { [field]: candidate[field] });
+      if (merged[field] !== undefined || candidate[field] === undefined) continue;
+      Object.assign(merged, { [field]: candidate[field] });
+      suppliedFields.add(field);
+      (merged.fieldEditionYears ??= {})[field] =
+        candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
+    }
+    for (const evidence of candidate.evidence) {
+      if (suppliedFields.delete(evidence.field)) merged.evidence.push(evidence);
     }
     if (candidate.lineupScope && merged.lineup === candidate.lineup)
       merged.lineupScope = candidate.lineupScope;
-    merged.evidence.push(...candidate.evidence.filter(({ field }) => merged[field] !== undefined));
     merged.observedEditionYears.push(...candidate.observedEditionYears);
     merged.warnings.push(...candidate.warnings);
   }
@@ -184,10 +223,6 @@ function extractConfiguredCandidate(
   if (merged.evidence.length > 0) {
     merged.warnings = merged.warnings.filter((warning) => !missingFormatWarnings.has(warning));
   }
-  merged.evidence = merged.evidence.filter(
-    ({ field }, index, values) =>
-      values.findIndex((evidence) => evidence.field === field) === index,
-  );
   merged.observedEditionYears = [...new Set(merged.observedEditionYears)];
   merged.warnings = [...new Set(merged.warnings)];
   // The JSON-LD format is optional for the verified Rock Werchter homepage.
@@ -242,6 +277,7 @@ export function extractFestivalCandidate(
   // A failed current ticket check must not publish an older stock assertion
   // from another format as if the current inventory had been verified.
   delete candidate.ticketStatus;
+  if (candidate.fieldEditionYears) delete candidate.fieldEditionYears.ticketStatus;
   candidate.evidence = candidate.evidence.filter((evidence) => evidence.field !== "ticketStatus");
   if (ticket.warning) candidate.warnings.push(ticket.warning);
   if (ticket.status) {
@@ -252,6 +288,16 @@ export function extractFestivalCandidate(
     };
     candidate.ticketStatus = ticket.status;
     candidate.ticketsUrl = ticket.ticketsUrl ?? envelope.ticket.url;
+    candidate.fieldEditionYears = {
+      ...Object.fromEntries(
+        supportedFields.map((field) => [
+          field,
+          candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears,
+        ]),
+      ),
+      ticketStatus: [source.editionYear],
+      ticketsUrl: [source.editionYear],
+    };
     candidate.observedEditionYears = [
       ...new Set([...candidate.observedEditionYears, source.editionYear]),
     ];

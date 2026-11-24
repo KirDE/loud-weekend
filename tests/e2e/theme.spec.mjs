@@ -27,7 +27,7 @@ for (const [language, label] of [
     expect(await response.text()).toContain('data-theme="dark"');
     await page.reload();
     await expect(toggle).toHaveAttribute("aria-checked", "true");
-    await page.locator("footer > a").click();
+    await page.locator('footer a[href="/submit/"]').click();
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     for (const width of [320, 375, 700, 768, 850, 1100, 1440]) {
       await page.setViewportSize({ width, height: 900 });
