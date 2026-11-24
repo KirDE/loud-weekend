@@ -17,6 +17,7 @@ const labels = {
     sync: "Sync now",
     syncing: "Syncing…",
     current: "Everything is synchronized.",
+    resolved: "Conflict resolved. Sync again to send other local changes.",
     conflict: "A newer version exists on another device. Nothing was overwritten.",
     keepLocal: "Keep this device",
     keepRemote: "Use other device",
@@ -43,6 +44,7 @@ const labels = {
     sync: "Jetzt synchronisieren",
     syncing: "Synchronisiere…",
     current: "Alles ist synchronisiert.",
+    resolved: "Konflikt gelöst. Synchronisiere erneut, um weitere lokale Änderungen zu übertragen.",
     conflict: "Auf einem anderen Gerät gibt es eine neuere Version. Nichts wurde überschrieben.",
     keepLocal: "Dieses Gerät behalten",
     keepRemote: "Anderes Gerät verwenden",
@@ -69,6 +71,8 @@ const labels = {
     sync: "Синхронизировать",
     syncing: "Синхронизация…",
     current: "Всё синхронизировано.",
+    resolved:
+      "Конфликт решён. Запустите синхронизацию ещё раз, чтобы отправить остальные локальные изменения.",
     conflict: "На другом устройстве есть более новая версия. Ничего не перезаписано.",
     keepLocal: "Оставить данные устройства",
     keepRemote: "Взять данные другого устройства",
@@ -140,6 +144,35 @@ export function AccountSyncPanel({
     setBusyState(value);
     onBusyChange?.(value);
   }
+  async function readDocuments() {
+    const entries = await Promise.all(
+      kinds.map(async (kind) => {
+        const response = await fetch("/api/sync/" + kind, { cache: "no-store" });
+        if (!response.ok) throw new Error(t.failed);
+        const { document } = (await response.json()) as { document?: Document | null };
+        if (
+          document !== null &&
+          (!document ||
+            typeof document.id !== "string" ||
+            !Number.isInteger(document.revision) ||
+            document.revision < 0 ||
+            document.payload === undefined)
+        )
+          throw new Error(t.failed);
+        if (kind === "collections" && document) readCollections(document.payload);
+        if (kind === "saved-filters" && document) {
+          const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
+          if (!filters || typeof filters !== "object" || Array.isArray(filters))
+            throw new Error(t.failed);
+        }
+        return [kind, document] as const;
+      }),
+    );
+    return Object.fromEntries(entries.filter(([, document]) => document)) as Partial<
+      Record<Kind, Document>
+    >;
+  }
+
   async function load() {
     try {
       const me = await fetch("/api/auth/me", { cache: "no-store" });
@@ -150,16 +183,7 @@ export function AccountSyncPanel({
       }
       setUser((await me.json()).user);
       setDocs({});
-      const entries = await Promise.all(
-        kinds.map(async (kind) => {
-          const response = await fetch("/api/sync/" + kind, { cache: "no-store" });
-          if (!response.ok) throw new Error(t.failed);
-          const document = (await response.json()).document as Document | null;
-          if (kind === "collections" && document) readCollections(document.payload);
-          return [kind, document] as const;
-        }),
-      );
-      setDocs(Object.fromEntries(entries.filter(([, document]) => document)));
+      setDocs(await readDocuments());
     } catch {
       setStatus(t.failed);
     }
@@ -195,7 +219,9 @@ export function AccountSyncPanel({
     setConflict(null);
     try {
       if (mode === "remote") {
-        planner.replace(plannerFrom(docs));
+        const latest = await readDocuments();
+        planner.replace(plannerFrom(latest));
+        setDocs(latest);
         setStatus(t.current);
         return;
       }
@@ -222,30 +248,32 @@ export function AccountSyncPanel({
     if (!conflict) return;
     setBusy(true);
     try {
-      if (useLocal) await put(conflict.kind, conflict.local, conflict.remote.revision);
-      else {
-        const next = { ...docs, [conflict.kind]: conflict.remote };
-        setDocs(next);
-        if (conflict.kind === "collections")
-          planner.replace({
-            favoriteFestivals: planner.favoriteFestivals,
-            favoriteArtists: planner.favoriteArtists,
-            attendance: planner.attendance,
-            savedFilters: planner.savedFilters,
-            playlistFestivals: readCollections(conflict.remote.payload).playlistFestivals,
-          });
-        else if (conflict.kind === "saved-filters")
-          planner.setSavedFilters(plannerFrom(next).savedFilters);
-        else planner.replace(plannerFrom(next));
+      const { kind, local, remote } = conflict;
+      if (useLocal) {
+        await put(kind, local, remote.revision);
+      } else {
+        const state = plannerFrom({ [kind]: remote });
+        const fields = {
+          favorites: {
+            favoriteFestivals: state.favoriteFestivals,
+            favoriteArtists: state.favoriteArtists,
+          },
+          collections: { playlistFestivals: state.playlistFestivals },
+          "saved-filters": { savedFilters: state.savedFilters },
+          plans: { attendance: state.attendance },
+        };
+        planner.replaceFields(fields[kind]);
+        setDocs((current) => ({ ...current, [kind]: remote }));
       }
       setConflict(null);
-      setStatus(t.current);
+      setStatus(t.resolved);
     } catch (reason) {
       setStatus(reason instanceof Error ? reason.message : t.failed);
     } finally {
       setBusy(false);
     }
   }
+
   async function share() {
     setBusy(true);
     setStatus("");
