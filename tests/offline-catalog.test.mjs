@@ -23,7 +23,7 @@ function edition(slug = "sample") {
         stage: "Main",
         start: "20:00",
         artistName: "Artist",
-        timeZone: null,
+        timeZone: "Europe/Berlin",
         status: "ANNOUNCED",
         sourceUrl: "https://private.invalid",
         observedAt: new Date(),
@@ -74,7 +74,7 @@ test(
       stage: "Main",
       start: "20:00",
       artist: "Artist",
-      timeZone: "UTC",
+      timeZone: "Europe/Berlin",
       status: "scheduled",
     });
     assert.equal(payload.festivals[0].endDate, null);
@@ -158,6 +158,11 @@ test(
     await readOfflineCatalog(database);
     assert.deepEqual(query.where, { year: 2027, recordState: "CURRENT" });
     assert.deepEqual(Object.keys(query.select), ["festival", "startDate", "endDate", "timetable"]);
+    assert.deepEqual(query.select.timetable.where, {
+      timeZone: { not: null },
+      sourceUrl: { not: null },
+      observedAt: { not: null },
+    });
     for (const findMany of [
       async () => [],
       async () => {
