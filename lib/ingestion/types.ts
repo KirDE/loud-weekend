@@ -1,3 +1,4 @@
+import type { OverviewObservation } from "../catalog/festival-overview-import.ts";
 import type { ArrivalObservation } from "../catalog/arrival-import.ts";
 import type { Festival } from "../domain/festival.ts";
 
@@ -23,6 +24,7 @@ export type FestivalSource = {
 export type FieldEvidence = {
   field:
     | "arrival"
+    | "overview"
     | keyof Pick<
         Festival,
         | "startDate"
@@ -58,6 +60,7 @@ export type FestivalCandidate = Partial<
   // An unranked news announcement adds members; absence is not a cancellation.
   lineupScope?: "announcement";
   arrival?: ArrivalObservation;
+  overview?: OverviewObservation;
   /** Announcement feeds add artists; absence is not a removal. */
   artistListMode?: "additive";
   /** Explicit producer provenance; persisted with normalized candidate evidence. */
@@ -67,6 +70,8 @@ export type FestivalCandidate = Partial<
     editionYear: number;
     scope?: { namespace: string; productId: string };
   };
+  /** Edition observations from the strategy that supplied each merged proposal field. */
+  fieldEditionYears?: Partial<Record<Exclude<FieldEvidence["field"], "timetable">, number[]>>;
   timetable?: { date: string; stage: string; start: string; artist: string }[];
   schemaVersion: typeof INGESTION_SCHEMA_VERSION;
   festivalSlug: string;

@@ -23,9 +23,11 @@ export type Festival = {
   dateLabel?: string;
   headliners: string[];
   lineup: string[];
+  finalLineup?: true;
   officialUrl: string;
   ticketsUrl?: string;
   playlistUrl?: string;
+  reviewedPlaylistLinks?: { spotify?: string; youtube_music?: string };
   freshness?: EditionFreshness;
   sourceDeprecated?: boolean;
   sourceDeprecatedAt?: string;
@@ -47,11 +49,18 @@ export type Festival = {
   timetable?: TimetableEntry[];
 };
 
+export type PlaylistCoverage = {
+  matchedArtists: number;
+  tracks: number;
+  recordedAt: string;
+};
+
 export type PlaylistStatus = {
-  spotifyUrl: string;
+  spotifyUrl?: string;
   youtubeMusicUrl?: string;
   youtubeMusicArtists?: number;
   youtubeMusicTracks?: number;
+  coverage?: { spotify?: PlaylistCoverage; youtubeMusic?: PlaylistCoverage };
   artists: number;
   tracks: number;
   updatedAt: string;
