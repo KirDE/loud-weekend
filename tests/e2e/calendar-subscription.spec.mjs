@@ -161,6 +161,16 @@ test("feed follows synced plans and published dates but never another account", 
     expect(shifted).toContain(uid);
     expect(shifted).toContain("DTSTART;VALUE=DATE:20271030");
     expect(shifted).toContain("DTEND;VALUE=DATE:20271101");
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: {
+        endDate: new Date("2027-10-29T00:00:00Z"),
+      },
+    });
+    const invalidRange = await request.get(url);
+    expect(invalidRange.status()).toBe(200);
+    expect(await invalidRange.text()).not.toContain("VEVENT");
+
     expect((await putPlan({ "synthetic-fest": "not-going" }, 1)).status()).toBe(200);
     expect(await (await request.get(url)).text()).not.toContain("VEVENT");
     await db.user.delete({ where: { id: user.id } });
