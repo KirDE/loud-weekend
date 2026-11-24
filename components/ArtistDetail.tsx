@@ -4,14 +4,17 @@ import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
 import type { ArtistProfile } from "@/lib/domain/artist";
 import { useLanguage } from "./LanguageProvider";
+import { favoriteArtistKey } from "@/lib/favorite-artist";
 import { FavoriteButton } from "./LocalPlanner";
 
 export function ArtistDetail({
   artist,
   appearances,
+  legacyFavoriteNames,
 }: {
   artist: ArtistProfile;
   appearances: Festival[];
+  legacyFavoriteNames: string[];
 }) {
   const { language, locale, t } = useLanguage();
   const festivalWord = appearances.length === 1 ? t("europeanFestival") : t("europeanFestivals");
@@ -25,7 +28,11 @@ export function ArtistDetail({
         <Link className="back" href="/">
           ← {t("festivalDirectory")}
         </Link>
-        <FavoriteButton kind="artist" value={artist.name} />
+        <FavoriteButton
+          kind="artist"
+          value={favoriteArtistKey(artist.slug)}
+          legacyValues={legacyFavoriteNames}
+        />
       </div>
       <div className="artistHero">
         {artist.image ? (
