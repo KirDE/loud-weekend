@@ -126,6 +126,7 @@ enum TicketStatus {
   NOT_ON_SALE
   SOLD_OUT
   SALES_ENDED
+  FREE
   UNAVAILABLE
   UNKNOWN
 }
@@ -324,6 +325,7 @@ model FestivalEdition {
   festival        Festival               @relation(fields: [festivalId], references: [id], onDelete: Cascade)
   lineup          LineupEntry[]
   provenance      EditionProvenance[]
+  arrivalFacts    EditionArrivalFact[]
   timetable       TimetablePerformance[]
   playlists       FestivalPlaylist[]
   sources         FestivalSource[]
@@ -331,6 +333,30 @@ model FestivalEdition {
 
   @@unique([festivalId, year])
   @@index([year, recordState])
+}
+
+enum EditionArrivalKind {
+  venue
+  shuttle
+  railShuttle
+  camper
+}
+
+model EditionArrivalFact {
+  editionId           String
+  kind                EditionArrivalKind
+  editionYear         Int
+  countryCode         String             @db.Char(2)
+  organizerHost       String
+  descriptionEn       String
+  descriptionDe       String
+  descriptionRu       String
+  sourceUrl           String
+  supportingSourceUrl String?
+  checkedOn           DateTime           @db.Date
+  edition             FestivalEdition    @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, kind])
 }
 
 model Artist {
