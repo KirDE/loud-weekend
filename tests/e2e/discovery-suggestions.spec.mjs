@@ -38,6 +38,15 @@ for (const [locale, t] of Object.entries(labels)) {
     await search.press("Escape");
     await expect(panel).toHaveCount(0);
     await expect(page.locator(".festivalCard h2")).toHaveText(["Synthetic Fest"]);
+    await search.press("ArrowDown");
+    await expect(
+      panel
+        .getByRole("region", { name: t.festivals })
+        .getByRole("link", { name: /Synthetic Fest/ }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(search).toBeFocused();
+    await expect(panel).toHaveCount(0);
     await search.fill("sample city");
     const city = panel.getByRole("button", { name: "Sample City · AT", exact: true });
     await expect(city).toBeVisible();
