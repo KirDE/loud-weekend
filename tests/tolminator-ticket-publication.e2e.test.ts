@@ -212,7 +212,8 @@ test("Tolminator publishes durable proof, rejects stale updates and preserves of
     assert.equal(fetched, false);
     assert.equal(await db.ingestionRun.count(), count);
     await db.festivalEdition.update({ where: { id: edition.id }, data: { year: 2027 } });
-    // Every request-side identity/value/time/extra-field mutation fails atomically.
+    const rejectedScope = /Tolminator|Ingestion publication scope does not match/;
+    // Both the general persisted-scope fence and the product proof must fail atomically.
     for (const mutate of [
       (v: IngestionResult) => {
         v.candidate.sourceUrl = "https://foreign.example/";
@@ -241,7 +242,7 @@ test("Tolminator publishes durable proof, rejects stale updates and preserves of
         changed = structuredClone(value);
       mutate(changed);
       const before = await snapshot();
-      await assert.rejects(publish(attempt.id, changed), /Tolminator/);
+      await assert.rejects(publish(attempt.id, changed), rejectedScope);
       assert.deepEqual(await snapshot(), before);
     }
     for (const data of [
@@ -256,7 +257,7 @@ test("Tolminator publishes durable proof, rejects stale updates and preserves of
         data,
       });
       const before = await snapshot();
-      await assert.rejects(publish(attempt.id), /Tolminator/);
+      await assert.rejects(publish(attempt.id), rejectedScope);
       assert.deepEqual(await snapshot(), before);
     }
     for (const data of [
@@ -268,7 +269,7 @@ test("Tolminator publishes durable proof, rejects stale updates and preserves of
       const attempt = await persist(value);
       await db.ingestionAttempt.update({ where: { id: attempt.id }, data });
       const before = await snapshot();
-      await assert.rejects(publish(attempt.id), /Tolminator/);
+      await assert.rejects(publish(attempt.id), rejectedScope);
       assert.deepEqual(await snapshot(), before);
     }
     // Even matching caller/stored candidates cannot authorize seller-date or
@@ -289,7 +290,7 @@ test("Tolminator publishes durable proof, rejects stale updates and preserves of
       }
       const attempt = await persist(changed),
         before = await snapshot();
-      await assert.rejects(publish(attempt.id, changed), /Tolminator/);
+      await assert.rejects(publish(attempt.id, changed), rejectedScope);
       assert.deepEqual(await snapshot(), before);
     }
     const attempt = await persist(value),

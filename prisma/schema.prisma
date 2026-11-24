@@ -322,12 +322,37 @@ model FestivalEdition {
   lineup          LineupEntry[]
   provenance      EditionProvenance[]
   lineupDays      EditionLineupDayAllocation[]
+  arrivalFacts    EditionArrivalFact[]
   timetable       TimetablePerformance[]
   playlists       FestivalPlaylist[]
   sources         FestivalSource[]
 
   @@unique([festivalId, year])
   @@index([year, recordState])
+}
+
+enum EditionArrivalKind {
+  venue
+  shuttle
+  railShuttle
+  camper
+}
+
+model EditionArrivalFact {
+  editionId           String
+  kind                EditionArrivalKind
+  editionYear         Int
+  countryCode         String             @db.Char(2)
+  organizerHost       String
+  descriptionEn       String
+  descriptionDe       String
+  descriptionRu       String
+  sourceUrl           String
+  supportingSourceUrl String?
+  checkedOn           DateTime           @db.Date
+  edition             FestivalEdition    @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, kind])
 }
 
 model Artist {
