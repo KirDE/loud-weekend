@@ -1,7 +1,7 @@
 /* Loud Weekend public-only service worker. DB catalogue freshness uses its ETag. */
 const BASE = new URL(self.registration?.scope ?? self.location.origin).pathname.replace(/\/$/, "");
 const CACHE_SCOPE = BASE ? `:${encodeURIComponent(BASE)}` : "";
-const CACHE_VERSION = `festival-radar-public-v5${CACHE_SCOPE}`;
+const CACHE_VERSION = `festival-radar-public-v6${CACHE_SCOPE}`;
 const CATALOG = `${BASE}/api/offline/catalog`;
 const TRIP_MODULE = `${BASE}/offline-trips.mjs`;
 const MAX_ENTRIES = 80;
@@ -70,8 +70,16 @@ async function freshCached(cache, request) {
 }
 
 async function trim(cache) {
+  // Keep the installed shell and its modules usable when browsing fills the asset cache.
+  const pinned = new Set(
+    [...PRECACHE, CATALOG].map((path) => new URL(path, self.location.origin).href),
+  );
   const keys = await cache.keys();
-  for (const key of keys.slice(0, Math.max(0, keys.length - MAX_ENTRIES))) await cache.delete(key);
+  const evictable = keys.filter(
+    (key) => !pinned.has(new URL(key.url ?? key, self.location.origin).href),
+  );
+  for (const key of evictable.slice(0, Math.max(0, keys.length - MAX_ENTRIES)))
+    await cache.delete(key);
 }
 
 function publicCatalogHeaders(response) {
@@ -218,7 +226,9 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       caches
         .open(CACHE_VERSION)
-        .then(async (cache) => (await cache.match(TRIP_MODULE)) ?? fetch(request)),
+        .then((cache) => cache.match(TRIP_MODULE))
+        .catch(() => undefined)
+        .then((cached) => cached ?? fetch(request)),
     );
     return;
   }
@@ -248,13 +258,17 @@ self.addEventListener("fetch", (event) => {
   if (!isPublicAsset({ pathname: localPath })) return;
   event.respondWith(
     (async () => {
-      const cache = await caches.open(CACHE_VERSION);
-      const cached = await freshCached(cache, request);
+      const cache = await caches.open(CACHE_VERSION).catch(() => undefined);
+      const cached = cache && (await freshCached(cache, request).catch(() => undefined));
       if (cached) return cached;
       const response = await fetch(request);
-      if (cacheable(response)) {
-        await cache.put(request, await stamped(response));
-        await trim(cache);
+      if (cache && cacheable(response)) {
+        try {
+          await cache.put(request, await stamped(response));
+          await trim(cache);
+        } catch {
+          /* Use the successful network response even when cache storage fails. */
+        }
       }
       return response;
     })(),
