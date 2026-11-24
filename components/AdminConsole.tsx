@@ -4,6 +4,7 @@ import { AdminSocialLinkReview } from "./AdminSocialLinkReview";
 import { useEffect, useMemo, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import type { AuditEntry, ParserRun, ReviewChange } from "@/lib/admin";
+import type { FollowOnDraft } from "./SubmissionFollowOnEdition";
 import { SubmissionEditionLink } from "./SubmissionEditionLink";
 import type { SubmissionEditionLink as LinkedEdition } from "@/lib/submission-edition-link";
 import { useLanguage, type Language, type AdminTranslationKey } from "./LanguageProvider";
@@ -18,6 +19,7 @@ type Submission = {
   status: "pending" | "approved" | "rejected";
   submittedAt: string;
   editionLink?: LinkedEdition | null;
+  followOnDraft?: FollowOnDraft;
   audit: { action: string; at: string }[];
 };
 type Notice = { key: AdminTranslationKey; values?: Record<string, string | number> };
@@ -52,7 +54,7 @@ export function AdminConsole({
   parserRuns: ParserRun[];
   auditEntries: AuditEntry[];
   submissions: Submission[];
-  editionOptions?: { slug: string; name: string; year: number }[];
+  editionOptions?: { slug: string; name: string; year: number; current: boolean }[];
   sourceHealth?: {
     id: string;
     festivalSlug: string;
@@ -354,6 +356,17 @@ export function AdminConsole({
                     reference={item.reference}
                     year={item.year}
                     editions={editionOptions}
+                    currentEditions={editionOptions.filter((entry) => entry.current)}
+                    draft={item.followOnDraft}
+                    onDraft={(followOnDraft) =>
+                      setSubmissions((items) =>
+                        items.map((submission) =>
+                          submission.reference === item.reference
+                            ? { ...submission, followOnDraft }
+                            : submission,
+                        ),
+                      )
+                    }
                     link={item.editionLink}
                     onLinked={(editionLink) =>
                       setSubmissions((items) =>

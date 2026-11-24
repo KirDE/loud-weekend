@@ -1,3 +1,4 @@
+import { readFollowOnDraft } from "@/lib/submission-follow-on-edition";
 import { readSubmissionEditionLink } from "@/lib/submission-edition-link";
 import { AdminConsole } from "@/components/AdminConsole";
 import { currentAdmin } from "@/lib/admin-access";
@@ -16,10 +17,11 @@ export default async function AdminPage() {
   ]);
   return (
     <AdminConsole
-      editionOptions={editions.map(({ slug, name, editionYear }) => ({
+      editionOptions={editions.map(({ slug, name, editionYear, recordState }) => ({
         slug,
         name,
         year: editionYear,
+        current: recordState === "current",
       }))}
       sourceHealth={snapshot.sourceHealth.map((s) => ({
         ...s,
@@ -36,6 +38,7 @@ export default async function AdminPage() {
         status: item.status.toLowerCase() as "pending" | "approved" | "rejected",
         submittedAt: item.submittedAt.toISOString(),
         editionLink: readSubmissionEditionLink(item.audit),
+        followOnDraft: readFollowOnDraft(item.audit),
         audit: item.audit.map((entry) => ({
           action: entry.action,
           at: entry.createdAt.toISOString(),

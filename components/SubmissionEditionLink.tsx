@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import type { SubmissionEditionLink as LinkedEdition } from "@/lib/submission-edition-link";
+import { SubmissionFollowOnEdition, type FollowOnDraft } from "./SubmissionFollowOnEdition";
 import { useLanguage } from "./LanguageProvider";
 
 const labels = {
@@ -37,12 +38,18 @@ export function SubmissionEditionLink({
   reference,
   year,
   editions,
+  currentEditions,
+  draft,
+  onDraft,
   link,
   onLinked,
 }: {
   reference: string;
   year: number;
   editions: { slug: string; name: string; year: number }[];
+  currentEditions: { slug: string; name: string; year: number }[];
+  draft?: FollowOnDraft;
+  onDraft: (value: FollowOnDraft) => void;
   link?: LinkedEdition | null;
   onLinked: (link: LinkedEdition) => void;
 }) {
@@ -81,26 +88,39 @@ export function SubmissionEditionLink({
         </Link>
       </p>
     );
-  if (!options.length) return <p>{copy.missing}</p>;
   return (
-    <form onSubmit={submit}>
-      <label>
-        {copy.select}
-        <select name="slug" defaultValue="" required>
-          <option value="" disabled>
-            {copy.choose}
-          </option>
-          {options.map((edition) => (
-            <option key={edition.slug} value={edition.slug}>
-              {edition.name} · {edition.year}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button type="submit" disabled={busy}>
-        {copy.link}
-      </button>
-      {failed && <p role="alert">{copy.failed}</p>}
-    </form>
+    <>
+      {!options.length ? (
+        <p>{copy.missing}</p>
+      ) : (
+        <form onSubmit={submit}>
+          <label>
+            {copy.select}
+            <select name="slug" defaultValue="" required>
+              <option value="" disabled>
+                {copy.choose}
+              </option>
+              {options.map((edition) => (
+                <option key={edition.slug} value={edition.slug}>
+                  {edition.name} · {edition.year}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" disabled={busy}>
+            {copy.link}
+          </button>
+          {failed && <p role="alert">{copy.failed}</p>}
+        </form>
+      )}
+      <SubmissionFollowOnEdition
+        reference={reference}
+        year={year}
+        options={currentEditions}
+        draft={draft}
+        onDraft={onDraft}
+        onLink={onLinked}
+      />
+    </>
   );
 }
