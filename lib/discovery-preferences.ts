@@ -1,3 +1,4 @@
+import { readArtistSelection, type ArtistMatchMode } from "./discovery-artists.ts";
 import { discoverySorts, type DiscoverySort } from "./discovery-sort.ts";
 import {
   defaultDiscoveryDates,
@@ -22,6 +23,33 @@ export const discoveryOrigins = {
 
 export const discoveryDistances = ["100", "250", "500", "1000", "2000"] as const;
 
+export type CustomOrigin = {
+  name: string;
+  countryCode: string;
+  latitude: number;
+  longitude: number;
+};
+
+export function readCustomOrigin(value: unknown): CustomOrigin | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const { name, countryCode, latitude, longitude } = value as Record<string, unknown>;
+  if (
+    typeof name !== "string" ||
+    !name.trim() ||
+    name.length > 150 ||
+    typeof countryCode !== "string" ||
+    !/^[A-Z]{2}$/.test(countryCode) ||
+    typeof latitude !== "number" ||
+    !Number.isFinite(latitude) ||
+    Math.abs(latitude) > 90 ||
+    typeof longitude !== "number" ||
+    !Number.isFinite(longitude) ||
+    Math.abs(longitude) > 180
+  )
+    return undefined;
+  return { name, countryCode, latitude, longitude };
+}
+
 export type DiscoveryPreferences = DiscoveryDates & {
   query: string;
   country: string;
@@ -30,8 +58,11 @@ export type DiscoveryPreferences = DiscoveryDates & {
   ticketsOnly: boolean;
   genre: string;
   origin: keyof typeof discoveryOrigins;
+  customOrigin?: CustomOrigin;
   maxDistance: string;
   sort: DiscoverySort;
+  artistSelection?: string[];
+  artistMatch?: ArtistMatchMode;
 };
 
 export const defaultDiscoveryPreferences: DiscoveryPreferences = {
@@ -49,8 +80,15 @@ export const defaultDiscoveryPreferences: DiscoveryPreferences = {
 
 export function readDiscoveryPreferences(value: unknown): DiscoveryPreferences {
   const fields = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  const customOrigin = readCustomOrigin(fields.customOrigin);
   return {
     ...readDiscoveryDates(fields),
+    ...(Array.isArray(fields.artistSelection)
+      ? { artistSelection: readArtistSelection(fields.artistSelection) }
+      : {}),
+    ...(fields.artistMatch === "any" || fields.artistMatch === "all"
+      ? { artistMatch: fields.artistMatch }
+      : {}),
     query: typeof fields.query === "string" ? fields.query : defaultDiscoveryPreferences.query,
     country:
       typeof fields.country === "string" && /^[A-Z]{2}$/.test(fields.country)
@@ -74,5 +112,6 @@ export function readDiscoveryPreferences(value: unknown): DiscoveryPreferences {
     maxDistance:
       discoveryDistances.find((distance) => distance === fields.maxDistance) ??
       defaultDiscoveryPreferences.maxDistance,
+    ...(customOrigin && { customOrigin }),
   };
 }
