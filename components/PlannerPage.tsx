@@ -12,6 +12,7 @@ import type { Festival } from "@/lib/domain/festival";
 import { useLocalPlanner, type Attendance } from "./LocalPlanner";
 import { PlannerReset } from "./PlannerReset";
 import { AccountSyncPanel } from "./AccountSyncPanel";
+import { TripBudget } from "./TripBudget";
 import { PersonalCalendar } from "./PersonalCalendar";
 import { FestivalViews } from "./FestivalViews";
 import { useLanguage, type Language } from "./LanguageProvider";
@@ -335,6 +336,7 @@ export function PlannerPage({
       {p.ready && (
         <>
           <AccountSyncPanel disabled={resetOpen} onBusyChange={setSyncBusy} />
+          <TripBudget festivals={festivals} />
           <section className="plannerSection">
             <div className="sectionHeading">
               <div>

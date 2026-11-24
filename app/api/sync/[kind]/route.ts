@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { error, requireUser } from "@/lib/api";
 import { rejectUntrustedOrigin } from "@/lib/request-origin";
+import { tripBudgetsSchema } from "@/lib/trip-budget";
 import { collectionsForSelection } from "@/lib/collections";
 
 const kinds: Record<string, SyncKind> = {
@@ -10,6 +11,7 @@ const kinds: Record<string, SyncKind> = {
   collections: SyncKind.COLLECTIONS,
   "saved-filters": SyncKind.SAVED_FILTERS,
   plans: SyncKind.FESTIVAL_PLANS,
+  budgets: SyncKind.TRIP_BUDGETS,
 };
 const input = z.object({
   payload: z.json().refine((value) => value !== null),
@@ -42,6 +44,9 @@ export async function PUT(request: Request, context: { params: Promise<{ kind: s
   if ((existing?.revision ?? 0) !== parsed.data.revision)
     return error("Sync conflict. Fetch the latest document.", 409);
   let payload: Prisma.InputJsonValue;
+  if (kind === SyncKind.TRIP_BUDGETS && !tripBudgetsSchema.safeParse(parsed.data.payload).success) {
+    return error("Invalid trip budgets. Nothing was overwritten.", 400);
+  }
   try {
     payload = (
       kind === SyncKind.COLLECTIONS
