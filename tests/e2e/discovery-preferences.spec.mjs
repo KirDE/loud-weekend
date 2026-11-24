@@ -11,6 +11,11 @@ const legacyFilters = {
 };
 const activeFilters = {
   ...legacyFilters,
+  dateFrom: "",
+  dateTo: "",
+  weekendOnly: false,
+  maxDays: "all",
+  sort: "date",
   ticketsOnly: true,
   genre: "doom metal",
   origin: "cologne",

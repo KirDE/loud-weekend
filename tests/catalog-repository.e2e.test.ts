@@ -335,6 +335,7 @@ test("cancelled artists do not count as announced in the public catalogue", asyn
       snapshot.editions.find(({ recordState }) => recordState === "current")?.headliners,
       [],
     );
+    assert.deepEqual(snapshot.discoveryLineups.artistSlugsByFestival["synthetic-fest"], []);
     assert.deepEqual(snapshot.artists, []);
     assert.equal(snapshot.playlists["synthetic-fest"].artists, 0);
   } finally {

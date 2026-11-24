@@ -15,6 +15,11 @@ const saved = {
     genre: "metal",
     origin: "prague",
     maxDistance: "500",
+    dateFrom: "2027-06-01",
+    dateTo: "2027-06-30",
+    weekendOnly: true,
+    maxDays: "4",
+    sort: "distance",
   },
 };
 const empty = {
@@ -31,6 +36,11 @@ const empty = {
     genre: "all",
     origin: "berlin",
     maxDistance: "all",
+    dateFrom: "",
+    dateTo: "",
+    weekendOnly: false,
+    maxDays: "all",
+    sort: "date",
   },
 };
 const copy = {
