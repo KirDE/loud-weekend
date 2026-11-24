@@ -1,3 +1,4 @@
+import { load } from "cheerio";
 import type { FestivalSource } from "../types.ts";
 
 export const LEYENDAS_ORIGIN = "https://www.leyendasdelrockfestival.com";
@@ -191,47 +192,112 @@ export function leyendas(html: string, source: FestivalSource) {
   }
   if (links.slice(0, 8).some((url) => !data.posts.some((p) => p.url === url)))
     warnings.push("Leyendas current-edition article was not fetched");
-  const ticketHtml = clean(data.tickets),
-    ticketTitle = text(ticketHtml.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+  const $tickets = load(data.tickets);
+  // Ignore inert comments before locating either serialized heading boundary.
+  $tickets("*")
+    .add($tickets.root())
+    .contents()
+    .filter((_, node) => node.type === "comment")
+    .remove();
+  $tickets(
+    "script, style, template, noscript, nav, header, footer, [hidden], [inert], [aria-hidden='true']",
+  ).remove();
+  $tickets("[style]").each((_, element) => {
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($tickets(element).attr("style") ?? ""))
+      $tickets(element).remove();
+  });
+  // Disabled controls cannot authorize a sale, but visible disabled notices
+  // can still contradict it. Mark links before slicing away ancestor markup.
+  const disabled = "[disabled], [aria-disabled='true']";
+  $tickets("a").each((_, element) => {
+    const link = $tickets(element);
+    if (link.is(disabled) || link.parents(disabled).length) link.attr("aria-disabled", "true");
+  });
+  $tickets("br").replaceWith(" ");
+  const ticketTitle = text($tickets("title").text());
   let ticketsUrl: string | undefined,
     ticketStatus: "available" | undefined,
     ticketsExcerpt: string | undefined;
   if (edition(ticketTitle, source.editionYear)) {
-    // Scope stock to the general festival pass. Camping, pool, shop and stale
-    // anniversary homepage copy cannot establish available admission tickets.
-    const pass =
-      ticketHtml.match(
-        /<h2\b[^>]*>\s*ABONO LEYENDAS DEL ROCK\s*<\/h2>([\s\S]*?)(?=<h2\b|$)/i,
-      )?.[1] ?? "";
-    const canBuy = [...pass.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)].some((m) => {
-      if (text(m[2]) !== "COMPRAR ABONO" || /\bdisabled\b|aria-disabled=["']true/i.test(m[1]))
-        return false;
-      try {
-        const u = new URL(attr(m[1], "href") ?? "");
-        return (
-          u.origin === "https://www.enterticket.es" &&
-          /^\/eventos\/leyendas-del-rock-\d+$/.test(u.pathname) &&
-          !u.search &&
-          !u.hash &&
-          !u.username &&
-          !u.password
-        );
-      } catch {
-        return false;
+    // Only one current ordinary-pass section, never hidden copies, campsite
+    // products, a stale anniversary banner or disabled purchase controls.
+    const headings = $tickets("h2").filter((_, element) =>
+      /^ABONO LEYENDAS DEL ROCK$/i.test(text($tickets(element).text())),
+    );
+    if (headings.length === 1) {
+      // Stop at the next product heading anywhere in document order, not
+      // only a sibling. Theme layout wrappers can nest later product sections.
+      const serialized = $tickets.html(),
+        heading = headings.first().toString();
+      const after = serialized.slice(serialized.indexOf(heading) + heading.length);
+      const boundary = after.search(/<h2\b/i);
+      const $pass = load(boundary < 0 ? after : after.slice(0, boundary));
+      // DOM text joins adjacent boxes. Preserve their boundaries without
+      // splitting words across ordinary inline formatting.
+      const blockElements =
+        "address, article, aside, blockquote, div, dl, dt, dd, fieldset, figure, " +
+        "figcaption, h1, h3, h4, h5, h6, hr, li, main, ol, p, pre, section, " +
+        "table, td, th, tr, ul";
+      $pass(blockElements + ", [style]").each((_, element) => {
+        const box = $pass(element);
+        const display = box
+          .css("display")
+          ?.replace(/\s*!important\s*$/i, "")
+          .trim();
+        const separatesText = display
+          ? /^(?:(?:inline-)?(?:block|flex|grid|table)|flow-root|list-item|table-cell|table-row)$/i.test(
+              display,
+            )
+          : box.is(blockElements);
+        if (separatesText) {
+          box.before(" ").after(" ");
+        }
+      });
+      const prose = $pass.root().text().replace(/\s+/g, " ").trim();
+      const buy = $pass("a[href]").filter((_, element) => {
+        const link = $pass(element);
+        if (
+          text(link.text()) !== "COMPRAR ABONO" ||
+          link.is("[disabled], [aria-disabled='true']") ||
+          link.parents("[disabled], [aria-disabled='true']").length
+        )
+          return false;
+        try {
+          const target = new URL(link.attr("href") ?? "");
+          return (
+            target.origin === "https://www.enterticket.es" &&
+            /^\/eventos\/leyendas-del-rock-\d+$/.test(target.pathname) &&
+            !target.search &&
+            !target.hash &&
+            !target.username &&
+            !target.password
+          );
+        } catch {
+          return false;
+        }
+      });
+      if (
+        buy.length === 1 &&
+        /Ya se pueden adquirir los abonos para la [IVXLCDM]+ edici[oó]n de Leyendas del Rock/i.test(
+          prose,
+        ) &&
+        !/agotad|sold out|cancelad|no disponibles/i.test(prose)
+      ) {
+        ticketsUrl = LEYENDAS_ORIGIN + "/tickets/";
+        ticketStatus = "available";
+        ticketsExcerpt =
+          ticketTitle +
+          "; " +
+          prose.slice(0, 250) +
+          "; enabled official COMPRAR ABONO: " +
+          buy.attr("href");
       }
-    });
-    if (
-      canBuy &&
-      /Ya se pueden adquirir los abonos para la [IVXLCDM]+ edici[oó]n de Leyendas del Rock/i.test(
-        text(pass),
-      ) &&
-      !/agotad|sold out|cancelad|no disponibles/i.test(text(pass))
-    ) {
-      ticketsUrl = LEYENDAS_ORIGIN + "/tickets/";
-      ticketStatus = "available";
-      ticketsExcerpt = ticketTitle + "; " + text(pass).slice(0, 350);
     }
   }
+  if (!ticketStatus)
+    warnings.push(
+      "Leyendas current ordinary admission stock requires review; no festival sellout inferred",
+    );
   const unique = (names: string[]) => [
     ...new Map(names.map((name) => [name.toLocaleLowerCase(), name])).values(),
   ];

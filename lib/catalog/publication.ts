@@ -4,6 +4,7 @@ import {
   isTolminatorStockRoute,
   matchesTolminatorStockEdition,
 } from "../ingestion/adapters/tolminator-stock.ts";
+import { rosterFingerprint } from "./lineup-proof.ts";
 import { editionDateProblem } from "../domain/edition-dates.ts";
 import { publishArrivalObservation, type ArrivalObservation } from "./arrival-import.ts";
 import {
@@ -15,6 +16,7 @@ import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { isDownloadAnnouncement } from "../ingestion/adapters/download.ts";
 import {
+  AdminRunStatus,
   ArtistIdentityState,
   CatalogPublicationSource,
   FestivalStatus,
@@ -56,6 +58,9 @@ const dateOnly = (value: unknown) =>
 const isoDate = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 const same = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+const trimFact = (value: unknown) => (typeof value === "string" ? value.trim() : value);
+const normalizeTicketLink = (value: unknown) =>
+  typeof value === "string" ? value.trim() || null : value;
 
 function artistSlug(name: string) {
   return encodeURIComponent(
@@ -67,14 +72,16 @@ function artistSlug(name: string) {
 }
 
 function stringList(value: unknown, field: string) {
-  const values = Array.isArray(value)
+  // A structured roster is a full replacement, so dropping an invalid slot
+  // could silently remove existing artists. Only text accepts blank separators.
+  if (Array.isArray(value) && value.some((item) => typeof item !== "string" || !item.trim()))
+    throw new Error(`Invalid ${field} list`);
+  const values: string[] = Array.isArray(value)
     ? value
     : typeof value === "string"
       ? value.split(/\r?\n|,/)
       : [];
-  const cleaned = values
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter(Boolean);
+  const cleaned = values.map((item) => item.trim()).filter(Boolean);
   if (!cleaned.length && value !== "" && (!Array.isArray(value) || value.length))
     throw new Error(`Invalid ${field} list`);
   const keys = cleaned.map((item) => item.toLocaleLowerCase());
@@ -302,10 +309,10 @@ async function applyFestivalChanges(
   const dateChanges = input.changes.filter(
     ({ field }) => field === "startDate" || field === "endDate",
   );
+  const proposed = new Map(
+    dateChanges.map(({ field, after }) => [field, after === "" ? null : after]),
+  );
   if (dateChanges.length) {
-    const proposed = new Map(
-      dateChanges.map(({ field, after }) => [field, after === "" ? null : after]),
-    );
     if (proposed.size !== dateChanges.length) throw new Error("Duplicate festival date changes");
     const start = proposed.has("startDate")
       ? proposed.get("startDate")
@@ -325,16 +332,14 @@ async function applyFestivalChanges(
       case "name":
       case "country":
       case "officialUrl": {
-        current = festival[change.field];
-        if (input.strictBefore && !same(current, change.before) && !same(current, change.after))
+        current = trimFact(festival[change.field]);
+        const before = trimFact(change.before);
+        const next = trimFact(change.after);
+        if (typeof next !== "string" || !next) throw new Error(`Invalid ${change.field}`);
+        if (input.strictBefore && !same(current, before) && !same(current, next))
           throw new Error(`Stale ${change.field} value for ${input.festivalSlug}`);
-        if (!same(current, change.after)) {
-          if (typeof change.after !== "string" || !change.after.trim())
-            throw new Error(`Invalid ${change.field}`);
-          await db.festival.update({
-            where: { id: festival.id },
-            data: { [change.field]: change.after.trim() },
-          });
+        if (!same(current, next)) {
+          await db.festival.update({ where: { id: festival.id }, data: { [change.field]: next } });
           changed = true;
         }
         break;
@@ -342,34 +347,33 @@ async function applyFestivalChanges(
       case "startDate":
       case "endDate": {
         current = isoDate(edition[change.field]);
-        if (input.strictBefore && !same(current, change.before) && !same(current, change.after))
+        const next = proposed.get(change.field);
+        const before = change.before === "" ? null : change.before;
+        if (input.strictBefore && !same(current, before) && !same(current, next))
           throw new Error(`Stale ${change.field} value for ${input.festivalSlug}`);
-        if (!same(current, change.after)) {
+        if (!same(current, next)) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { [change.field]: dateOnly(change.after), sourceUpdatedAt: input.observedAt },
+            data: { [change.field]: dateOnly(next) },
           });
           changed = true;
         }
         break;
       }
       case "ticketsUrl": {
-        current = edition.ticketsUrl;
-        if (input.strictBefore && !same(current, change.before) && !same(current, change.after))
+        current = normalizeTicketLink(edition.ticketsUrl);
+        const next = normalizeTicketLink(change.after);
+        if (next !== null && typeof next !== "string") throw new Error("Invalid ticketsUrl");
+        if (
+          input.strictBefore &&
+          !same(current, normalizeTicketLink(change.before)) &&
+          !same(current, next)
+        )
           throw new Error(`Stale ticketsUrl value for ${input.festivalSlug}`);
-        if (!same(current, change.after)) {
-          if (
-            change.after !== undefined &&
-            change.after !== null &&
-            typeof change.after !== "string"
-          )
-            throw new Error("Invalid ticketsUrl");
+        if (!same(current, next)) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: {
-              ticketsUrl: change.after as string | null | undefined,
-              sourceUpdatedAt: input.observedAt,
-            },
+            data: { ticketsUrl: next },
           });
           changed = true;
         }
@@ -388,7 +392,7 @@ async function applyFestivalChanges(
         if (current !== change.after) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { completeness: "PARTIAL", sourceUpdatedAt: input.observedAt },
+            data: { completeness: "PARTIAL" },
           });
           changed = true;
         }
@@ -404,10 +408,7 @@ async function applyFestivalChanges(
         if (input.strictBefore && !same(current, change.before) && !same(current, change.after))
           throw new Error(`Stale status value for ${input.festivalSlug}`);
         if (edition.status !== next) {
-          await db.festivalEdition.update({
-            where: { id: edition.id },
-            data: { status: next, sourceUpdatedAt: input.observedAt },
-          });
+          await db.festivalEdition.update({ where: { id: edition.id }, data: { status: next } });
           changed = true;
         }
         break;
@@ -422,7 +423,7 @@ async function applyFestivalChanges(
         if (edition.ticketStatus !== next) {
           await db.festivalEdition.update({
             where: { id: edition.id },
-            data: { ticketStatus: next, sourceUpdatedAt: input.observedAt },
+            data: { ticketStatus: next },
           });
           changed = true;
         }
@@ -453,6 +454,14 @@ async function applyFestivalChanges(
         throw new Error(`Unsupported catalogue publication field: ${change.field}`);
     }
     if (changed) changedFields.push(change.field);
+  }
+  // Public festival facts and edition details share this source clock.
+  // A delayed publication must not move it backwards.
+  if (changedFields.length) {
+    await db.festivalEdition.updateMany({
+      where: { id: edition.id, sourceUpdatedAt: { lt: input.observedAt } },
+      data: { sourceUpdatedAt: input.observedAt },
+    });
   }
   return { edition, changedFields: [...new Set(changedFields)] };
 }
@@ -579,6 +588,14 @@ export async function publishIngestionResult(
         return { ...existing, playlistRefreshRequested: Boolean(existing.playlistRefresh) };
       if (candidate.reviewState !== "PENDING")
         throw new Error(`Candidate is not pending: ${candidate.reviewState}`);
+      const observedAt = new Date(stored.fetchedAt);
+      if (
+        !Number.isFinite(observedAt.getTime()) ||
+        stored.fetchedAt !== observed.fetchedAt ||
+        stored.fetchedAt !== input.result.fetchedAt
+      ) {
+        throw new Error("Ingestion publication does not match the persisted observation time");
+      }
       if (candidate.diffs.some(({ reviewRequired }) => reviewRequired))
         throw new Error("Persisted candidate requires review");
       const normalizedDiffs = (values: { field: string; before: unknown; after: unknown }[]) =>
@@ -750,7 +767,7 @@ export async function publishIngestionResult(
         expectedYear,
         changes: input.result.changes,
         strictBefore: true,
-        observedAt: new Date(input.result.fetchedAt),
+        observedAt,
       });
       // Rockharz 2027 publications retain exact edition/source/field and persisted
       // evidence guards. Verified lineup changes use the normal provider queue.
@@ -1141,6 +1158,20 @@ export async function publishAdminFestivalChange(
   const sourceId = `admin:${input.change.id}`;
   const existing = await db.catalogPublication.findUnique({ where: { sourceId } });
   if (existing) return { ...existing, playlistRefreshRequested: existing.lineupChanged };
+  let observedAt = new Date();
+  if (input.change.parserRunId) {
+    const run = await db.adminParserRun.findUnique({ where: { id: input.change.parserRunId } });
+    if (
+      !run?.finishedAt ||
+      run.festivalSlug !== input.change.resourceKey ||
+      (run.status !== AdminRunStatus.SUCCEEDED && run.status !== AdminRunStatus.PARTIAL) ||
+      run.finishedAt < run.startedAt ||
+      run.finishedAt > observedAt
+    ) {
+      throw new Error("Admin change has no completed source check for this festival");
+    }
+    observedAt = run.finishedAt;
+  }
   const afterValue =
     input.change.field === "lineup" || input.change.field === "headliners"
       ? stringList(input.change.afterValue, input.change.field)
@@ -1149,7 +1180,7 @@ export async function publishAdminFestivalChange(
     festivalSlug: input.change.resourceKey,
     changes: [{ field: input.change.field, before: input.change.beforeValue, after: afterValue }],
     strictBefore: Boolean(input.change.parserRunId),
-    observedAt: new Date(),
+    observedAt,
   });
   return createPublication(db, {
     source: CatalogPublicationSource.ADMIN,
@@ -1206,6 +1237,9 @@ export async function publishAgentFestivalResolution(
   });
   if (edition.festival.slug !== input.festivalSlug || edition.recordState !== "CURRENT")
     throw new Error("Reviewed edition mismatch");
+  const finalLineup = input.facts.finalLineup;
+  if (finalLineup && finalLineup.year !== edition.year)
+    throw new Error("Reviewed lineup edition mismatch");
   const dateProblem = editionDateProblem(
     edition.year,
     input.facts.startDate ?? isoDate(edition.startDate),
@@ -1270,14 +1304,15 @@ export async function publishAgentFestivalResolution(
         ...rosterPositions("LINEUP", artistIds.slice(headliners.length), cancelled),
       ]);
       changedFields.push("headliners", "lineup");
-      await db.festivalEdition.update({
-        where: { id: edition.id },
+      await db.festivalEdition.updateMany({
+        where: { id: edition.id, sourceUpdatedAt: { lt: input.observedAt } },
         data: { sourceUpdatedAt: input.observedAt },
       });
     }
   }
+  // A reviewed edition status is not evidence about catalogue completeness.
   const scalar = Object.entries(input.facts)
-    .filter(([field]) => field !== "headliners" && field !== "lineup")
+    .filter(([field]) => field !== "headliners" && field !== "lineup" && field !== "finalLineup")
     .map(([field, after]) => ({ field, after }));
   if (scalar.length) {
     const applied = await applyFestivalChanges(db, {
@@ -1289,24 +1324,27 @@ export async function publishAgentFestivalResolution(
     });
     changedFields.push(...applied.changedFields);
   }
-  if (input.facts.status) {
-    const completeness = {
-      confirmed: "COMPLETE",
-      partial: "PARTIAL",
-      tba: "TBA",
-    } as const;
-    if (edition.completeness !== completeness[input.facts.status]) {
-      await db.festivalEdition.update({
-        where: { id: edition.id },
-        data: { completeness: completeness[input.facts.status] },
-      });
-      changedFields.push("completeness");
-    }
+  if (finalLineup) {
+    const entries = finalLineup.complete
+      ? await db.lineupEntry.findMany({
+          where: { editionId: edition.id },
+          select: { artistId: true, billing: true, status: true },
+        })
+      : [];
+    if (finalLineup.complete && !entries.some((entry) => entry.status === "ANNOUNCED"))
+      throw new Error("A final lineup requires announced artists");
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: {
+        finalLineupFingerprint: finalLineup.complete
+          ? rosterFingerprint(edition.id, entries)
+          : null,
+      },
+    });
+    changedFields.push("finalLineup");
   }
   for (const field of new Set(changedFields)) {
-    const evidence = input.evidence.find(
-      (e) => e.field === field || (field === "completeness" && e.field === "status"),
-    );
+    const evidence = input.evidence.find((e) => e.field === field);
     if (!evidence) throw new Error("Reviewed field has no official evidence");
     await db.editionProvenance.create({
       data: {
