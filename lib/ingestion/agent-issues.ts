@@ -602,7 +602,7 @@ TIME ZONE 'UTC')) FOR UPDATE
           arrivalEvidence.some(
             (e) =>
               !expectedUrls.includes(e.url) ||
-              !allowedArrivalEvidenceUrl(i.festivalSlug, i.current.year, e.url) ||
+              !allowedArrivalEvidenceUrl(i.festivalSlug, i.current.year, i.source.url, e.url) ||
               !/^[a-f0-9]{64}$/.test(e.contentHash) ||
               e.observedAt > now ||
               e.observedAt.getTime() < now.getTime() - 86_400_000,

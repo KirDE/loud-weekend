@@ -236,7 +236,7 @@ for (const source of selected) {
       if (collectReview) {
         if (current.editionYear !== source.editionYear)
           throw new Error("Organizer source does not match the current edition");
-        organizerReview = await collectReview(source);
+        organizerReview = await collectReview(source, fetch, current);
       } else if (!fixturePath) {
         const fetched = await fetchSource(source);
         response = fetched.response;
