@@ -2,11 +2,18 @@
 
 import { useId, useState } from "react";
 import {
-  dateShareQuery, hasDiscoveryDates, readDiscoveryDates, reversedDiscoveryDates, type DiscoveryDates,
+  dateShareQuery,
+  hasDiscoveryDates,
+  readDiscoveryDates,
+  reversedDiscoveryDates,
+  type DiscoveryDates,
 } from "@/lib/discovery-dates";
 import { useLanguage } from "./LanguageProvider";
 
-export function DiscoveryDateFilters({ filters, onChange }: {
+export function DiscoveryDateFilters({
+  filters,
+  onChange,
+}: {
   filters: DiscoveryDates;
   onChange: (patch: Partial<DiscoveryDates>) => void;
 }) {
@@ -34,25 +41,73 @@ export function DiscoveryDateFilters({ filters, onChange }: {
     }
   }
 
-  return <details className="discoveryDates" open={active || undefined}>
-    <summary>{t("dateFilters")}</summary>
-    <fieldset aria-describedby={hintId}>
-      <legend className="srOnly">{t("dateFilters")}</legend>
-      <label>{t("dateFrom")}
-        <input type="date" value={filters.dateFrom} aria-invalid={reversed} onChange={event => update({ dateFrom: readDiscoveryDates({ dateFrom: event.target.value }).dateFrom })}/>
-      </label>
-      <label>{t("dateTo")}
-        <input type="date" value={filters.dateTo} aria-invalid={reversed} onChange={event => update({ dateTo: readDiscoveryDates({ dateTo: event.target.value }).dateTo })}/>
-      </label>
-      <label>{t("dateMaxDays")}
-        <input type="number" min="1" max="99" step="1" inputMode="numeric" placeholder={t("dateAnyDuration")} value={filters.maxDays === "all" ? "" : filters.maxDays}
-          onChange={event => update({ maxDays: readDiscoveryDates({ maxDays: event.target.value }).maxDays })}/>
-      </label>
-      <label className="discoveryWeekend"><input type="checkbox" checked={filters.weekendOnly} onChange={event => update({ weekendOnly: event.target.checked })}/>{t("dateWeekend")}</label>
-    </fieldset>
-    <p id={hintId}>{reversed ? t("dateReversed") : t("dateUnknownExcluded")}</p>
-    {active && !reversed && <button type="button" className="outlineButton" onClick={copyLink}>{t("copyDateFilters")}</button>}
-    {fallbackLink && active && <input className="dateShareFallback" aria-label={t("copyDateFilters")} readOnly value={fallbackLink} onFocus={event => event.target.select()}/>}
-    <span role="status">{copied && active ? t("dateFiltersCopied") : ""}</span>
-  </details>;
+  return (
+    <details className="discoveryDates" open={active || undefined}>
+      <summary>{t("dateFilters")}</summary>
+      <fieldset aria-describedby={hintId}>
+        <legend className="srOnly">{t("dateFilters")}</legend>
+        <label>
+          {t("dateFrom")}
+          <input
+            type="date"
+            value={filters.dateFrom}
+            aria-invalid={reversed}
+            onChange={(event) =>
+              update({ dateFrom: readDiscoveryDates({ dateFrom: event.target.value }).dateFrom })
+            }
+          />
+        </label>
+        <label>
+          {t("dateTo")}
+          <input
+            type="date"
+            value={filters.dateTo}
+            aria-invalid={reversed}
+            onChange={(event) =>
+              update({ dateTo: readDiscoveryDates({ dateTo: event.target.value }).dateTo })
+            }
+          />
+        </label>
+        <label>
+          {t("dateMaxDays")}
+          <input
+            type="number"
+            min="1"
+            max="99"
+            step="1"
+            inputMode="numeric"
+            placeholder={t("dateAnyDuration")}
+            value={filters.maxDays === "all" ? "" : filters.maxDays}
+            onChange={(event) =>
+              update({ maxDays: readDiscoveryDates({ maxDays: event.target.value }).maxDays })
+            }
+          />
+        </label>
+        <label className="discoveryWeekend">
+          <input
+            type="checkbox"
+            checked={filters.weekendOnly}
+            onChange={(event) => update({ weekendOnly: event.target.checked })}
+          />
+          {t("dateWeekend")}
+        </label>
+      </fieldset>
+      <p id={hintId}>{reversed ? t("dateReversed") : t("dateUnknownExcluded")}</p>
+      {active && !reversed && (
+        <button type="button" className="outlineButton" onClick={copyLink}>
+          {t("copyDateFilters")}
+        </button>
+      )}
+      {fallbackLink && active && (
+        <input
+          className="dateShareFallback"
+          aria-label={t("copyDateFilters")}
+          readOnly
+          value={fallbackLink}
+          onFocus={(event) => event.target.select()}
+        />
+      )}
+      <span role="status">{copied && active ? t("dateFiltersCopied") : ""}</span>
+    </details>
+  );
 }

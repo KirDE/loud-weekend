@@ -23,7 +23,8 @@ export function festivalOverlapsMonth(item: Dates, month: number, year?: number)
   if (!Number.isInteger(month) || month < 1 || month > 12) return false;
   const interval = festivalDateInterval(item);
   if (!interval) return false;
-  const first = monthIndex(interval.start), last = monthIndex(interval.end);
+  const first = monthIndex(interval.start),
+    last = monthIndex(interval.end);
   if (year !== undefined) {
     const target = year * 12 + month - 1;
     return target >= first && target <= last;
@@ -33,14 +34,22 @@ export function festivalOverlapsMonth(item: Dates, month: number, year?: number)
 }
 
 export function availableFestivalMonths(items: Dates[]): number[] {
-  return Array.from({ length: 12 }, (_, index) => index + 1)
-    .filter(month => items.some(item => festivalOverlapsMonth(item, month)));
+  return Array.from({ length: 12 }, (_, index) => index + 1).filter((month) =>
+    items.some((item) => festivalOverlapsMonth(item, month)),
+  );
 }
 
 export function formatFestivalDateRange(item: Dates, locale: string, unknown: string): string {
   const interval = festivalDateInterval(item);
   if (!interval) return unknown;
-  const formatter = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const formatter = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
   const start = formatter.format(interval.start);
-  return interval.start.valueOf() === interval.end.valueOf() ? start : `${start} – ${formatter.format(interval.end)}`;
+  return interval.start.valueOf() === interval.end.valueOf()
+    ? start
+    : `${start} – ${formatter.format(interval.end)}`;
 }

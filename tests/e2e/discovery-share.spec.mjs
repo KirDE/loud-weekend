@@ -1,18 +1,42 @@
 import { expect, test } from "@playwright/test";
 
 const labels = {
-  en: { share: "Share filters", text: "Include search text", artists: "Include artists used for sorting", copy: "Copy filter link", copied: "Filter link copied." },
-  de: { share: "Filter teilen", text: "Suchtext einschließen", artists: "Künstler für die Sortierung einschließen", copy: "Filterlink kopieren", copied: "Filterlink kopiert." },
-  ru: { share: "Поделиться фильтрами", text: "Добавить текст поиска", artists: "Добавить исполнителей для сортировки", copy: "Скопировать ссылку на фильтры", copied: "Ссылка на фильтры скопирована." },
+  en: {
+    share: "Share filters",
+    text: "Include search text",
+    artists: "Include artists used for sorting",
+    copy: "Copy filter link",
+    copied: "Filter link copied.",
+  },
+  de: {
+    share: "Filter teilen",
+    text: "Suchtext einschließen",
+    artists: "Künstler für die Sortierung einschließen",
+    copy: "Filterlink kopieren",
+    copied: "Filterlink kopiert.",
+  },
+  ru: {
+    share: "Поделиться фильтрами",
+    text: "Добавить текст поиска",
+    artists: "Добавить исполнителей для сортировки",
+    copy: "Скопировать ссылку на фильтры",
+    copied: "Ссылка на фильтры скопирована.",
+  },
 };
 const storageKey = "festival-radar-planner-v1";
 
 for (const [locale, t] of Object.entries(labels)) {
-  test(`copy only selected search details and restore a localized link (${locale})`, async ({ page, context, browser, baseURL }) => {
+  test(`copy only selected search details and restore a localized link (${locale})`, async ({
+    page,
+    context,
+    browser,
+    baseURL,
+  }) => {
     await page.setViewportSize({ width: 375, height: 850 });
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-    await page.addInitScript(key => {
-      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ favoriteArtists: ["artist:second-artist"] }));
+    await page.addInitScript((key) => {
+      if (!localStorage.getItem(key))
+        localStorage.setItem(key, JSON.stringify({ favoriteArtists: ["artist:second-artist"] }));
     }, storageKey);
     await page.goto(`/${locale}/`);
     const search = page.locator(".search input");
@@ -37,17 +61,31 @@ for (const [locale, t] of Object.entries(labels)) {
     const other = await browser.newContext({ baseURL, viewport: { width: 375, height: 850 } });
     try {
       const recipient = await other.newPage();
-      await recipient.addInitScript(key => {
-        if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ savedFilters: { query: "Synthetic Alpine" } }));
+      await recipient.addInitScript((key) => {
+        if (!localStorage.getItem(key))
+          localStorage.setItem(
+            key,
+            JSON.stringify({ savedFilters: { query: "Synthetic Alpine" } }),
+          );
       }, storageKey);
       await recipient.goto(link);
       const recipientSearch = recipient.locator(".search input");
       await expect(recipientSearch).toHaveValue("Synthetic Fest");
       await expect(recipient.locator(".festivalCard h2")).toHaveText(["Synthetic Fest"]);
-      await expect(recipient.locator("link[rel=canonical]")).toHaveAttribute("href", new RegExp(`/${locale}/$`));
+      await expect(recipient.locator("link[rel=canonical]")).toHaveAttribute(
+        "href",
+        new RegExp(`/${locale}/$`),
+      );
       await recipientSearch.fill("Synthetic West");
       await expect(recipient).toHaveURL(link);
-      await expect.poll(() => recipient.evaluate(key => JSON.parse(localStorage.getItem(key))?.savedFilters?.query, storageKey)).toBe("Synthetic Alpine");
+      await expect
+        .poll(() =>
+          recipient.evaluate(
+            (key) => JSON.parse(localStorage.getItem(key))?.savedFilters?.query,
+            storageKey,
+          ),
+        )
+        .toBe("Synthetic Alpine");
       await recipient.locator(".clearFilters").click();
       await expect(recipient).toHaveURL(`/${locale}/`);
       await expect(recipientSearch).toHaveValue("Synthetic Alpine");
@@ -55,7 +93,9 @@ for (const [locale, t] of Object.entries(labels)) {
       await expect(recipientSearch).toHaveValue("Synthetic Fest");
       await recipient.goForward();
       await expect(recipientSearch).toHaveValue("Synthetic Alpine");
-      await expect.poll(() => recipient.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+      await expect
+        .poll(() => recipient.evaluate(() => document.documentElement.scrollWidth))
+        .toBeLessThanOrEqual(375);
     } finally {
       await other.close();
     }
