@@ -407,6 +407,10 @@
   margin-top: 1rem;
 }
 
+.siteInformation p {
+  line-height: 1.6;
+}
+
 .plannerSection details p {
   max-width: 54rem;
 }
@@ -622,6 +626,10 @@
 }
 
 .personalCalendar a:where(:not(.primaryButton)) {
+  text-decoration: underline;
+}
+
+.siteInformation a {
   text-decoration: underline;
 }
 
@@ -2204,10 +2212,6 @@ main {
     margin-left: auto;
   }
 
-  .siteHeader nav a:last-child {
-    display: none;
-  }
-
   .hero {
     padding-top: 45px;
   }
@@ -3298,6 +3302,10 @@ select:not(:disabled) {
   cursor: pointer;
 }
 
+.discoveryOrder select {
+  max-width: 100%;
+}
+
 select:not(:disabled):is(:hover, :focus-visible) {
   background: var(--acid);
   color: var(--solid);
@@ -3307,6 +3315,14 @@ select option,
 select optgroup {
   background: var(--paper);
   color: var(--ink);
+}
+
+.discoveryOrder label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 summary:is(:hover, :focus-visible),
@@ -3491,6 +3507,38 @@ summary:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.siteFooterLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.siteInformation {
+  max-width: 760px;
+  margin-inline: auto;
+  padding: 36px clamp(20px, 6vw, 44px);
+}
+
+.siteInformation h1 {
+  margin-block: 0 12px;
+}
+
+.siteInformation details {
+  border-block-start: 1px solid var(--line);
+  padding-block: 12px;
+}
+
+.siteInformation summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding-block: 8px;
+}
+
+.siteInformation details:last-of-type {
+  border-block-end: 1px solid var(--line);
+  margin-block-end: 20px;
+}
+
 .discoveryDates {
   grid-column: 1 / -1;
   flex: 1 1 100%;
@@ -3547,6 +3595,12 @@ summary:focus-visible {
 
 .discoveryDates [role="status"] {
   margin-inline-start: 6px;
+}
+
+.discoveryOrder {
+  display: flex;
+  justify-content: flex-end;
+  margin-block: 12px 0;
 }
 
 .personalCalendar li {
