@@ -11,6 +11,7 @@ enum SyncKind {
   COLLECTIONS
   SAVED_FILTERS
   FESTIVAL_PLANS
+  TRIP_BUDGETS
 }
 
 enum NotificationChannel {
@@ -126,6 +127,7 @@ enum TicketStatus {
   NOT_ON_SALE
   SOLD_OUT
   SALES_ENDED
+  FREE
   UNAVAILABLE
   UNKNOWN
 }
@@ -194,6 +196,15 @@ model User {
   submissionAuditEntries    FestivalSubmissionAudit[]
   emailVerificationTokens   EmailVerificationToken[]
   passkeys                  Passkey[]
+  calendarSubscription      CalendarSubscription?
+}
+
+model CalendarSubscription {
+  userId    String   @id
+  keyDigest String   @unique
+  seasons   Int[]
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Passkey {
@@ -314,18 +325,60 @@ model FestivalEdition {
   recordState     EditionRecordState
   completeness    EditionCompleteness
   sourceUpdatedAt DateTime
+  finalLineupFingerprint String?
   snapshotAt      DateTime?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   festival        Festival               @relation(fields: [festivalId], references: [id], onDelete: Cascade)
   lineup          LineupEntry[]
   provenance      EditionProvenance[]
+  arrivalFacts    EditionArrivalFact[]
   timetable       TimetablePerformance[]
   playlists       FestivalPlaylist[]
+  playlistLinks   FestivalPlaylistLink[]
   sources         FestivalSource[]
+
+  overview        EditionOverview?
 
   @@unique([festivalId, year])
   @@index([year, recordState])
+}
+
+model EditionOverview {
+  editionId     String          @id
+  city          String
+  countryCode   String
+  organizerHost String
+  checkedOn     DateTime        @db.Date
+  sourceUrls    String[]
+  summaryEn     String
+  summaryDe     String
+  summaryRu     String
+  edition       FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+}
+
+enum EditionArrivalKind {
+  venue
+  shuttle
+  railShuttle
+  camper
+}
+
+model EditionArrivalFact {
+  editionId           String
+  kind                EditionArrivalKind
+  editionYear         Int
+  countryCode         String             @db.Char(2)
+  organizerHost       String
+  descriptionEn       String
+  descriptionDe       String
+  descriptionRu       String
+  sourceUrl           String
+  supportingSourceUrl String?
+  checkedOn           DateTime           @db.Date
+  edition             FestivalEdition    @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, kind])
 }
 
 model Artist {
@@ -454,6 +507,16 @@ model FestivalPlaylist {
 
   @@unique([editionId, provider])
   @@unique([provider, url])
+}
+
+/// Reviewed public links are not managed provider bindings or write targets.
+model FestivalPlaylistLink {
+  editionId String
+  provider  String
+  url       String
+  edition   FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, provider])
 }
 
 model FestivalSource {
@@ -901,4 +964,55 @@ model OperationalState {
   leaseOwner     String?
   leaseExpiresAt DateTime?
   updatedAt      DateTime @updatedAt
+}
+
+
+model GeographicOrigin {
+  id          String  @id
+  countryCode String
+  name        String
+  searchName  String
+  region      String?
+  postalCode  String?
+  postalKey   String?
+  latitude    Float
+  longitude   Float
+
+  @@index([searchName(ops: raw("text_pattern_ops"))], map: "GeographicOrigin_searchName_prefix_idx")
+  @@index([postalKey])
+}
+
+enum CorrectionKind {
+  DATE
+  LINEUP
+  TICKETS
+  IDENTITY
+}
+
+enum CorrectionStatus {
+  PENDING
+  ACCEPTED
+  DISMISSED
+}
+
+model CorrectionReport {
+  id           String           @id @default(cuid())
+  targetName   String
+  editionId    String?
+  editionYear  Int?
+  artistId     String?
+  kind         CorrectionKind
+  sourceUrl    String
+  notes        String?
+  fingerprint  String
+  reporterHash String
+  submittedAt  DateTime         @default(now())
+  status       CorrectionStatus @default(PENDING)
+  reviewedAt   DateTime?
+  reviewerId   String?
+
+  @@index([status, submittedAt])
+  @@index([reporterHash, submittedAt])
+  @@index([fingerprint, submittedAt])
+  @@index([submittedAt])
 }

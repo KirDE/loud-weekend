@@ -407,6 +407,10 @@
   margin-top: 1rem;
 }
 
+.siteInformation p {
+  line-height: 1.6;
+}
+
 .plannerSection details p {
   max-width: 54rem;
 }
@@ -548,7 +552,7 @@
   inset: 9% 15% 8% 18%;
   display: grid;
   place-items: center;
-  color: #9a9a85;
+  color: #62634f;
   font:
     clamp(60px, 13vw, 170px) "Archivo Black",
     sans-serif;
@@ -576,8 +580,8 @@
   transform: translate(-50%, -50%);
   z-index: 2;
 }
-
-.mapMarker summary {
+/* stylelint-disable-next-line no-descending-specificity -- Map buttons do not share notification styles. */
+.mapMarker > button {
   list-style: none;
   display: grid;
   place-items: center;
@@ -586,24 +590,39 @@
   border: 3px solid white;
   border-radius: 50%;
   background: var(--orange);
-  color: white;
+  color: var(--solid);
   font-weight: 900;
   cursor: pointer;
   box-shadow: 0 3px 12px #0005;
 }
-
-.mapMarker summary::-webkit-details-marker {
-  display: none;
-}
-
-/* stylelint-disable-next-line no-descending-specificity
-   -- Preserve component cascade against earlier .channelRow > span:first-child.
-*/
-.mapMarker summary span {
+/* stylelint-disable-next-line no-descending-specificity -- Map labels are not channel labels. */
+.mapMarker > button span {
   position: absolute;
   top: 42px;
   color: var(--ink);
   font-size: 10px;
+  padding-inline: 0.2em;
+  background: var(--paper);
+  border-radius: 0.2em;
+}
+
+.mapMarker[data-open="true"] {
+  z-index: 3;
+}
+
+.mapTextList {
+  margin-block: 1rem;
+}
+
+.mapTextList summary {
+  cursor: pointer;
+  width: fit-content;
+  min-height: 44px;
+  padding-block: 0.6rem;
+}
+
+.mapTextList a {
+  text-decoration: underline;
 }
 
 /* stylelint-disable-next-line no-descending-specificity
@@ -619,6 +638,24 @@
   background: var(--paper);
   border: 2px solid var(--ink);
   box-shadow: 7px 7px 0 #17171244;
+}
+
+.catalogueGroups a {
+  display: inline-block;
+  min-height: 32px;
+  padding-block: 6px;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.personalCalendar a:where(:not(.primaryButton)) {
+  text-decoration: underline;
+}
+
+.editionHistory a,
+.siteInformation a {
+  text-decoration: underline;
 }
 
 .mapMarker > div a {
@@ -1047,7 +1084,7 @@ main {
 /* stylelint-disable-next-line no-descending-specificity
    -- Preserve component cascade against earlier .notificationPage button:disabled.
 */
-.search button {
+.search > button {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
@@ -1059,7 +1096,7 @@ main {
   cursor: pointer;
 }
 
-.search button:focus-visible {
+.search > button:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
@@ -1067,7 +1104,7 @@ main {
 /* stylelint-disable-next-line no-descending-specificity
    -- Preserve component cascade against earlier .channelRow > span:first-child.
 */
-.search button span {
+.search > button span {
   font-size: 19px;
 }
 
@@ -1148,6 +1185,8 @@ main {
 
 .resultMeta {
   display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
   justify-content: space-between;
   margin: 35px 0 15px;
   color: var(--muted);
@@ -1448,6 +1487,18 @@ main {
   background-image: radial-gradient(circle at 90% 20%, #574d10, transparent 30%);
 }
 
+.editionDetailBody {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.editionDetailHero .status {
+  display: inline-block;
+  max-width: 100%;
+  white-space: normal;
+}
+
 .detailHero h1 {
   font-size: clamp(45px, 7vw, 96px);
   max-width: 920px;
@@ -1716,6 +1767,29 @@ main {
   font-weight: 800;
 }
 
+.timetableFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-block: 12px;
+}
+
+.timetableFilters label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.timetableFilters select {
+  max-width: 100%;
+  min-width: 0;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
 .timetableDay {
   margin-top: 22px;
 }
@@ -1917,6 +1991,24 @@ main {
 .artistActions a:is(:hover, :focus-visible) {
   background: var(--acid);
   color: var(--solid);
+}
+
+.seasonNavigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-block: 16px;
+}
+
+/* stylelint-disable-next-line no-descending-specificity -- Season links do not share map styles. */
+.seasonNavigation a {
+  padding: 6px 4px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.seasonNavigation a[aria-current="page"] {
+  font-weight: 800;
 }
 
 .directoryPage {
@@ -2163,10 +2255,6 @@ main {
     margin-left: auto;
   }
 
-  .siteHeader nav a:last-child {
-    display: none;
-  }
-
   .hero {
     padding-top: 45px;
   }
@@ -2193,10 +2281,6 @@ main {
 
   .festivalCard {
     min-height: 350px;
-  }
-
-  .resultMeta span:last-child {
-    display: none;
   }
 
   .detailHero {
@@ -3255,10 +3339,58 @@ button:focus-visible,
   outline-offset: 3px;
 }
 
+.tripBudgetEdition,
+.tripBudgetFields label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.tripBudgetEdition {
+  max-width: 28rem;
+}
+
+.tripBudgetFields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.tripBudgetFields input,
+.tripBudgetFields select,
+.tripBudgetEdition select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.4rem 0.6rem;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid currentcolor;
+  border-radius: 0.25rem;
+}
+
+.tripBudgetComparison {
+  padding-inline-start: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.tripBudgetComparison li {
+  margin-block: 0.5rem;
+}
+
+.tripBudgetComparison strong {
+  margin-inline-start: 0.75rem;
+}
+
 /* All framed controls need feedback, including native select triggers. Keep
    options neutral when the browser uses these styles for its native popup. */
 select:not(:disabled) {
   cursor: pointer;
+}
+
+.discoveryOrder select {
+  max-width: 100%;
 }
 
 select:not(:disabled):is(:hover, :focus-visible) {
@@ -3270,6 +3402,14 @@ select option,
 select optgroup {
   background: var(--paper);
   color: var(--ink);
+}
+
+.discoveryOrder label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 summary:is(:hover, :focus-visible),
@@ -3409,4 +3549,272 @@ summary:focus-visible {
 
 .plannerReset [role="status"] {
   max-width: 28rem;
+}
+
+.correctionReport {
+  margin-block: 2rem;
+  max-width: 38rem;
+}
+
+.correctionReportSummary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.correctionReportFields,
+.correctionReportLabel {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.correctionReportFields {
+  margin-top: 1rem;
+  gap: 1rem;
+}
+
+.correctionReportInput {
+  width: 100%;
+  min-width: 0;
+  padding: 0.6rem;
+}
+
+.correctionReportSubmit {
+  justify-self: start;
+}
+
+.correctionQueue {
+  max-width: 55rem;
+  margin: 2rem auto;
+  padding-inline: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.correctionQueueNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block: 1rem;
+}
+
+.correctionQueueLink {
+  text-decoration: underline;
+}
+
+.siteHeader nav a[aria-current] {
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+.catalogueGroups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 18px 28px;
+  margin-top: 28px;
+}
+
+.catalogueGroups section {
+  min-width: 0;
+  margin: 0;
+}
+
+.catalogueGroups ul {
+  list-style: none;
+  padding: 0;
+}
+
+.browseArtistSearch {
+  display: grid;
+  gap: 6px;
+}
+
+.browseArtistSearch input {
+  min-width: 0;
+  padding: 8px;
+  width: 100%;
+}
+
+.playlistCoverage {
+  display: grid;
+  gap: 3px;
+  margin-block-start: 8px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.siteFooterLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.siteInformation {
+  max-width: 760px;
+  margin-inline: auto;
+  padding: 36px clamp(20px, 6vw, 44px);
+}
+
+.siteInformation h1 {
+  margin-block: 0 12px;
+}
+
+.siteInformation details {
+  border-block-start: 1px solid var(--line);
+  padding-block: 12px;
+}
+
+.siteInformation summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding-block: 8px;
+}
+
+.siteInformation details:last-of-type {
+  border-block-end: 1px solid var(--line);
+  margin-block-end: 20px;
+}
+
+.discoveryDates {
+  grid-column: 1 / -1;
+  flex: 1 1 100%;
+  color: white;
+}
+
+.discoveryDates summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.discoveryDates fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.filterBar .discoveryDates label {
+  flex: 1 1 140px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.discoveryDates input:not([type="checkbox"]) {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  padding: 8px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.filterBar .discoveryDates label.discoveryWeekend {
+  display: flex;
+  flex: 1 1 200px;
+  align-items: center;
+}
+
+.filterBar .discoveryDates p {
+  font-size: 13px;
+  margin: 6px 0;
+}
+
+.discoveryDates .dateShareFallback {
+  display: block;
+  margin-top: 6px;
+}
+
+.discoveryDates [role="status"] {
+  margin-inline-start: 6px;
+}
+
+/* stylelint-disable no-descending-specificity -- Keep an explicit focus ring on map controls. */
+.mapMarker > button:focus-visible,
+.mapTextList summary:focus-visible,
+.mapTextList a:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+/* stylelint-enable no-descending-specificity */
+
+.discoveryOrder {
+  display: flex;
+  justify-content: flex-end;
+  margin-block: 12px 0;
+}
+
+.artistMatchSummary {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.discoverySearch {
+  position: relative;
+}
+
+.discoverySuggestions {
+  position: absolute;
+  z-index: 8;
+  inset: calc(100% + 5px) auto auto 0;
+  width: min(340px, 100%);
+  max-height: min(350px, 50vh);
+  overflow: auto;
+  padding: 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.discoverySuggestions section + section {
+  margin-top: 10px;
+}
+
+.discoverySuggestions ul {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0;
+}
+
+:where(.discoverySearch) .discoverySuggestions :where(a, button) {
+  display: block;
+  width: 100%;
+  height: auto;
+  text-align: start;
+  padding: 6px 2px;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
+.personalCalendar li {
+  margin-block: 8px;
+}
+
+.personalCalendarConflicts {
+  margin-block: 16px;
+  padding: 12px 16px;
+  border-inline-start: 4px solid var(--orange);
+}
+
+.personalCalendarConflicts h3 {
+  margin: 0;
+}
+
+.editionHistory {
+  border-top: 1px solid var(--line);
+  padding-block: 2rem;
+}
+
+.editionHistory ol {
+  padding-inline-start: 1.25rem;
+}
+
+.editionHistory li + li {
+  margin-top: 1rem;
+}
+
+.editionHistory time {
+  color: var(--muted);
 }

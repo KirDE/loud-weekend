@@ -1,6 +1,8 @@
+import { load } from "cheerio";
 import type { FestivalCandidate, FestivalSource, FieldEvidence } from "../types.ts";
 import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 import { validateGenericLineup } from "../lineup-quality.ts";
+import { festivalDateInterval } from "../../festival-dates.ts";
 
 type JsonLd = Record<string, unknown>;
 
@@ -13,10 +15,12 @@ function records(value: unknown): JsonLd[] {
 
 function eventRecords(html: string): { event: JsonLd; excerpt: string }[] {
   const events: { event: JsonLd; excerpt: string }[] = [];
-  const scriptPattern =
-    /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-  for (const match of html.matchAll(scriptPattern)) {
-    const source = match[1].trim();
+  const $ = load(html);
+  $("template").remove();
+  for (const element of $("script[type]").toArray()) {
+    const script = $(element);
+    if (script.attr("type")?.trim().toLowerCase() !== "application/ld+json") continue;
+    const source = script.text().trim();
     if (!source) continue;
     try {
       const parsed = JSON.parse(source);
@@ -25,7 +29,7 @@ function eventRecords(html: string): { event: JsonLd; excerpt: string }[] {
         if (
           types.some((type) => typeof type === "string" && type.toLowerCase().endsWith("event"))
         ) {
-          events.push({ event: record, excerpt: source.slice(0, 500) });
+          events.push({ event: record, excerpt: JSON.stringify(record).slice(0, 500) });
         }
       }
     } catch {
@@ -42,13 +46,20 @@ function text(value: unknown): string | undefined {
   return undefined;
 }
 
-function date(value: unknown): string | undefined {
-  const valueText = text(value);
-  if (!valueText) return undefined;
-  const plainDate = valueText.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
-  if (plainDate) return plainDate;
-  const parsed = new Date(valueText);
-  return Number.isNaN(parsed.valueOf()) ? undefined : parsed.toISOString().slice(0, 10);
+function eventDate(value: unknown): { day: string; instant?: number } | undefined {
+  if (typeof value !== "string") return undefined;
+  const valueText = value.trim();
+  const plainDate = valueText.match(
+    /^(\d{4}-\d{2}-\d{2})(?:[Tt ](?:[01]\d|2[0-3]):\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})?)?$/,
+  )?.[1];
+  const parsed = Date.parse(valueText);
+  if (!plainDate || !festivalDateInterval({ startDate: plainDate }) || !Number.isFinite(parsed)) {
+    return undefined;
+  }
+  // Use the local date in the official timestamp, not its UTC day.
+  const hasOffset =
+    valueText.length > plainDate.length && /(?:z|[+-]\d{2}:?\d{2})$/i.test(valueText);
+  return { day: plainDate, instant: hasOffset ? parsed : undefined };
 }
 
 function city(location: unknown): string | undefined {
@@ -127,9 +138,22 @@ export function extractJsonLdCandidate(
   source: FestivalSource,
   fetchedAt: string,
 ): FestivalCandidate {
-  const matches = eventRecords(html);
-  const matching = matches.filter(({ event }) =>
-    date(event.startDate)?.startsWith(`${source.editionYear}-`),
+  const events = eventRecords(html).map((record) => ({
+    ...record,
+    startDate: eventDate(record.event.startDate),
+    endDate: eventDate(record.event.endDate),
+  }));
+  const matches = events.filter(({ startDate, endDate }) => {
+    if (!startDate || !endDate) return true;
+    if (!festivalDateInterval({ startDate: startDate.day, endDate: endDate.day })) return false;
+    return (
+      startDate.instant === undefined ||
+      endDate.instant === undefined ||
+      endDate.instant >= startDate.instant
+    );
+  });
+  const matching = matches.filter(({ startDate }) =>
+    startDate?.day.startsWith(`${source.editionYear}-`),
   );
   const selected = matching[0] ?? matches[0];
   const candidate: FestivalCandidate = {
@@ -142,20 +166,26 @@ export function extractJsonLdCandidate(
     observedEditionYears: [],
   };
 
+  if (matches.length !== events.length)
+    candidate.warnings.push("JSON-LD Event end date precedes its start date");
   if (!selected) {
-    candidate.warnings.push("No JSON-LD Event was found");
+    if (!events.length) candidate.warnings.push("No JSON-LD Event was found");
     return candidate;
   }
 
   const fields = {
-    startDate: date(selected.event.startDate),
-    endDate: date(selected.event.endDate),
+    startDate: selected.startDate?.day,
+    endDate: selected.endDate?.day,
     city: city(selected.event.location),
     lineup: names(selected.event.performer),
     ticketsUrl: ticketUrl(selected.event.offers),
     ticketStatus: ticketStatus(selected.event.offers),
     timetable: timetable(selected.event.subEvent),
   };
+  if (selected.event.startDate != null && fields.startDate === undefined)
+    candidate.warnings.push("JSON-LD Event contains an invalid start date");
+  if (selected.event.endDate != null && fields.endDate === undefined)
+    candidate.warnings.push("JSON-LD Event contains an invalid end date");
   const lineupQuality = validateGenericLineup(fields.lineup ?? []);
   fields.lineup = lineupQuality.names.length
     ? lineupQuality.names
@@ -163,7 +193,7 @@ export function extractJsonLdCandidate(
       ? undefined
       : [];
   candidate.warnings.push(...lineupQuality.warnings);
-  const observedYear = Number(date(selected.event.startDate)?.slice(0, 4));
+  const observedYear = Number(fields.startDate?.slice(0, 4));
   if (Number.isFinite(observedYear)) candidate.observedEditionYears.push(observedYear);
   if (matches.length && matching.length === 0 && candidate.observedEditionYears.length) {
     candidate.warnings.push(
@@ -177,12 +207,18 @@ export function extractJsonLdCandidate(
   for (const [field, value] of Object.entries(fields)) {
     if (value === undefined) continue;
     Object.assign(candidate, { [field]: value });
+    const evidenceField = field as FieldEvidence["field"];
     candidate.evidence.push({
-      field: field as FieldEvidence["field"],
+      field: evidenceField,
       sourceUrl: source.url,
       observedAt: fetchedAt,
       excerpt: selected.excerpt,
     });
+    // Keep the parsed values for diagnostics but do not treat document order
+    // as proof that this Event belongs to the selected festival edition.
+    if (matching.length > 1 && evidenceField !== "timetable") {
+      (candidate.fieldEditionYears ??= {})[evidenceField] = [];
+    }
   }
 
   const eventStatus = text(selected.event.eventStatus)?.toLowerCase();

@@ -1,6 +1,7 @@
 import type { Festival } from "@/lib/domain/festival";
 
 type TicketLabel =
+  | "ticketsFree"
   | "officialTickets"
   | "ticketsLow"
   | "ticketsNotOnSale"
@@ -15,6 +16,10 @@ export type TicketPresentation = {
 };
 
 export function ticketPresentation(item: Festival): TicketPresentation {
+  // Free, unticketed admission has no purchase flow. Ancillary camping/VIP
+  // ticket URLs must not become a misleading general-admission CTA.
+  if (item.ticketStatus === "free")
+    return { status: "free", href: item.officialUrl || undefined, label: "ticketsFree" };
   const href = item.ticketsUrl || undefined;
   // A missing link cannot prove a sellout. Keep known negative states truthful,
   // but do not advertise an actionable offer without an official destination.
