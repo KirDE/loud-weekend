@@ -25,24 +25,30 @@ const localizedDetail = /^\/(?:(?:en|de|ru)\/)?(?:festivals|artists)\/[^/]+\/$/;
 
 // A header may scope a rule to a crawler. Image preview limits also use
 // a colon, but "none" in that value position is not an indexing directive.
-const noIndexHeader = /(?:^|,)\s*(?:(?!max-image-preview\s*:)[\w-]+\s*:\s*)?(?:noindex|none)\s*(?:,|$)/i;
+const noIndexHeader =
+  /(?:^|,)\s*(?:(?!max-image-preview\s*:)[\w-]+\s*:\s*)?(?:noindex|none)\s*(?:,|$)/i;
 
 async function get(origin, path, mime, limit) {
   const response = await fetch(new URL(path, origin), {
-    redirect: "manual", signal: AbortSignal.timeout(10_000),
+    redirect: "manual",
+    signal: AbortSignal.timeout(10_000),
     headers: { "User-Agent": mime.includes("text/html") ? htmlMonitor : monitor },
   });
   const type = response.headers.get("content-type")?.split(";")[0];
   if (response.status !== 200 || !mime.includes(type) || !response.body) {
     await response.body?.cancel();
-    throw new Error(`${path}: expected HTTP 200 and ${mime.join(" or ")}, got ${response.status} ${type ?? ""}`);
+    throw new Error(
+      `${path}: expected HTTP 200 and ${mime.join(" or ")}, got ${response.status} ${type ?? ""}`,
+    );
   }
   if (noIndexHeader.test(response.headers.get("x-robots-tag") ?? "")) {
     await response.body.cancel();
     throw new Error(`${path}: X-Robots-Tag disallows indexing`);
   }
-  const reader = response.body.getReader(), decoder = new TextDecoder();
-  let result = "", size = 0;
+  const reader = response.body.getReader(),
+    decoder = new TextDecoder();
+  let result = "",
+    size = 0;
   while (true) {
     const { value, done } = await reader.read();
     if (done) return result + decoder.decode();
@@ -87,24 +93,43 @@ export function inspectSitemap(xml, now = Date.now()) {
     assert.equal(xmlNamespace(location[0], "xmlns"), namespace, "invalid loc namespace");
     assert.equal(location.children().length, 0, "invalid loc content");
     const path = canonicalPath(location.text());
-    assert.ok(fixedPaths.includes(path) || localizedDetail.test(path) || routeClasses.some(type => type.test(path)),
-      `unsupported sitemap path: ${path}`);
+    assert.ok(
+      fixedPaths.includes(path) ||
+        localizedDetail.test(path) ||
+        routeClasses.some((type) => type.test(path)),
+      `unsupported sitemap path: ${path}`,
+    );
     assert.ok(!entries.has(path), `duplicate sitemap path: ${path}`);
     const timestamps = entry.children("lastmod");
     assert.ok(timestamps.length <= 1, `duplicate lastmod on ${path}`);
     if (timestamps.length) {
-      assert.equal(xmlNamespace(timestamps[0], "xmlns"), namespace, `invalid lastmod namespace on ${path}`);
+      assert.equal(
+        xmlNamespace(timestamps[0], "xmlns"),
+        namespace,
+        `invalid lastmod namespace on ${path}`,
+      );
       assert.equal(timestamps.children().length, 0, `invalid lastmod content on ${path}`);
-      const stamp = timestamps.text(), date = new Date(stamp);
-      assert.ok(date.getTime() <= now && (date.toISOString() === stamp || date.toISOString().slice(0, 10) === stamp),
-        `invalid/future lastmod on ${path}`);
+      const stamp = timestamps.text(),
+        date = new Date(stamp);
+      assert.ok(
+        date.getTime() <= now &&
+          (date.toISOString() === stamp || date.toISOString().slice(0, 10) === stamp),
+        `invalid/future lastmod on ${path}`,
+      );
     }
     const alternates = new Map();
     for (const link of entry.children("xhtml\\:link")) {
-      assert.equal(xmlNamespace(link, "xmlns:xhtml"), xhtmlNamespace, `invalid alternate namespace on ${path}`);
+      assert.equal(
+        xmlNamespace(link, "xmlns:xhtml"),
+        xhtmlNamespace,
+        `invalid alternate namespace on ${path}`,
+      );
       const attrs = link.attribs;
       assert.equal(attrs.rel, "alternate");
-      assert.ok(languages.includes(attrs.hreflang) && !alternates.has(attrs.hreflang), `invalid hreflang on ${path}`);
+      assert.ok(
+        languages.includes(attrs.hreflang) && !alternates.has(attrs.hreflang),
+        `invalid hreflang on ${path}`,
+      );
       alternates.set(attrs.hreflang, canonicalPath(attrs.href));
     }
     entries.set(path, alternates);
@@ -119,7 +144,11 @@ export function inspectSitemap(xml, now = Date.now()) {
     for (const lang of languages) {
       const target = lang === "x-default" ? barePath : `/${lang}${barePath}`;
       assert.equal(alternates.get(lang), target, `incorrect hreflang ${lang} on ${path}`);
-      assert.deepEqual(entries.get(target), alternates, `nonreciprocal hreflang: ${path} → ${target}`);
+      assert.deepEqual(
+        entries.get(target),
+        alternates,
+        `nonreciprocal hreflang: ${path} → ${target}`,
+      );
     }
   }
   for (const path of ["/", "/en/", "/de/", "/ru/"]) {
@@ -138,14 +167,28 @@ function outsideTemplate(_, element) {
 }
 
 export async function checkIndexing(origin = site) {
-  assert.ok(origin === site || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin), "use the public site or a loopback test origin");
+  assert.ok(
+    origin === site || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin),
+    "use the public site or a loopback test origin",
+  );
   const robots = await get(origin, "/robots.txt", ["text/plain"], 64_000);
-  assert.match(robots, /^User-agent:[ \t]*\*[ \t]*(?:#[^\r\n]*)?\r?$/mi, "missing default robots.txt group");
+  assert.match(
+    robots,
+    /^User-agent:[ \t]*\*[ \t]*(?:#[^\r\n]*)?\r?$/im,
+    "missing default robots.txt group",
+  );
   const rules = robotsParser(site + "/robots.txt", robots);
-  assert.ok(rules.getSitemaps().includes(site + "/sitemap.xml"), "missing canonical sitemap in robots.txt");
-  const checkCrawlAccess = path => {
+  assert.ok(
+    rules.getSitemaps().includes(site + "/sitemap.xml"),
+    "missing canonical sitemap in robots.txt",
+  );
+  const checkCrawlAccess = (path) => {
     for (const crawler of crawlers) {
-      assert.equal(rules.isAllowed(site + path, crawler), true, `robots.txt blocks ${crawler} on ${path}`);
+      assert.equal(
+        rules.isAllowed(site + path, crawler),
+        true,
+        `robots.txt blocks ${crawler} on ${path}`,
+      );
     }
   };
   checkCrawlAccess("/sitemap.xml");
@@ -171,9 +214,18 @@ export async function checkIndexing(origin = site) {
     const canonical = $('head link[rel="canonical"]').filter(outsideTemplate);
     assert.equal(canonical.length, 1, `expected a single canonical on ${path}`);
     assert.equal(canonical.attr("href"), site + path, `canonical mismatch on ${path}`);
-    const robotsDirectives = $('meta[name="robots" i], meta[name="googlebot" i], meta[name="bingbot" i]')
-      .filter(outsideTemplate).map((_, node) => $(node).attr("content")).get().join(",");
-    assert.doesNotMatch(robotsDirectives, /(?:^|,)\s*(?:noindex|none)\s*(?:,|$)/i, `not indexable: ${path}`);
+    const robotsDirectives = $(
+      'meta[name="robots" i], meta[name="googlebot" i], meta[name="bingbot" i]',
+    )
+      .filter(outsideTemplate)
+      .map((_, node) => $(node).attr("content"))
+      .get()
+      .join(",");
+    assert.doesNotMatch(
+      robotsDirectives,
+      /(?:^|,)\s*(?:noindex|none)\s*(?:,|$)/i,
+      `not indexable: ${path}`,
+    );
     for (const [lang, target] of entries.get(path)) {
       const link = $(`head link[rel="alternate"][hreflang="${lang}"]`).filter(outsideTemplate);
       assert.equal(link.length, 1, `missing/duplicate ${lang} alternate on ${path}`);
@@ -185,5 +237,7 @@ export async function checkIndexing(origin = site) {
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   const result = await checkIndexing(process.argv[2]);
-  console.log(`Indexing smoke passed: ${result.entries} sitemap URLs, ${result.sampled} public pages sampled.`);
+  console.log(
+    `Indexing smoke passed: ${result.entries} sitemap URLs, ${result.sampled} public pages sampled.`,
+  );
 }

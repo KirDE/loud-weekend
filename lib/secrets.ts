@@ -2,7 +2,8 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 
 const key = () => {
   const secret = process.env.AUTH_SECRET;
-  if (!secret || secret.length < 32) throw new Error("AUTH_SECRET must contain at least 32 characters");
+  if (!secret || secret.length < 32)
+    throw new Error("AUTH_SECRET must contain at least 32 characters");
   return createHash("sha256").update(secret).digest();
 };
 
