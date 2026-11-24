@@ -89,3 +89,59 @@ test("mismatched JSON-LD edition can never become publishable", () => {
     result.reviewReasons.some((reason) => reason.includes("does not match catalogue edition")),
   );
 });
+
+const current = {
+  slug: source.festivalSlug,
+  name: "Fixture",
+  country: "DE",
+  city: "Berlin",
+  editionYear: 2027,
+  startDate: "2027-07-01",
+  officialUrl: source.url,
+  status: "announced",
+  headliners: [],
+  lineup: [],
+  ticketsUrl: "https://fixture.test/previous-tickets",
+};
+
+for (const strategy of ["html_fallback", "json_ld_event"]) {
+  const extractNames = (names) =>
+    strategy === "html_fallback"
+      ? extracted(
+          names.map((name) => `<div class="lineup-artist">${name}</div>`).join("") +
+            '<a href="/tickets">Tickets</a>',
+        )
+      : extractJsonLdCandidate(
+          `<script type="application/ld+json">${JSON.stringify({
+            "@type": "MusicEvent",
+            startDate: current.startDate,
+            performer: names.map((name) => ({ name })),
+            offers: { url: "https://fixture.test/tickets" },
+          })}</script>`,
+          { ...source, strategies: [strategy] },
+          "2026-08-29T12:00:00Z",
+        );
+
+  test(`${strategy} preserves both competing spellings for editorial review`, () => {
+    for (const names of [
+      ["Tora Vale", "Tóra Vale"],
+      ["Tóra Vale", "Tora Vale"],
+    ]) {
+      const candidate = extractNames(names);
+      const result = evaluateCandidate(current, candidate);
+      assert.deepEqual(candidate.lineup, names);
+      assert.ok(result.changes.some(({ kind }) => kind === "tickets_changed"));
+      assert.ok(
+        result.reviewReasons.some((reason) => reason.includes("Ambiguous lineup spellings")),
+      );
+      assert.equal(result.publishable, false);
+    }
+  });
+
+  test(`${strategy} still deduplicates case and Unicode encoding of the same spelling`, () => {
+    const candidate = extractNames(["Tóra Vale", "TÓRA VALE", "To\u0301ra Vale"]);
+    assert.deepEqual(candidate.lineup, ["Tóra Vale"]);
+    assert.deepEqual(candidate.warnings, []);
+    assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  });
+}

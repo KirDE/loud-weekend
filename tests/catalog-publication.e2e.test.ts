@@ -62,7 +62,7 @@ function result(artist: string, overrides: Partial<IngestionResult> = {}): Inges
   };
 }
 
-async function persist(value: IngestionResult) {
+async function persist(value: IngestionResult, endedAt = new Date(value.fetchedAt)) {
   const run = await createIngestionRun(db, {
     trigger: "TEST",
     sourceCommit: suffix,
@@ -75,8 +75,8 @@ async function persist(value: IngestionResult) {
     finalUrl: value.sourceUrl,
     httpStatus: 200,
     durationMs: 1,
-    startedAt: new Date(value.fetchedAt),
-    endedAt: new Date(value.fetchedAt),
+    startedAt: endedAt,
+    endedAt,
     result: value,
   });
 }
@@ -259,6 +259,39 @@ test("publication cannot replace the timestamp of a persisted observation", asyn
       .reviewState,
     "PENDING",
   );
+});
+
+test("publication rejects persisted observation times outside completed history", async () => {
+  const artist = `Impossible observation ${suffix}`;
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+  });
+  const publications = await db.catalogPublication.count();
+  const jobs = await db.catalogPlaylistRefresh.count();
+  const now = Date.now();
+  const timestampPairs = [
+    { fetchedAt: new Date(now - 30_000), endedAt: new Date(now - 60_000) },
+    { fetchedAt: new Date(now + 60_000), endedAt: new Date(now + 60_000) },
+  ];
+  for (const { fetchedAt, endedAt } of timestampPairs) {
+    const value = result(artist);
+    value.fetchedAt = value.candidate.fetchedAt = fetchedAt.toISOString();
+    for (const evidence of value.candidate.evidence) evidence.observedAt = value.fetchedAt;
+    const attempt = await persist(value, endedAt);
+    await assert.rejects(
+      publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
+      /observation time is later than the completed attempt or current time/,
+    );
+    const saved = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    assert.equal(saved.reviewState, "PENDING");
+  }
+  assert.equal(await db.catalogPublication.count(), publications);
+  assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
+  assert.equal(await db.artist.count({ where: { name: artist } }), 0);
+  const unchanged = await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } });
+  assert.deepEqual(unchanged.sourceUpdatedAt, edition.sourceUpdatedAt);
 });
 
 test("a delayed ticket observation does not backdate the edition", async () => {
@@ -2140,6 +2173,67 @@ test("Provinssi provenance drift rolls back catalogue, completeness and provider
     );
     assert.deepEqual(await counts(), before);
   }
+});
+
+test("a scoped refresh approval rejects invalid calendar dates and reversed ranges", async () => {
+  const rollback = new Error("rollback scoped date fixture");
+  await assert.rejects(
+    db.$transaction(async (tx) => {
+      const edition = await tx.festivalEdition.findFirstOrThrow({
+        where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+      });
+      const run = await tx.adminParserRun.create({
+        data: {
+          festivalSlug: "synthetic-fest",
+          sourceId: "https://festival.example.test/",
+          adapter: "fixture",
+          status: "SUCCEEDED",
+          startedAt: new Date("2026-01-01T10:00:00Z"),
+          finishedAt: new Date("2026-01-01T10:01:00Z"),
+          log: [],
+        },
+      });
+      const change = {
+        id: randomUUID(),
+        resourceKey: "synthetic-fest",
+        field: "startDate",
+        beforeValue: edition.startDate!.toISOString().slice(0, 10),
+        afterValue: "2027-06-13",
+        sourceEvidence: {
+          kind: "scoped-refresh",
+          editionId: edition.id,
+          editionYear: edition.year,
+        },
+        parserRunId: run.id,
+      };
+      const approve = (afterValue: string) =>
+        publishAdminFestivalChange(tx, {
+          change: { ...change, afterValue },
+          actorLabel: "synthetic-date-review",
+        });
+      await assert.rejects(approve("2027-06-31"), /Festival dates must be valid calendar dates/);
+      await assert.rejects(
+        approve(change.afterValue),
+        /Festival end date cannot precede the start date/,
+      );
+      assert.equal(
+        await tx.catalogPublication.count({ where: { sourceId: `admin:${change.id}` } }),
+        0,
+      );
+      assert.deepEqual(
+        await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } }),
+        edition,
+      );
+
+      // A one-day interval remains valid.
+      await approve("2027-06-12");
+      const current = await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } });
+      assert.equal(current.startDate?.toISOString().slice(0, 10), "2027-06-12");
+      assert.equal(current.endDate?.toISOString().slice(0, 10), "2027-06-12");
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
 });
 
 test("free admission survives ingestion/replay and stale rollback without ticket offers", async () => {
