@@ -1,3 +1,4 @@
+import { TOLMINATOR_PRODUCT } from "./adapters/tolminator-stock.ts";
 import { queueImportEvent } from "./import-event-queue.ts";
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -19,6 +20,7 @@ type AttemptInput = {
   startedAt: Date;
   endedAt: Date;
   result?: IngestionResult;
+  sourceLease?: { id: string; owner: string; updatedAt: Date };
 };
 
 export async function createIngestionRun(
@@ -32,9 +34,34 @@ export async function createIngestionRun(
   return db.ingestionRun.create({ data: { schemaVersion: INGESTION_SCHEMA_VERSION, ...input } });
 }
 
+// Only reviewed independent endpoints are excluded. Do not infer scope from
+// caller-supplied candidate fields (a failed request has no candidate at all).
+const independentTicketUrls = [TOLMINATOR_PRODUCT];
+const attemptScope = (requestedUrl?: string): Prisma.IngestionAttemptWhereInput =>
+  requestedUrl ? { requestedUrl } : { requestedUrl: { notIn: independentTicketUrls } };
+
 export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
   return db.$transaction(async (tx) => {
+    if (Boolean(input.sourceLease) !== Boolean(input.result?.candidate.arrival))
+      throw new Error("Arrival observations require a source lease");
+    if (input.sourceLease) {
+      const lease = input.sourceLease;
+      const rows = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM "FestivalSource"
+        WHERE id = ${lease.id} AND "leaseOwner" = ${lease.owner}
+          AND enabled = true AND "configurationBackfilledAt" IS NOT NULL
+          AND "festivalSlug" = ${input.festivalSlug} AND url = ${input.requestedUrl}
+          AND "editionId" = ${input.result?.candidate.arrival?.editionId ?? null}
+          AND "editionYear" = ${input.result?.candidate.arrival?.editionYear ?? null}
+          AND "updatedAt" = (${lease.updatedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC')
+          AND "leaseExpiresAt" > (clock_timestamp() AT TIME ZONE 'UTC')
+        FOR UPDATE
+      `;
+      if (rows.length !== 1) throw new Error("Ingestion source lease is no longer active");
+    }
     const result = input.result;
+    const independent = independentTicketUrls.includes(input.requestedUrl);
+    const scope = attemptScope(independent ? input.requestedUrl : undefined);
     const status = !result
       ? "FAILED"
       : result.reviewReasons.length
@@ -43,7 +70,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
           ? "PUBLISHABLE"
           : "UNCHANGED";
     const previous = await tx.ingestionAttempt.findFirst({
-      where: { festivalSlug: input.festivalSlug },
+      where: { festivalSlug: input.festivalSlug, ...scope },
       orderBy: { endedAt: "desc" },
       select: { id: true },
     });
@@ -66,7 +93,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
     });
     if (result) {
       const prior = await tx.ingestionCandidate.findFirst({
-        where: { festivalSlug: input.festivalSlug },
+        where: { festivalSlug: input.festivalSlug, attempt: scope },
         orderBy: { createdAt: "desc" },
         select: { id: true },
       });
@@ -79,7 +106,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
           sourceEdition: result.candidate.startDate,
           sourceYear: result.candidate.startDate
             ? Number(result.candidate.startDate.slice(0, 4))
-            : undefined,
+            : result.candidate.arrival?.editionYear,
           normalized: result.candidate as Prisma.InputJsonValue,
           warnings: result.candidate.warnings,
           publishable: result.publishable,
@@ -93,12 +120,14 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
             field: e.field,
             sourceUrl: e.sourceUrl,
             excerpt: e.excerpt?.slice(0, MAX_EVIDENCE_EXCERPT),
-            contentHash: createHash("sha256")
-              .update(e.excerpt ?? JSON.stringify(result.candidate[e.field] ?? null))
-              .digest("hex"),
+            contentHash:
+              e.contentHash ??
+              createHash("sha256")
+                .update(e.excerpt ?? JSON.stringify(result.candidate[e.field] ?? null))
+                .digest("hex"),
             observedValue: (result.candidate[e.field] ?? null) as Prisma.InputJsonValue,
             observedAt: new Date(e.observedAt),
-            adapter: "festival-extractor-v1",
+            adapter: e.adapter ?? "festival-extractor-v1",
           })),
         });
       if (result.changes.length)
@@ -113,7 +142,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
           })),
         });
     }
-    if (result)
+    if (result && !independent)
       await tx.ingestionSourceState.upsert({
         where: { festivalSlug: input.festivalSlug },
         create: {
@@ -162,9 +191,9 @@ export async function finishIngestionRun(db: Client, runId: string) {
 export const ingestionQueries = {
   runHistory: (db: Client, take = 50) =>
     db.ingestionRun.findMany({ orderBy: { startedAt: "desc" }, take, include: { attempts: true } }),
-  latestResult: (db: Client, festivalSlug: string) =>
+  latestResult: (db: Client, festivalSlug: string, requestedUrl?: string) =>
     db.ingestionAttempt.findFirst({
-      where: { festivalSlug },
+      where: { festivalSlug, ...attemptScope(requestedUrl) },
       orderBy: { endedAt: "desc" },
       include: { candidate: { include: { evidence: true, diffs: true } } },
     }),
@@ -181,15 +210,15 @@ export const ingestionQueries = {
     }),
   sourceStates: (db: Client) =>
     db.ingestionSourceState.findMany({ select: { festivalSlug: true, lastSuccessfulCheck: true } }),
-  lastSuccessfulExtraction: (db: Client, festivalSlug: string) =>
+  lastSuccessfulExtraction: (db: Client, festivalSlug: string, requestedUrl?: string) =>
     db.ingestionEvidence.findFirst({
-      where: { candidate: { festivalSlug } },
+      where: { candidate: { festivalSlug, attempt: attemptScope(requestedUrl) } },
       orderBy: { observedAt: "desc" },
       select: { observedAt: true },
     }),
-  consecutiveFailures: async (db: Client, festivalSlug: string) => {
+  consecutiveFailures: async (db: Client, festivalSlug: string, requestedUrl?: string) => {
     const attempts = await db.ingestionAttempt.findMany({
-      where: { festivalSlug },
+      where: { festivalSlug, ...attemptScope(requestedUrl) },
       orderBy: { endedAt: "desc" },
       take: 100,
       select: { status: true },

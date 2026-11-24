@@ -16,10 +16,60 @@ export type AdminTranslationKey = keyof typeof adminTranslations.en;
 
 export const adminTranslations = {
   en: {
+    pending: "pending",
+    deprecated: "Source deprecated",
+    retry: "Retry scheduled",
+    healthy: "Successful",
+    warning: "Completed with warnings",
+    failed: "Failed",
+    running: "Running",
+    noChanges: "No changes to review.",
+    noSubmissions: "No festival submissions yet.",
+    noNotes: "No notes supplied.",
+    submissionHistory: "History",
+    approveSubmission: "Approve submission",
+    noFestivals: "No festivals are available to edit.",
+    noArtistsFound: "No matching artists.",
+    canonicalName: "Canonical name",
+    saveArtist: "Save artist draft",
+    saveLinks: "Save links draft",
+    playlistEditor: "Playlist editor",
+    platform: "Platform",
+    publicationStatus: "Publication status",
+    published: "Published",
+    draft: "Draft",
+    disabled: "Disabled",
+    savePlaylist: "Save playlist draft",
+    assetReviewHelp: "Edits enter the review queue before they can be published.",
+    playlistAddress: "Playlist URL",
+    refreshFestivalAction: "Refresh {festival}",
+    refreshResult: "{festival}: source check finished. See parser diagnostics for the result.",
+    refreshWarning: "{festival}: source check finished with warnings. See parser diagnostics.",
+    draftRevisionSaved: "Draft revision {revision} persisted and queued for review.",
+    accessDenied: "Access denied. Check your session and permissions.",
+    invalidRequest: "Check the supplied values and try again.",
+    decisionFailed:
+      "Could not save the decision. Reload the review queue and check the item's current state.",
+    submissionFailed:
+      "Could not save the decision. Reload the submissions to check whether it was already reviewed.",
+    refreshFailed: "Source check failed. See parser diagnostics for any recorded details.",
+    revisionLoadFailed: "Could not load the current revision. Try again.",
+    draftSaveFailed:
+      "Could not save the draft. Check the values and reload the page if the revision changed.",
+    noDiagnostics: "No parser runs or source failures recorded.",
+    failures: "Failures",
+    since: "Since",
+    nextCheck: "Next check",
+    parserOutput: "Parser output",
+    parserLog: "{festival} parser log",
+    noAudit: "No audit entries recorded.",
     submissions: "Festival submissions",
     roleAdmin: "Administrator",
     roleEditor: "Editor · Review required",
     roleUser: "User",
+    confirmed: "Confirmed",
+    partial: "Partial",
+    tba: "To be announced",
     skip: "Skip to administration content",
     console: "Admin console",
     subtitle: "Review-first content operations",
@@ -70,6 +120,9 @@ export const adminTranslations = {
     playlistUrl: "Spotify / playlist URL",
     logoUrl: "Logo URL",
     saveAsset: "Save asset draft",
+    playlistPublicationUnavailable: "Playlist drafts can be saved, but cannot yet be published.",
+    saveLogoDraft: "Save logo draft",
+    reviewedLogoHash: "Reviewed logo SHA-256",
     validation: "Validation",
     reachable: "Official URL · reachable",
     httpsValid: "HTTPS · valid",
@@ -89,10 +142,64 @@ export const adminTranslations = {
     pendingCount: "pending review items",
   },
   de: {
+    pending: "offen",
+    deprecated: "Quelle veraltet",
+    retry: "Erneute Prüfung geplant",
+    healthy: "Erfolgreich",
+    warning: "Mit Warnungen abgeschlossen",
+    failed: "Fehlgeschlagen",
+    running: "Läuft",
+    noChanges: "Keine Änderungen zur Prüfung.",
+    noSubmissions: "Noch keine Festivalvorschläge.",
+    noNotes: "Keine Anmerkungen angegeben.",
+    submissionHistory: "Verlauf",
+    approveSubmission: "Vorschlag freigeben",
+    noFestivals: "Keine Festivals zum Bearbeiten vorhanden.",
+    noArtistsFound: "Keine passenden Künstler gefunden.",
+    canonicalName: "Kanonischer Name",
+    saveArtist: "Künstlerentwurf speichern",
+    saveLinks: "Linkentwurf speichern",
+    playlistEditor: "Playlist-Editor",
+    platform: "Plattform",
+    publicationStatus: "Veröffentlichungsstatus",
+    published: "Veröffentlicht",
+    draft: "Entwurf",
+    disabled: "Deaktiviert",
+    savePlaylist: "Playlistentwurf speichern",
+    assetReviewHelp:
+      "Änderungen werden vor einer möglichen Veröffentlichung zur Prüfung vorgemerkt.",
+    playlistAddress: "Playlist-URL",
+    refreshFestivalAction: "{festival} aktualisieren",
+    refreshResult: "{festival}: Quellenprüfung beendet. Das Ergebnis steht in der Parser-Diagnose.",
+    refreshWarning:
+      "{festival}: Quellenprüfung mit Warnungen beendet. Details stehen in der Parser-Diagnose.",
+    draftRevisionSaved: "Entwurfsversion {revision} gespeichert und zur Prüfung vorgemerkt.",
+    accessDenied: "Zugriff verweigert. Anmeldung und Berechtigungen prüfen.",
+    invalidRequest: "Eingaben prüfen und erneut versuchen.",
+    decisionFailed:
+      "Entscheidung konnte nicht gespeichert werden. Prüfwarteschlange neu laden und aktuellen Status prüfen.",
+    submissionFailed:
+      "Entscheidung konnte nicht gespeichert werden. Vorschläge neu laden und " +
+      "prüfen, ob bereits eine Entscheidung vorliegt.",
+    refreshFailed:
+      "Quellenprüfung fehlgeschlagen. Aufgezeichnete Details stehen in der Parser-Diagnose.",
+    revisionLoadFailed: "Aktuelle Version konnte nicht geladen werden. Erneut versuchen.",
+    draftSaveFailed:
+      "Entwurf konnte nicht gespeichert werden. Eingaben prüfen und bei geänderter Version die Seite neu laden.",
+    noDiagnostics: "Keine Parserläufe oder Quellfehler aufgezeichnet.",
+    failures: "Fehler",
+    since: "Seit",
+    nextCheck: "Nächste Prüfung",
+    parserOutput: "Parser-Ausgabe",
+    parserLog: "Parser-Protokoll für {festival}",
+    noAudit: "Keine Audit-Einträge vorhanden.",
     submissions: "Festivalvorschläge",
     roleAdmin: "Administrator",
     roleEditor: "Redaktion · Prüfung erforderlich",
     roleUser: "Benutzer",
+    confirmed: "Bestätigt",
+    partial: "Teilweise bestätigt",
+    tba: "Noch nicht angekündigt",
     skip: "Zum Administrationsinhalt springen",
     console: "Admin-Konsole",
     subtitle: "Inhaltsarbeit mit verpflichtender Prüfung",
@@ -144,6 +251,10 @@ export const adminTranslations = {
     playlistUrl: "Spotify-/Playlist-URL",
     logoUrl: "Logo-URL",
     saveAsset: "Medienentwurf speichern",
+    playlistPublicationUnavailable:
+      "Playlist-Entwürfe können gespeichert, aber noch nicht veröffentlicht werden.",
+    saveLogoDraft: "Logoentwurf speichern",
+    reviewedLogoHash: "SHA-256 des geprüften Logos",
     validation: "Validierung",
     reachable: "Offizielle URL · erreichbar",
     httpsValid: "HTTPS · gültig",
@@ -165,10 +276,63 @@ export const adminTranslations = {
     pendingCount: "offene Prüfeinträge",
   },
   ru: {
+    pending: "ожидает проверки",
+    deprecated: "Источник устарел",
+    retry: "Назначена повторная проверка",
+    healthy: "Успешно",
+    warning: "Завершено с предупреждениями",
+    failed: "Ошибка",
+    running: "Выполняется",
+    noChanges: "Нет изменений для проверки.",
+    noSubmissions: "Предложений фестивалей пока нет.",
+    noNotes: "Примечаний нет.",
+    submissionHistory: "История",
+    approveSubmission: "Одобрить предложение",
+    noFestivals: "Нет фестивалей для редактирования.",
+    noArtistsFound: "Подходящих артистов нет.",
+    canonicalName: "Каноническое имя",
+    saveArtist: "Сохранить черновик артиста",
+    saveLinks: "Сохранить черновик ссылок",
+    playlistEditor: "Редактор плейлистов",
+    platform: "Платформа",
+    publicationStatus: "Статус публикации",
+    published: "Опубликовано",
+    draft: "Черновик",
+    disabled: "Отключено",
+    savePlaylist: "Сохранить черновик плейлиста",
+    assetReviewHelp: "Перед публикацией изменения поступают в очередь проверки.",
+    playlistAddress: "URL плейлиста",
+    refreshFestivalAction: "Обновить {festival}",
+    refreshResult:
+      "{festival}: проверка источника завершена. Результат доступен в диагностике парсера.",
+    refreshWarning:
+      "{festival}: проверка источника завершена с предупреждениями. Подробности в диагностике парсера.",
+    draftRevisionSaved: "Версия черновика {revision} сохранена и отправлена на проверку.",
+    accessDenied: "Доступ запрещён. Проверьте сеанс и права доступа.",
+    invalidRequest: "Проверьте введённые данные и повторите попытку.",
+    decisionFailed:
+      "Не удалось сохранить решение. Обновите очередь проверки и проверьте текущий статус записи.",
+    submissionFailed:
+      "Не удалось сохранить решение. Обновите список предложений и проверьте, не рассмотрено ли оно ранее.",
+    refreshFailed:
+      "Не удалось проверить источник. Записанные подробности доступны в диагностике парсера.",
+    revisionLoadFailed: "Не удалось загрузить текущую версию. Повторите попытку.",
+    draftSaveFailed:
+      "Не удалось сохранить черновик. Проверьте значения и обновите страницу, если версия изменилась.",
+    noDiagnostics: "Запусков парсера и ошибок источников пока не зафиксировано.",
+    failures: "Ошибки",
+    since: "С",
+    nextCheck: "Следующая проверка",
+    parserOutput: "Вывод парсера",
+    parserLog: "Журнал парсера: {festival}",
+    noAudit: "Записей аудита пока нет.",
     submissions: "Предложения фестивалей",
     roleAdmin: "Администратор",
     roleEditor: "Редактор · нужна проверка",
     roleUser: "Пользователь",
+    confirmed: "Подтверждено",
+    partial: "Частично подтверждено",
+    tba: "Будет объявлено",
     skip: "Перейти к содержимому админ-панели",
     console: "Админ-панель",
     subtitle: "Операции с обязательной проверкой",
@@ -220,6 +384,10 @@ export const adminTranslations = {
     playlistUrl: "URL Spotify / плейлиста",
     logoUrl: "URL логотипа",
     saveAsset: "Сохранить черновик материалов",
+    playlistPublicationUnavailable:
+      "Черновики плейлистов можно сохранять, но пока нельзя публиковать.",
+    saveLogoDraft: "Сохранить черновик логотипа",
+    reviewedLogoHash: "SHA-256 проверенного логотипа",
     validation: "Проверка",
     reachable: "Официальный URL · доступен",
     httpsValid: "HTTPS · корректен",
@@ -305,6 +473,7 @@ const translations = {
     ticketsNotOnSale: "Not yet on sale",
     ticketsSoldOut: "Sold out",
     ticketsSalesEnded: "Ticket sales ended",
+    ticketsFree: "Free admission — no ticket needed",
     listen: "Listen",
     artists: "artists",
     tracks: "tracks",
@@ -457,6 +626,7 @@ const translations = {
     ticketsNotOnSale: "Vorverkauf noch nicht gestartet",
     ticketsSoldOut: "Ausverkauft",
     ticketsSalesEnded: "Vorverkauf beendet",
+    ticketsFree: "Eintritt frei — kein Ticket nötig",
     listen: "Anhören",
     artists: "Künstler",
     tracks: "Titel",
@@ -615,6 +785,7 @@ const translations = {
     ticketsNotOnSale: "Продажа ещё не началась",
     ticketsSoldOut: "Все билеты проданы",
     ticketsSalesEnded: "Продажа билетов завершена",
+    ticketsFree: "Вход свободный — билет не нужен",
     listen: "Слушать",
     artists: "артистов",
     tracks: "треков",
@@ -707,11 +878,15 @@ const translations = {
   },
 } as const;
 
-export function translate(language: Language, key: TranslationKey, values: TranslationValues = {}) {
+function interpolate(text: string, values: TranslationValues = {}) {
   return Object.entries(values).reduce(
-    (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
-    translations[language][key] as string,
+    (result, [name, value]) => result.replaceAll(`{${name}}`, String(value)),
+    text,
   );
+}
+
+export function translate(language: Language, key: TranslationKey, values?: TranslationValues) {
+  return interpolate(translations[language][key], values);
 }
 
 const localeMap: Record<Language, string> = { en: "en-US", de: "de-DE", ru: "ru-RU" };
@@ -720,7 +895,7 @@ const LanguageContext = createContext<{
   locale: string;
   setLanguage: (language: Language) => void;
   t: (key: TranslationKey, values?: TranslationValues) => string;
-  ta: (key: AdminTranslationKey) => string;
+  ta: (key: AdminTranslationKey, values?: TranslationValues) => string;
 } | null>(null);
 
 function browserLanguage(): Language {
@@ -802,7 +977,8 @@ export function LanguageProvider({
       locale: localeMap[language],
       setLanguage,
       t: (key: TranslationKey, values?: TranslationValues) => translate(language, key, values),
-      ta: (key: AdminTranslationKey) => adminTranslations[language][key],
+      ta: (key: AdminTranslationKey, values?: TranslationValues) =>
+        interpolate(adminTranslations[language][key], values),
     }),
     [language],
   );
