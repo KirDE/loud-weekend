@@ -80,6 +80,143 @@ export const offlineTripCopy = {
   },
 };
 
+export const offlinePageCopy = {
+  en: {
+    title: "Offline trips",
+    help: "Reconnect to refresh festival and timetable data. Saved data may be outdated.",
+    home: "Open the festival list",
+    loading: "Loading saved festival data…",
+    catalog: "Saved festivals",
+    timetable: "Timetable not published",
+    available: "Saved public festival and timetable data. Reconnect to check for updates.",
+    unavailable:
+      "No saved festival data is available. Open Loud Weekend online to save it for your next visit.",
+  },
+  de: {
+    title: "Offline-Reisen",
+    help: "Gehe online, um Festivaldaten und Spielpläne zu aktualisieren. Gespeicherte Daten können veraltet sein.",
+    home: "Festivalliste öffnen",
+    loading: "Gespeicherte Festivaldaten werden geladen…",
+    catalog: "Gespeicherte Festivals",
+    timetable: "Spielplan nicht veröffentlicht",
+    available:
+      "Gespeicherte öffentliche Festivaldaten und Spielpläne. Gehe online, um nach Updates zu suchen.",
+    unavailable:
+      "Keine gespeicherten Festivaldaten. Öffne Loud Weekend online, um sie für später zu speichern.",
+  },
+  ru: {
+    title: "Поездки офлайн",
+    help: "Подключитесь к интернету, чтобы обновить данные фестивалей и расписания. Сохранённые данные могли устареть.",
+    home: "Открыть список фестивалей",
+    loading: "Загрузка сохранённых данных фестивалей…",
+    catalog: "Сохранённые фестивали",
+    timetable: "Расписание не опубликовано",
+    available:
+      "Сохранённые общедоступные данные фестивалей и расписания. Подключитесь к интернету, чтобы проверить обновления.",
+    unavailable:
+      "Нет сохранённых данных фестивалей. Откройте Loud Weekend онлайн, чтобы сохранить данные на будущее.",
+  },
+};
+
+export async function showOfflineCatalog(document, fetchCatalog, base, language) {
+  const copy = offlinePageCopy[language];
+  const status = document.getElementById("catalog-status");
+  const catalog = document.getElementById("catalog");
+  try {
+    const response = await fetchCatalog(`${base}api/offline/catalog/`, {
+      credentials: "omit",
+      cache: "no-cache",
+    });
+    if (!response.ok) throw new Error("Catalogue unavailable");
+    const data = await response.json();
+    if (data.schemaVersion !== 1 || !Array.isArray(data.festivals) || !data.festivals.length)
+      throw new Error("Catalogue unavailable");
+    const fragment = document.createDocumentFragment();
+    for (const festival of data.festivals) {
+      const heading = document.createElement("h2");
+      heading.textContent = festival.name;
+      fragment.append(heading);
+      const dates = document.createElement("p");
+      dates.textContent =
+        [festival.startDate, festival.endDate].filter(Boolean).join(" – ") ||
+        offlineTripCopy[language].dates;
+      fragment.append(dates);
+      const timetable = document.createElement("ul");
+      for (const entry of festival.timetable) {
+        const item = document.createElement("li");
+        const details = [
+          entry.date,
+          `${entry.start} (${entry.timeZone})`,
+          entry.stage,
+          entry.artist,
+        ];
+        if (entry.status === "cancelled") details.push(offlineTripCopy[language].cancelled);
+        item.textContent = details.join(" · ");
+        timetable.append(item);
+      }
+      if (festival.timetable.length) fragment.append(timetable);
+      else {
+        const empty = document.createElement("p");
+        empty.textContent = copy.timetable;
+        fragment.append(empty);
+      }
+    }
+    catalog.replaceChildren(fragment);
+    status.textContent = copy.available;
+  } catch {
+    status.textContent = copy.unavailable;
+  }
+}
+
+export async function fetchOfflineTrip(basePath, slug, year) {
+  const response = await fetch(
+    `${basePath}/api/offline/trips/${encodeURIComponent(slug)}/${year}/`,
+    {
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "error",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  if (
+    response.status !== 200 ||
+    !/^application\/json(?:;|$)/i.test(response.headers.get("content-type") || "")
+  ) {
+    throw new Error("Trip download unavailable");
+  }
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Trip download unavailable");
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let bytes = 0;
+  let body = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maximumBytes) throw new Error("Trip download too large");
+      body += decoder.decode(value, { stream: true });
+    }
+  } catch (error) {
+    void reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+  const data = JSON.parse(body + decoder.decode());
+  const trip = parseOfflineTrip(data);
+  if (
+    !trip ||
+    trip.slug !== slug ||
+    trip.year !== year ||
+    trip.timetable.length !== data.timetable.length
+  ) {
+    throw new Error("Unexpected trip download");
+  }
+  return trip;
+}
+
 export function offlineTripKey(slug, year) {
   return `${prefix}${slug}:${year}`;
 }
@@ -97,6 +234,7 @@ export function parseOfflineTrip(value) {
     !shortText(value.name) ||
     !(value.startDate === null || isoDate(value.startDate)) ||
     !(value.endDate === null || isoDate(value.endDate)) ||
+    (value.startDate !== null && value.endDate !== null && value.endDate < value.startDate) ||
     !(value.location === null || shortText(value.location)) ||
     !instant(value.updatedAt) ||
     !Array.isArray(value.timetable) ||
@@ -104,6 +242,7 @@ export function parseOfflineTrip(value) {
   )
     return null;
   const timetable = [];
+  const validTimeZones = new Set();
   for (const row of value.timetable) {
     if (
       !row ||
@@ -122,6 +261,15 @@ export function parseOfflineTrip(value) {
       (value.endDate && row.date > value.endDate)
     )
       continue;
+    if (!validTimeZones.has(row.timeZone)) {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: row.timeZone });
+      } catch {
+        // Keep legacy trip details, but never show a performance with an invalid time zone.
+        continue;
+      }
+      validTimeZones.add(row.timeZone);
+    }
     timetable.push({
       date: row.date,
       start: row.start,
