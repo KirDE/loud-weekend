@@ -347,6 +347,39 @@ test("a new revision replaces body and validator; a subsequent offline request u
   assert.deepEqual(await (await dispatch(listeners)).json(), payload("Festival B"));
 });
 
+for (const status of [200, 304]) {
+  test(`a delayed ${status} cannot overwrite a newer successful public response`, async () => {
+    const { cache, caches } = memoryCache();
+    await seed(cache);
+    const started = Promise.withResolvers();
+    const delayedReply = Promise.withResolvers();
+    let requests = 0;
+    let online = true;
+    const { listeners } = await loadWorker({
+      cachesImpl: caches,
+      fetchImpl: async (request) => {
+        if (!online) throw new TypeError("offline");
+        assert.equal(request.headers.get("if-none-match"), `"${revisionA}"`);
+        if (++requests === 1) {
+          started.resolve();
+          return delayedReply.promise;
+        }
+        return catalogReply(revisionB, { body: payload("Festival B") });
+      },
+    });
+
+    const older = dispatch(listeners);
+    await started.promise;
+    assert.deepEqual(await (await dispatch(listeners)).json(), payload("Festival B"));
+    delayedReply.resolve(catalogReply(revisionA, { status }));
+    const late = await older;
+    assert.deepEqual(await late.json(), payload("Festival B"));
+    assert.equal((await cache.match(CATALOG_URL)).headers.get("etag"), `"${revisionB}"`);
+    online = false;
+    assert.deepEqual(await (await dispatch(listeners)).json(), payload("Festival B"));
+  });
+}
+
 test("304 without a cached body or with a mismatched revision retries unconditionally", async () => {
   for (const existing of [false, true]) {
     const { cache, caches } = memoryCache();
