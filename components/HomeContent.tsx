@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { CatalogFreshness } from "@/lib/domain/freshness";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalExplorer } from "./FestivalExplorer";
@@ -10,9 +11,11 @@ import { hasAnnouncedLineup } from "@/lib/festival-lineup";
 export function HomeContent({
   festivals,
   freshness,
+  discoveryLineups,
 }: {
   festivals: Festival[];
   freshness: CatalogFreshness;
+  discoveryLineups?: DiscoveryLineups;
 }) {
   const { t, language } = useLanguage();
   const announced = festivals.filter(hasAnnouncedLineup).length;
@@ -39,7 +42,11 @@ export function HomeContent({
           </span>
         </div>
       </section>
-      <FestivalExplorer festivals={festivals} freshness={freshness} />
+      <FestivalExplorer
+        festivals={festivals}
+        freshness={freshness}
+        discoveryLineups={discoveryLineups}
+      />
       <p className="dataQualityLink">
         <Link className="textLink" href={`/${language}/data-quality/`}>
           {t("dataQuality")}

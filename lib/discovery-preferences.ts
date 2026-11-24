@@ -1,3 +1,4 @@
+import { discoverySorts, type DiscoverySort } from "./discovery-sort.ts";
 import {
   defaultDiscoveryDates,
   readDiscoveryDates,
@@ -30,6 +31,7 @@ export type DiscoveryPreferences = DiscoveryDates & {
   genre: string;
   origin: keyof typeof discoveryOrigins;
   maxDistance: string;
+  sort: DiscoverySort;
 };
 
 export const defaultDiscoveryPreferences: DiscoveryPreferences = {
@@ -42,6 +44,7 @@ export const defaultDiscoveryPreferences: DiscoveryPreferences = {
   genre: "all",
   origin: "berlin",
   maxDistance: "all",
+  sort: "date",
 };
 
 export function readDiscoveryPreferences(value: unknown): DiscoveryPreferences {
@@ -67,6 +70,7 @@ export function readDiscoveryPreferences(value: unknown): DiscoveryPreferences {
       typeof fields.origin === "string" && Object.hasOwn(discoveryOrigins, fields.origin)
         ? (fields.origin as DiscoveryPreferences["origin"])
         : defaultDiscoveryPreferences.origin,
+    sort: discoverySorts.find((sort) => sort === fields.sort) ?? defaultDiscoveryPreferences.sort,
     maxDistance:
       discoveryDistances.find((distance) => distance === fields.maxDistance) ??
       defaultDiscoveryPreferences.maxDistance,
