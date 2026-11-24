@@ -135,7 +135,7 @@ test.before(async () => {
   await db.shareLink.deleteMany();
   await db.syncDocument.deleteMany();
   await db.session.deleteMany();
-  await db.user.deleteMany();
+  await db.user.deleteMany({ where: { adminAuditEntries: { none: {} } } });
 
   mock = http
     .createServer(async (request, response) => {
