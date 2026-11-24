@@ -1,3 +1,4 @@
+import type { ArrivalObservation } from "../catalog/arrival-import.ts";
 import type { Festival } from "../domain/festival.ts";
 
 export const INGESTION_SCHEMA_VERSION = 1 as const;
@@ -20,21 +21,25 @@ export type FestivalSource = {
 };
 
 export type FieldEvidence = {
-  field: keyof Pick<
-    Festival,
-    | "startDate"
-    | "endDate"
-    | "city"
-    | "headliners"
-    | "lineup"
-    | "ticketsUrl"
-    | "ticketStatus"
-    | "timetable"
-    | "status"
-  >;
+  field:
+    | "arrival"
+    | keyof Pick<
+        Festival,
+        | "startDate"
+        | "endDate"
+        | "city"
+        | "headliners"
+        | "lineup"
+        | "ticketsUrl"
+        | "ticketStatus"
+        | "timetable"
+        | "status"
+      >;
   sourceUrl: string;
   observedAt: string;
   excerpt?: string;
+  contentHash?: string;
+  adapter?: string;
 };
 
 export type FestivalCandidate = Partial<
@@ -52,6 +57,7 @@ export type FestivalCandidate = Partial<
 > & {
   // An unranked news announcement adds members; absence is not a cancellation.
   lineupScope?: "announcement";
+  arrival?: ArrivalObservation;
   /** Announcement feeds add artists; absence is not a removal. */
   artistListMode?: "additive";
   /** Explicit producer provenance; persisted with normalized candidate evidence. */

@@ -1,12 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
 
-const action = "EDITION_LINKED";
+export const submissionEditionLinked = "EDITION_LINKED";
 export type SubmissionEditionLink = { editionId: string; slug: string; year: number };
 
 export function readSubmissionEditionLink(
   audit: { action: string; detail: unknown }[],
 ): SubmissionEditionLink | null {
-  const detail = audit.find((item) => item.action === action)?.detail;
+  const detail = audit.find((item) => item.action === submissionEditionLinked)?.detail;
   if (
     !detail ||
     typeof detail !== "object" ||
@@ -21,7 +21,7 @@ export function readSubmissionEditionLink(
   return { editionId: detail.editionId, slug: detail.slug, year: detail.year as number };
 }
 
-function sameOfficialSite(submitted: string, canonical: string) {
+export function sameOfficialSite(submitted: string, canonical: string) {
   try {
     const source = new URL(submitted);
     const expected = new URL(canonical);
@@ -59,7 +59,12 @@ export async function linkSubmissionEdition(
     if (!locked[0]) return null;
     const submission = await tx.festivalSubmission.findUniqueOrThrow({
       where: { id: locked[0].id },
-      include: { audit: { where: { action }, select: { action: true, detail: true } } },
+      include: {
+        audit: {
+          where: { action: submissionEditionLinked },
+          select: { action: true, detail: true },
+        },
+      },
     });
     if (submission.status !== "APPROVED") return null;
     const existing = readSubmissionEditionLink(submission.audit);
@@ -77,7 +82,12 @@ export async function linkSubmissionEdition(
       year: edition.year,
     };
     await tx.festivalSubmissionAudit.create({
-      data: { submissionId: submission.id, actorId: reviewerId, action, detail: link },
+      data: {
+        submissionId: submission.id,
+        actorId: reviewerId,
+        action: submissionEditionLinked,
+        detail: link,
+      },
     });
     return link;
   });

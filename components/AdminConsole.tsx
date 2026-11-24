@@ -1,12 +1,14 @@
 "use client";
-
+import { AdminBiographyReview } from "./AdminBiographyReview";
 import { AdminSocialLinkReview } from "./AdminSocialLinkReview";
 import { useEffect, useMemo, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import type { AuditEntry, ParserRun, ReviewChange } from "@/lib/admin";
+import type { NewFestivalDraft } from "./SubmissionNewFestival";
+import type { FollowOnDraft } from "./SubmissionFollowOnEdition";
 import { SubmissionEditionLink } from "./SubmissionEditionLink";
 import type { SubmissionEditionLink as LinkedEdition } from "@/lib/submission-edition-link";
-import { useLanguage, type Language } from "./LanguageProvider";
+import { useLanguage, type Language, type AdminTranslationKey } from "./LanguageProvider";
 
 type Section = "content" | "review" | "submissions" | "assets" | "diagnostics" | "audit";
 type Submission = {
@@ -18,12 +20,24 @@ type Submission = {
   status: "pending" | "approved" | "rejected";
   submittedAt: string;
   editionLink?: LinkedEdition | null;
+  followOnDraft?: FollowOnDraft;
+  newFestivalDraft?: NewFestivalDraft;
   audit: { action: string; at: string }[];
 };
+type Notice = { key: AdminTranslationKey; values?: Record<string, string | number> };
+
+function failureKey(status: number, fallback: AdminTranslationKey): AdminTranslationKey {
+  if ([401, 403].includes(status)) return "accessDenied";
+  if ([400, 422].includes(status)) return "invalidRequest";
+  return fallback;
+}
+
 type EditableArtist = {
   slug: string;
   name: string;
   officialUrl?: string;
+  biography?: string;
+  verifiedOfficialSite: boolean;
   socialCandidates: string[];
 };
 type Operator = { email: string; role: "USER" | "EDITOR" | "ADMIN" };
@@ -44,7 +58,7 @@ export function AdminConsole({
   parserRuns: ParserRun[];
   auditEntries: AuditEntry[];
   submissions: Submission[];
-  editionOptions?: { slug: string; name: string; year: number }[];
+  editionOptions?: { slug: string; name: string; year: number; current: boolean }[];
   sourceHealth?: {
     id: string;
     festivalSlug: string;
@@ -59,7 +73,7 @@ export function AdminConsole({
   const selected = festivals.find((item) => item.slug === selectedSlug) ?? festivals[0];
   const [changes, setChanges] = useState(initialChanges);
   const [submissions, setSubmissions] = useState(initialSubmissions);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [artistQuery, setArtistQuery] = useState("");
   const [selectedArtistSlug, setSelectedArtistSlug] = useState("");
@@ -92,76 +106,95 @@ export function AdminConsole({
   }, []);
 
   const decide = async (id: string, status: "approved" | "rejected") => {
-    const response = await fetch(`/api/admin/changes/${id}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ decision: status === "approved" ? "approve" : "reject" }),
-    });
-    const body = await response.json();
-    if (!response.ok) return setNotice(body.error ?? "Decision failed");
-    setChanges((items) => items.map((item) => (item.id === id ? { ...item, status } : item)));
-    setNotice(`${id}: ${ta(status)}. ${ta("decisionNotice")}`);
+    try {
+      const response = await fetch(`/api/admin/changes/${id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision: status === "approved" ? "approve" : "reject" }),
+      });
+      if (!response.ok) return setNotice({ key: failureKey(response.status, "decisionFailed") });
+      setChanges((items) => items.map((item) => (item.id === id ? { ...item, status } : item)));
+      setNotice({ key: "decisionNotice" });
+    } catch {
+      setNotice({ key: "decisionFailed" });
+    }
   };
+
   const decideSubmission = async (reference: string, status: "approved" | "rejected") => {
-    const response = await fetch(`/api/admin/submissions/${reference}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ decision: status === "approved" ? "approve" : "reject" }),
-    });
-    const body = await response.json();
-    if (!response.ok) return setNotice(body.error ?? "Submission decision failed");
-    setSubmissions((items) =>
-      items.map((item) => (item.reference === reference ? { ...item, status } : item)),
-    );
-    setNotice(`Submission ${reference} ${status}; append-only audit updated.`);
+    try {
+      const response = await fetch(`/api/admin/submissions/${reference}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision: status === "approved" ? "approve" : "reject" }),
+      });
+      if (!response.ok) return setNotice({ key: failureKey(response.status, "submissionFailed") });
+      setSubmissions((items) =>
+        items.map((item) => (item.reference === reference ? { ...item, status } : item)),
+      );
+      setNotice({ key: "decisionNotice" });
+    } catch {
+      setNotice({ key: "submissionFailed" });
+    }
   };
+
   const refresh = async () => {
+    if (!selected) return;
     setRefreshing(true);
-    setNotice("");
+    setNotice(null);
     try {
       const response = await fetch(`/api/admin/refresh/${selected.slug}`, { method: "POST" });
+      if (!response.ok) return setNotice({ key: failureKey(response.status, "refreshFailed") });
       const body = await response.json();
-      setNotice(
-        response.ok
-          ? `${selected.name}: ${ta("refreshFinished")} ${body.message}`
-          : (body.error ?? "Refresh failed"),
-      );
+      setNotice({
+        key: body.status === "PARTIAL" ? "refreshWarning" : "refreshResult",
+        values: { festival: selected.name },
+      });
+    } catch {
+      setNotice({ key: "refreshFailed" });
     } finally {
       setRefreshing(false);
     }
   };
+
   const save = async (
     resourceKind: "festival" | "artist" | "link" | "asset" | "playlist",
     resourceKey: string,
     values: Record<string, unknown>,
   ) => {
-    const snapshotResponse = await fetch("/api/admin");
-    const snapshot = await snapshotResponse.json();
-    if (!snapshotResponse.ok) return setNotice(snapshot.error ?? "Unable to load current revision");
-    const resource = snapshot.resources.find(
-      (item: { resourceKind: string; resourceKey: string }) =>
-        item.resourceKind === resourceKind.toUpperCase() && item.resourceKey === resourceKey,
-    );
-    const response = await fetch("/api/admin", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        resourceKind,
-        resourceKey,
-        baseRevision: resource?.revision ?? 0,
-        values,
-      }),
-    });
-    const body = await response.json();
-    setNotice(
-      response.ok
-        ? `Draft revision ${body.revision} persisted and queued for review.`
-        : (body.error ?? "Draft save failed"),
-    );
+    let baseRevision: number;
+    try {
+      const response = await fetch("/api/admin");
+      if (!response.ok)
+        return setNotice({ key: failureKey(response.status, "revisionLoadFailed") });
+      const snapshot = await response.json();
+      const resource = snapshot.resources.find(
+        (item: { resourceKind: string; resourceKey: string }) =>
+          item.resourceKind === resourceKind.toUpperCase() && item.resourceKey === resourceKey,
+      );
+      baseRevision = resource?.revision ?? 0;
+    } catch {
+      return setNotice({ key: "revisionLoadFailed" });
+    }
+
+    try {
+      const response = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ resourceKind, resourceKey, baseRevision, values }),
+      });
+      if (!response.ok) return setNotice({ key: failureKey(response.status, "draftSaveFailed") });
+      const body = await response.json();
+      setNotice({ key: "draftRevisionSaved", values: { revision: body.revision } });
+    } catch {
+      setNotice({ key: "draftSaveFailed" });
+    }
   };
 
   const pending = changes.filter((item) => item.status === "pending").length;
   const pendingSubmissions = submissions.filter((item) => item.status === "pending").length;
+  const unhealthySources = sourceHealth.filter(
+    (source) => source.consecutiveFailures > 0 || source.deprecatedAt,
+  );
   return (
     <div className="adminShell">
       <nav className="adminNav" aria-label={ta("navigation")}>
@@ -227,8 +260,8 @@ export function AdminConsole({
         </header>
         {notice && (
           <div className="adminNotice" role="status" aria-live="polite">
-            {notice}
-            <button onClick={() => setNotice("")} aria-label={ta("dismiss")}>
+            {ta(notice.key, notice.values)}
+            <button onClick={() => setNotice(null)} aria-label={ta("dismiss")}>
               ×
             </button>
           </div>
@@ -244,6 +277,7 @@ export function AdminConsole({
                 <option>{ta("highConfidence")}</option>
               </select>
             </div>
+            {!changes.length && <p>{ta("noChanges")}</p>}
             {changes.map((change) => (
               <article className={`reviewCard ${change.status}`} key={change.id}>
                 <div className="reviewMeta">
@@ -284,10 +318,13 @@ export function AdminConsole({
 
         {section === "submissions" && (
           <div className="reviewList">
+            {!submissions.length && <p>{ta("noSubmissions")}</p>}
             {submissions.map((item) => (
               <article className={`reviewCard ${item.status}`} key={item.reference}>
                 <div className="reviewMeta">
-                  <span className={item.status === "pending" ? "risk" : "safe"}>{item.status}</span>
+                  <span className={item.status === "pending" ? "risk" : "safe"}>
+                    {ta(item.status)}
+                  </span>
                   <small>
                     {item.reference} · {item.submittedAt}
                   </small>
@@ -300,20 +337,23 @@ export function AdminConsole({
                     {item.officialUrl}
                   </a>
                 </p>
-                <p>{item.notes || "No notes supplied."}</p>
-                <p>
-                  History: {item.audit.map((entry) => `${entry.action} ${entry.at}`).join(" · ")}
-                </p>
+                <p>{item.notes || ta("noNotes")}</p>
+                {item.audit.length > 0 && (
+                  <p>
+                    {ta("submissionHistory")}:{" "}
+                    {item.audit.map((entry) => `${entry.action} ${entry.at}`).join(" · ")}
+                  </p>
+                )}
                 {item.status === "pending" && (
                   <div className="reviewActions">
                     <button
                       className="secondary"
                       onClick={() => decideSubmission(item.reference, "rejected")}
                     >
-                      Reject
+                      {ta("reject")}
                     </button>
                     <button onClick={() => decideSubmission(item.reference, "approved")}>
-                      Approve submission
+                      {ta("approveSubmission")}
                     </button>
                   </div>
                 )}
@@ -322,7 +362,28 @@ export function AdminConsole({
                     reference={item.reference}
                     year={item.year}
                     editions={editionOptions}
+                    currentEditions={editionOptions.filter((entry) => entry.current)}
+                    draft={item.followOnDraft}
+                    onDraft={(followOnDraft) =>
+                      setSubmissions((items) =>
+                        items.map((submission) =>
+                          submission.reference === item.reference
+                            ? { ...submission, followOnDraft }
+                            : submission,
+                        ),
+                      )
+                    }
                     link={item.editionLink}
+                    newFestivalDraft={item.newFestivalDraft}
+                    onNewFestivalDraft={(newFestivalDraft) =>
+                      setSubmissions((items) =>
+                        items.map((submission) =>
+                          submission.reference === item.reference
+                            ? { ...submission, newFestivalDraft }
+                            : submission,
+                        ),
+                      )
+                    }
                     onLinked={(editionLink) =>
                       setSubmissions((items) =>
                         items.map((submission) =>
@@ -339,16 +400,18 @@ export function AdminConsole({
           </div>
         )}
 
+        {(section === "content" || section === "assets") && !selected && <p>{ta("noFestivals")}</p>}
+
         {section === "content" && selected && (
           <div className="editorGrid">
             <div className="adminPanel">
               {selected.sourceDeprecated && (
                 <p className="risk">
-                  Deprecated · {selected.sourceDeprecatedAt} · {ta("diagnostics")}
+                  {ta("deprecated")} · {selected.sourceDeprecatedAt} · {ta("diagnostics")}
                 </p>
               )}
               <label>
-                Festival
+                {ta("festival")}
                 <select
                   value={selectedSlug}
                   onChange={(event) => {
@@ -359,41 +422,43 @@ export function AdminConsole({
                   {festivals.map((item) => (
                     <option value={item.slug} key={item.slug}>
                       {item.name}
-                      {item.sourceDeprecated ? " · deprecated" : ""}
+                      {item.sourceDeprecated ? ` · ${ta("deprecated")}` : ""}
                     </option>
                   ))}
                 </select>
               </label>
               <div className="fieldPair">
                 <label>
-                  Name
+                  {ta("name")}
                   <input
                     defaultValue={selected.name}
                     onChange={(e) => setFestivalDraft((v) => ({ ...v, name: e.target.value }))}
                   />
                 </label>
                 <label>
-                  Status
+                  {ta("status")}
                   <select
                     defaultValue={selected.status}
                     onChange={(e) => setFestivalDraft((v) => ({ ...v, status: e.target.value }))}
                   >
-                    <option>confirmed</option>
-                    <option>partial</option>
-                    <option>tba</option>
+                    {(["confirmed", "partial", "tba"] as const).map((status) => (
+                      <option value={status} key={status}>
+                        {ta(status)}
+                      </option>
+                    ))}
                   </select>
                 </label>
               </div>
               <div className="fieldPair">
                 <label>
-                  City
+                  {ta("city")}
                   <input
                     defaultValue={selected.city}
                     onChange={(e) => setFestivalDraft((v) => ({ ...v, city: e.target.value }))}
                   />
                 </label>
                 <label>
-                  Country
+                  {ta("country")}
                   <input
                     defaultValue={selected.country}
                     onChange={(e) => setFestivalDraft((v) => ({ ...v, country: e.target.value }))}
@@ -402,7 +467,7 @@ export function AdminConsole({
               </div>
               <div className="fieldPair">
                 <label>
-                  Start date
+                  {ta("startDate")}
                   <input
                     type="date"
                     defaultValue={selected.startDate}
@@ -410,7 +475,7 @@ export function AdminConsole({
                   />
                 </label>
                 <label>
-                  End date
+                  {ta("endDate")}
                   <input
                     type="date"
                     defaultValue={selected.endDate}
@@ -419,7 +484,7 @@ export function AdminConsole({
                 </label>
               </div>
               <label>
-                Headliners
+                {ta("headliners")}
                 <textarea
                   defaultValue={selected.headliners.join("\n")}
                   rows={5}
@@ -430,29 +495,30 @@ export function AdminConsole({
                 disabled={!Object.keys(festivalDraft).length}
                 onClick={() => save("festival", selected.slug, festivalDraft)}
               >
-                Save festival draft
+                {ta("saveFestival")}
               </button>
             </div>
             <div>
               {operator?.role === "ADMIN" && (
                 <div className="adminPanel">
-                  <h3>Manual refresh</h3>
-                  <p>
-                    Run only this festival’s configured adapters. Any differences go to the review
-                    queue.
-                  </p>
+                  <h3>{ta("manualRefresh")}</h3>
+                  <p>{ta("refreshHelp")}</p>
                   <button onClick={refresh} disabled={refreshing}>
-                    {refreshing ? "Refreshing…" : `Refresh ${selected.name}`}
+                    {refreshing
+                      ? ta("refreshing")
+                      : ta("refreshFestivalAction", { festival: selected.name })}
                   </button>
                 </div>
               )}
               <div className="adminPanel">
-                <h3>Artist editor</h3>
+                <h3>{ta("artistEditor")}</h3>
                 <input
-                  placeholder="Find an artist"
+                  aria-label={ta("findArtist")}
+                  placeholder={ta("findArtist")}
                   value={artistQuery}
                   onChange={(event) => setArtistQuery(event.target.value)}
                 />
+                {!artists.length && <p>{ta("noArtistsFound")}</p>}
                 <ul className="artistAdminList">
                   {matchingArtists.map((artist) => (
                     <li key={artist.slug}>
@@ -464,7 +530,7 @@ export function AdminConsole({
                           setArtistDraft({});
                         }}
                       >
-                        Edit
+                        {ta("edit")}
                       </button>
                     </li>
                   ))}
@@ -473,7 +539,7 @@ export function AdminConsole({
                   <div key={selectedArtist.slug}>
                     <strong>{selectedArtist.name}</strong>
                     <label>
-                      Canonical name
+                      {ta("canonicalName")}
                       <input
                         defaultValue={selectedArtist.name}
                         onChange={(event) =>
@@ -485,7 +551,7 @@ export function AdminConsole({
                       />
                     </label>
                     <label>
-                      Official URL
+                      {ta("officialUrl")}
                       <input
                         type="url"
                         defaultValue={selectedArtist.officialUrl}
@@ -499,8 +565,16 @@ export function AdminConsole({
                       disabled={!Object.keys(artistDraft).length}
                       onClick={() => save("artist", selectedArtist.slug, artistDraft)}
                     >
-                      Save artist draft
+                      {ta("saveArtist")}
                     </button>
+                    {selectedArtist.verifiedOfficialSite && (
+                      <AdminBiographyReview
+                        biography={selectedArtist.biography}
+                        onSave={(proof) =>
+                          save("artist", selectedArtist.slug, { biography: proof })
+                        }
+                      />
+                    )}
                     {selectedArtist.socialCandidates.length > 0 && (
                       <AdminSocialLinkReview
                         key={selectedArtist.slug}
@@ -522,11 +596,11 @@ export function AdminConsole({
             <div className="adminPanel">
               {selected.sourceDeprecated && (
                 <p className="risk">
-                  Deprecated · {selected.sourceDeprecatedAt} · {ta("diagnostics")}
+                  {ta("deprecated")} · {selected.sourceDeprecatedAt} · {ta("diagnostics")}
                 </p>
               )}
               <label>
-                Festival
+                {ta("festival")}
                 <select
                   value={selectedSlug}
                   onChange={(event) => {
@@ -538,19 +612,19 @@ export function AdminConsole({
                   {festivals.map((item) => (
                     <option value={item.slug} key={item.slug}>
                       {item.name}
-                      {item.sourceDeprecated ? " · deprecated" : ""}
+                      {item.sourceDeprecated ? ` · ${ta("deprecated")}` : ""}
                     </option>
                   ))}
                 </select>
               </label>
               {(
                 [
-                  ["officialUrl", "Official URL", selected.officialUrl],
-                  ["ticketsUrl", "Tickets URL", selected.ticketsUrl],
+                  ["officialUrl", selected.officialUrl],
+                  ["ticketsUrl", selected.ticketsUrl],
                 ] as const
-              ).map(([field, label, value]) => (
+              ).map(([field, value]) => (
                 <label key={field}>
-                  {label}
+                  {ta(field)}
                   <input
                     type="url"
                     defaultValue={value}
@@ -571,10 +645,10 @@ export function AdminConsole({
                   )
                 }
               >
-                Save links draft
+                {ta("saveLinks")}
               </button>
               <label>
-                Reviewed logo SHA-256
+                {ta("reviewedLogoHash")}
                 <input
                   key={selected.slug}
                   value={assetDraft.logoAssetHash ?? ""}
@@ -589,15 +663,15 @@ export function AdminConsole({
                   save("asset", selected.slug, { logoAssetHash: assetDraft.logoAssetHash })
                 }
               >
-                Save logo draft
+                {ta("saveLogoDraft")}
               </button>
             </div>
             <div>
               <div className="adminPanel">
-                <h3>Playlist editor</h3>
-                <p>Playlist drafts can be saved, but cannot yet be published.</p>
+                <h3>{ta("playlistEditor")}</h3>
+                <p>{ta("playlistPublicationReview")}</p>
                 <label>
-                  Platform
+                  {ta("platform")}
                   <select
                     value={playlistProvider}
                     onChange={(event) => {
@@ -612,7 +686,7 @@ export function AdminConsole({
                   </select>
                 </label>
                 <label>
-                  Playlist URL
+                  {ta("playlistAddress")}
                   <input
                     type="url"
                     value={playlistDraft ?? reviewedPlaylistUrl ?? ""}
@@ -629,7 +703,7 @@ export function AdminConsole({
                     )
                   }
                 >
-                  Save playlist draft
+                  {ta("savePlaylist")}
                 </button>
                 {reviewedPlaylistUrl && selected.editionYear && (
                   <button
@@ -641,19 +715,13 @@ export function AdminConsole({
                       )
                     }
                   >
-                    Queue removal of reviewed link
+                    {ta("removeReviewedPlaylist")}
                   </button>
                 )}
               </div>
               <div className="adminPanel assetPreview">
-                <h3>Validation</h3>
-                <span className="safe">
-                  HTTPS URLs are validated by the browser and server workflow.
-                </span>
-                <p>
-                  Every persisted edit enters the review queue before it updates durable resource
-                  state.
-                </p>
+                <h3>{ta("validation")}</h3>
+                <p>{ta("assetReviewHelp")}</p>
               </div>
             </div>
           </div>
@@ -661,28 +729,33 @@ export function AdminConsole({
 
         {section === "diagnostics" && (
           <div className="diagnosticGrid">
-            {sourceHealth
-              .filter((s) => s.consecutiveFailures > 0 || s.deprecatedAt)
-              .map((s) => (
-                <article className="adminPanel" key={s.id}>
-                  <span className="risk">{s.deprecatedAt ? "deprecated" : "retry"}</span>
-                  <h3>{s.festivalSlug}</h3>
-                  <p>
-                    Failures: {s.consecutiveFailures} · Since: {s.failureStartedAt} · Next check:{" "}
-                    {s.nextRunAt}
-                  </p>
-                </article>
-              ))}
+            {!unhealthySources.length && !parserRuns.length && <p>{ta("noDiagnostics")}</p>}
+            {unhealthySources.map((source) => (
+              <article className="adminPanel" key={source.id}>
+                <span className="risk">{ta(source.deprecatedAt ? "deprecated" : "retry")}</span>
+                <h3>{source.festivalSlug}</h3>
+                <p>
+                  {ta("failures")}: {source.consecutiveFailures} · {ta("since")}:{" "}
+                  {source.failureStartedAt ?? "—"} · {ta("nextCheck")}: {source.nextRunAt ?? "—"}
+                </p>
+              </article>
+            ))}
             {parserRuns.map((run, index) => {
               const logId = `parser-log-${index}`;
               return (
-                <article className="adminPanel" key={`${run.festival}-${run.lastRun}`}>
+                <article className="adminPanel" key={logId}>
                   <div className="reviewMeta">
-                    <span className={run.status === "healthy" ? "safe" : "risk"}>{run.status}</span>
+                    <span className={run.status === "healthy" ? "safe" : "risk"}>
+                      {ta(run.status)}
+                    </span>
                     <small>{run.lastRun}</small>
                   </div>
                   <h3>{run.festival}</h3>
-                  <p>{run.message}</p>
+                  {run.message && (
+                    <p>
+                      {ta("parserOutput")}: {run.message}
+                    </p>
+                  )}
                   <dl>
                     <div>
                       <dt>{ta("adapter")}</dt>
@@ -706,7 +779,11 @@ export function AdminConsole({
                     {ta("viewLog")}
                   </button>
                   {openLog === logId && (
-                    <pre id={logId} tabIndex={0} aria-label={`${run.festival} parser log`}>
+                    <pre
+                      id={logId}
+                      tabIndex={0}
+                      aria-label={ta("parserLog", { festival: run.festival })}
+                    >
                       {JSON.stringify(run.log, null, 2)}
                     </pre>
                   )}
@@ -718,6 +795,7 @@ export function AdminConsole({
 
         {section === "audit" && (
           <div className="adminPanel auditTable">
+            {!auditEntries.length && <p>{ta("noAudit")}</p>}
             {auditEntries.map((entry) => (
               <article key={entry.id}>
                 <time>{entry.at}</time>
