@@ -10,7 +10,7 @@ import {
   type ArrivalSlug,
 } from "./adapters/arrival-guidance.ts";
 
-import { readOrganizerPage } from "./organizer-page.ts";
+import { MissingOrganizerEvidence, readOrganizerPage } from "./organizer-page.ts";
 
 export const ARRIVAL_ADAPTER = "arrival-guidance-v1";
 
@@ -56,7 +56,8 @@ export async function collectArrivalCandidate(
   const wacken = slug === "wacken-open-air" ? parseWackenArrival(pages[0], editionYear) : undefined;
   const facts =
     slug === "graspop" ? parseGraspopArrival(pages[0], pages[1], editionYear) : wacken && [wacken];
-  if (!facts) throw new Error("No complete organizer arrival evidence for this edition");
+  if (!facts)
+    throw new MissingOrganizerEvidence("No complete organizer arrival evidence for this edition");
 
   const fetchedAt = new Date().toISOString();
   const arrival = arrivalObservation.parse({

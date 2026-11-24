@@ -1,17 +1,10 @@
-import {
-  collectOverviewCandidate,
-  registeredOverviewSource,
-} from "../lib/ingestion/overview-collector.ts";
+import { organizerReviewCollector } from "../lib/ingestion/organizer-collector.ts";
 import { drainImportEvents } from "../lib/ingestion/import-events.ts";
 import { sendImportEvent, transportConfigured } from "../lib/ingestion/import-event-transport.mjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { listConfiguredSources } from "../lib/sources/repository.ts";
-import {
-  collectArrivalCandidate,
-  registeredArrivalSource,
-} from "../lib/ingestion/arrival-collector.ts";
 import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
 import { fetchSource } from "../lib/ingestion/fetch.ts";
 import { evaluateCandidate } from "../lib/ingestion/policy.ts";
@@ -82,19 +75,8 @@ const hydratedSources = configuredSources.map((source) => ({
 const eligible = dueOnly
   ? dueFestivalSources(hydratedSources)
   : hydratedSources.filter((source) => source.enabled);
-const sourceIdentity = (source) => ({
-  slug: source.festivalSlug,
-  year: source.editionYear,
-  url: source.url,
-  parserKey: source.parserKey,
-});
-function reviewCollector(source) {
-  const identity = sourceIdentity(source);
-  if (registeredArrivalSource(identity)) return collectArrivalCandidate;
-  if (registeredOverviewSource(identity)) return collectOverviewCandidate;
-}
 let selected = eligible.filter(
-  (source) => (!slugArg || source.festivalSlug === slugArg) && !reviewCollector(source),
+  (source) => (!slugArg || source.festivalSlug === slugArg) && !organizerReviewCollector(source),
 );
 const notificationEndpoint =
   !dbDue &&
@@ -248,7 +230,7 @@ for (const source of selected) {
     let response;
     let html;
     let organizerReview;
-    const collectReview = sourceLease && reviewCollector(source);
+    const collectReview = sourceLease && organizerReviewCollector(source);
     failureStage = "fetch";
     try {
       if (collectReview) {

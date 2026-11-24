@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { organizerReviewCollector } from "../../lib/ingestion/organizer-collector.ts";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
@@ -118,8 +120,10 @@ test("only the current imported overview can be approved and replayed", async ({
   expect(publication.fields).toEqual(["overview"]);
   expect(publication.evidence).toMatchObject({
     candidateId: next.candidate.id,
-    fingerprint: request.decision.overview,
-    documents: [{ url: source.url, contentHash: expect.stringMatching(/^[a-f0-9]{64}$/) }],
+    overview: {
+      fingerprint: request.decision.overview,
+      documents: [{ url: source.url, contentHash: expect.stringMatching(/^[a-f0-9]{64}$/) }],
+    },
   });
   const audit = await db.adminAuditEntry.findMany({
     where: {
@@ -169,3 +173,84 @@ for (const [lang, heading] of Object.entries({
     await expect(page.getByRole("region", { name: heading })).toHaveCount(0);
   });
 }
+
+test("one shared Wacken page can publish arrival and overview in one reviewed transaction", async ({
+  page,
+}) => {
+  const slug = "wacken-open-air";
+  const origin = overviewOrganizer(slug, year);
+  const festival = await db.festival.create({
+    data: {
+      slug,
+      name: "Wacken Fixture",
+      country: "Germany",
+      countryCode: origin.countryCode,
+      city: origin.city,
+      officialUrl: "https://www.wacken.com/",
+      genres: [],
+      editions: {
+        create: {
+          year,
+          status: "TBA",
+          ticketStatus: "UNKNOWN",
+          recordState: "CURRENT",
+          completeness: "TBA",
+          sourceUpdatedAt: new Date(),
+        },
+      },
+    },
+  });
+  try {
+    const arrival = await readFile(
+      new URL("../fixtures/arrival/wacken.html", import.meta.url),
+      "utf8",
+    );
+    const overview =
+      "<p>1.3 Veranstaltungsgelände: Die Veranstaltung findet auf dem ausgewiesenen Festivalgelände " +
+      "statt. Dazu gehört insbesondere die Eventfläche der Gemeinde Wacken. " +
+      "Hierzu gehören auch das Gelände vor den Haupt- und Nebenbühnen.</p>";
+    let reads = 0;
+    const staged = await stageOrganizerFixture(
+      db,
+      festival,
+      new Map([[origin.url, arrival + overview]]),
+      {
+        editionYear: year,
+        collect: (binding, fixtureFetch) =>
+          organizerReviewCollector(binding)(binding, (...args) => {
+            reads += 1;
+            return fixtureFetch(...args);
+          }),
+        fingerprintField: "overviewFingerprint",
+      },
+    );
+    expect(reads).toBe(1);
+    const claim = await claimAgentIssue(db, staged.sourceId, staged.issueId);
+    const overviewOnly = approve(claim);
+    await expect(resolveAgentIssue(db, overviewOnly)).rejects.toThrow("invalid");
+    const joint = {
+      ...overviewOnly,
+      decision: { ...overviewOnly.decision, arrival: claim.candidate.arrivalFingerprint },
+    };
+    const receipt = await resolveAgentIssue(db, joint);
+    expect(receipt).toMatchObject({
+      arrivalPublished: true,
+      overviewPublished: true,
+      providerJobs: 0,
+    });
+    expect(await resolveAgentIssue(db, joint)).toEqual(receipt);
+    const published = await db.catalogPublication.findUniqueOrThrow({
+      where: { id: receipt.publicationId },
+    });
+    expect(published.fields).toEqual(["arrival", "overview"]);
+    expect(published.evidence.arrival.documents[0].contentHash).toBe(
+      published.evidence.overview.documents[0].contentHash,
+    );
+    await page.goto(`/en/festivals/${slug}/`);
+    await expect(page.getByRole("region", { name: "About this festival" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Venue and arrival" })).toBeVisible();
+  } finally {
+    await db.festivalSource.deleteMany({ where: { festivalId: festival.id } });
+    await db.festival.delete({ where: { id: festival.id } });
+  }
+});

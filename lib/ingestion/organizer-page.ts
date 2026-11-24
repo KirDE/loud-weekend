@@ -1,3 +1,5 @@
+export class MissingOrganizerEvidence extends Error {}
+
 export async function readOrganizerPage(url: string, fetchImpl: typeof fetch) {
   const response = await fetchImpl(url, {
     redirect: "error",

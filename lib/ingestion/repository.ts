@@ -50,8 +50,16 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
   return db.$transaction(async (tx) => {
     const { arrival, overview } = input.result?.candidate ?? {};
     const organizer = arrival ?? overview;
-    if ((arrival && overview) || Boolean(input.sourceLease) !== Boolean(organizer))
-      throw new Error("Organizer observations require a source lease and a single review type");
+    if (Boolean(input.sourceLease) !== Boolean(organizer))
+      throw new Error("Organizer observations require a source lease");
+    if (
+      arrival &&
+      overview &&
+      (arrival.editionId !== overview.editionId ||
+        arrival.editionYear !== overview.editionYear ||
+        arrival.festivalSlug !== overview.festivalSlug)
+    )
+      throw new Error("Shared organizer observations must refer to the same edition");
     if (input.sourceLease) {
       const lease = input.sourceLease;
       const rows = await tx.$queryRaw<{ id: string }[]>`

@@ -18,9 +18,8 @@ import {
 } from "./agent-contract.ts";
 import { mapSource, validateSource } from "../sources/repository.ts";
 import {
-  publishAgentArrivalResolution,
   publishAgentFestivalResolution,
-  publishAgentOverviewResolution,
+  publishAgentOrganizerResolution,
 } from "../catalog/publication.ts";
 
 type Database = PrismaClient | PrismaTypes.TransactionClient;
@@ -544,8 +543,6 @@ TIME ZONE 'UTC')) FOR UPDATE
         ) ?? [];
       const [overviewDocument] = overviewDocuments;
       const overviewSource = registeredOverviewSource(i.source);
-      if (d.action === "apply" && overviewSource && !d.overview && (!d.source || d.facts))
-        throw new ImportAgentError("invalid");
       if (
         d.overview &&
         (!overviewSource ||
@@ -574,8 +571,16 @@ TIME ZONE 'UTC')) FOR UPDATE
       const guidanceSource = registeredArrivalSource(i.source);
       // An evidence-backed source-only repair must remain available after an import failure.
       // It cannot also publish unrelated facts or approve a guidance candidate.
-      if (d.action === "apply" && guidanceSource && !d.arrival && (!d.source || d.facts))
-        throw new ImportAgentError("invalid");
+      if (d.action === "apply" && (guidanceSource || overviewSource)) {
+        if (!d.arrival && !d.overview && (!d.source || d.facts))
+          throw new ImportAgentError("invalid");
+        if (
+          (d.arrival || d.overview) &&
+          (Boolean(d.arrival) !== Boolean(candidateArrival) ||
+            Boolean(d.overview) !== Boolean(candidateOverview))
+        )
+          throw new ImportAgentError("invalid");
+      }
       if (d.arrival) {
         const expectedUrls = candidateArrival?.facts.flatMap((fact) =>
           fact.supportingSourceUrl ? [fact.sourceUrl, fact.supportingSourceUrl] : [fact.sourceUrl],
@@ -610,34 +615,36 @@ TIME ZONE 'UTC')) FOR UPDATE
         ...e,
         observedAt: e.observedAt.toISOString(),
       }));
-      const overviewPublication =
-        d.overview && candidateOverview
-          ? await publishAgentOverviewResolution(tx, {
-              sourceId: publicationSourceId,
-              overview: candidateOverview,
-              evidence: {
-                candidateId: i.candidate?.id,
-                fingerprint: d.overview,
-                documents: persistedOverviewEvidence,
-              },
-            })
-          : null;
       const persistedArrivalEvidence = arrivalEvidence.map((e) => ({
         ...e,
         observedAt: e.observedAt.toISOString(),
       }));
-      const arrivalPublication =
-        d.arrival && candidateArrival
-          ? await publishAgentArrivalResolution(tx, {
-              sourceId: publicationSourceId,
-              arrival: candidateArrival,
-              evidence: {
+      const organizerEvidence = {
+        candidateId: i.candidate?.id,
+        ...(d.arrival && {
+          arrival: { fingerprint: d.arrival, documents: persistedArrivalEvidence },
+        }),
+        ...(d.overview && {
+          overview: { fingerprint: d.overview, documents: persistedOverviewEvidence },
+        }),
+      };
+      const {
+        publication: organizerPublication,
+        arrivalPublished,
+        overviewPublished,
+      } = await publishAgentOrganizerResolution(tx, {
+        sourceId: publicationSourceId,
+        arrival: d.arrival ? (candidateArrival ?? undefined) : undefined,
+        overview: d.overview ? (candidateOverview ?? undefined) : undefined,
+        evidence:
+          d.arrival && !d.overview
+            ? {
                 candidateId: i.candidate?.id,
                 fingerprint: d.arrival,
                 documents: persistedArrivalEvidence,
-              },
-            })
-          : null;
+              }
+            : organizerEvidence,
+      });
       // A stored candidate is not proof of a parser problem. In particular,
       // manual no-op reviews (including unchanged supplied facts/source) must
       // not manufacture repair tasks. Actual corrections and rejected/review
@@ -660,7 +667,7 @@ TIME ZONE 'UTC')) FOR UPDATE
           i.candidate.diffs.length > 0 ||
           !Array.isArray(i.candidate.warnings) ||
           i.candidate.warnings.length > 0);
-      let publication = overviewPublication ?? arrivalPublication;
+      let publication = organizerPublication;
       if (d.action === "apply") {
         if (d.facts && changedFacts)
           publication = await publishAgentFestivalResolution(tx, {
@@ -754,8 +761,8 @@ TIME ZONE 'UTC')) FOR UPDATE
         reason: d.reason,
         question: d.question ?? null,
         publicationId: publication?.id ?? null,
-        ...(d.arrival && { arrivalPublished: !!arrivalPublication }),
-        ...(d.overview && { overviewPublished: !!overviewPublication }),
+        ...(d.arrival && { arrivalPublished }),
+        ...(d.overview && { overviewPublished }),
         parserRepairId,
         providerJobs: publication?.playlistRefreshRequested ? 1 : 0,
         at: now.toISOString(),
@@ -798,10 +805,9 @@ TIME ZONE 'UTC')) FOR UPDATE
             ...(d.arrival && { arrival: candidateArrival, arrivalFingerprint: d.arrival }),
             ...(d.overview && { overview: candidateOverview, overviewFingerprint: d.overview }),
           },
-          evidence: d.overview
-            ? persistedOverviewEvidence
-            : d.arrival
-              ? persistedArrivalEvidence
+          evidence:
+            d.arrival || d.overview
+              ? [...persistedArrivalEvidence, ...persistedOverviewEvidence]
               : d.evidence,
           metadata: {
             issueId: i.issueId,

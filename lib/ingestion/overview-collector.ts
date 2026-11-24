@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { overviewObservation } from "../catalog/festival-overview-import.ts";
 import { overviewOrganizer, parseFestivalOverview } from "./adapters/festival-overview.ts";
-import { readOrganizerPage } from "./organizer-page.ts";
+import { MissingOrganizerEvidence, readOrganizerPage } from "./organizer-page.ts";
 import { INGESTION_SCHEMA_VERSION, type IngestionResult } from "./types.ts";
 import type { ConfiguredSource } from "../sources/repository.ts";
 
@@ -32,7 +32,8 @@ export async function collectOverviewCandidate(
   const html = await readOrganizerPage(url, fetchImpl);
   const fetchedAt = new Date().toISOString();
   const summary = parseFestivalOverview(html, festivalSlug, editionYear);
-  if (!summary) throw new Error("No complete organizer overview evidence for this edition");
+  if (!summary)
+    throw new MissingOrganizerEvidence("No complete organizer overview evidence for this edition");
   const overview = overviewObservation.parse({
     editionId,
     festivalSlug,

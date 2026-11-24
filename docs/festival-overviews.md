@@ -15,7 +15,10 @@ Follow the [protected import conflict workflow](import-conflict-agent.md). Claim
 the exact case and verify the stored organizer evidence before submitting an
 `apply` decision with `overview` set to its `candidate.overviewFingerprint`.
 Do not include replacement facts, source changes or separate evidence in that
-decision. A newer candidate or changed catalogue snapshot requires a new review.
+decision. When one organizer document supplies both arrival and overview
+evidence, send both stored fingerprints (`arrival` and `overview`) in one
+decision. If only one adapter finds complete evidence, only that observation
+can be approved. A newer candidate or changed catalogue snapshot requires a new review.
 The overview write, publication, candidate disposition and append-only audit are
 atomic. Replaying the same approval returns its existing receipt.
 

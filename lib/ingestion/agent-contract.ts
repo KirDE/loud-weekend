@@ -107,10 +107,7 @@ export const decisionSchema = z
         code: "custom",
         message: "Arrival approval must reference only the persisted observation",
       });
-    if (
-      v.overview &&
-      (v.action !== "apply" || v.arrival || v.facts || v.source || v.evidence.length)
-    )
+    if (v.overview && (v.action !== "apply" || v.facts || v.source || v.evidence.length))
       c.addIssue({
         code: "custom",
         message: "Overview approval must reference only the persisted observation",
