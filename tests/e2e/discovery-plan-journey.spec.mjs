@@ -10,6 +10,7 @@ const copy = {
     save: "☆ Save",
     saved: "★ Saved",
     attendance: "Attendance for Synthetic Fest",
+    plan: "Open my plan →",
     calendar: "Download calendar (.ics)",
   },
   de: {
@@ -20,6 +21,7 @@ const copy = {
     save: "☆ Speichern",
     saved: "★ Gespeichert",
     attendance: "Teilnahme an Synthetic Fest",
+    plan: "Meinen Plan öffnen →",
     calendar: "Kalender herunterladen (.ics)",
   },
   ru: {
@@ -30,6 +32,7 @@ const copy = {
     save: "☆ Сохранить",
     saved: "★ Сохранено",
     attendance: "Посещение фестиваля Synthetic Fest",
+    plan: "Открыть мой план →",
     calendar: "Скачать календарь (.ics)",
   },
 };
@@ -106,7 +109,7 @@ for (const [lang, t] of Object.entries(copy)) {
     await expect(saved).toHaveAttribute("aria-pressed", "true");
     await expect(attendance).toHaveValue("going");
 
-    await page.locator(".localActions").getByRole("link").click();
+    await page.locator(".localActions").getByRole("link", { name: t.plan, exact: true }).click();
     const plan = page.locator(".planList");
     await expect(plan.getByRole("link", { name: "Synthetic Fest", exact: true })).toBeVisible();
     await expect(plan.getByRole("combobox")).toHaveValue("going");
