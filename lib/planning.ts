@@ -91,46 +91,55 @@ function escapeIcs(value: string) {
     .replaceAll("\\", "\\\\")
     .replaceAll(";", "\\;")
     .replaceAll(",", "\\,")
-    .replaceAll(/\r?\n/g, "\\n");
+    .replaceAll(/\r\n|\r|\n/g, "\\n");
 }
 
-type CalendarFestival = Pick<
+type CalendarEvent = Pick<
   Festival,
-  | "slug"
-  | "name"
-  | "city"
-  | "country"
-  | "startDate"
-  | "endDate"
-  | "editionYear"
-  | "officialUrl"
-  | "updatedAt"
->;
+  "slug" | "editionYear" | "name" | "city" | "country" | "officialUrl" | "startDate" | "endDate"
+> & { calendarId?: string; calendarUpdatedAt?: string; updatedAt?: string };
 
-export function calendarFile(items: readonly CalendarFestival[]) {
+function foldCalendarLine(line: string) {
+  const encoder = new TextEncoder();
+  const parts: string[] = [];
+  let part = "";
+  let bytes = 0;
+  for (const character of line) {
+    const nextBytes = encoder.encode(character).length;
+    if (bytes + nextBytes > 75) {
+      parts.push(part);
+      part = " ";
+      bytes = 1;
+    }
+    part += character;
+    bytes += nextBytes;
+  }
+  return [...parts, part].join("\r\n");
+}
+
+function calendarStamp(value: string | undefined, generatedAt: Date) {
+  const date = value ? new Date(value) : generatedAt;
+  const iso = Number.isNaN(date.getTime()) ? generatedAt.toISOString() : date.toISOString();
+  return iso.replace(/[-:]|\.\d{3}/g, "");
+}
+
+export function calendarFile(items: readonly CalendarEvent[], generatedAt = new Date()) {
   const events = items
     .filter((item) => item.startDate)
     .flatMap((item) => {
       const end = new Date(`${item.endDate || item.startDate}T12:00:00Z`);
       end.setUTCDate(end.getUTCDate() + 1);
       const location = [item.city, item.country].filter(Boolean).join(", ");
-      const updated = new Date(item.updatedAt);
-      const stamp = Number.isFinite(updated.getTime())
-        ? updated
-            .toISOString()
-            .replace(/[-:]/g, "")
-            .replace(/\.\d{3}Z$/, "Z")
-        : null;
       return [
         "BEGIN:VEVENT",
-        `UID:${item.slug}-${item.editionYear || 2027}@festival-radar`,
-        ...(stamp ? [`DTSTAMP:${stamp}`] : []),
+        `UID:${item.calendarId ?? `${item.slug}-${item.editionYear || 2027}`}@festival-radar`,
+        `DTSTAMP:${calendarStamp(item.calendarUpdatedAt ?? item.updatedAt, generatedAt)}`,
         `DTSTART;VALUE=DATE:${compactDate(item.startDate!)}`,
         `DTEND;VALUE=DATE:${compactDate(end.toISOString().slice(0, 10))}`,
         `SUMMARY:${escapeIcs(item.name)}`,
         `LOCATION:${escapeIcs(location)}`,
         `DESCRIPTION:${escapeIcs(`Official information: ${item.officialUrl}`)}`,
-        `URL:${item.officialUrl}`,
+        `URL:${item.officialUrl.replace(/\r|\n/g, "")}`,
         "END:VEVENT",
       ];
     });
@@ -142,7 +151,10 @@ export function calendarFile(items: readonly CalendarFestival[]) {
     "PRODID:-//Loud Weekend//European Festivals//EN",
     ...events,
     "END:VCALENDAR",
-  ].join("\r\n");
+    "",
+  ]
+    .map(foldCalendarLine)
+    .join("\r\n");
 }
 
 export function calendarUrls(item: Festival) {

@@ -66,6 +66,12 @@ const copy = {
   ],
 };
 
+const depthCopy = {
+  en: ["Playlist depth", "Spotify's request limit was reached"],
+  de: ["Playlist-Umfang", "Spotify-Anfragelimit erreicht"],
+  ru: ["Объём плейлиста", "Лимит запросов Spotify исчерпан"],
+};
+
 for (const [
   language,
   [choose, first, second, favorites, fallback, download, create],
@@ -86,7 +92,7 @@ for (const [
         );
     });
     await page.route("**/api/spotify/selection-playlist", (route) =>
-      route.fulfill({ status: 409, json: { error: "Not connected" } }),
+      route.fulfill({ status: 429, json: { error: "Synthetic quota" } }),
     );
     await page.goto(`/${language}/planner/`);
     await page.getByText(choose, { exact: true }).click();
@@ -107,9 +113,16 @@ for (const [
       "href",
       "data:text/plain;charset=utf-8,Second%20Artist%0AThird%20Playlist%20Artist",
     );
+    const [depthLabel, quotaLabel] = depthCopy[language];
+    const depth = page.getByRole("combobox", { name: depthLabel });
+    await expect(depth).toHaveValue("quick");
+    await depth.selectOption("preview");
     const request = page.waitForRequest("**/api/spotify/selection-playlist");
     await page.getByRole("button", { name: create }).click();
-    expect((await request).postDataJSON().artists).toEqual([second, third]);
+    const body = (await request).postDataJSON();
+    expect(body.artists).toEqual([second, third]);
+    expect(body.depth).toBe("preview");
+    await expect(page.getByText(quotaLabel, { exact: false })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       320,
     );

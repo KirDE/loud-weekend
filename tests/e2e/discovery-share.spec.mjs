@@ -68,7 +68,9 @@ for (const [locale, t] of Object.entries(labels)) {
             JSON.stringify({ savedFilters: { query: "Synthetic Alpine" } }),
           );
       }, storageKey);
-      await recipient.goto(link);
+      const attributedLink = new URL(link);
+      attributedLink.searchParams.set("ref", "festival-guide");
+      await recipient.goto(attributedLink.href);
       const recipientSearch = recipient.locator(".search input");
       await expect(recipientSearch).toHaveValue("Synthetic Fest");
       await expect(recipient.locator(".festivalCard h2")).toHaveText(["Synthetic Fest"]);
@@ -77,7 +79,7 @@ for (const [locale, t] of Object.entries(labels)) {
         new RegExp(`/${locale}/$`),
       );
       await recipientSearch.fill("Synthetic West");
-      await expect(recipient).toHaveURL(link);
+      await expect(recipient).toHaveURL(attributedLink.href);
       await expect
         .poll(() =>
           recipient.evaluate(
@@ -86,8 +88,24 @@ for (const [locale, t] of Object.entries(labels)) {
           ),
         )
         .toBe("Synthetic Alpine");
+
+      // A second linked snapshot must not leave the first one's abandoned
+      // local edits waiting to reappear on Back.
+      await recipient.evaluate(() => {
+        const secondLink = new URL(location.href);
+        secondLink.searchParams.set("q", "Synthetic South");
+        history.pushState(null, "", secondLink);
+      });
+      await expect(recipientSearch).toHaveValue("Synthetic South");
+      await recipient.goBack();
+      await expect(recipientSearch).toHaveValue("Synthetic Fest");
+      await recipient.goForward();
+      await expect(recipientSearch).toHaveValue("Synthetic South");
+      await recipient.goBack();
+      await expect(recipientSearch).toHaveValue("Synthetic Fest");
+
       await recipient.locator(".clearFilters").click();
-      await expect(recipient).toHaveURL(`/${locale}/`);
+      await expect(recipient).toHaveURL(`/${locale}/?ref=festival-guide`);
       await expect(recipientSearch).toHaveValue("Synthetic Alpine");
       await recipient.goBack();
       await expect(recipientSearch).toHaveValue("Synthetic Fest");

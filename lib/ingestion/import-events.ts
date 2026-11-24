@@ -42,7 +42,7 @@ export async function prepareImportEvent(
       p.retryAt &&
       issue.attempt.status === "REVIEW" &&
       issue.candidate?.reviewState === "PENDING" &&
-      issue.candidate.arrival
+      (issue.candidate.arrival || issue.candidate.overview)
     )
   )
     return {};

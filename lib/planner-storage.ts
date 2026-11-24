@@ -1,3 +1,4 @@
+import { readTripBudgets, type TripBudgets } from "./trip-budget";
 import { readPlaylistExclusions } from "./playlist-selection.ts";
 
 export const legacyPlannerYear = 2027;
@@ -9,12 +10,14 @@ type PlannerState = {
   attendance: Record<string, Attendance>;
   seasonAttendance?: Record<string, Attendance>;
   playlistFestivals: string[];
+  tripBudgets?: TripBudgets;
   playlistExcludedArtists?: string[];
   savedFilters?: unknown;
 };
 
 export function serializePlannerState(state: PlannerState) {
-  return JSON.stringify(state);
+  const { tripBudgets, ...original } = state;
+  return JSON.stringify(tripBudgets && Object.keys(tripBudgets).length ? state : original);
 }
 
 export function parsePlannerState(value: string): Partial<PlannerState> {
@@ -30,6 +33,7 @@ export function parsePlannerState(value: string): Partial<PlannerState> {
   return {
     ...parsed,
     seasonAttendance: Object.keys(seasonAttendance).length ? seasonAttendance : undefined,
+    tripBudgets: readTripBudgets(parsed.tripBudgets),
     playlistFestivals: Array.isArray(parsed.playlistFestivals)
       ? parsed.playlistFestivals.filter((item): item is string => typeof item === "string")
       : [],
