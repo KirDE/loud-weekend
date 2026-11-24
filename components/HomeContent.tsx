@@ -2,6 +2,7 @@
 
 import type { DiscoveryArtist } from "@/lib/discovery-artists";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
+import type { CatalogFreshness } from "@/lib/domain/freshness";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { useLanguage } from "./LanguageProvider";
@@ -9,10 +10,12 @@ import { hasAnnouncedLineup } from "@/lib/festival-lineup";
 
 export function HomeContent({
   festivals,
+  freshness,
   discoveryLineups,
   matchingArtists,
 }: {
   festivals: Festival[];
+  freshness: CatalogFreshness;
   discoveryLineups?: DiscoveryLineups;
   matchingArtists?: readonly DiscoveryArtist[];
 }) {
@@ -43,6 +46,7 @@ export function HomeContent({
       </section>
       <FestivalExplorer
         festivals={festivals}
+        freshness={freshness}
         discoveryLineups={discoveryLineups}
         matchingArtists={matchingArtists}
       />

@@ -5,7 +5,7 @@ import type { SupportedLanguage } from "./catalog/public";
 
 // Share one request-scoped catalogue snapshot between metadata and visible stats.
 export const getHomeCatalog = cache(async () => {
-  const catalogue = await getCatalog();
+  const catalogue = await getCatalog({ includeFreshness: true });
   const inLineups = new Set(Object.values(catalogue.discoveryLineups.artistSlugsByFestival).flat());
   const matchingArtists = catalogue.artists
     .filter(({ slug }) => inLineups.has(slug))

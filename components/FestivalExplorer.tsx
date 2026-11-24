@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
+import type { CatalogFreshness } from "@/lib/domain/freshness";
+import { formatFreshnessDate } from "@/lib/freshness-date";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
@@ -28,7 +30,7 @@ import {
 } from "@/lib/discovery-dates";
 import { lineupOverlap } from "@/lib/planning";
 import { useLocalPlanner } from "./LocalPlanner";
-import { hasAvailableTickets } from "@/lib/tickets";
+import { hasAvailableTickets, ticketPresentation } from "@/lib/tickets";
 import {
   distanceKm,
   festivalGenres,
@@ -39,7 +41,12 @@ import {
   festivalOverlapsMonth,
   formatFestivalDateRange,
 } from "@/lib/festival-dates";
-import { announcedArtists, hasAnnouncedLineup, lineupPreviewArtists } from "@/lib/festival-lineup";
+import {
+  announcedArtists,
+  hasAnnouncedLineup,
+  lineupPresentation,
+  lineupPreviewArtists,
+} from "@/lib/festival-lineup";
 
 import {
   festivalArtistMatch,
@@ -56,12 +63,30 @@ import {
 
 const emptyArtistSelection: string[] = [];
 
+export function FestivalComparisonTicket({ item }: { item: Festival }) {
+  const { t } = useLanguage();
+  const tickets = ticketPresentation(item);
+  return (
+    <td data-ticket-status={tickets.status}>
+      {tickets.href ? (
+        <a href={tickets.href} rel="noreferrer" target="_blank">
+          {t(tickets.label)}
+        </a>
+      ) : (
+        t(tickets.label)
+      )}
+    </td>
+  );
+}
+
 export function FestivalExplorer({
   festivals,
+  freshness,
   discoveryLineups,
   matchingArtists,
 }: {
   festivals: Festival[];
+  freshness?: CatalogFreshness;
   discoveryLineups?: DiscoveryLineups;
   matchingArtists?: readonly DiscoveryArtist[];
 }) {
@@ -366,7 +391,7 @@ export function FestivalExplorer({
               onChange={(event) => updateFilters({ announcedOnly: event.target.checked })}
             />
             <span />
-            {t("lineupAnnounced")}
+            {t("onlyAnnouncedActs")}
           </label>
           <label className="toggle">
             <input
@@ -436,17 +461,7 @@ export function FestivalExplorer({
                   <tr>
                     <th scope="row">{t("tickets")}</th>
                     {compared.map((item) => (
-                      <td key={item.slug}>
-                        {item.ticketsUrl ? (
-                          <a href={item.ticketsUrl} rel="noreferrer" target="_blank">
-                            {t("officialTickets")}
-                          </a>
-                        ) : item.ticketStatus === "unavailable" ? (
-                          t("unavailable")
-                        ) : (
-                          t("availabilityNotConfirmed")
-                        )}
-                      </td>
+                      <FestivalComparisonTicket key={item.slug} item={item} />
                     ))}
                   </tr>
                   <tr>
@@ -489,7 +504,29 @@ export function FestivalExplorer({
         <span>
           {visible.length} {t("festivals")}
         </span>
-        <span>{t("lastReview")}</span>
+        {freshness && (
+          <span>
+            {freshness.checkedAt ? (
+              <>
+                {t("latestSourceCheck")} ·{" "}
+                <time dateTime={freshness.checkedAt}>
+                  {formatFreshnessDate(freshness.checkedAt, locale)}
+                </time>
+              </>
+            ) : (
+              t("sourceCheckUnavailable")
+            )}
+            {freshness.lastPublishedAt && (
+              <>
+                {" "}
+                · {t("latestCatalogPublication")} ·{" "}
+                <time dateTime={freshness.lastPublishedAt}>
+                  {formatFreshnessDate(freshness.lastPublishedAt, locale)}
+                </time>
+              </>
+            )}
+          </span>
+        )}
       </div>
       {withoutRoster > 0 && (
         <p className="compareHint">{t("artistMatchesUnknown", { count: withoutRoster })}</p>
@@ -499,6 +536,7 @@ export function FestivalExplorer({
           const isSelected = selected.includes(item.slug);
           const previewArtists = lineupPreviewArtists(item);
           const artistCount = announcedArtists(item).length;
+          const lineupStatus = lineupPresentation(item);
           return (
             <article className="festivalCard" key={item.slug}>
               <button
@@ -527,9 +565,7 @@ export function FestivalExplorer({
                 )}
                 <div className="cardTop">
                   <FestivalLogo slug={item.slug} name={item.name} />
-                  <span className={`status ${item.status}`}>
-                    {t(item.status === "tba" ? "tba" : item.status)}
-                  </span>
+                  <span className={`status ${lineupStatus.tone}`}>{t(lineupStatus.label)}</span>
                 </div>
                 {item.sourceDeprecated && (
                   <span className="status deprecated">{t("sourceDeprecated")}</span>
@@ -541,11 +577,9 @@ export function FestivalExplorer({
                   {item.city || displayNames.of(item.countryCode) || item.country}
                 </div>
                 <div className="artists">
-                  {previewArtists.length ? (
-                    previewArtists.slice(0, 4).map((artist) => <span key={artist}>{artist}</span>)
-                  ) : (
-                    <span className="muted">{t("lineupNotAnnounced")}</span>
-                  )}
+                  {previewArtists.length
+                    ? previewArtists.slice(0, 4).map((artist) => <span key={artist}>{artist}</span>)
+                    : null}
                 </div>
                 <div className="cardFoot">
                   <span>

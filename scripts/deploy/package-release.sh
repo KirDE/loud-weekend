@@ -81,3 +81,4 @@ grep -Fxq 'app/scripts/deploy/provider-timers.sh' "$archive_contents"
 grep -Fxq 'app/scripts/deploy/check-python-release.sh' "$archive_contents"
 
 grep -Fxq 'app/scripts/add-artist-aliases.mjs' "$archive_contents"
+grep -Fxq 'app/lib/catalog/arrival-import.ts' "$archive_contents"
