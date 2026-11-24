@@ -436,7 +436,7 @@ const translations = {
     region: "Europe 2027",
     festivals: "Festivals",
     notifications: "Notifications",
-    aboutData: "About data",
+    aboutData: "About",
     dataQuality: "Catalogue data quality",
     footerNote: "Always confirm dates and tickets with the official festival.",
     language: "Language",
@@ -564,6 +564,8 @@ const translations = {
     noLineupOverlap: "No announced lineup overlap yet",
     noDiscoveryMatches:
       "Try a wider distance, another origin, or remove a genre filter. Your comparison selections are preserved.",
+    siteFaq: "FAQ",
+    sourceCode: "Source code",
     discoverySort: "Sort festivals",
     discoverySort_date: "Date",
     discoverySort_name: "Name",
@@ -607,7 +609,7 @@ const translations = {
     region: "Europa 2027",
     festivals: "Festivals",
     notifications: "Benachrichtigungen",
-    aboutData: "Über die Daten",
+    aboutData: "Über uns",
     dataQuality: "Datenqualität des Katalogs",
     footerNote: "Termine und Tickets immer auf der offiziellen Festival-Seite prüfen.",
     language: "Sprache",
@@ -742,6 +744,8 @@ const translations = {
       "Wähle eine größere Entfernung oder einen anderen Ausgangspun" +
       "kt oder entferne den Genre-Filter. Deine Vergleichsauswahl b" +
       "leibt erhalten.",
+    siteFaq: "Häufige Fragen",
+    sourceCode: "Quellcode",
     discoverySort: "Festivals sortieren",
     discoverySort_date: "Datum",
     discoverySort_name: "Name",
@@ -786,7 +790,7 @@ const translations = {
     region: "Европа 2027",
     festivals: "Фестивали",
     notifications: "Уведомления",
-    aboutData: "О данных",
+    aboutData: "О проекте",
     dataQuality: "Качество данных каталога",
     footerNote: "Всегда проверяйте даты и билеты на официальном сайте фестиваля.",
     language: "Язык",
@@ -916,6 +920,8 @@ const translations = {
       "Увеличьте расстояние, выберите другую точку отсчёта или убер" +
       "ите фильтр по жанру. Выбранные для сравнения фестивали сохра" +
       "нятся.",
+    siteFaq: "Частые вопросы",
+    sourceCode: "Исходный код",
     discoverySort: "Сортировка фестивалей",
     discoverySort_date: "Дата",
     discoverySort_name: "Название",
