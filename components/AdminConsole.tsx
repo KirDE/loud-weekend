@@ -558,6 +558,7 @@ export function AdminConsole({
             <div>
               <div className="adminPanel">
                 <h3>Playlist editor</h3>
+                <p>Playlist drafts can be saved, but cannot yet be published.</p>
                 <label>
                   Platform
                   <select
