@@ -38,10 +38,14 @@ export function clearBrowserRunningOrders(storage: Storage, snapshot: Record<str
 }
 
 export function restoreBrowserRunningOrders(storage: Storage, snapshot: Record<string, string[]>) {
+  const updates = new Map<string, string[]>();
   for (const [key, previous] of Object.entries(snapshot)) {
     if (!previous.length || !ownedPlanKey(key)) continue;
     const current = parsePerformanceSelections(storage.getItem(key) ?? "[]");
-    const restored = [...new Set([...current, ...previous])].slice(0, maxPerformanceSelections);
-    storage.setItem(key, JSON.stringify(restored));
+    const restored = [...new Set([...current, ...previous])];
+    if (restored.length > maxPerformanceSelections)
+      throw new RangeError("Running order limit exceeded");
+    updates.set(key, restored);
   }
+  for (const [key, restored] of updates) storage.setItem(key, JSON.stringify(restored));
 }
