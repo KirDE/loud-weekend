@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import vm from "node:vm";
+import { showOfflineCatalog } from "../public/offline-trips.mjs";
 
-async function render(fetchImpl) {
-  const source = await readFile(new URL("../public/offline.html", import.meta.url), "utf8");
+async function render(fetchImpl, base = "/", language = "en") {
   const element = (tag) => ({
     tag,
     textContent: "",
@@ -26,10 +24,7 @@ async function render(fetchImpl) {
     createElement: element,
     createDocumentFragment: () => element("fragment"),
   };
-  await vm.runInNewContext(source.match(/<script>([\s\S]*?)<\/script>/)[1], {
-    document,
-    fetch: fetchImpl,
-  });
+  await showOfflineCatalog(document, fetchImpl, base, language);
   return { status, catalog };
 }
 
@@ -77,21 +72,29 @@ test(
   },
 );
 
-test(
-  "offline page clearly handles first offline visit, HTTP failu" +
-    "re and invalid JSON without a static substitution",
-  async () => {
-    for (const fetchImpl of [
-      async () => {
-        throw new TypeError("offline");
-      },
-      async () => new Response(null, { status: 503 }),
-      async () => new Response("not JSON"),
-      async () => new Response('{"schemaVersion":1,"festivals":[]}'),
-    ]) {
-      const { status, catalog } = await render(fetchImpl);
-      assert.match(status.textContent, /No saved festival data/);
-      assert.equal(catalog.children.length, 0);
-    }
-  },
-);
+test("offline page does not substitute data when the catalogue is missing or invalid", async () => {
+  for (const fetchImpl of [
+    async () => {
+      throw new TypeError("offline");
+    },
+    async () => new Response(null, { status: 503 }),
+    async () => new Response("not JSON"),
+    async () => new Response('{"schemaVersion":1,"festivals":[]}'),
+  ]) {
+    const { status, catalog } = await render(fetchImpl);
+    assert.match(status.textContent, /No saved festival data/);
+    assert.equal(catalog.children.length, 0);
+  }
+});
+
+test("catalogue requests stay under the installation path and empty data is localized", async () => {
+  const { status } = await render(
+    async (url) => {
+      assert.equal(url, "/radar/api/offline/catalog/");
+      return new Response(null, { status: 503 });
+    },
+    "/radar/",
+    "ru",
+  );
+  assert.match(status.textContent, /^Нет сохранённых данных фестивалей/);
+});

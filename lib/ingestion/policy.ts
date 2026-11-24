@@ -1,3 +1,4 @@
+import { editionDateProblem } from "../domain/edition-dates.ts";
 import { canonicalArtistNames, type AliasArtist } from "../catalog/artist-aliases.ts";
 import { isDownloadAnnouncement } from "./adapters/download.ts";
 import { ROSKILDE_HOME, ROSKILDE_REVIEW } from "./adapters/roskilde.ts";
@@ -295,6 +296,14 @@ export function evaluateCandidate(
   }
   const catalogueYear =
     current.editionYear ?? (current.startDate ? Number(current.startDate.slice(0, 4)) : undefined);
+  if (changes.some(({ field }) => field === "startDate" || field === "endDate")) {
+    const problem = editionDateProblem(
+      catalogueYear,
+      effective.startDate ?? current.startDate,
+      effective.endDate ?? current.endDate,
+    );
+    if (problem) reviewReasons.add(problem);
+  }
   const mismatchedYears = catalogueYear
     ? candidate.observedEditionYears.filter((year) => year !== catalogueYear)
     : [];
@@ -305,7 +314,7 @@ export function evaluateCandidate(
   const hasObservedActs = Boolean(candidate.lineup?.length || candidate.headliners?.length);
   if (hasObservedActs && !catalogueYear)
     reviewReasons.add("Catalogue edition year is unknown; lineup requires review");
-  if (hasObservedActs && candidate.observedEditionYears.length === 0)
+  if (hasObservedActs && candidate.observedEditionYears.length !== 1)
     reviewReasons.add("Lineup edition could not be verified against the catalogue year");
   if (candidate.lineup && candidate.lineup.length === 0 && current.lineup.length > 0)
     reviewReasons.add("A non-empty lineup cannot be replaced by an empty lineup");
