@@ -1,0 +1,72 @@
+"use client";
+
+import Link from "next/link";
+import type { summarizeDataQuality } from "@/lib/catalog/data-quality";
+import { dataQualityCopy } from "@/lib/data-quality-copy";
+import { useLanguage } from "./LanguageProvider";
+
+export function DataQualityContent({ data }: { data?: ReturnType<typeof summarizeDataQuality> }) {
+  const { language, locale } = useLanguage();
+  const t = dataQualityCopy[language];
+  const count = new Intl.NumberFormat(locale);
+  const group = (header: string, total: number, rows: readonly (readonly [string, number])[]) => (
+    <section>
+      <h2>{header}</h2>
+      <dl>
+        {rows.map(([label, value]) => (
+          <div className="dataQualityCount" key={label}>
+            <dt>{label}</dt>
+            <dd>
+              {count.format(value)} / {count.format(total)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+  return (
+    <article className="directoryPage">
+      <h1>{t.title}</h1>
+      {!data ? (
+        <p role="status">{t.unavailable}</p>
+      ) : data.total === 0 ? (
+        <p>{t.empty}</p>
+      ) : (
+        <>
+          <p>{t.intro}</p>
+          {group(t.coverage, data.total, [
+            [t.dates, data.dates],
+            [t.lineup, data.lineup],
+            [t.tickets, data.tickets],
+            [t.timetable, data.timetable],
+          ])}
+          {group(t.source, data.total, [
+            [t.recent, data.checked],
+            [t.stale, data.stale],
+            [t.unchecked, data.notChecked],
+          ])}
+          {data.lastRecentCheck ? (
+            <p>
+              {t.last}:{" "}
+              <time dateTime={data.lastRecentCheck}>
+                {new Intl.DateTimeFormat(locale, { timeZone: "UTC", dateStyle: "medium" }).format(
+                  new Date(data.lastRecentCheck),
+                )}
+              </time>
+            </p>
+          ) : (
+            <p>{t.noCheck}</p>
+          )}
+          {group(t.evidence, data.total, [
+            [t.dateEvidence, data.dateEvidence],
+            [t.lineupEvidence, data.lineupEvidence],
+          ])}
+          <p>{t.detail}</p>
+        </>
+      )}
+      <Link className="textLink" href={`/${language}/`}>
+        {t.more}
+      </Link>
+    </article>
+  );
+}

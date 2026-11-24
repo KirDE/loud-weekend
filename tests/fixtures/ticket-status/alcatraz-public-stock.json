@@ -1,0 +1,172 @@
+{
+  "shops": [
+    {
+      "guid": "a22e0ce7-7657-4601-addc-13d7d0cac701",
+      "name": "Alcatraz Open Air 2027",
+      "currency": "EUR",
+      "event_selection": "auto"
+    }
+  ],
+  "events": [
+    {
+      "guid": "03e411ab-e876-4c40-9a55-9de3bcf980ab",
+      "name": "Alcatraz Open Air 2027 - CAMPING",
+      "start": "2027-08-05T10:00:00+02:00",
+      "end": "2027-08-09T13:00:00+02:00",
+      "status": "normal",
+      "currency": "EUR"
+    },
+    {
+      "guid": "69108611-833e-49a3-8170-71f3011c23aa",
+      "name": "Alcatraz Open Air 2027",
+      "start": "2027-08-05T09:00:00+02:00",
+      "end": "2027-08-09T01:30:00+02:00",
+      "status": "normal",
+      "currency": "EUR"
+    },
+    {
+      "guid": "ca17b64b-d407-4e5b-b670-9918664309e8",
+      "name": "Alcatraz Open Air 2027 - FOOD & DRINK",
+      "start": "2027-08-05T11:00:00+02:00",
+      "end": "2027-08-09T13:00:00+02:00",
+      "status": "normal",
+      "currency": "EUR"
+    }
+  ],
+  "tickets": {
+    "92e740a7-e174-4c34-90b5-bf27ecdd76fa": {
+      "guid": "92e740a7-e174-4c34-90b5-bf27ecdd76fa",
+      "event_id": "69108611-833e-49a3-8170-71f3011c23aa",
+      "name": "Combi - Early Bird",
+      "min_price": 24000,
+      "status_overrule": "sold_out",
+      "class": "PlayPass",
+      "increment": 1,
+      "available_from": "2026-08-12T12:00:00+02:00",
+      "available_until": null,
+      "min_orderable_amount_per_order": 1,
+      "max_orderable_amount_per_order": 20,
+      "hide_without_coupon": false,
+      "require_coupon": false,
+      "combines_products": true,
+      "deleted_at": null,
+      "status": "sold_out",
+      "seated": false
+    },
+    "aa7adccc-bfc1-477b-aace-14a79c3c02e9": {
+      "guid": "aa7adccc-bfc1-477b-aace-14a79c3c02e9",
+      "event_id": "03e411ab-e876-4c40-9a55-9de3bcf980ab",
+      "name": "Camping",
+      "min_price": 2550,
+      "status_overrule": "auto",
+      "class": null,
+      "increment": 1,
+      "available_from": "2026-08-12T12:00:00+02:00",
+      "available_until": null,
+      "min_orderable_amount_per_order": 1,
+      "max_orderable_amount_per_order": 20,
+      "hide_without_coupon": false,
+      "require_coupon": false,
+      "combines_products": true,
+      "deleted_at": null,
+      "status": "available",
+      "seated": false
+    },
+    "ab4ca575-7289-4657-b26c-423fc1f92ba5": {
+      "guid": "ab4ca575-7289-4657-b26c-423fc1f92ba5",
+      "event_id": "69108611-833e-49a3-8170-71f3011c23aa",
+      "name": "Combi VIP",
+      "min_price": 47500,
+      "status_overrule": "sold_out",
+      "class": "PlayPass",
+      "increment": 1,
+      "available_from": "2026-08-12T12:00:00+02:00",
+      "available_until": null,
+      "min_orderable_amount_per_order": 1,
+      "max_orderable_amount_per_order": 20,
+      "hide_without_coupon": false,
+      "require_coupon": false,
+      "combines_products": true,
+      "deleted_at": null,
+      "status": "sold_out",
+      "seated": false
+    },
+    "aef1836e-9a6a-47dc-bd1f-d7ba972ff908": {
+      "guid": "aef1836e-9a6a-47dc-bd1f-d7ba972ff908",
+      "event_id": "69108611-833e-49a3-8170-71f3011c23aa",
+      "name": "Combi - Wave 2",
+      "min_price": 25000,
+      "status_overrule": "sold_out",
+      "class": "PlayPass",
+      "increment": 1,
+      "available_from": "2026-08-12T12:00:00+02:00",
+      "available_until": null,
+      "min_orderable_amount_per_order": 1,
+      "max_orderable_amount_per_order": 20,
+      "hide_without_coupon": false,
+      "require_coupon": false,
+      "combines_products": true,
+      "deleted_at": null,
+      "status": "sold_out",
+      "seated": false
+    },
+    "b97eba3b-553a-43c4-a419-db2dc62d71b6": {
+      "guid": "b97eba3b-553a-43c4-a419-db2dc62d71b6",
+      "event_id": "69108611-833e-49a3-8170-71f3011c23aa",
+      "name": "Combi - Wave 3",
+      "min_price": 26500,
+      "status_overrule": "auto",
+      "class": "PlayPass",
+      "increment": 1,
+      "available_from": "2026-08-12T12:00:00+02:00",
+      "available_until": null,
+      "min_orderable_amount_per_order": 1,
+      "max_orderable_amount_per_order": 20,
+      "hide_without_coupon": false,
+      "require_coupon": false,
+      "combines_products": true,
+      "deleted_at": null,
+      "status": "available",
+      "seated": false
+    }
+  },
+  "pivots": {
+    "shops-tickets": [
+      {
+        "shop_guid": "a22e0ce7-7657-4601-addc-13d7d0cac701",
+        "ticket_guid": "92e740a7-e174-4c34-90b5-bf27ecdd76fa",
+        "preceded_by": null,
+        "numerator": 464,
+        "denominator": 19
+      },
+      {
+        "shop_guid": "a22e0ce7-7657-4601-addc-13d7d0cac701",
+        "ticket_guid": "aa7adccc-bfc1-477b-aace-14a79c3c02e9",
+        "preceded_by": null,
+        "numerator": 174,
+        "denominator": 7
+      },
+      {
+        "shop_guid": "a22e0ce7-7657-4601-addc-13d7d0cac701",
+        "ticket_guid": "ab4ca575-7289-4657-b26c-423fc1f92ba5",
+        "preceded_by": null,
+        "numerator": 145,
+        "denominator": 6
+      },
+      {
+        "shop_guid": "a22e0ce7-7657-4601-addc-13d7d0cac701",
+        "ticket_guid": "aef1836e-9a6a-47dc-bd1f-d7ba972ff908",
+        "preceded_by": null,
+        "numerator": 58,
+        "denominator": 3
+      },
+      {
+        "shop_guid": "a22e0ce7-7657-4601-addc-13d7d0cac701",
+        "ticket_guid": "b97eba3b-553a-43c4-a419-db2dc62d71b6",
+        "preceded_by": null,
+        "numerator": 87,
+        "denominator": 4
+      }
+    ]
+  }
+}
