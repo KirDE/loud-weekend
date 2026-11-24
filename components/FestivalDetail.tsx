@@ -10,6 +10,7 @@ import { useLanguage } from "./LanguageProvider";
 import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
 import { FestivalArrival } from "./FestivalArrival";
 import { PlanningTools } from "./PlanningTools";
+import { PlaylistCoverageLabel } from "./PlaylistCoverageLabel";
 import type { PlaylistStatus } from "@/lib/domain/festival";
 import { formatFreshnessDate } from "@/lib/freshness-date";
 import { ticketPresentation } from "@/lib/tickets";
@@ -135,13 +136,13 @@ export function FestivalDetail({
         )}
         {playlistUrl ? (
           <a href={playlistUrl} target="_blank" rel="noreferrer">
-            <small>
-              {t("listen")}
-              {playlist && !reviewedSpotify
-                ? ` · ${playlist.artists} ${t("artists")} · ${playlist.tracks} ${t("tracks")}`
-                : ""}
-            </small>
+            <small>{t("listen")}</small>
             <strong>{t("spotifyPlaylist")}</strong>
+            <PlaylistCoverageLabel
+              coverage={
+                playlistUrl === playlist?.spotifyUrl ? playlist.coverage?.spotify : undefined
+              }
+            />
           </a>
         ) : (
           <div className="disabled">
@@ -151,15 +152,15 @@ export function FestivalDetail({
         )}
         {youtubePlaylistUrl ? (
           <a href={youtubePlaylistUrl} target="_blank" rel="noreferrer">
-            <small>
-              {t("listen")}
-              {!reviewedYoutube &&
-              playlist?.youtubeMusicArtists !== undefined &&
-              playlist.youtubeMusicTracks !== undefined
-                ? ` · ${playlist.youtubeMusicArtists} ${t("artists")} · ${playlist.youtubeMusicTracks} ${t("tracks")}`
-                : ""}
-            </small>
+            <small>{t("listen")}</small>
             <strong>{t("youtubeMusicPlaylist")}</strong>
+            <PlaylistCoverageLabel
+              coverage={
+                youtubePlaylistUrl === playlist?.youtubeMusicUrl
+                  ? playlist.coverage?.youtubeMusic
+                  : undefined
+              }
+            />
           </a>
         ) : null}
         {setlistUrl ? (
