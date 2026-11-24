@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
-import { parsePlannerState, serializePlannerState } from "@/lib/planner-storage";
+import { mergePlannerState, parsePlannerState, serializePlannerState } from "@/lib/planner-storage";
 import {
   defaultDiscoveryPreferences,
   readDiscoveryPreferences,
@@ -98,37 +98,7 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           return { ...current, ...fields };
         }),
       merge: (next: Partial<PlannerState>, expected?: PlannerState) =>
-        setState((current) => {
-          // A completed account merge must not restore values edited while it was in flight.
-          const preserved = <K extends keyof PlannerState>(key: K, merged: PlannerState[K]) =>
-            expected && !Object.is(current[key], expected[key]) ? current[key] : merged;
-          return {
-            favoriteFestivals: preserved(
-              "favoriteFestivals",
-              Array.from(
-                new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])]),
-              ),
-            ),
-            favoriteArtists: preserved(
-              "favoriteArtists",
-              Array.from(new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])])),
-            ),
-            attendance: preserved("attendance", {
-              ...next.attendance,
-              ...current.attendance,
-            }),
-            playlistFestivals: preserved(
-              "playlistFestivals",
-              Array.from(
-                new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]),
-              ),
-            ),
-            savedFilters: preserved(
-              "savedFilters",
-              readDiscoveryPreferences({ ...current.savedFilters, ...next.savedFilters }),
-            ),
-          };
-        }),
+        setState((current) => mergePlannerState(current, next, expected)),
       clear: () => setState(emptyPlannerState),
     }),
     [ready, state],
