@@ -368,6 +368,32 @@ test("a visible disabled sold-out notice still contradicts an ordinary purchase 
   assert.equal(evaluateCandidate(current, candidate).publishable, false);
 });
 
+test("block boundaries preserve contradictory ordinary-admission notices", () => {
+  const unknownStock = { ...current, ticketStatus: "unknown" };
+  assert.equal(evaluateCandidate(unknownStock, parse()).publishable, true);
+
+  for (const notice of [
+    "<div>No</div><div>disponibles</div>",
+    "<div>Sold</div><div>out</div>",
+    '<span style="display: block">Sold</span><span style="display: block">out</span>',
+  ]) {
+    const fixture = copy();
+    fixture.tickets = fixture.tickets.replace(
+      "Ya se pueden adquirir",
+      notice + "Ya se pueden adquirir",
+    );
+    const candidate = parse(fixture);
+    const result = evaluateCandidate(unknownStock, candidate);
+    assert.equal(candidate.ticketStatus, undefined, notice);
+    assert.equal(result.publishable, false, notice);
+    assert.equal(
+      result.changes.some(({ field }) => field === "ticketStatus"),
+      false,
+      notice,
+    );
+  }
+});
+
 test("commented purchase sections and headings do not affect live admission stock", () => {
   const { tickets } = copy();
   const heading = '<h2 style="text-align:center">ABONO LEYENDAS DEL ROCK</h2>';

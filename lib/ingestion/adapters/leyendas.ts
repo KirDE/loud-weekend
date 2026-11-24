@@ -232,7 +232,28 @@ export function leyendas(html: string, source: FestivalSource) {
       const after = serialized.slice(serialized.indexOf(heading) + heading.length);
       const boundary = after.search(/<h2\b/i);
       const $pass = load(boundary < 0 ? after : after.slice(0, boundary));
-      const prose = text($pass.root().text());
+      // DOM text joins adjacent boxes. Preserve their boundaries without
+      // splitting words across ordinary inline formatting.
+      const blockElements =
+        "address, article, aside, blockquote, div, dl, dt, dd, fieldset, figure, " +
+        "figcaption, h1, h3, h4, h5, h6, hr, li, main, ol, p, pre, section, " +
+        "table, td, th, tr, ul";
+      $pass(blockElements + ", [style]").each((_, element) => {
+        const box = $pass(element);
+        const display = box
+          .css("display")
+          ?.replace(/\s*!important\s*$/i, "")
+          .trim();
+        const separatesText = display
+          ? /^(?:(?:inline-)?(?:block|flex|grid|table)|flow-root|list-item|table-cell|table-row)$/i.test(
+              display,
+            )
+          : box.is(blockElements);
+        if (separatesText) {
+          box.before(" ").after(" ");
+        }
+      });
+      const prose = $pass.root().text().replace(/\s+/g, " ").trim();
       const buy = $pass("a[href]").filter((_, element) => {
         const link = $pass(element);
         if (
