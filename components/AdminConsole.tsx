@@ -4,6 +4,7 @@ import { AdminSocialLinkReview } from "./AdminSocialLinkReview";
 import { useEffect, useMemo, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import type { AuditEntry, ParserRun, ReviewChange } from "@/lib/admin";
+import type { NewFestivalDraft } from "./SubmissionNewFestival";
 import type { FollowOnDraft } from "./SubmissionFollowOnEdition";
 import { SubmissionEditionLink } from "./SubmissionEditionLink";
 import type { SubmissionEditionLink as LinkedEdition } from "@/lib/submission-edition-link";
@@ -20,6 +21,7 @@ type Submission = {
   submittedAt: string;
   editionLink?: LinkedEdition | null;
   followOnDraft?: FollowOnDraft;
+  newFestivalDraft?: NewFestivalDraft;
   audit: { action: string; at: string }[];
 };
 type Notice = { key: AdminTranslationKey; values?: Record<string, string | number> };
@@ -368,6 +370,16 @@ export function AdminConsole({
                       )
                     }
                     link={item.editionLink}
+                    newFestivalDraft={item.newFestivalDraft}
+                    onNewFestivalDraft={(newFestivalDraft) =>
+                      setSubmissions((items) =>
+                        items.map((submission) =>
+                          submission.reference === item.reference
+                            ? { ...submission, newFestivalDraft }
+                            : submission,
+                        ),
+                      )
+                    }
                     onLinked={(editionLink) =>
                       setSubmissions((items) =>
                         items.map((submission) =>

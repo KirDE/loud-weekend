@@ -8,7 +8,7 @@ import {
 
 const stagedAction = "FOLLOW_ON_EDITION_STAGED";
 const slugSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,179}$/);
-const sourceSchema = z
+export const officialEvidenceUrl = z
   .string()
   .trim()
   .max(500)
@@ -26,7 +26,7 @@ const sourceSchema = z
   });
 const reviewedEvidence = z.object({
   slug: slugSchema,
-  evidenceUrl: sourceSchema,
+  evidenceUrl: officialEvidenceUrl,
   excerpt: z.string().trim().min(8).max(500),
 });
 export const followOnAction = z.discriminatedUnion("action", [
@@ -35,7 +35,7 @@ export const followOnAction = z.discriminatedUnion("action", [
 ]);
 type Action = z.infer<typeof followOnAction>;
 
-const words = (value: string) =>
+export const normalizeEvidenceWords = (value: string) =>
   value
     .normalize("NFKC")
     .toLocaleLowerCase("en")
@@ -93,8 +93,8 @@ export async function reviewFollowOnEdition(
       !festival ||
       !sameOfficialSite(submission.officialUrl, festival.officialUrl) ||
       !sameOfficialSite(evidenceUrl, festival.officialUrl) ||
-      !words(excerpt).split(" ").includes(String(submission.editionYear)) ||
-      !` ${words(excerpt)} `.includes(` ${words(festival.name)} `)
+      !normalizeEvidenceWords(excerpt).split(" ").includes(String(submission.editionYear)) ||
+      !` ${normalizeEvidenceWords(excerpt)} `.includes(` ${normalizeEvidenceWords(festival.name)} `)
     )
       return null;
 

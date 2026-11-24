@@ -1,3 +1,4 @@
+import { readNewFestivalDraft } from "@/lib/submission-new-festival";
 import { readFollowOnDraft } from "@/lib/submission-follow-on-edition";
 import { readSubmissionEditionLink } from "@/lib/submission-edition-link";
 import { AdminConsole } from "@/components/AdminConsole";
@@ -39,6 +40,7 @@ export default async function AdminPage() {
         submittedAt: item.submittedAt.toISOString(),
         editionLink: readSubmissionEditionLink(item.audit),
         followOnDraft: readFollowOnDraft(item.audit),
+        newFestivalDraft: readNewFestivalDraft(item.audit),
         audit: item.audit.map((entry) => ({
           action: entry.action,
           at: entry.createdAt.toISOString(),
