@@ -18,18 +18,26 @@ test("fetchSource follows the first matching official announcement link", async 
     fetchImpl: async (url) => {
       requests.push(String(url));
       return requests.length === 1
-        ? new Response('<a href="/news/2027slipp1">Announcement</a><a href="/news/other">Other</a>', { status: 200 })
+        ? new Response(
+            '<a href="/news/2027slipp1">Announcement</a><a href="/news/other">Other</a>',
+            { status: 200 },
+          )
         : new Response("official announcement", { status: 200 });
     },
   });
-  assert.deepEqual(requests, ["https://festival.example/", "https://festival.example/news/2027slipp1"]);
+  assert.deepEqual(requests, [
+    "https://festival.example/",
+    "https://festival.example/news/2027slipp1",
+  ]);
   assert.equal(attempts, 2);
   assert.equal(await response.text(), "official announcement");
 });
 
 test("fetchSource fails closed when the official announcement link is absent", async () => {
   await assert.rejects(
-    fetchSource(source, { fetchImpl: async () => new Response('<a href="/news/other">Other</a>', { status: 200 }) }),
+    fetchSource(source, {
+      fetchImpl: async () => new Response('<a href="/news/other">Other</a>', { status: 200 }),
+    }),
     /No official linked page matched/,
   );
 });
@@ -46,11 +54,16 @@ test("fetchSource follows a matching official script asset", async () => {
     fetchImpl: async (url) => {
       requests.push(String(url));
       return requests.length === 1
-        ? new Response('<script type="module" src="/assets/index-vj0Jr4K-.js"></script>', { status: 200 })
+        ? new Response('<script type="module" src="/assets/index-vj0Jr4K-.js"></script>', {
+            status: 200,
+          })
         : new Response('children:"18.-21. August 2027 | Borre Norway"', { status: 200 });
     },
   });
-  assert.deepEqual(requests, ["https://midgardsblot.example/", "https://midgardsblot.example/assets/index-vj0Jr4K-.js"]);
+  assert.deepEqual(requests, [
+    "https://midgardsblot.example/",
+    "https://midgardsblot.example/assets/index-vj0Jr4K-.js",
+  ]);
   assert.equal(attempts, 2);
   assert.match(await response.text(), /18\.-21\. August 2027/);
 });
