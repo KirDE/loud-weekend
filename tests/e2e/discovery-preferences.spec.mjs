@@ -213,9 +213,16 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
     password: "synthetic conflict test password",
   };
   expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
+  // Establish the empty favorites baseline before simulating the second device.
+  const baseline = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      new URL(response.url()).pathname === "/api/sync/favorites/",
+  );
   await page.goto("/en/planner/");
-  const pull = page.getByRole("button", { name: "Use account data on this device", exact: true });
-  await expect(pull).toBeDisabled();
+  const favorites = await baseline;
+  expect(favorites.ok()).toBeTruthy();
+  expect((await favorites.json()).document).toBeNull();
 
   // Another device creates favorites before this one tries to sync its local version.
   const remote = { favoriteFestivals: ["remote-festival"], favoriteArtists: [] };
