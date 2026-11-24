@@ -2977,11 +2977,57 @@ test("social previews show parser-backed approved dates but not unsupported edit
       });
       await decideChange(change.id, "approve", actor);
     };
+    const alias = `Alias ${suffix}`;
+    await db.artist.create({
+      data: {
+        slug: `canonical-preview-${suffix}`,
+        name: headliner,
+        aliases: [alias],
+        genres: [],
+        identityState: "UNRESOLVED",
+        topTracks: [],
+        recentSetlists: [],
+        freshness: {},
+      },
+    });
     assert.equal(await headliners(), undefined);
-    await approveHeadliners([], [headliner], true);
+    await approveHeadliners([], [alias], true);
     assert.deepEqual(await headliners(), [headliner]);
     await approveHeadliners([headliner], [headliner, replacement], false);
     assert.equal(await headliners(), undefined);
+
+    const verified = `Later Verified Headliner ${suffix}`;
+    const billing = `Official Billing ${suffix}`;
+    await db.artist.create({
+      data: {
+        slug: `verified-preview-${suffix}`,
+        name: verified,
+        aliases: [billing],
+        genres: [],
+        identityState: "UNRESOLVED",
+        topTracks: [],
+        recentSetlists: [],
+        freshness: {},
+      },
+    });
+    const value = result(billing);
+    value.festivalSlug = slug;
+    value.candidate.festivalSlug = slug;
+    value.candidate.headliners = [billing];
+    delete value.candidate.lineup;
+    value.candidate.evidence[0].field = "headliners";
+    value.changes = [
+      { kind: "headliner_added", field: "headliners", after: billing, reviewRequired: false },
+    ];
+    const attempt = await persist(value);
+    assert.ok(
+      await publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: value,
+        sourceCommit: suffix,
+      }),
+    );
+    assert.deepEqual(await headliners(), [verified]);
   } finally {
     await applicationDb.$disconnect();
   }

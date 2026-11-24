@@ -1,3 +1,4 @@
+import { artistAliasIndex } from "./artist-aliases.ts";
 import type { Prisma } from "@prisma/client";
 import { db } from "../db.ts";
 import type { Language } from "../language-preference.ts";
@@ -97,10 +98,10 @@ async function publishedHeadliners(
   tx: Prisma.TransactionClient,
   slug: string,
   year: number,
-  names: string[],
+  roster: { id: string; name: string }[],
   hasProvenance: boolean,
 ) {
-  if (!names.length) return [];
+  if (!roster.length) return [];
   const scope = { festivalSlug: slug, editionYear: year, fields: { has: "headliners" } };
   const replacement = await tx.catalogPublication.findFirst({
     where: { ...scope, source: "ADMIN" },
@@ -110,10 +111,11 @@ async function publishedHeadliners(
 
   // Admin edits replace the headliner list. Evidence for an older list cannot
   // verify a name reintroduced by a later unsupported replacement.
-  const verified = new Set<string>();
-  if (!replacement || replacement.sourceId.startsWith("openclaw:")) {
-    if (hasProvenance) names.forEach((name) => verified.add(name));
-  } else if (replacement.sourceId.startsWith("admin:")) {
+  if ((!replacement || replacement.sourceId.startsWith("openclaw:")) && hasProvenance) {
+    return roster.slice(0, 2).map(({ name }) => name);
+  }
+  const billingNames = new Set<string>();
+  if (replacement?.sourceId.startsWith("admin:")) {
     const id = replacement.sourceId.slice("admin:".length);
     if (hasParserEvidence(replacement.evidence, id, "headliners")) {
       const change = await tx.adminChange.findFirst({
@@ -127,15 +129,14 @@ async function publishedHeadliners(
         },
         select: { afterValue: true },
       });
-      const after = change?.afterValue;
-      if (Array.isArray(after)) {
-        for (const name of names) if (after.includes(name)) verified.add(name);
+      if (Array.isArray(change?.afterValue)) {
+        for (const name of change.afterValue) {
+          if (typeof name === "string") billingNames.add(name);
+        }
       }
     }
   }
 
-  const missing = names.filter((name) => !verified.has(name));
-  if (!missing.length) return names;
   const additions = await tx.catalogPublication.findMany({
     where: {
       ...scope,
@@ -149,32 +150,45 @@ async function publishedHeadliners(
     },
     select: { id: true, sourceId: true },
   });
-  if (!additions.length) return names.filter((name) => verified.has(name));
 
   const receiptIds = new Map(additions.map(({ id, sourceId }) => [sourceId, id]));
-  const diffs = await tx.ingestionDiff.findMany({
-    where: {
-      field: "headliners",
-      reviewRequired: false,
-      OR: missing.map((name) => ({ afterValue: { equals: name } })),
-      candidate: {
-        festivalSlug: slug,
-        reviewState: "PUBLISHED",
-        catalogueVersion: { in: additions.map(({ id }) => id) },
-        evidence: { some: { field: "headliners" } },
-      },
-    },
-    select: { afterValue: true, candidate: { select: { id: true, catalogueVersion: true } } },
-  });
+  const diffs = additions.length
+    ? await tx.ingestionDiff.findMany({
+        where: {
+          field: "headliners",
+          reviewRequired: false,
+          candidate: {
+            festivalSlug: slug,
+            reviewState: "PUBLISHED",
+            catalogueVersion: { in: additions.map(({ id }) => id) },
+            evidence: { some: { field: "headliners" } },
+          },
+        },
+        select: { afterValue: true, candidate: { select: { id: true, catalogueVersion: true } } },
+      })
+    : [];
   for (const { afterValue, candidate } of diffs) {
     if (
       typeof afterValue === "string" &&
       receiptIds.get(`ingestion:${candidate.id}`) === candidate.catalogueVersion
     ) {
-      verified.add(afterValue);
+      billingNames.add(afterValue);
     }
   }
-  return names.filter((name) => verified.has(name));
+  if (!billingNames.size) return [];
+  const lookup = artistAliasIndex(
+    await tx.artist.findMany({ select: { id: true, slug: true, name: true, aliases: true } }),
+    { orthography: true },
+  );
+  const verified = new Set<string>();
+  for (const billingName of billingNames) {
+    const matches = lookup(billingName);
+    if (matches.length === 1) verified.add(matches[0].id);
+  }
+  return roster
+    .filter(({ id }) => verified.has(id))
+    .slice(0, 2)
+    .map(({ name }) => name);
 }
 
 export async function readSocialPreview(
@@ -212,8 +226,7 @@ export async function readSocialPreview(
           lineup: {
             where: { billing: "HEADLINER", status: "ANNOUNCED" },
             orderBy: { position: "asc" },
-            take: 2,
-            select: { artist: { select: { name: true } } },
+            select: { artist: { select: { id: true, name: true } } },
           },
         },
       });
@@ -243,7 +256,7 @@ export async function readSocialPreview(
           tx,
           slug,
           edition.year,
-          edition.lineup.map(({ artist }) => artist.name),
+          edition.lineup.map(({ artist }) => artist),
           evidence.has("headliners") || evidence.has("lineup"),
         ),
       ]);
