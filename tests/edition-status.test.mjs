@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "esbuild";
 import { editionRecordCompleteness } from "../lib/edition-status.ts";
+import { EditionHistory } from "../components/EditionHistory.tsx";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
 import { canonicalPath } from "../lib/seo.ts";
 import { LanguageProvider } from "../components/LanguageProvider.tsx";
@@ -46,6 +47,7 @@ const { code: outputText } = await transform(source, {
 const require = createRequire(import.meta.url);
 function loadPage(editions, artists = []) {
   const module = { exports: {} };
+  const db = {};
   const dependencies = {
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": {
@@ -53,11 +55,21 @@ function loadPage(editions, artists = []) {
         throw new Error("NEXT_NOT_FOUND");
       },
     },
-    "@/lib/db": { db: {} },
     "@/lib/catalog/arrival-facts": { readArrivalFacts: async () => [] },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
     "@/lib/seo": { canonicalPath },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
+    "@/components/EditionHistory": { EditionHistory },
+    "@/lib/db": { db },
+    "@/lib/catalog/public-history": {
+      readEditionHistory: async (client, slug, year) => {
+        assert.equal(client, db);
+        assert.ok(
+          editions.some((edition) => edition.slug === slug && edition.editionYear === year),
+        );
+        return [];
+      },
+    },
   };
   new Function("require", "module", "exports", outputText)(
     (id) => {

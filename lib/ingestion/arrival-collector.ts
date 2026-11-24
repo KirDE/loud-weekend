@@ -13,38 +13,7 @@ import {
   type ArrivalSlug,
 } from "./adapters/arrival-guidance.ts";
 
-async function readArrivalPage(url: string, fetchImpl: typeof fetch) {
-  const response = await fetchImpl(url, {
-    redirect: "error",
-    signal: AbortSignal.timeout(15_000),
-    headers: { accept: "text/html" },
-  });
-  if (
-    response.status !== 200 ||
-    response.url !== url ||
-    response.redirected ||
-    !/^text\/html(?:\s*;|$)/i.test(response.headers.get("content-type") ?? "") ||
-    !response.body
-  ) {
-    await response.body?.cancel();
-    throw new Error("Unexpected organizer arrival response");
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > 2_000_000) throw new Error("Organizer arrival response exceeds size limit");
-      chunks.push(value);
-    }
-  } finally {
-    await reader.cancel();
-  }
-  return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
-}
+import { MissingOrganizerEvidence, readOrganizerPage } from "./organizer-page.ts";
 
 export const ARRIVAL_ADAPTER = "arrival-guidance-v1";
 
@@ -104,12 +73,12 @@ export async function collectArrivalCandidate(
   const endDate = editionInterval?.endDate;
   const interval = startDate && endDate ? { startDate, endDate } : undefined;
   if (rail && !interval) throw new Error("Rail guidance requires a verified edition interval");
-  const primary = await readArrivalPage(url, fetchImpl);
+  const primary = await readOrganizerPage(url, fetchImpl);
   if (rail && !graspopRailOrganizerStations(primary))
     throw new Error("No organizer corroboration for the rail operator");
   const pages = [
     primary,
-    ...(await Promise.all(urls.slice(1).map((url) => readArrivalPage(url, fetchImpl)))),
+    ...(await Promise.all(urls.slice(1).map((url) => readOrganizerPage(url, fetchImpl)))),
   ];
   const wacken = slug === "wacken-open-air" ? parseWackenArrival(pages[0], editionYear) : undefined;
   const shuttle =
@@ -119,7 +88,8 @@ export async function collectArrivalCandidate(
   const standard =
     slug === "graspop" ? parseGraspopArrival(pages[0], pages[1], editionYear) : wacken && [wacken];
   const facts = rail ? shuttle && [shuttle] : standard;
-  if (!facts) throw new Error("No complete organizer arrival evidence for this edition");
+  if (!facts)
+    throw new MissingOrganizerEvidence("No complete organizer arrival evidence for this edition");
 
   const fetchedAt = new Date().toISOString();
   const arrival = arrivalObservation.parse({

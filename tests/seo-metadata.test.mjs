@@ -15,13 +15,18 @@ test("all indexable route classes define self-canonical metadata", async () => {
     "archive",
     "submit",
     "[lang]",
-    "editions/[year]",
     "festivals/[slug]/[year]",
   ];
   for (const route of routes) {
     const source = await readFile(new URL(`../app/${route}/page.tsx`, import.meta.url), "utf8");
     assert.match(source, route.startsWith("artists") ? /artistMetadata/ : /canonical/);
   }
+  for (const route of ["editions/[year]", "[lang]/editions/[year]"]) {
+    const source = await readFile(new URL(`../app/${route}/page.tsx`, import.meta.url), "utf8");
+    assert.match(source, /seasonMetadata\(/);
+  }
+  const seasonPage = await readFile(new URL("../lib/season-page.tsx", import.meta.url), "utf8");
+  assert.match(seasonPage, /canonical:/);
 });
 
 test("sitemap uses content timestamps rather than future event dates", () => {

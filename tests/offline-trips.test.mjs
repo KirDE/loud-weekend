@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  fetchOfflineTrip,
   listOfflineTrips,
   offlineTripKey,
   parseOfflineTrip,
@@ -85,4 +86,130 @@ test("bad input, quota errors and wrong-key records never replace the last good 
     name: "QuotaExceededError",
   });
   assert.deepEqual(readOfflineTrip(storage, "festival", 2027), saved);
+});
+
+test("legacy offline copies omit out-of-range performances without losing trip details", () => {
+  const storage = memoryStorage();
+  const trip = {
+    ...fact,
+    startDate: "2027-12-31",
+    endDate: "2028-01-01",
+    timetable: ["2027-12-30", "2027-12-31", "2028-01-01", "2028-01-02"].map((date) => ({
+      ...fact.timetable[0],
+      date,
+    })),
+  };
+  const key = offlineTripKey(trip.slug, trip.year);
+  storage.setItem(key, JSON.stringify({ trip, savedAt: updatedAt }));
+  const [read] = listOfflineTrips(storage);
+  assert.equal(read.trip.name, trip.name);
+  assert.equal(read.savedAt, updatedAt);
+  assert.deepEqual(
+    read.trip.timetable.map((row) => row.date),
+    ["2027-12-31", "2028-01-01"],
+  );
+  assert.deepEqual(readOfflineTrip(storage, trip.slug, trip.year), read);
+});
+
+test("a fresh trip response with an out-of-range performance is not usable as an update", async (t) => {
+  t.mock.method(globalThis, "fetch", async () =>
+    Response.json({
+      ...fact,
+      timetable: [{ ...fact.timetable[0], date: "2027-06-13" }],
+    }),
+  );
+  await assert.rejects(fetchOfflineTrip("", fact.slug, fact.year), /Unexpected trip download/);
+});
+
+test("trip download cancels an oversized response even without Content-Length", async (t) => {
+  let cancelled = false;
+  const chunks = [
+    new TextEncoder().encode(JSON.stringify(fact)),
+    new Uint8Array(192 * 1024).fill(32),
+  ];
+  const body = new ReadableStream(
+    {
+      pull(controller) {
+        const chunk = chunks.shift();
+        if (chunk) controller.enqueue(chunk);
+        else controller.close();
+      },
+      cancel() {
+        cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(body, {
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
+  await assert.rejects(fetchOfflineTrip("", fact.slug, fact.year), /Trip download too large/);
+  assert.ok(cancelled);
+  assert.equal(body.locked, false);
+});
+
+test("trip download decodes a multibyte character split across response chunks", async (t) => {
+  const trip = { ...fact, name: "Sample Festival 🎸" };
+  const bytes = new TextEncoder().encode(JSON.stringify(trip));
+  const split = bytes.indexOf(0xf0) + 1;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes.subarray(0, split));
+      controller.enqueue(bytes.subarray(split));
+      controller.close();
+    },
+  });
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(body, {
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
+  assert.deepEqual(await fetchOfflineTrip("", trip.slug, trip.year), trip);
+});
+
+test("a download with an invalid time zone cannot replace a valid saved schedule", async (t) => {
+  const trip = { ...fact, timetable: [{ ...fact.timetable[0], timeZone: "City/Unknown" }] };
+  t.mock.method(globalThis, "fetch", async () => Response.json(trip));
+  const storage = memoryStorage();
+  const saved = saveOfflineTrip(storage, fact, updatedAt);
+  await assert.rejects(async () => {
+    saveOfflineTrip(storage, await fetchOfflineTrip("", fact.slug, fact.year), updatedAt);
+  }, /Unexpected trip download/);
+  assert.deepEqual(readOfflineTrip(storage, fact.slug, fact.year), saved);
+
+  // Older stored copies still expose their public trip details, not the unusable time.
+  storage.setItem(
+    offlineTripKey(fact.slug, fact.year),
+    JSON.stringify({ trip, savedAt: updatedAt }),
+  );
+  assert.deepEqual(readOfflineTrip(storage, fact.slug, fact.year), {
+    savedAt: updatedAt,
+    trip: { ...fact, timetable: [] },
+  });
+});
+
+test("a download with dates in reverse order cannot replace a valid saved trip", async (t) => {
+  const trip = { ...fact, startDate: "2027-06-12", endDate: "2027-06-10", timetable: [] };
+  t.mock.method(globalThis, "fetch", async () => Response.json(trip));
+  const storage = memoryStorage();
+  const saved = saveOfflineTrip(storage, fact, updatedAt);
+  await assert.rejects(async () => {
+    saveOfflineTrip(storage, await fetchOfflineTrip("", fact.slug, fact.year), updatedAt);
+  }, /Unexpected trip download/);
+  assert.deepEqual(readOfflineTrip(storage, fact.slug, fact.year), saved);
+
+  // Also hide contradictory records cached by older builds of the web app.
+  storage.setItem(
+    offlineTripKey(trip.slug, trip.year),
+    JSON.stringify({ trip, savedAt: updatedAt }),
+  );
+  assert.deepEqual(listOfflineTrips(storage), []);
 });
