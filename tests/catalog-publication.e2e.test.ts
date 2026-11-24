@@ -3525,3 +3525,84 @@ test("a parser proposal compares festival facts using their canonical whitespace
     (error) => error === rollback,
   );
 });
+
+test("scoped refresh previews show observed headliners, not carried-forward manual billing", async (t) => {
+  const slug = "idays";
+  const sourceUrl = "https://www.idays.it/line-up";
+  const ticketsUrl = "https://www.idays.it/tickets";
+  const actor = await db.user.create({
+    data: { email: `preview-headliners-${suffix}@example.test` },
+  });
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug }, year: 2027, recordState: "CURRENT" },
+  });
+  const { decideChange, refreshFestival } = await import("../lib/admin-store.ts");
+  const { db: applicationDb } = await import("../lib/db.ts");
+  const { readSocialPreview } = await import("../lib/catalog/social-preview.ts");
+  const getHeadliners = async () =>
+    (await readSocialPreview("festivals", slug, "en", 2027))?.headliners;
+
+  try {
+    const unverified = "Unverified Manual Headliner";
+    const manual = await db.adminChange.create({
+      data: {
+        resourceKind: "FESTIVAL",
+        resourceKey: slug,
+        field: "headliners",
+        beforeValue: [],
+        afterValue: [unverified],
+        baseRevision: 0,
+        sourceEvidence: [],
+      },
+    });
+    await decideChange(manual.id, "approve", actor);
+    assert.equal(await getHeadliners(), undefined);
+
+    await db.festivalSource.create({
+      data: {
+        festivalSlug: slug,
+        festivalId: edition.festivalId,
+        editionId: edition.id,
+        editionYear: edition.year,
+        url: sourceUrl,
+        strategies: ["html_fallback"],
+        parserKey: "html_fallback",
+        enabled: true,
+        refreshPolicy: "daily",
+        cadenceSeconds: 86400,
+        configurationBackfilledAt: new Date(),
+      },
+    });
+    const documents = new Map([
+      [
+        sourceUrl,
+        await readFile(new URL("./fixtures/idays/lineup-2027.html", import.meta.url), "utf8"),
+      ],
+      [
+        ticketsUrl,
+        await readFile(new URL("./fixtures/idays/tickets-2027.html", import.meta.url), "utf8"),
+      ],
+    ]);
+    const fetchFixture = t.mock.method(globalThis, "fetch", async (url: string) => {
+      const html = documents.get(url);
+      assert.ok(html, `Unexpected fixture request: ${url}`);
+      const response = new Response(html, { headers: { "content-type": "text/html" } });
+      Object.defineProperty(response, "url", { value: url });
+      return response;
+    });
+    const refresh = await refreshFestival(slug, actor, edition.year);
+    assert.equal(fetchFixture.mock.callCount(), 2);
+    const change = await db.adminChange.findFirstOrThrow({
+      where: { parserRunId: refresh.id, field: "headliners", status: "PENDING" },
+    });
+    assert.ok(Array.isArray(change.afterValue) && change.afterValue.includes(unverified));
+    await decideChange(change.id, "approve", actor);
+
+    assert.deepEqual(
+      (await getHeadliners())?.map((name) => name.toLowerCase()),
+      ["blink-182", "fontaines d.c."],
+    );
+  } finally {
+    await applicationDb.$disconnect();
+  }
+});

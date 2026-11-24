@@ -6,26 +6,28 @@ import { festivalPreviewDate, type PreviewCard, type PreviewKind } from "../soci
 
 type EditionScope = { id: string; year: number };
 
-function hasParserEvidence(
+function parserEvidenceKind(
   evidence: Prisma.JsonValue,
   id: string,
   field: string,
   edition: EditionScope,
-) {
-  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return false;
-  if (evidence.adminChangeId !== id) return false;
+): "legacy" | "scoped-refresh" | undefined {
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return undefined;
+  if (evidence.adminChangeId !== id) return undefined;
 
   let entries = evidence.sourceEvidence;
+  let kind: "legacy" | "scoped-refresh" = "legacy";
   if (entries && typeof entries === "object" && !Array.isArray(entries)) {
     if (
       entries.kind !== "scoped-refresh" ||
       entries.editionId !== edition.id ||
       entries.editionYear !== edition.year
     )
-      return false;
+      return undefined;
+    kind = "scoped-refresh";
     entries = entries.evidence;
   }
-  return (
+  const hasField =
     Array.isArray(entries) &&
     entries.some(
       (item) =>
@@ -35,8 +37,8 @@ function hasParserEvidence(
         item.field === field &&
         typeof item.sourceUrl === "string" &&
         /^https?:\/\//i.test(item.sourceUrl),
-    )
-  );
+    );
+  return hasField ? kind : undefined;
 }
 
 async function hasPublishedDate(
@@ -58,7 +60,7 @@ async function hasPublishedDate(
   if (receipt.source === "ADMIN" && receipt.sourceId.startsWith("admin:")) {
     const id = receipt.sourceId.slice("admin:".length);
     const evidence = receipt.evidence;
-    if (!hasParserEvidence(evidence, id, field, edition)) return false;
+    if (!parserEvidenceKind(evidence, id, field, edition)) return false;
 
     const change = await tx.adminChange.findFirst({
       where: {
@@ -133,7 +135,8 @@ async function publishedHeadliners(
   const billingNames = new Set<string>();
   if (replacement?.sourceId.startsWith("admin:")) {
     const id = replacement.sourceId.slice("admin:".length);
-    if (hasParserEvidence(replacement.evidence, id, "headliners", edition)) {
+    const evidenceKind = parserEvidenceKind(replacement.evidence, id, "headliners", edition);
+    if (evidenceKind) {
       const change = await tx.adminChange.findFirst({
         where: {
           id,
@@ -143,11 +146,20 @@ async function publishedHeadliners(
           status: "APPROVED",
           parserRun: { festivalSlug: slug, status: { in: ["SUCCEEDED", "PARTIAL"] } },
         },
-        select: { afterValue: true },
+        select: { beforeValue: true, afterValue: true },
       });
       if (Array.isArray(change?.afterValue)) {
-        for (const name of change.afterValue) {
-          if (typeof name === "string") billingNames.add(name);
+        // Scoped refresh merges observed differences into the saved list.
+        // Its field evidence does not attest to carried-forward billing.
+        const carried =
+          evidenceKind === "scoped-refresh" && Array.isArray(change.beforeValue)
+            ? change.beforeValue
+            : null;
+        if (evidenceKind === "legacy" || carried) {
+          const priorNames = new Set(carried);
+          for (const name of change.afterValue) {
+            if (typeof name === "string" && !priorNames.has(name)) billingNames.add(name);
+          }
         }
       }
     }
