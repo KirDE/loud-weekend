@@ -361,6 +361,18 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   );
   assert.equal(await db.adminDraft.count(), beforeForgedDrafts);
   assert.equal(await db.adminAuditEntry.count(), beforeForgedAudit);
+  const malformedDraft = await admin.json("/api/admin", "POST", {
+    resourceKind: "festival",
+    resourceKey: "wacken-open-air",
+    baseRevision: 0,
+    values: ["not a field map"],
+  });
+  assert.equal(malformedDraft.status, 409);
+  assert.equal((await malformedDraft.json()).error, "Invalid draft");
+  assert.equal(await db.adminDraft.count(), beforeForgedDrafts);
+  assert.equal(await db.adminChange.count({ where: { resourceKey: "wacken-open-air" } }), 0);
+  assert.equal(await db.adminAuditEntry.count(), beforeForgedAudit);
+
   const draftResponse = await admin.json("/api/admin", "POST", {
     resourceKind: "festival",
     resourceKey: "wacken-open-air",
@@ -968,6 +980,8 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
       sourceId: sourceOrigin + "/primary",
       adapter: "json_ld_event",
       status: "SUCCEEDED",
+      startedAt: new Date("2026-01-01T10:00:00Z"),
+      finishedAt: new Date("2026-01-01T10:01:00Z"),
       log: [],
     },
   });
