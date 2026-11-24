@@ -517,6 +517,22 @@ test("public freshness separates edition-bound checks, publication and source fa
     for (const path of ["/artists/sample-artist/", "/archive/", "/editions/2026/"]) {
       assert.equal(finalDates[path], updatedDates[path], path);
     }
+    const overview = await db.catalogPublication.create({
+      data: {
+        source: "INGESTION",
+        sourceId: `${slug}-overview`,
+        festivalSlug: slug,
+        editionYear: current.year,
+        actorLabel: "fixture",
+        evidence: {},
+        fields: ["overview"],
+      },
+    });
+    const overviewDates = await sitemapDates();
+    for (const path of ["/", "/de/", `/festivals/${slug}/`, `/ru/festivals/${slug}/`])
+      assert.equal(overviewDates[path], overview.createdAt.toISOString(), path);
+    for (const path of ["/editions/2027/", "/countries/de/", "/months/06/"])
+      assert.equal(overviewDates[path], finalDates[path], path);
   } finally {
     // Publication receipts are append-only; the unique fixture slug isolates reruns.
     await db.ingestionSourceState.deleteMany({ where: { festivalSlug: slug } });
