@@ -184,7 +184,8 @@ export async function saveDraft(
     !input.resourceKey ||
     !Number.isInteger(input.baseRevision) ||
     typeof input.values !== "object" ||
-    !input.values
+    !input.values ||
+    Array.isArray(input.values)
   )
     throw new Error("Invalid draft");
   return db.$transaction(
