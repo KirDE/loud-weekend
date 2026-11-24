@@ -1,3 +1,4 @@
+import { load } from "cheerio";
 import type { FestivalCandidate, FestivalSource, FieldEvidence } from "../types.ts";
 import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 
@@ -228,23 +229,107 @@ export function extractCopenhellCurrent(
       }
       c.warnings.push(COPENHELL_REVIEW);
     }
-    const tickets = docs.find((d) => new URL(d.url).pathname === "/billetter/");
-    const ticketMain = tickets ? main(tickets.html) : "";
-    // The old festival-place label on the ticket modal is stale; the explicit
-    // pass dates and current sale announcement establish the edition instead.
-    if (
-      tickets &&
-      new RegExp(`juni ${year}\\b`, "i").test(copenhellPlain(ticketMain)) &&
-      /4-dagsbillet/i.test(ticketMain) &&
-      !/\b(?:udsolgt|sold out)\b/i.test(copenhellPlain(ticketMain)) &&
-      /<a\b[^>]*href=["']https:\/\/www\.ticketmaster\.dk\/event\/[^"']+["'][^>]*>\s*Køb nu\s*<\/a>/i.test(
-        ticketMain,
-      )
-    ) {
-      c.ticketsUrl = tickets.url;
-      c.ticketStatus = "available";
-      evidence("ticketsUrl", tickets, copenhellPlain(ticketMain));
-      evidence("ticketStatus", sale, copenhellPlain(main(sale.html)));
+    const ticketDocuments = docs.filter((d) => new URL(d.url).pathname === "/billetter/");
+    const tickets = ticketDocuments.length === 1 ? ticketDocuments[0] : undefined;
+    const failStock = () =>
+      c.warnings.push(
+        "Copenhell current ordinary four-day ticket stock requires review; no whole-event sellout inferred",
+      );
+    if (!tickets) failStock();
+    else {
+      const $ = load(main(tickets.html));
+      // Closed information dialogs contain stale festival-place labels. Dates
+      // come from the visible product row + verified current sale articles,
+      // never modal, archived, hydration or accessory copy.
+      $(
+        "script, style, template, nav, footer, [role='dialog'], [hidden], [inert], [aria-hidden='true']",
+      ).remove();
+      $("[style]").each((_, element) => {
+        if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? ""))
+          $(element).remove();
+      });
+      const plain = (value: string) => value.replace(/\s+/g, " ").trim();
+      const containers = $(".ticket-container#4-dagsbillet");
+      const cards = containers.find(".ticket");
+      if (containers.length !== 1 || cards.length !== 1) failStock();
+      else {
+        const card = cards.first();
+        const heading = card
+          .find(".font-header")
+          .filter((_, e) => /^4-DAGSBILLET$/i.test(plain($(e).text())));
+        const dates = card
+          .children(".grow")
+          .children("div")
+          .map((_, e) => plain($(e).text()))
+          .get()
+          .map((value) =>
+            value.match(
+              /^(\d{1,2})\.\s*[-–—]\s*(\d{1,2})\.\s*[-–—]\s*(\d{1,2})\.\s*[-–—]\s*(\d{1,2})\.\s*juni$/i,
+            ),
+          )
+          .filter((value) => value !== null);
+        const expected =
+          c.startDate &&
+          c.endDate &&
+          c.startDate.startsWith(year + "-06-") &&
+          c.endDate.startsWith(year + "-06-") &&
+          Number(c.endDate.slice(-2)) - Number(c.startDate.slice(-2)) === 3
+            ? Array.from({ length: 4 }, (_, i) => Number(c.startDate!.slice(-2)) + i)
+            : undefined;
+        const verifiedDates =
+          expected &&
+          dates.length === 1 &&
+          dates[0]!.slice(1).every((day, i) => Number(day) === expected[i]);
+        const purchase = card.find("a[href]").filter((_, element) => {
+          const link = $(element);
+          if (
+            !/^Køb nu$/i.test(plain(link.text())) ||
+            link.is("[disabled], [aria-disabled='true']") ||
+            link.parents("[disabled], [aria-disabled='true']").length
+          )
+            return false;
+          try {
+            const u = new URL(link.attr("href") ?? "");
+            return (
+              u.origin === "https://www.ticketmaster.dk" &&
+              !u.username &&
+              !u.password &&
+              !u.hash &&
+              /^\/event\/[0-9]+$/.test(u.pathname) &&
+              [...u.searchParams.keys()].every((key) => ["language", "brand"].includes(key)) &&
+              u.searchParams.getAll("brand").length === 1 &&
+              u.searchParams.get("brand") === "copenhelldk" &&
+              u.searchParams.getAll("language").length <= 1
+            );
+          } catch {
+            return false;
+          }
+        });
+        const ordinary = card.clone();
+        // Only the known standalone RIP upgrade badge is outside ordinary
+        // admission scope. Every other visible sellout assertion in the card
+        // contradicts a lingering Buy control, regardless of tag or phrasing.
+        ordinary
+          .find("span")
+          .filter((_, e) => /^R\.I\.P\.\s+(?:tilgængelig|udsolgte?)$/i.test(plain($(e).text())))
+          .remove();
+        // Pad element boundaries on the clone, then let Cheerio's native
+        // text traversal preserve mixed direct/nested text in document order.
+        ordinary.find("*").prepend(" ").append(" ");
+        const sold = /\b(?:ud\s*solgte?|sold\s*out)\b/i.test(plain(ordinary.text()));
+        if (heading.length === 1 && verifiedDates && purchase.length === 1 && !sold) {
+          c.ticketsUrl = tickets.url;
+          c.ticketStatus = "available";
+          const excerpt =
+            "COPENHELL " +
+            year +
+            "; ordinary 4-DAGSBILLET " +
+            dates[0]![0] +
+            "; enabled official Ticketmaster Køb nu control";
+          evidence("ticketsUrl", tickets, excerpt);
+          evidence("ticketStatus", tickets, excerpt);
+        } else failStock();
+      }
     }
   }
   if (!c.headliners && headliners.size) {

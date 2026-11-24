@@ -1,4 +1,5 @@
 import { alcatrazPrimaryUrl } from "./alcatraz-ticket-stock.ts";
+import { RFP_STOCK, reduceRfpStockDocument } from "./rfp-ticket-stock.ts";
 import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import { isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS } from "./adapters/full-rewind.ts";
@@ -1130,7 +1131,7 @@ export async function fetchSource(
     const supportedType =
       source.festivalSlug === "alcatraz"
         ? /^application\/json\b/i.test(type)
-        : source.festivalSlug === "full-rewind"
+        : source.festivalSlug === "full-rewind" || ticketUrl === RFP_STOCK
           ? /^(?:application\/json|text\/javascript|application\/javascript)\b/i.test(type)
           : /^text\/html\b|^application\/xhtml\+xml\b/i.test(type);
     if (!supportedType)
@@ -1139,7 +1140,8 @@ export async function fetchSource(
           ? "Official ticket destination returned a non-JSON document"
           : "Official ticket destination returned a non-HTML document",
       );
-    const html = await boundedTicketText(ticket.response);
+    const rawTicket = await boundedTicketText(ticket.response);
+    const html = ticketUrl === RFP_STOCK ? reduceRfpStockDocument(rawTicket) : rawTicket;
     const response = new Response(
       JSON.stringify({ kind: TICKET_SUPPLEMENT, body, ticket: { url: ticketUrl, html } }),
       { headers: { "content-type": "application/json" } },
