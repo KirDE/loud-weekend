@@ -1,3 +1,4 @@
+import { POLANDROCK_NEWSROOM } from "./adapters/polandrock-admission.ts";
 import { TOLMINATOR_PRODUCT } from "./adapters/tolminator-stock.ts";
 import { queueImportEvent } from "./import-event-queue.ts";
 import { createHash } from "node:crypto";
@@ -35,14 +36,15 @@ export async function createIngestionRun(
 
 // Only reviewed independent endpoints are excluded. Do not infer scope from
 // caller-supplied candidate fields (a failed request has no candidate at all).
-const independentTicketUrls = [TOLMINATOR_PRODUCT];
+const independentTicketUrls = [TOLMINATOR_PRODUCT, POLANDROCK_NEWSROOM];
+export const isIndependentTicketUrl = (url: string) => independentTicketUrls.includes(url);
 const attemptScope = (requestedUrl?: string): Prisma.IngestionAttemptWhereInput =>
   requestedUrl ? { requestedUrl } : { requestedUrl: { notIn: independentTicketUrls } };
 
 export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
   return db.$transaction(async (tx) => {
     const result = input.result;
-    const independent = independentTicketUrls.includes(input.requestedUrl);
+    const independent = isIndependentTicketUrl(input.requestedUrl);
     const scope = attemptScope(independent ? input.requestedUrl : undefined);
     const status = !result
       ? "FAILED"
@@ -190,6 +192,12 @@ export const ingestionQueries = {
     }),
   sourceStates: (db: Client) =>
     db.ingestionSourceState.findMany({ select: { festivalSlug: true, lastSuccessfulCheck: true } }),
+  lastSuccessfulCheck: (db: Client, festivalSlug: string, requestedUrl: string) =>
+    db.ingestionAttempt.findFirst({
+      where: { festivalSlug, requestedUrl, status: { not: "FAILED" } },
+      orderBy: { endedAt: "desc" },
+      select: { endedAt: true },
+    }),
   lastSuccessfulExtraction: (db: Client, festivalSlug: string, requestedUrl?: string) =>
     db.ingestionEvidence.findFirst({
       where: { candidate: { festivalSlug, attempt: attemptScope(requestedUrl) } },

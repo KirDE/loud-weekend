@@ -26,6 +26,7 @@ import {
   createIngestionRun,
   finishIngestionRun,
   ingestionQueries,
+  isIndependentTicketUrl,
   persistAttempt,
 } from "../lib/ingestion/repository.ts";
 
@@ -67,10 +68,21 @@ const persistedStates =
 const lastSuccessfulChecks = new Map(
   persistedStates.map((state) => [state.festivalSlug, state.lastSuccessfulCheck?.toISOString()]),
 );
-const hydratedSources = configuredSources.map((source) => ({
-  ...source,
-  lastSuccessfulCheck: lastSuccessfulChecks.get(source.festivalSlug) ?? source.lastSuccessfulCheck,
-}));
+const hydratedSources = dueOnly
+  ? await Promise.all(
+      configuredSources.map(async (source) => {
+        const lastSuccessfulCheck = isIndependentTicketUrl(source.url)
+          ? (
+              await ingestionQueries.lastSuccessfulCheck(db, source.festivalSlug, source.url)
+            )?.endedAt.toISOString()
+          : lastSuccessfulChecks.get(source.festivalSlug);
+        return {
+          ...source,
+          lastSuccessfulCheck: lastSuccessfulCheck ?? source.lastSuccessfulCheck,
+        };
+      }),
+    )
+  : configuredSources;
 const eligible = dueOnly
   ? dueFestivalSources(hydratedSources)
   : hydratedSources.filter((source) => source.enabled);
@@ -213,6 +225,7 @@ const summary = {
 };
 
 for (const source of selected) {
+  const healthUrl = isIndependentTicketUrl(source.url) ? source.url : undefined;
   let leaseCompleted = false;
   let publicationCommitted = false;
   let failureOutcome = "pre_attempt_error";
@@ -259,13 +272,13 @@ for (const source of selected) {
       }
       failureStage = "result_recording";
       const consecutiveFailures = persistenceEnabled
-        ? await ingestionQueries.consecutiveFailures(db, source.festivalSlug)
+        ? await ingestionQueries.consecutiveFailures(db, source.festivalSlug, healthUrl)
         : 1;
       const escalated = consecutiveFailures >= failureThreshold;
       summary.fetchErrors += 1;
       if (escalated) summary.escalatedFailures += 1;
       const lastExtraction = persistenceEnabled
-        ? await ingestionQueries.lastSuccessfulExtraction(db, source.festivalSlug)
+        ? await ingestionQueries.lastSuccessfulExtraction(db, source.festivalSlug, healthUrl)
         : null;
       summary.results.push({
         festivalSlug: source.festivalSlug,
@@ -417,7 +430,7 @@ for (const source of selected) {
     }
     failureStage = "result_recording";
     const lastExtraction = persistenceEnabled
-      ? await ingestionQueries.lastSuccessfulExtraction(db, source.festivalSlug)
+      ? await ingestionQueries.lastSuccessfulExtraction(db, source.festivalSlug, healthUrl)
       : null;
     summary.results.push({
       festivalSlug: source.festivalSlug,
