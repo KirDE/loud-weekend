@@ -38,6 +38,10 @@ for (const [locale, t] of Object.entries(labels)) {
     await search.press("Escape");
     await expect(panel).toHaveCount(0);
     await expect(page.locator(".festivalCard h2")).toHaveText(["Synthetic Fest"]);
+    await search.click();
+    await expect(panel.getByRole("region", { name: t.festivals })).toBeVisible();
+    await search.press("Escape");
+    await expect(panel).toHaveCount(0);
     await search.press("ArrowDown");
     await expect(
       panel

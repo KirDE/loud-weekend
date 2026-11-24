@@ -85,6 +85,7 @@ export function DiscoverySearch({
         aria-label={t("filterSearch")}
         value={query}
         onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onChange={(event) => {
           setOpen(true);
           onChange(event.target.value);
