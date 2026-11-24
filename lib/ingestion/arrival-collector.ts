@@ -5,6 +5,9 @@ import type { ConfiguredSource } from "../sources/repository.ts";
 import {
   arrivalSources,
   arrivalSourceUrls,
+  graspopRailSources,
+  graspopRailOrganizerStations,
+  parseGraspopRailShuttle,
   parseGraspopArrival,
   parseWackenArrival,
   type ArrivalSlug,
@@ -45,6 +48,14 @@ async function readArrivalPage(url: string, fetchImpl: typeof fetch) {
 
 export const ARRIVAL_ADAPTER = "arrival-guidance-v1";
 
+function guidanceDocumentUrls(slug: string, year: number, primary: string) {
+  if (!Object.hasOwn(arrivalSources, slug)) return;
+  const organizerUrls = arrivalSourceUrls(slug as ArrivalSlug, year);
+  if (organizerUrls[0] === primary) return { urls: organizerUrls, rail: false };
+  const railUrls = graspopRailSources(slug as ArrivalSlug);
+  if (railUrls?.[0] === primary) return { urls: railUrls, rail: true };
+}
+
 export function registeredArrivalSource(source: {
   slug: string;
   year: number;
@@ -52,16 +63,19 @@ export function registeredArrivalSource(source: {
   parserKey: string | null;
 }) {
   return (
-    Object.hasOwn(arrivalSources, source.slug) &&
     source.parserKey === "manual_review" &&
-    arrivalSourceUrls(source.slug as ArrivalSlug, source.year)[0] === source.url
+    !!guidanceDocumentUrls(source.slug, source.year, source.url)
   );
 }
 
-export function allowedArrivalEvidenceUrl(slug: string, year: number, url: string) {
+export function allowedArrivalEvidenceUrl(
+  slug: string,
+  year: number,
+  primary: string,
+  url: string,
+) {
   return (
-    Object.hasOwn(arrivalSources, slug) &&
-    arrivalSourceUrls(slug as ArrivalSlug, year).includes(url)
+    guidanceDocumentUrls(slug, year, primary)?.urls.some((document) => document === url) ?? false
   );
 }
 
@@ -69,6 +83,7 @@ export function allowedArrivalEvidenceUrl(slug: string, year: number, url: strin
 export async function collectArrivalCandidate(
   source: ConfiguredSource,
   fetchImpl: typeof fetch = fetch,
+  editionInterval?: { startDate?: string; endDate?: string },
 ): Promise<IngestionResult> {
   const { festivalSlug, editionYear, editionId, url } = source;
   if (
@@ -82,11 +97,28 @@ export async function collectArrivalCandidate(
   )
     throw new Error("Arrival source is not registered for this edition");
   const slug = festivalSlug as ArrivalSlug;
-  const urls = arrivalSourceUrls(slug, editionYear);
-  const pages = await Promise.all(urls.map((url) => readArrivalPage(url, fetchImpl)));
+  const documents = guidanceDocumentUrls(slug, editionYear, url);
+  if (!documents) throw new Error("Unknown arrival source");
+  const { urls, rail } = documents;
+  const startDate = editionInterval?.startDate;
+  const endDate = editionInterval?.endDate;
+  const interval = startDate && endDate ? { startDate, endDate } : undefined;
+  if (rail && !interval) throw new Error("Rail guidance requires a verified edition interval");
+  const primary = await readArrivalPage(url, fetchImpl);
+  if (rail && !graspopRailOrganizerStations(primary))
+    throw new Error("No organizer corroboration for the rail operator");
+  const pages = [
+    primary,
+    ...(await Promise.all(urls.slice(1).map((url) => readArrivalPage(url, fetchImpl)))),
+  ];
   const wacken = slug === "wacken-open-air" ? parseWackenArrival(pages[0], editionYear) : undefined;
-  const facts =
+  const shuttle =
+    rail && interval
+      ? parseGraspopRailShuttle(pages[0], pages[1], editionYear, interval)
+      : undefined;
+  const standard =
     slug === "graspop" ? parseGraspopArrival(pages[0], pages[1], editionYear) : wacken && [wacken];
+  const facts = rail ? shuttle && [shuttle] : standard;
   if (!facts) throw new Error("No complete organizer arrival evidence for this edition");
 
   const fetchedAt = new Date().toISOString();
@@ -94,6 +126,7 @@ export async function collectArrivalCandidate(
     editionId,
     festivalSlug,
     editionYear,
+    ...(rail && { editionInterval: interval }),
     ...arrivalSources[slug],
     facts: facts.map((fact, index) => ({
       ...fact,
@@ -120,7 +153,7 @@ export async function collectArrivalCandidate(
         sourceUrl,
         observedAt: fetchedAt,
         contentHash: createHash("sha256").update(pages[index]).digest("hex"),
-        excerpt: facts[index].description.en,
+        excerpt: facts[rail ? 0 : index].description.en,
         adapter: ARRIVAL_ADAPTER,
       })),
     },
