@@ -1,3 +1,6 @@
+import { YOUTUBE_URL } from "./youtube-playlist-queue.ts";
+import { playlistCoverage } from "../playlist-coverage.ts";
+import { uniqueFavoriteSlugs, type DiscoveryLineups } from "../discovery-sort.ts";
 import { rosterFingerprint } from "./lineup-proof.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
@@ -13,6 +16,7 @@ export type CatalogSnapshot = Readonly<{
   editions: readonly FestivalEdition[];
   artists: ArtistProfile[];
   playlists: Readonly<Record<string, PlaylistStatus>>;
+  discoveryLineups: DiscoveryLineups;
   freshness: CatalogFreshness;
 }>;
 export interface CatalogRepository {
@@ -233,18 +237,27 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       .sort((left, right) => left.name.localeCompare(right.name));
     const playlists: Record<string, PlaylistStatus> = {};
     for (const row of editionRows.filter(({ recordState }) => recordState === "CURRENT")) {
-      const spotify = row.playlists.find(({ provider }) => provider === "spotify");
-      const youtube = row.playlists.find(({ provider }) => provider === "youtube_music");
-      if (!spotify) continue;
+      const spotify = row.playlists.find(
+        ({ provider, url }) =>
+          provider === "spotify" &&
+          /^https:\/\/open\.spotify\.com\/playlist\/[A-Za-z0-9]{22}(?:\?[^\s#]*)?$/.test(url),
+      );
+      const youtube = row.playlists.find(
+        ({ provider, url }) => provider === "youtube_music" && YOUTUBE_URL.test(url),
+      );
+      if (!spotify && !youtube) continue;
       playlists[row.festival.slug] = {
-        spotifyUrl: spotify.url,
+        spotifyUrl: spotify?.url,
         youtubeMusicUrl: youtube?.url,
         youtubeMusicArtists: youtube?.artistCount ?? undefined,
         youtubeMusicTracks: youtube?.trackCount ?? undefined,
         artists:
-          spotify.artistCount ?? row.lineup.filter(({ status }) => status === "ANNOUNCED").length,
-        tracks: spotify.trackCount ?? 0,
-        updatedAt: instant(spotify.syncedAt) ?? row.sourceUpdatedAt.toISOString(),
+          spotify?.artistCount ?? row.lineup.filter(({ status }) => status === "ANNOUNCED").length,
+        tracks: spotify?.trackCount ?? 0,
+        updatedAt:
+          instant(spotify?.syncedAt ?? youtube?.syncedAt ?? null) ??
+          row.sourceUpdatedAt.toISOString(),
+        coverage: { youtubeMusic: playlistCoverage(youtube) },
       };
     }
     const freshness = {
@@ -253,11 +266,39 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         currentEditions.map(({ freshness }) => freshness?.lastPublishedAt),
       ),
     };
+    const artistSlugsByFestival = Object.fromEntries(
+      editionRows
+        .filter((row) => row.recordState === "CURRENT")
+        .map((row) => [
+          row.festival.slug,
+          [
+            ...new Set(
+              row.lineup
+                .filter(
+                  ({ status, billing }) =>
+                    status === "ANNOUNCED" && (billing === "HEADLINER" || billing === "LINEUP"),
+                )
+                .map((entry) => entry.artist.slug),
+            ),
+          ],
+        ]),
+    );
+    const visibleSlugs = new Set(Object.values(artistSlugsByFestival).flat());
+    const discoveryLineups = {
+      artistSlugsByFestival,
+      artistNamesBySlug: Object.fromEntries(
+        artistRows
+          .filter((artist) => visibleSlugs.has(artist.slug))
+          .map(({ slug, name }) => [slug, name]),
+      ),
+      legacyFavoriteSlugs: uniqueFavoriteSlugs(artistRows, visibleSlugs),
+    };
     return Object.freeze({
       festivals: festivalsFromDatabase,
       editions,
       artists,
       playlists,
+      discoveryLineups,
       freshness,
     });
   }
