@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { YOUTUBE_URL } from "./youtube-playlist-queue.ts";
 import { playlistCoverage } from "../playlist-coverage.ts";
 import { uniqueFavoriteSlugs, type DiscoveryLineups } from "../discovery-sort.ts";
@@ -21,6 +22,8 @@ export type CatalogSnapshot = Readonly<{
   discoveryLineups: DiscoveryLineups;
   freshness: CatalogFreshness;
 }>;
+type CatalogReadOptions = { includeFreshness?: boolean; requireTimetableEvidence?: boolean };
+
 export interface CatalogRepository {
   read(): Promise<CatalogSnapshot>;
 }
@@ -36,15 +39,20 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     this.client = client;
   }
 
-  async read({ includeFreshness = false } = {}): Promise<CatalogSnapshot> {
-    return this.client.$transaction((tx) => this.readSnapshot(tx, includeFreshness), {
-      isolationLevel: "RepeatableRead",
-    });
+  async read({
+    includeFreshness = false,
+    requireTimetableEvidence = false,
+  }: CatalogReadOptions = {}): Promise<CatalogSnapshot> {
+    return this.client.$transaction(
+      (tx) => this.readSnapshot(tx, includeFreshness, requireTimetableEvidence),
+      { isolationLevel: "RepeatableRead" },
+    );
   }
 
   private async readSnapshot(
     tx: Prisma.TransactionClient,
     includeFreshness: boolean,
+    requireTimetableEvidence: boolean,
   ): Promise<CatalogSnapshot> {
     const now = new Date();
     const [editionRows, artistRows, freshnessEvidence] = await Promise.all([
@@ -57,7 +65,17 @@ export class DatabaseCatalogRepository implements CatalogRepository {
             orderBy: [{ billing: "asc" }, { position: "asc" }],
           },
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
-          timetable: { orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }] },
+          timetable: {
+            // Legacy display defaults are not evidence for data-quality coverage.
+            ...(requireTimetableEvidence && {
+              where: {
+                sourceUrl: { not: null },
+                observedAt: { not: null },
+                timeZone: { not: null },
+              },
+            }),
+            orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }],
+          },
           playlists: { orderBy: { provider: "asc" } },
           playlistLinks: { select: { provider: true, url: true } },
         },
@@ -200,6 +218,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         ...festival,
         headliners: [...festival.headliners],
         lineup: [...festival.lineup],
+        timetable: festival.timetable?.map((performance) => ({ ...performance })),
       };
     });
     const artists: ArtistProfile[] = artistRows
@@ -325,15 +344,21 @@ export class DatabaseCatalogRepository implements CatalogRepository {
   }
 }
 
-export async function readCatalog(
-  options: { database?: PrismaClient; includeFreshness?: boolean } = {},
-): Promise<CatalogSnapshot> {
-  const database = options.database ?? (await import("../db.ts")).db;
-  return new DatabaseCatalogRepository(database).read({
-    includeFreshness: options.includeFreshness,
-  });
+export async function readCatalog({
+  database,
+  ...options
+}: CatalogReadOptions & { database?: PrismaClient } = {}): Promise<CatalogSnapshot> {
+  return new DatabaseCatalogRepository(database ?? (await import("../db.ts")).db).read(options);
 }
 
-export function getCatalog(options?: { includeFreshness?: boolean }) {
-  return readCatalog(options);
+// Normalize options so equivalent reads share a projection within a request.
+const getRequestCatalog = cache((includeFreshness: boolean, requireTimetableEvidence: boolean) =>
+  readCatalog({ includeFreshness, requireTimetableEvidence }),
+);
+
+export function getCatalog(options?: CatalogReadOptions) {
+  return getRequestCatalog(
+    options?.includeFreshness === true,
+    options?.requireTimetableEvidence === true,
+  );
 }

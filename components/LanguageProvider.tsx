@@ -437,6 +437,7 @@ const translations = {
     festivals: "Festivals",
     notifications: "Notifications",
     aboutData: "About",
+    dataQuality: "Catalogue data quality",
     footerNote: "Always confirm dates and tickets with the official festival.",
     language: "Language",
     season: "THE 2027 EUROPEAN SEASON",
@@ -543,6 +544,8 @@ const translations = {
     shareDiscoveryPrivacy:
       "Search text and favorite artists are left out unless you include them. " +
       "Anyone with the link can see what you include.",
+    shareCustomOriginExcluded:
+      "Custom origins and distance-based filters or sorting are not shared.",
     shareDiscoveryText: "Include search text",
     shareDiscoveryArtists: "Include artists used for sorting",
     copyDiscoveryLink: "Copy filter link",
@@ -657,6 +660,7 @@ const translations = {
     festivals: "Festivals",
     notifications: "Benachrichtigungen",
     aboutData: "Über uns",
+    dataQuality: "Datenqualität des Katalogs",
     footerNote: "Termine und Tickets immer auf der offiziellen Festival-Seite prüfen.",
     language: "Sprache",
     season: "DIE EUROPÄISCHE SAISON 2027",
@@ -766,6 +770,8 @@ const translations = {
     shareDiscoveryPrivacy:
       "Suchtext und Lieblingskünstler werden nur auf Wunsch geteilt. " +
       "Alle mit dem Link können die ausgewählten Angaben sehen.",
+    shareCustomOriginExcluded:
+      "Benutzerdefinierte Startorte sowie Entfernungsfilter und -sortierung werden nicht geteilt.",
     shareDiscoveryText: "Suchtext einschließen",
     shareDiscoveryArtists: "Künstler für die Sortierung einschließen",
     copyDiscoveryLink: "Filterlink kopieren",
@@ -885,6 +891,7 @@ const translations = {
     festivals: "Фестивали",
     notifications: "Уведомления",
     aboutData: "О проекте",
+    dataQuality: "Качество данных каталога",
     footerNote: "Всегда проверяйте даты и билеты на официальном сайте фестиваля.",
     language: "Язык",
     season: "ЕВРОПЕЙСКИЙ СЕЗОН 2027",
@@ -991,6 +998,8 @@ const translations = {
     shareDiscoveryPrivacy:
       "Текст поиска и избранные исполнители не передаются без вашего выбора. " +
       "Выбранные данные увидит любой, у кого есть ссылка.",
+    shareCustomOriginExcluded:
+      "Пользовательская точка отправления, фильтр и сортировка по расстоянию не передаются.",
     shareDiscoveryText: "Добавить текст поиска",
     shareDiscoveryArtists: "Добавить исполнителей для сортировки",
     copyDiscoveryLink: "Скопировать ссылку на фильтры",

@@ -23,7 +23,7 @@ function edition(slug = "sample") {
         stage: "Main",
         start: "20:00",
         artistName: "Artist",
-        timeZone: null,
+        timeZone: "Europe/Berlin",
         status: "ANNOUNCED",
         sourceUrl: "https://private.invalid",
         observedAt: new Date(),
@@ -33,68 +33,64 @@ function edition(slug = "sample") {
   };
 }
 
-test(
-  "safe existing projection, stable bytes and strong ETag; row " +
-    "order and metadata do not affect revision",
-  async () => {
-    const rows = [edition("z"), edition("a")];
-    rows[0].timetable.push({ ...rows[0].timetable[0], artistName: "Other", status: "CANCELLED" });
-    const read = () => Promise.resolve(projectOfflineCatalog(rows));
-    const first = await serveOfflineCatalog(request(), read);
-    const body = await first.text();
-    const expectedHash = createHash("sha256").update(body).digest("hex");
-    assert.equal(first.status, 200);
-    assert.equal(first.headers.get("etag"), `"${expectedHash}"`);
-    assert.equal(first.headers.get("x-catalog-revision"), expectedHash);
-    assert.match(first.headers.get("cache-control"), /must-revalidate/);
-    assert.equal(first.headers.get("set-cookie"), null);
-    assert.match(first.headers.get("content-type"), /application\/json/);
-    const payload = JSON.parse(body);
-    assert.deepEqual(Object.keys(payload), [
-      "schemaVersion",
-      "dataVersion",
-      "editionYear",
-      "generatedAt",
-      "timetableStatus",
-      "festivals",
-    ]);
-    assert.equal(payload.schemaVersion, 1);
-    assert.equal(payload.editionYear, 2027);
-    assert.equal(payload.generatedAt, null);
-    assert.equal(payload.timetableStatus, "published");
-    assert.deepEqual(Object.keys(payload.festivals[0]), [
-      "slug",
-      "name",
-      "startDate",
-      "endDate",
-      "timetable",
-    ]);
-    assert.deepEqual(payload.festivals[0].timetable[0], {
-      date: "2027-06-04",
-      stage: "Main",
-      start: "20:00",
-      artist: "Artist",
-      timeZone: "UTC",
-      status: "scheduled",
-    });
-    assert.equal(payload.festivals[0].endDate, null);
-    assert.doesNotMatch(body, /private|sourceUpdatedAt|observedAt|internal/);
-    rows.reverse();
-    for (const row of rows) {
-      row.sourceUpdatedAt = new Date("2030-01-01");
-      row.timetable.reverse();
-    }
-    const unchanged = await serveOfflineCatalog(request(), read);
-    assert.equal(await unchanged.text(), body);
-    assert.equal(unchanged.headers.get("etag"), first.headers.get("etag"));
-  },
-);
+test("stable ETag ignores row order and private metadata", async () => {
+  const rows = [edition("z"), edition("a")];
+  rows[0].timetable.push({ ...rows[0].timetable[0], artistName: "Other", status: "CANCELLED" });
+  const read = () => Promise.resolve(projectOfflineCatalog(rows, 2027));
+  const first = await serveOfflineCatalog(request(), read);
+  const body = await first.text();
+  const expectedHash = createHash("sha256").update(body).digest("hex");
+  assert.equal(first.status, 200);
+  assert.equal(first.headers.get("etag"), `"${expectedHash}"`);
+  assert.equal(first.headers.get("x-catalog-revision"), expectedHash);
+  assert.match(first.headers.get("cache-control"), /must-revalidate/);
+  assert.equal(first.headers.get("set-cookie"), null);
+  assert.match(first.headers.get("content-type"), /application\/json/);
+  const payload = JSON.parse(body);
+  assert.deepEqual(Object.keys(payload), [
+    "schemaVersion",
+    "dataVersion",
+    "editionYear",
+    "generatedAt",
+    "timetableStatus",
+    "festivals",
+  ]);
+  assert.equal(payload.schemaVersion, 1);
+  assert.equal(payload.editionYear, 2027);
+  assert.equal(payload.generatedAt, null);
+  assert.equal(payload.timetableStatus, "published");
+  assert.deepEqual(Object.keys(payload.festivals[0]), [
+    "slug",
+    "name",
+    "startDate",
+    "endDate",
+    "timetable",
+  ]);
+  assert.deepEqual(payload.festivals[0].timetable[0], {
+    date: "2027-06-04",
+    stage: "Main",
+    start: "20:00",
+    artist: "Artist",
+    timeZone: "Europe/Berlin",
+    status: "scheduled",
+  });
+  assert.equal(payload.festivals[0].endDate, null);
+  assert.doesNotMatch(body, /private|sourceUpdatedAt|observedAt|internal/);
+  rows.reverse();
+  for (const row of rows) {
+    row.sourceUpdatedAt = new Date("2030-01-01");
+    row.timetable.reverse();
+  }
+  const unchanged = await serveOfflineCatalog(request(), read);
+  assert.equal(await unchanged.text(), body);
+  assert.equal(unchanged.headers.get("etag"), first.headers.get("etag"));
+});
 
 test("conditional GET supports weak/list/wildcard validators after a fresh read", async () => {
   let reads = 0;
   const read = async () => {
     reads++;
-    return projectOfflineCatalog([edition()]);
+    return projectOfflineCatalog([edition()], 2027);
   };
   const first = await serveOfflineCatalog(request(), read);
   const etag = first.headers.get("etag");
@@ -117,14 +113,14 @@ test("conditional GET supports weak/list/wildcard validators after a fresh read"
 
 test("public content changes invalidate old validators without timestamp updates", async () => {
   const row = edition();
-  const read = async () => projectOfflineCatalog([row]);
+  const read = async () => projectOfflineCatalog([row], 2027);
   let etag = (await serveOfflineCatalog(request(), read)).headers.get("etag");
   for (const mutate of [
     () => {
       row.festival.name = "Changed";
     },
     () => {
-      row.startDate = new Date("2027-06-05");
+      row.startDate = new Date("2027-06-03");
     },
     () => {
       row.timetable[0].start = "21:00";
@@ -139,22 +135,35 @@ test("public content changes invalidate old validators without timestamp updates
     assert.notEqual(response.headers.get("etag"), etag);
     etag = response.headers.get("etag");
   }
-  assert.equal(projectOfflineCatalog([row]).timetableStatus, "not-published");
+  assert.equal(projectOfflineCatalog([row], 2027).timetableStatus, "not-published");
 });
 
-test("DB query selects only current public fields and fails closed even with wildcard", async () => {
+test("Offline query uses current-season public fields and fails closed", async (t) => {
+  const now = new Date("2026-11-23T12:00:00.000Z");
+  t.mock.timers.enable({ apis: ["Date"], now });
   let query;
+  const findFirst = async (args) => {
+    assert.deepEqual(args, {
+      where: { recordState: "CURRENT" },
+      orderBy: { year: "desc" },
+      select: { year: true },
+    });
+    return { year: 2029 };
+  };
   const database = {
     editionLifecycleProposalSnapshot: { findFirst: async () => null },
     festivalEdition: {
+      findFirst,
       findMany: async (args) => {
         query = args;
         return [edition()];
       },
     },
   };
-  await readOfflineCatalog(database);
-  assert.deepEqual(query.where, { year: 2027, recordState: "CURRENT" });
+  const payload = await readOfflineCatalog(database);
+  assert.equal(payload.editionYear, 2029);
+  assert.equal(payload.dataVersion, "festivals-2029-v1");
+  assert.deepEqual(query.where, { year: 2029, recordState: "CURRENT" });
   assert.deepEqual(Object.keys(query.select), [
     "id",
     "festival",
@@ -162,6 +171,11 @@ test("DB query selects only current public fields and fails closed even with wil
     "endDate",
     "timetable",
   ]);
+  assert.deepEqual(query.select.timetable.where, {
+    timeZone: { not: null },
+    sourceUrl: { not: null },
+    observedAt: { lte: now },
+  });
   for (const findMany of [
     async () => [],
     async () => {
@@ -169,7 +183,7 @@ test("DB query selects only current public fields and fails closed even with wil
     },
   ]) {
     const response = await serveOfflineCatalog(request("*"), () =>
-      readOfflineCatalog({ festivalEdition: { findMany } }),
+      readOfflineCatalog({ ...database, festivalEdition: { findFirst, findMany } }),
     );
     assert.equal(response.status, 503);
     assert.equal(response.headers.get("cache-control"), "no-store");
@@ -189,6 +203,7 @@ test("actual GET route reads DB on each call and never returns 304 during DB fai
   globalThis.prisma = {
     editionLifecycleProposalSnapshot: { findFirst: async () => null },
     festivalEdition: {
+      findFirst: async () => ({ year: 2027 }),
       findMany: async () => {
         reads++;
         if (fail) throw new Error("DB unavailable");

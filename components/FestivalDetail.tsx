@@ -5,6 +5,8 @@ import Link from "next/link";
 import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
+import type { PublicFestivalOverview } from "@/lib/catalog/festival-overviews";
+import { FestivalOverview } from "./FestivalOverview";
 import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
@@ -34,6 +36,7 @@ export function FestivalDetail({
   discoveryLineups,
   artistSlugs,
   playlist,
+  overview,
   artistPopularity = {},
   arrivalFacts = [],
 }: {
@@ -42,6 +45,7 @@ export function FestivalDetail({
   discoveryLineups?: DiscoveryLineups;
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
+  overview?: PublicFestivalOverview;
   arrivalFacts?: readonly PublicArrivalFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
@@ -192,6 +196,7 @@ export function FestivalDetail({
           </div>
         )}
       </div>
+      {!hiatus && <FestivalOverview overview={overview} />}
       {!hiatus && item.editionYear && (
         <OfflineTripDownload
           key={`${item.slug}:${item.editionYear}`}

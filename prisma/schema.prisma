@@ -11,6 +11,7 @@ enum SyncKind {
   COLLECTIONS
   SAVED_FILTERS
   FESTIVAL_PLANS
+  TRIP_BUDGETS
 }
 
 enum NotificationChannel {
@@ -196,6 +197,15 @@ model User {
   emailVerificationTokens   EmailVerificationToken[]
   lifecycleDecisions        EditionLifecycleReviewDecision[]
   passkeys                  Passkey[]
+  calendarSubscription      CalendarSubscription?
+}
+
+model CalendarSubscription {
+  userId    String   @id
+  keyDigest String   @unique
+  seasons   Int[]
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Passkey {
@@ -330,8 +340,23 @@ model FestivalEdition {
   sources         FestivalSource[]
   lifecycleProposals EditionLifecycleProposalSnapshot[]
 
+  overview        EditionOverview?
+
   @@unique([festivalId, year])
   @@index([year, recordState])
+}
+
+model EditionOverview {
+  editionId     String          @id
+  city          String
+  countryCode   String
+  organizerHost String
+  checkedOn     DateTime        @db.Date
+  sourceUrls    String[]
+  summaryEn     String
+  summaryDe     String
+  summaryRu     String
+  edition       FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
 }
 
 enum EditionArrivalKind {
@@ -974,6 +999,21 @@ model EditionLifecycleReviewDecision {
   snapshot    EditionLifecycleProposalSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
   actor       User @relation(fields: [actorId], references: [id], onDelete: Restrict)
   audit       AdminAuditEntry @relation(fields: [auditId], references: [id], onDelete: Restrict)
+}
+
+model GeographicOrigin {
+  id          String  @id
+  countryCode String
+  name        String
+  searchName  String
+  region      String?
+  postalCode  String?
+  postalKey   String?
+  latitude    Float
+  longitude   Float
+
+  @@index([searchName(ops: raw("text_pattern_ops"))], map: "GeographicOrigin_searchName_prefix_idx")
+  @@index([postalKey])
 }
 
 enum CorrectionKind {

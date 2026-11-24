@@ -12,6 +12,7 @@ export default defineConfig({
     reuseExistingServer: false,
     env: {
       DATABASE_URL: process.env.DATABASE_URL,
+      CALENDAR_SUBSCRIPTIONS_ENABLED: "1",
       AUTH_SECRET: "admin-e2e-secret-at-least-32-characters",
       APP_URL: "http://localhost:3245",
       ADMIN_EMAILS: [

@@ -552,7 +552,7 @@
   inset: 9% 15% 8% 18%;
   display: grid;
   place-items: center;
-  color: #9a9a85;
+  color: #62634f;
   font:
     clamp(60px, 13vw, 170px) "Archivo Black",
     sans-serif;
@@ -580,8 +580,8 @@
   transform: translate(-50%, -50%);
   z-index: 2;
 }
-
-.mapMarker summary {
+/* stylelint-disable-next-line no-descending-specificity -- Map buttons do not share notification styles. */
+.mapMarker > button {
   list-style: none;
   display: grid;
   place-items: center;
@@ -590,24 +590,39 @@
   border: 3px solid white;
   border-radius: 50%;
   background: var(--orange);
-  color: white;
+  color: var(--solid);
   font-weight: 900;
   cursor: pointer;
   box-shadow: 0 3px 12px #0005;
 }
-
-.mapMarker summary::-webkit-details-marker {
-  display: none;
-}
-
-/* stylelint-disable-next-line no-descending-specificity
-   -- Preserve component cascade against earlier .channelRow > span:first-child.
-*/
-.mapMarker summary span {
+/* stylelint-disable-next-line no-descending-specificity -- Map labels are not channel labels. */
+.mapMarker > button span {
   position: absolute;
   top: 42px;
   color: var(--ink);
   font-size: 10px;
+  padding-inline: 0.2em;
+  background: var(--paper);
+  border-radius: 0.2em;
+}
+
+.mapMarker[data-open="true"] {
+  z-index: 3;
+}
+
+.mapTextList {
+  margin-block: 1rem;
+}
+
+.mapTextList summary {
+  cursor: pointer;
+  width: fit-content;
+  min-height: 44px;
+  padding-block: 0.6rem;
+}
+
+.mapTextList a {
+  text-decoration: underline;
 }
 
 /* stylelint-disable-next-line no-descending-specificity
@@ -1978,6 +1993,24 @@ main {
   color: var(--solid);
 }
 
+.seasonNavigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-block: 16px;
+}
+
+/* stylelint-disable-next-line no-descending-specificity -- Season links do not share map styles. */
+.seasonNavigation a {
+  padding: 6px 4px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.seasonNavigation a[aria-current="page"] {
+  font-weight: 800;
+}
+
 .directoryPage {
   max-width: 1280px;
   margin: auto;
@@ -3306,6 +3339,50 @@ button:focus-visible,
   outline-offset: 3px;
 }
 
+.tripBudgetEdition,
+.tripBudgetFields label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.tripBudgetEdition {
+  max-width: 28rem;
+}
+
+.tripBudgetFields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.tripBudgetFields input,
+.tripBudgetFields select,
+.tripBudgetEdition select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.4rem 0.6rem;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid currentcolor;
+  border-radius: 0.25rem;
+}
+
+.tripBudgetComparison {
+  padding-inline-start: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.tripBudgetComparison li {
+  margin-block: 0.5rem;
+}
+
+.tripBudgetComparison strong {
+  margin-inline-start: 0.75rem;
+}
+
 /* All framed controls need feedback, including native select triggers. Keep
    options neutral when the browser uses these styles for its native popup. */
 select:not(:disabled) {
@@ -3472,6 +3549,26 @@ summary:focus-visible {
 
 .plannerReset [role="status"] {
   max-width: 28rem;
+}
+
+.dataQualityCount {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  margin-block: 0.5rem;
+}
+
+.dataQualityCount dd {
+  margin: 0;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dataQualityLink {
+  max-width: 1120px;
+  margin: 1rem auto;
+  padding-inline: 1.25rem;
 }
 
 .correctionReport {
@@ -3653,6 +3750,15 @@ summary:focus-visible {
 .discoveryDates [role="status"] {
   margin-inline-start: 6px;
 }
+
+/* stylelint-disable no-descending-specificity -- Keep an explicit focus ring on map controls. */
+.mapMarker > button:focus-visible,
+.mapTextList summary:focus-visible,
+.mapTextList a:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+/* stylelint-enable no-descending-specificity */
 
 .discoveryOrder {
   display: flex;
