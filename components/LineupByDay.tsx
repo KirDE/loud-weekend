@@ -7,13 +7,14 @@ import { useLanguage } from "./LanguageProvider";
 
 export function LineupByDay({
   appearances,
-  artistSlugs,
+  publicArtistSlugs,
 }: {
   appearances: LineupDayAppearance[];
-  artistSlugs: Readonly<Record<string, string>>;
+  publicArtistSlugs: readonly string[];
 }) {
   const { locale, t } = useLanguage();
   const [selection, setSelection] = useState("");
+  const publicProfiles = new Set(publicArtistSlugs);
   const dates = [...new Set(appearances.flatMap((appearance) => appearance.dates))].sort();
   const activeDay = dates.includes(selection) || selection === "unassigned" ? selection : "";
   const format = new Intl.DateTimeFormat(locale, { dateStyle: "full", timeZone: "UTC" });
@@ -51,8 +52,8 @@ export function LineupByDay({
             <ul>
               {artists.map(({ artist, artistSlug, cancelled, sourceUrl }) => (
                 <li key={artistSlug}>
-                  {Object.hasOwn(artistSlugs, artist) ? (
-                    <Link href={`/artists/${artistSlugs[artist]}/`}>{artist}</Link>
+                  {publicProfiles.has(artistSlug) ? (
+                    <Link href={`/artists/${artistSlug}/`}>{artist}</Link>
                   ) : (
                     artist
                   )}

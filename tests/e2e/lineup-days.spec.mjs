@@ -3,6 +3,7 @@ import { createPrismaClient } from "../../lib/prisma-client.mjs";
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 
 const sourceUrl = "https://festival.example.test/2027/by-day";
+const namesakeSlug = "cancelled-sample-artist-namesake";
 const day = (date) => new Date(`${date}T00:00:00Z`);
 let edition;
 
@@ -26,6 +27,29 @@ test.beforeAll(async () => {
         observedAt: day("2026-10-02"),
       },
     });
+    await db.artist.create({
+      data: {
+        slug: namesakeSlug,
+        name: artist.name,
+        identityState: "UNRESOLVED",
+        recentSetlists: [],
+        freshness: {},
+        appearances: {
+          create: { editionId: edition.id, billing: "LINEUP", position: 900, status: "CANCELLED" },
+        },
+        lineupDays: {
+          create: {
+            editionId: edition.id,
+            dates: [day("2027-06-12")],
+            status: "CANCELLED",
+            startDate: edition.startDate,
+            endDate: edition.endDate,
+            sourceUrl,
+            observedAt: day("2026-10-02"),
+          },
+        },
+      },
+    });
   } finally {
     await db.$disconnect();
   }
@@ -36,6 +60,10 @@ test.afterAll(async () => {
   const db = createPrismaClient();
   try {
     await db.editionLineupDayAllocation.deleteMany({ where: { editionId: edition.id, sourceUrl } });
+    await db.lineupEntry.deleteMany({
+      where: { editionId: edition.id, artist: { slug: namesakeSlug } },
+    });
+    await db.artist.deleteMany({ where: { slug: namesakeSlug } });
   } finally {
     await db.$disconnect();
   }
@@ -59,9 +87,26 @@ for (const [language, labels] of Object.entries({
       timeZone: "UTC",
     }).format(day("2027-06-11"));
     await expect(panel.getByRole("heading", { name: announcedDate })).toBeVisible();
-    await expect(panel.getByText(labels[3], { exact: false })).toBeVisible();
-    await expect(panel.locator(`a[href="${sourceUrl}"]`)).toBeVisible();
-    await expect(panel.getByRole("link", { name: "Sample Artist" })).toBeVisible();
+    await expect(panel.getByText(labels[3], { exact: false })).toHaveCount(2);
+    await expect(panel.locator(`a[href="${sourceUrl}"]`)).toHaveCount(2);
+    const namesakeDay = new Intl.DateTimeFormat(language, {
+      dateStyle: "full",
+      timeZone: "UTC",
+    }).format(day("2027-06-12"));
+    const namesake = panel.locator("section").filter({
+      has: page.getByRole("heading", { name: namesakeDay, exact: true }),
+    });
+    await expect(namesake.getByRole("link", { name: "Sample Artist" })).toHaveAttribute(
+      "href",
+      `/artists/${namesakeSlug}/`,
+    );
+    const original = panel.locator("section").filter({
+      has: page.getByRole("heading", { name: announcedDate, exact: true }),
+    });
+    await expect(original.getByRole("link", { name: "Sample Artist" })).toHaveAttribute(
+      "href",
+      "/artists/sample-artist/",
+    );
     await expect(panel.getByRole("link", { name: "Second Artist" })).toBeVisible();
     await expect(page.locator(".timetableEmpty")).toBeVisible();
     await expect

@@ -26,6 +26,7 @@ export function FestivalDetail({
   item,
   festivals,
   artistSlugs,
+  lineupDayArtistSlugs = [],
   playlist,
   artistPopularity = {},
   arrivalFacts = [],
@@ -33,6 +34,7 @@ export function FestivalDetail({
   item: Festival;
   festivals: Festival[];
   artistSlugs: Readonly<Record<string, string>>;
+  lineupDayArtistSlugs?: readonly string[];
   playlist?: PlaylistStatus;
   arrivalFacts?: readonly PublicArrivalFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
@@ -234,7 +236,7 @@ export function FestivalDetail({
           <LineupByDay
             key={`${item.slug}:${item.editionYear}`}
             appearances={item.lineupDays}
-            artistSlugs={artistSlugs}
+            publicArtistSlugs={lineupDayArtistSlugs}
           />
         )}
       </section>
