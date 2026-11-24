@@ -303,12 +303,15 @@ for (const [language, labels] of Object.entries({
     const youtubeMusicUrl = "https://music.youtube.com/playlist?list=Synthetic01";
     const spotify = { matchedArtists: 110, tracks: 220, recordedAt: "2026-11-20T12:00:00.000Z" };
     const youtubeMusic = { matchedArtists: 8, tracks: 14, recordedAt: "2026-11-18T14:00:00.000Z" };
-    const render = (coverage?: { spotify?: typeof spotify; youtubeMusic?: typeof youtubeMusic }) =>
+    const render = (
+      coverage?: { spotify?: typeof spotify; youtubeMusic?: typeof youtubeMusic },
+      reviewedPlaylistLinks?: (typeof festival)["reviewedPlaylistLinks"],
+    ) =>
       renderToStaticMarkup(
         <LanguageProvider initialLanguage={language as Language}>
           <LocalPlannerProvider>
             <FestivalDetail
-              item={festival}
+              item={{ ...festival, reviewedPlaylistLinks }}
               festivals={[festival]}
               artistSlugs={{}}
               playlist={{
@@ -335,6 +338,21 @@ for (const [language, labels] of Object.entries({
       .split("</a>")[0];
     assert.ok(missingYoutubeCoverage.includes(labels[1]));
     assert.doesNotMatch(missingYoutubeCoverage, /110|220|2026-11-20/);
+    const reviewedSpotify = "https://open.spotify.com/playlist/Reviewed00000000000001";
+    const reviewedYoutube = "https://music.youtube.com/playlist?list=ReviewedSynthetic";
+    const mixed = render({ spotify, youtubeMusic }, { spotify: reviewedSpotify });
+    assert.ok(mixed.split(`href="${reviewedSpotify}"`)[1].split("</a>")[0].includes(labels[1]));
+    assert.ok(mixed.includes(youtubeMusic.recordedAt));
+    assert.ok(!mixed.includes(spotify.recordedAt));
+    const reviewedOnly = render(
+      { spotify, youtubeMusic },
+      { spotify: spotifyUrl, youtube_music: reviewedYoutube },
+    );
+    assert.ok(
+      reviewedOnly.split(`href="${reviewedYoutube}"`)[1].split("</a>")[0].includes(labels[1]),
+    );
+    assert.ok(reviewedOnly.includes(spotify.recordedAt));
+    assert.ok(!reviewedOnly.includes(youtubeMusic.recordedAt));
     const legacy = render();
     assert.ok(legacy.includes(labels[1]));
     assert.doesNotMatch(legacy, /112|2026-11-23/);
