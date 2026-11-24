@@ -1,5 +1,6 @@
 "use client";
 
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { CatalogFreshness } from "@/lib/domain/freshness";
 import type { Festival } from "@/lib/domain/festival";
 import { FestivalExplorer } from "./FestivalExplorer";
@@ -9,9 +10,11 @@ import { hasAnnouncedLineup } from "@/lib/festival-lineup";
 export function HomeContent({
   festivals,
   freshness,
+  discoveryLineups,
 }: {
   festivals: Festival[];
   freshness: CatalogFreshness;
+  discoveryLineups?: DiscoveryLineups;
 }) {
   const { t } = useLanguage();
   const announced = festivals.filter(hasAnnouncedLineup).length;
@@ -38,7 +41,11 @@ export function HomeContent({
           </span>
         </div>
       </section>
-      <FestivalExplorer festivals={festivals} freshness={freshness} />
+      <FestivalExplorer
+        festivals={festivals}
+        freshness={freshness}
+        discoveryLineups={discoveryLineups}
+      />
     </>
   );
 }
