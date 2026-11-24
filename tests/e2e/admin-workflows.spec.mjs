@@ -20,7 +20,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => db.$disconnect());
 
-test("admin edits, reviews, diagnostics and audit survive reload", async ({ page }) => {
+test("admin edits, reviews, diagnostics and audit survive reload", async ({ page }, testInfo) => {
   await expect((await page.request.get("/api/admin")).status()).toBe(403);
   await page.goto("/submit");
   await page.getByLabel("Festival name").fill("Browser Metal Festival");
@@ -215,7 +215,15 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   await page.getByRole("button", { name: "Review queue" }).click();
   const cityChange = page.locator("article.reviewCard").filter({ hasText: "Sample E2E City" });
   await expect(cityChange).toBeVisible();
+  const cityChangeApproval = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && response.url().includes("/api/admin/changes/"),
+  );
   await cityChange.getByRole("button", { name: "Approve change" }).click();
+  const cityApprovalTarget = new URL((await cityChangeApproval).url()).pathname
+    .split("/")
+    .filter(Boolean)
+    .at(-1);
   await expect(cityChange).toContainText("approved");
   const biographyChange = page
     .locator("article.reviewCard")
@@ -275,8 +283,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
       save: "Save festival draft",
       playlist: "Playlist editor",
       savePlaylist: "Save playlist draft",
-      publication: "Publication status",
-      published: "Published",
+      playlistAddress: "Playlist URL",
       history: "History",
       approved: "approved",
       failed: "Failed",
@@ -300,8 +307,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
       save: "Festivalentwurf speichern",
       playlist: "Playlist-Editor",
       savePlaylist: "Playlistentwurf speichern",
-      publication: "Veröffentlichungsstatus",
-      published: "Veröffentlicht",
+      playlistAddress: "Playlist-URL",
       history: "Verlauf",
       approved: "freigegeben",
       failed: "Fehlgeschlagen",
@@ -325,8 +331,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
       save: "Сохранить черновик фестиваля",
       playlist: "Редактор плейлистов",
       savePlaylist: "Сохранить черновик плейлиста",
-      publication: "Статус публикации",
-      published: "Опубликовано",
+      playlistAddress: "URL плейлиста",
       history: "История",
       approved: "подтверждено",
       failed: "Ошибка",
@@ -366,7 +371,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
           .selectOption(draftFestival[language]);
         await page
           .getByLabel(copy.city, { exact: true })
-          .fill(`Localized synthetic city ${language}`);
+          .fill(`Localized synthetic city ${language} ${testInfo.retry}`);
         await page.getByRole("button", { name: copy.save }).click();
         await expect(page.getByRole("status")).toContainText(copy.saved);
         await page
@@ -380,9 +385,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
       await open(copy.sections[3]);
       await expect(page.getByRole("heading", { name: copy.playlist })).toBeVisible();
       await expect(page.getByRole("button", { name: copy.savePlaylist })).toBeVisible();
-      const publication = page.getByLabel(copy.publication);
-      await expect(publication.locator("option[value=published]")).toHaveText(copy.published);
-      await expect(publication).toHaveValue("published");
+      await expect(page.getByLabel(copy.playlistAddress, { exact: true })).toBeEditable();
       await open(copy.sections[4]);
       await expect(page.locator(".diagnosticGrid .reviewMeta")).toContainText(copy.failed);
       await expect(page.getByText("E2E adapter failure", { exact: false })).toBeVisible();
@@ -390,7 +393,12 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
       await expect(page.getByLabel(copy.log)).toContainText('"message": "fixture"');
       await page.getByRole("button", { name: copy.showLog }).click();
       await open(copy.sections[5]);
-      await expect(page.getByText("CHANGE_APPROVED", { exact: true })).toBeVisible();
+      await expect(
+        page
+          .locator(".auditTable article")
+          .filter({ hasText: cityApprovalTarget })
+          .getByText("CHANGE_APPROVED", { exact: true }),
+      ).toBeVisible();
 
       for (const section of copy.sections) {
         await open(section);
