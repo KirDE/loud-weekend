@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+const comparison = await readFile(
+  new URL("../components/FestivalComparison.tsx", import.meta.url),
+  "utf8",
+);
 const explorer = await readFile(
   new URL("../components/FestivalExplorer.tsx", import.meta.url),
   "utf8",
@@ -73,7 +77,10 @@ test("planning filters and comparison controls expose accessible names and state
     '<th scope="row"',
     'className="comparisonScroll" tabIndex={0}',
   ])
-    assert.ok((explorer + search).includes(marker), `missing accessible behavior: ${marker}`);
+    assert.ok(
+      (explorer + search + comparison).includes(marker),
+      `missing accessible behavior: ${marker}`,
+    );
 });
 
 test("planning UI has no remaining hard-coded English control or comparison copy", () => {
