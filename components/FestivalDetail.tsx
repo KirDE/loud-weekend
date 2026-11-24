@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
@@ -27,6 +28,7 @@ import { FavoriteButton, useLocalPlanner, type Attendance } from "./LocalPlanner
 export function FestivalDetail({
   item,
   festivals,
+  discoveryLineups,
   artistSlugs,
   playlist,
   artistPopularity = {},
@@ -34,6 +36,7 @@ export function FestivalDetail({
 }: {
   item: Festival;
   festivals: Festival[];
+  discoveryLineups?: DiscoveryLineups;
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
   arrivalFacts?: readonly PublicArrivalFact[];
@@ -235,7 +238,12 @@ export function FestivalDetail({
           </>
         )}
       </section>
-      <PlanningTools item={item} festivals={festivals} />
+      <PlanningTools
+        item={item}
+        festivals={festivals}
+        discoveryLineups={discoveryLineups}
+        favorites={planner.favoriteArtists}
+      />
       <FestivalArrival facts={arrivalFacts} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
