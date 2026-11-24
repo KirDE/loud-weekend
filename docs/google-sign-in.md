@@ -14,8 +14,10 @@ this does not mark the application's own email verification as complete.
    instructions](https://developers.google.com/identity/openid-connect/openid-connect).
    Register the exact `APP_URL` origin plus `/api/auth/google/callback/`, including
    the trailing slash. Use a canonical HTTPS origin, not a path or an alternate
-   hostname. Store `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET` in protected
-   server runtime configuration; do not expose them as build-time client variables.
+   hostname. Store `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET` as protected
+   GitHub production environment secrets; do not expose them as build-time client
+   variables. Deploy copies them into the protected server runtime file only when
+   the production environment variable `GOOGLE_OIDC_ENABLED` is `true`.
 3. Review the site's privacy documentation (#430) and the provider consent
    screen before accepting users. The app requests only `openid email`. It
    stores the Google subject attached to the account, and uses the verified
@@ -35,7 +37,8 @@ this does not mark the application's own email verification as complete.
 
 ## Rollback
 
-Set `GOOGLE_OIDC_ENABLED=false` and reload the app configuration. The provider
+Set the production environment variable `GOOGLE_OIDC_ENABLED=false` and apply
+the normal release workflow. The provider
 buttons and handlers become unavailable; existing sessions and password and
 passkey sign-in remain unchanged. Keep the additive tables and identity links.
 Accounts created solely through Google cannot start a new session while the
