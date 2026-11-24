@@ -616,6 +616,11 @@ export async function publishIngestionResult(
       ) {
         throw new Error("Ingestion publication does not match the persisted observation time");
       }
+      if (observedAt > candidate.attempt.endedAt || observedAt.getTime() > Date.now()) {
+        throw new Error(
+          "Ingestion observation time is later than the completed attempt or current time",
+        );
+      }
       if (candidate.diffs.some(({ reviewRequired }) => reviewRequired))
         throw new Error("Persisted candidate requires review");
       const normalizedDiffs = (values: { field: string; before: unknown; after: unknown }[]) =>

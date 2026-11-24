@@ -61,7 +61,7 @@ function result(artist: string, overrides: Partial<IngestionResult> = {}): Inges
   };
 }
 
-async function persist(value: IngestionResult) {
+async function persist(value: IngestionResult, endedAt = new Date(value.fetchedAt)) {
   const run = await createIngestionRun(db, {
     trigger: "TEST",
     sourceCommit: suffix,
@@ -74,8 +74,8 @@ async function persist(value: IngestionResult) {
     finalUrl: value.sourceUrl,
     httpStatus: 200,
     durationMs: 1,
-    startedAt: new Date(value.fetchedAt),
-    endedAt: new Date(value.fetchedAt),
+    startedAt: endedAt,
+    endedAt,
     result: value,
   });
 }
@@ -258,6 +258,39 @@ test("publication cannot replace the timestamp of a persisted observation", asyn
       .reviewState,
     "PENDING",
   );
+});
+
+test("publication rejects persisted observation times outside completed history", async () => {
+  const artist = `Impossible observation ${suffix}`;
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+  });
+  const publications = await db.catalogPublication.count();
+  const jobs = await db.catalogPlaylistRefresh.count();
+  const now = Date.now();
+  const timestampPairs = [
+    { fetchedAt: new Date(now - 30_000), endedAt: new Date(now - 60_000) },
+    { fetchedAt: new Date(now + 60_000), endedAt: new Date(now + 60_000) },
+  ];
+  for (const { fetchedAt, endedAt } of timestampPairs) {
+    const value = result(artist);
+    value.fetchedAt = value.candidate.fetchedAt = fetchedAt.toISOString();
+    for (const evidence of value.candidate.evidence) evidence.observedAt = value.fetchedAt;
+    const attempt = await persist(value, endedAt);
+    await assert.rejects(
+      publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
+      /observation time is later than the completed attempt or current time/,
+    );
+    const saved = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    assert.equal(saved.reviewState, "PENDING");
+  }
+  assert.equal(await db.catalogPublication.count(), publications);
+  assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
+  assert.equal(await db.artist.count({ where: { name: artist } }), 0);
+  const unchanged = await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } });
+  assert.deepEqual(unchanged.sourceUpdatedAt, edition.sourceUpdatedAt);
 });
 
 test("a delayed ticket observation does not backdate the edition", async () => {
