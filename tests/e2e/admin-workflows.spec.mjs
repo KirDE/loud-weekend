@@ -86,11 +86,49 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   await page.getByRole("button", { name: "Save festival draft" }).click();
   await expect(page.getByRole("status")).toContainText("persisted and queued");
 
+  const sampledArtist = await db.artist.findUniqueOrThrow({ where: { slug: "sample-artist" } });
+  const site = "https://sample-artist.example.test/";
+  const social = "https://www.instagram.com/sample-artist/";
+  await db.artistLink.createMany({
+    skipDuplicates: true,
+    data: [
+      {
+        artistId: sampledArtist.id,
+        url: site,
+        label: "Official site",
+        source: "official",
+        verified: true,
+      },
+      {
+        artistId: sampledArtist.id,
+        url: social,
+        label: "Social profile",
+        source: "musicbrainz",
+        verified: false,
+        position: 1,
+      },
+    ],
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Festivals & artists" }).click();
   await page.getByPlaceholder("Find an artist").fill("Sample Artist");
   await page.getByRole("button", { name: "Edit" }).first().click();
   await page.getByLabel("Canonical name").fill("Sample Artist E2E");
   await page.getByRole("button", { name: "Save artist draft" }).click();
   await expect(page.getByRole("status")).toContainText("persisted and queued");
+
+  await page.getByLabel("Official evidence URL").fill(site + "social/");
+  const queuedSocial = page.waitForResponse(
+    (response) =>
+      response.status() === 201 &&
+      response.request().method() === "POST" &&
+      response.request().postData()?.includes('"socialProfile"'),
+  );
+  await page.getByRole("button", { name: "Queue social profile for review" }).click();
+  await queuedSocial;
+  expect(
+    await db.artistLink.findFirstOrThrow({ where: { artistId: sampledArtist.id, url: social } }),
+  ).toMatchObject({ verified: false });
 
   await page.getByRole("button", { name: "Links & assets" }).click();
   await page.getByLabel("Tickets URL").fill("https://tickets.example.test/wacken");
@@ -171,7 +209,7 @@ test("admin edits, reviews, diagnostics and audit survive reload", async ({ page
   await expect(page.getByLabel("synthetic-fest parser log")).toContainText("fixture");
 
   const snapshot = await (await page.request.get("/api/admin")).json();
-  expect(snapshot.drafts).toHaveLength(5);
+  expect(snapshot.drafts).toHaveLength(6);
   expect(snapshot.resources.find((item) => item.resourceKind === "FESTIVAL")?.values.city).toBe(
     "Sample E2E City",
   );
