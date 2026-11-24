@@ -532,7 +532,7 @@ TIME ZONE 'UTC')) FOR UPDATE
           arrivalEvidence.some(
             (e) =>
               !expectedUrls.includes(e.url) ||
-              !allowedArrivalEvidenceUrl(i.festivalSlug, i.current.year, e.url) ||
+              !allowedArrivalEvidenceUrl(i.festivalSlug, i.current.year, i.source.url, e.url) ||
               !/^[a-f0-9]{64}$/.test(e.contentHash) ||
               e.observedAt > now ||
               e.observedAt.getTime() < now.getTime() - 86_400_000,
@@ -642,10 +642,12 @@ TIME ZONE 'UTC')) FOR UPDATE
           : i.kind === "manual_source" && !changedSource
             ? new Date(now.getTime() + 604800000).toISOString()
             : null;
+      // Raw fact differences may be spelling changes for the same artist.
+      // Only a committed catalogue change is correction feedback on its own.
       const parserRepairId =
         ["apply", "dismiss"].includes(d.action) &&
         !d.arrival &&
-        (changedFacts || changedSource || candidateFeedback)
+        (publication || changedSource || candidateFeedback)
           ? await enqueueParserRepair(tx, {
               sourceId: i.sourceId,
               festivalSlug: i.festivalSlug,

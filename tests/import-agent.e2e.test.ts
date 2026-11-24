@@ -162,6 +162,40 @@ test("verified resolution commits audit/provenance once, replays safely and enqu
   const future = await listAgentIssues(db, new Date(Date.now() + 8 * 86400000));
   assert.equal(future.ready, 1);
 });
+for (const [before, after, completeness] of [
+  ["TBA", "confirmed", "PARTIAL"],
+  ["CONFIRMED", "partial", "COMPLETE"],
+] as const) {
+  test(`reviewed status ${after} preserves ${completeness} catalogue completeness`, async () => {
+    const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
+    const editionId = source.editionId!;
+    const provenance = { where: { editionId, field: "completeness" } };
+    const provenanceBefore = await db.editionProvenance.count(provenance);
+    await db.festivalEdition.update({
+      where: { id: editionId },
+      data: { status: before, completeness },
+    });
+    const c = await claim();
+    const receipt = await resolveCase(c, {
+      action: "apply",
+      reason: "Reviewed official edition status independently of record completeness",
+      facts: { status: after },
+      evidence: [evidence("status")],
+    });
+
+    assert.equal(typeof receipt.publicationId, "string");
+    const edition = await db.festivalEdition.findUniqueOrThrow({ where: { id: editionId } });
+    assert.equal(edition.status, after.toUpperCase());
+    assert.equal(edition.completeness, completeness);
+    const publication = await db.catalogPublication.findUniqueOrThrow({
+      where: { id: String(receipt.publicationId) },
+    });
+    assert.deepEqual(publication.fields, ["status"]);
+    assert.equal(receipt.providerJobs, 0);
+    assert.equal(await db.editionProvenance.count(provenance), provenanceBefore);
+  });
+}
+
 test("billing promotion is atomic and keeps artist identity, completeness and provider boundaries", async () => {
   const c = await claim();
   const original = await db.lineupEntry.findFirstOrThrow({
@@ -182,7 +216,11 @@ test("billing promotion is atomic and keeps artist identity, completeness and pr
     where: { id: c.current.editionId! },
     include: { lineup: { include: { artist: true } } },
   });
-  assert.equal(edition.completeness, "PARTIAL");
+  assert.equal(edition.completeness, "COMPLETE");
+  assert.equal(
+    edition.lineup.find((entry) => entry.artistId === original.artistId)?.id,
+    original.id,
+  );
   assert.equal(edition.lineup.find((l) => l.artist.name === "Sample Artist")?.billing, "LINEUP");
   assert.equal(
     edition.lineup.find((entry) => entry.artistId === original.artistId)?.id,
@@ -221,6 +259,26 @@ test("a reviewed alias keeps the published roster and does not emit a lineup cha
   assert.equal(publication.lineupChanged, false);
   assert.equal(
     await db.catalogPlaylistRefresh.count({ where: { publicationId: publication.id } }),
+    0,
+  );
+});
+
+test("an alias-only decision does not queue parser repair", async () => {
+  await db.artist.update({
+    where: { slug: "sample-artist" },
+    data: { aliases: ["Reviewed Artist Alias"] },
+  });
+  const c = await claim();
+  const receipt = await resolveCase(c, {
+    ...checked,
+    facts: { headliners: ["Reviewed Artist Alias"], lineup: [] },
+    evidence: ["headliners", "lineup"].map((field) => evidence(field)),
+  });
+  assert.equal(receipt.status, "resolved");
+  assert.equal(receipt.publicationId, null);
+  assert.equal(receipt.parserRepairId, null);
+  assert.equal(
+    await db.operationalState.count({ where: { key: { startsWith: "parser-repair-" } } }),
     0,
   );
 });

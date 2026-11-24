@@ -258,7 +258,7 @@ for (const source of selected) {
       if (sourceLease && isArrivalSource(source)) {
         if (current.editionYear !== source.editionYear)
           throw new Error("Arrival source does not match the current edition");
-        arrivalResult = await collectArrivalCandidate(source);
+        arrivalResult = await collectArrivalCandidate(source, fetch, current);
       } else if (!fixturePath) {
         const fetched = await fetchSource(source);
         response = fetched.response;
