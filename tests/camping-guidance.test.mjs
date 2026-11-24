@@ -41,3 +41,18 @@ test("alcatraz: both camping endpoints must be valid and ordered", () => {
   const reversedHours = page.replace("Monday 9/8 (noon)", "Thursday 5/8 (8h)");
   assert.equal(parseCampingGuidance(reversedHours, "alcatraz", 2027), undefined);
 });
+
+test("alcatraz: every Graveyard opening statement must corroborate the main schedule", () => {
+  const page = fixture("alcatraz");
+  const opening = "The campsite is open from Thursday 5 August at 9 a.m.";
+  const parse = (html) => parseCampingGuidance(html, "alcatraz", 2027);
+  for (const conflicting of [
+    "The campsite is open from Friday 6 August at 9 a.m.",
+    "The campsite is open from Thursday 5 August at 9 p.m.",
+    "The campsite is open from Thursday 5 August at a time to be announced.",
+  ]) {
+    assert.equal(parse(page.replace(opening, `${opening}</p><p>${conflicting}`)), undefined);
+    assert.equal(parse(page.replace(opening, `${opening} ${conflicting}`)), undefined);
+  }
+  assert.deepEqual(parse(page.replace(opening, `${opening}</p><p>${opening}`)), parse(page));
+});
