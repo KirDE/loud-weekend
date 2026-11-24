@@ -343,6 +343,10 @@ test("commits catalog rows, candidate state, audit snapshot and playlist request
     },
   });
   assert.ok(lineup);
+  const visible = (await readCatalog({ database: db })).festivals.find(
+    (festival) => festival.slug === value.festivalSlug,
+  );
+  assert.equal(visible?.updatedAt, value.fetchedAt);
   const queued = await db.catalogPlaylistRefresh.findUniqueOrThrow({
     where: { publicationId: publication.id },
   });
