@@ -2,6 +2,8 @@ import { getPlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-readb
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { FestivalDetail } from "@/components/FestivalDetail";
+import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
+import { db } from "@/lib/db";
 import { getCatalog } from "@/lib/catalog/repository";
 import { canonicalPath, festivalMusicEvent } from "@/lib/seo";
 
@@ -33,6 +35,7 @@ export default async function FestivalPage({ params }: { params: Promise<{ slug:
   const failures = item.editionYear
     ? await getPlaylistRefreshFailures(item.slug, item.editionYear)
     : {};
+  const arrivalFacts = await readArrivalFacts(db, item);
   const event = festivalMusicEvent(item);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
@@ -43,6 +46,7 @@ export default async function FestivalPage({ params }: { params: Promise<{ slug:
       />
       <FestivalDetail
         item={item}
+        arrivalFacts={arrivalFacts}
         festivals={festivals}
         artistSlugs={artistSlugs}
         artistPopularity={Object.fromEntries(
