@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
 import { stageArrivalFixture } from "../support/arrival-fixture.mjs";
-import { arrivalSourceUrls } from "../../lib/ingestion/adapters/arrival-guidance.ts";
+import {
+  arrivalSourceUrls,
+  graspopRailSources,
+} from "../../lib/ingestion/adapters/arrival-guidance.ts";
 import {
   claimAgentIssue,
   inspectSource,
@@ -171,6 +174,8 @@ test("Graspop arrival comes from the reviewed organizer observation", async ({ p
         editions: {
           create: {
             year: 2027,
+            startDate: new Date("2027-06-17"),
+            endDate: new Date("2027-06-20"),
             status: "TBA",
             ticketStatus: "UNKNOWN",
             recordState: "CURRENT",
@@ -347,6 +352,36 @@ test("Graspop arrival comes from the reviewed organizer observation", async ({ p
     await expect(panel.getByText(/Antwerp Airport/)).toBeVisible();
     await expect(panel.getByText(/Eindhoven Airport/)).toHaveCount(0);
     await expect(panel.locator(`time[datetime="${observationDay}"]`)).toHaveCount(2);
+
+    const [organizer, operator] = graspopRailSources("graspop");
+    const rail = await stageArrivalFixture(
+      db,
+      item,
+      new Map([
+        [organizer, await fixture("graspop-rail-organizer")],
+        [operator, await fixture("graspop-rail-operator")],
+      ]),
+    );
+    const railClaim = await claimAgentIssue(db, rail.sourceId, rail.issueId);
+    const dates = { festivalId_year: { festivalId, year: 2027 } };
+    await db.festivalEdition.update({ where: dates, data: { endDate: new Date("2027-06-27") } });
+    await expect(resolveAgentIssue(db, approve(railClaim))).rejects.toThrow("stale");
+    await releaseAgentIssue(db, railClaim.issueId, railClaim.leaseToken);
+    const changedInterval = await claimAgentIssue(db, rail.sourceId, rail.issueId);
+    await expect(resolveAgentIssue(db, approve(changedInterval))).rejects.toThrow(
+      "edition mismatch",
+    );
+    await releaseAgentIssue(db, changedInterval.issueId, changedInterval.leaseToken);
+    await db.festivalEdition.update({ where: dates, data: { endDate: new Date("2027-06-20") } });
+    const reconciled = await claimAgentIssue(db, rail.sourceId, rail.issueId);
+    const railReceipt = await resolveAgentIssue(db, approve(reconciled));
+    expect(railReceipt.arrivalPublished).toBe(true);
+    const storedRail = await db.editionArrivalFact.findFirst({
+      where: { edition: { festivalId }, kind: "railShuttle" },
+    });
+    expect(storedRail.supportingSourceUrl).toBe(operator);
+    await page.reload();
+    await expect(panel.getByText(/Brussels-Midi, Eindhoven Centraal/)).toBeVisible();
   } finally {
     if (festivalId) {
       await db.festivalSource.deleteMany({ where: { festivalId } });

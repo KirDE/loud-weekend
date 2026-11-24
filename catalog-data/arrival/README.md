@@ -12,3 +12,8 @@ case, then resolve it with `action: "apply"` and `arrival` set to the candidate'
 facts and evidence, not caller-supplied text or URLs, and commits the edition
 projection, candidate disposition and append-only audit together. There is no
 direct-write import command.
+
+Rail shuttle guidance uses its own explicitly registered organizer source. The
+organizer must link the recognized operator before its timetable is fetched.
+The edition's persisted dates bound eligible inbound transfers and the first
+Monday return after the event. The protected resolution rechecks that interval.
