@@ -266,57 +266,6 @@ for (const language of ["en", "de", "ru"] as const) {
 }
 
 for (const language of ["en", "de", "ru"] as const) {
-  test("playlist links show their own provider counts in " + language, () => {
-    for (const hasYoutubeCounts of [true, false]) {
-      const playlist = {
-        spotifyUrl: "https://open.spotify.com/playlist/spotify",
-        youtubeMusicUrl: "https://music.youtube.com/playlist?list=youtube",
-        artists: 44,
-        tracks: 208,
-        updatedAt: "2026-10-18",
-        ...(hasYoutubeCounts ? { youtubeMusicArtists: 43, youtubeMusicTracks: 205 } : {}),
-      };
-      const html = renderToStaticMarkup(
-        <LanguageProvider initialLanguage={language}>
-          <LocalPlannerProvider>
-            <FestivalDetail
-              item={festival}
-              festivals={[festival]}
-              artistSlugs={{}}
-              playlist={playlist}
-            />
-          </LocalPlannerProvider>
-        </LanguageProvider>,
-      );
-      const spotify = html.match(
-        /<a href="https:\/\/open\.spotify\.com\/playlist\/spotify"[^>]*>(.*?)<\/a>/,
-      )?.[1];
-      const youtube = html.match(
-        /<a href="https:\/\/music\.youtube\.com\/playlist\?list=youtube"[^>]*>(.*?)<\/a>/,
-      )?.[1];
-      assert.ok(
-        spotify?.includes(
-          `44 ${translate(language, "artists")} · 208 ${translate(language, "tracks")}`,
-        ),
-      );
-      assert.ok(youtube);
-      assert.ok(!youtube.includes("208"), "YouTube must never borrow Spotify's track count");
-      if (hasYoutubeCounts)
-        assert.ok(
-          youtube.includes(
-            `43 ${translate(language, "artists")} · 205 ${translate(language, "tracks")}`,
-          ),
-        );
-      else
-        assert.ok(
-          !youtube.includes(translate(language, "tracks")),
-          "Missing YouTube counts stay unknown",
-        );
-    }
-  });
-}
-
-for (const language of ["en", "de", "ru"] as const) {
   test(`artist appearances follow festival dates, not import order, in ${language}`, () => {
     const appearances = [
       { ...festival, slug: "unknown", startDate: undefined },
@@ -341,6 +290,72 @@ for (const language of ["en", "de", "ru"] as const) {
       ["early-a", "early-b", "late", "unknown"],
     );
     assert.deepEqual(appearances, before);
+  });
+}
+
+for (const [language, labels] of Object.entries({
+  en: ["Artists matched", "Verified coverage unavailable"],
+  de: ["Zugeordnete Künstler", "Keine verifizierten Angaben zur Abdeckung"],
+  ru: ["Подобрано артистов", "Подтверждённый охват неизвестен"],
+} as const)) {
+  test(`playlist coverage reports provider-specific stored counts and times in ${language}`, () => {
+    const spotifyUrl = "https://open.spotify.com/playlist/1234567890123456789012";
+    const youtubeMusicUrl = "https://music.youtube.com/playlist?list=Synthetic01";
+    const spotify = { matchedArtists: 110, tracks: 220, recordedAt: "2026-11-20T12:00:00.000Z" };
+    const youtubeMusic = { matchedArtists: 8, tracks: 14, recordedAt: "2026-11-18T14:00:00.000Z" };
+    const render = (
+      coverage?: { spotify?: typeof spotify; youtubeMusic?: typeof youtubeMusic },
+      reviewedPlaylistLinks?: (typeof festival)["reviewedPlaylistLinks"],
+    ) =>
+      renderToStaticMarkup(
+        <LanguageProvider initialLanguage={language as Language}>
+          <LocalPlannerProvider>
+            <FestivalDetail
+              item={{ ...festival, reviewedPlaylistLinks }}
+              festivals={[festival]}
+              artistSlugs={{}}
+              playlist={{
+                spotifyUrl,
+                youtubeMusicUrl,
+                artists: 112,
+                tracks: 0,
+                updatedAt: "2026-11-23",
+                coverage,
+              }}
+            />
+          </LocalPlannerProvider>
+        </LanguageProvider>,
+      );
+    const html = render({ spotify, youtubeMusic });
+    const spotifyCard = html.split(`href="${spotifyUrl}"`)[1].split("</a>")[0];
+    const youtubeCard = html.split(`href="${youtubeMusicUrl}"`)[1].split("</a>")[0];
+    assert.ok(spotifyCard.includes(`${labels[0]}: 110`));
+    assert.ok(spotifyCard.includes(spotify.recordedAt));
+    assert.ok(youtubeCard.includes(`${labels[0]}: 8`));
+    assert.ok(youtubeCard.includes(youtubeMusic.recordedAt));
+    const missingYoutubeCoverage = render({ spotify })
+      .split(`href="${youtubeMusicUrl}"`)[1]
+      .split("</a>")[0];
+    assert.ok(missingYoutubeCoverage.includes(labels[1]));
+    assert.doesNotMatch(missingYoutubeCoverage, /110|220|2026-11-20/);
+    const reviewedSpotify = "https://open.spotify.com/playlist/Reviewed00000000000001";
+    const reviewedYoutube = "https://music.youtube.com/playlist?list=ReviewedSynthetic";
+    const mixed = render({ spotify, youtubeMusic }, { spotify: reviewedSpotify });
+    assert.ok(mixed.split(`href="${reviewedSpotify}"`)[1].split("</a>")[0].includes(labels[1]));
+    assert.ok(mixed.includes(youtubeMusic.recordedAt));
+    assert.ok(!mixed.includes(spotify.recordedAt));
+    const reviewedOnly = render(
+      { spotify, youtubeMusic },
+      { spotify: spotifyUrl, youtube_music: reviewedYoutube },
+    );
+    assert.ok(
+      reviewedOnly.split(`href="${reviewedYoutube}"`)[1].split("</a>")[0].includes(labels[1]),
+    );
+    assert.ok(reviewedOnly.includes(spotify.recordedAt));
+    assert.ok(!reviewedOnly.includes(youtubeMusic.recordedAt));
+    const legacy = render();
+    assert.ok(legacy.includes(labels[1]));
+    assert.doesNotMatch(legacy, /112|2026-11-23/);
   });
 }
 
