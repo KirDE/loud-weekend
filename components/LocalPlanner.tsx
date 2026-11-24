@@ -2,7 +2,11 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
 import { parsePlannerState, serializePlannerState } from "@/lib/planner-storage";
-import { defaultDiscoveryPreferences, readDiscoveryPreferences, type DiscoveryPreferences } from "@/lib/discovery-preferences";
+import {
+  defaultDiscoveryPreferences,
+  readDiscoveryPreferences,
+  type DiscoveryPreferences,
+} from "@/lib/discovery-preferences";
 export type Attendance = "going" | "maybe" | "not-going";
 export type PlannerState = {
   favoriteFestivals: string[];
@@ -33,11 +37,7 @@ const Context = createContext<
     })
   | null
 >(null);
-export function LocalPlannerProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function LocalPlannerProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState(emptyPlannerState);
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -45,7 +45,11 @@ export function LocalPlannerProvider({
       const value = localStorage.getItem("festival-radar-planner-v1");
       if (value) {
         const restored = parsePlannerState(value);
-        setState({ ...emptyPlannerState, ...restored, savedFilters: readDiscoveryPreferences(restored.savedFilters) });
+        setState({
+          ...emptyPlannerState,
+          ...restored,
+          savedFilters: readDiscoveryPreferences(restored.savedFilters),
+        });
       }
     } catch {
       localStorage.removeItem("festival-radar-planner-v1");
@@ -53,11 +57,9 @@ export function LocalPlannerProvider({
     setReady(true);
   }, []);
   useEffect(() => {
-    if (ready)
-      localStorage.setItem("festival-radar-planner-v1", serializePlannerState(state));
+    if (ready) localStorage.setItem("festival-radar-planner-v1", serializePlannerState(state));
   }, [ready, state]);
-  const toggle = (a: string[], v: string) =>
-    a.includes(v) ? a.filter((x) => x !== v) : [...a, v];
+  const toggle = (a: string[], v: string) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]);
   const value = useMemo(
     () => ({
       ...state,
@@ -84,27 +86,49 @@ export function LocalPlannerProvider({
           ...s,
           playlistFestivals: toggle(s.playlistFestivals, v),
         })),
-      setSavedFilters: (savedFilters: DiscoveryPreferences) => setState((s) => ({ ...s, savedFilters })),
+      setSavedFilters: (savedFilters: DiscoveryPreferences) =>
+        setState((s) => ({ ...s, savedFilters })),
       updateSavedFilters: (patch: Partial<DiscoveryPreferences>) =>
         setState((s) => ({ ...s, savedFilters: { ...s.savedFilters, ...patch } })),
-      replaceFields: (fields: Partial<PlannerState>, expected: PlannerState) => setState((current) => {
-        // The selected account document may have been loading while the device was edited.
-        const keys = Object.keys(fields) as (keyof PlannerState)[];
-        if (keys.some((key) => !Object.is(current[key], expected[key]))) return current;
-        return { ...current, ...fields };
-      }),
-      merge: (next: Partial<PlannerState>, expected?: PlannerState) => setState((current) => {
-        // A completed account merge must not restore values edited while it was in flight.
-        const preserved = <K extends keyof PlannerState>(key: K, merged: PlannerState[K]) =>
-          expected && !Object.is(current[key], expected[key]) ? current[key] : merged;
-        return {
-          favoriteFestivals: preserved("favoriteFestivals", Array.from(new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])]))),
-          favoriteArtists: preserved("favoriteArtists", Array.from(new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])]))),
-          attendance: preserved("attendance", { ...(next.attendance || {}), ...current.attendance }),
-          playlistFestivals: preserved("playlistFestivals", Array.from(new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]))),
-          savedFilters: preserved("savedFilters", readDiscoveryPreferences({ ...current.savedFilters, ...next.savedFilters })),
-        };
-      }),
+      replaceFields: (fields: Partial<PlannerState>, expected: PlannerState) =>
+        setState((current) => {
+          // The selected account document may have been loading while the device was edited.
+          const keys = Object.keys(fields) as (keyof PlannerState)[];
+          if (keys.some((key) => !Object.is(current[key], expected[key]))) return current;
+          return { ...current, ...fields };
+        }),
+      merge: (next: Partial<PlannerState>, expected?: PlannerState) =>
+        setState((current) => {
+          // A completed account merge must not restore values edited while it was in flight.
+          const preserved = <K extends keyof PlannerState>(key: K, merged: PlannerState[K]) =>
+            expected && !Object.is(current[key], expected[key]) ? current[key] : merged;
+          return {
+            favoriteFestivals: preserved(
+              "favoriteFestivals",
+              Array.from(
+                new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])]),
+              ),
+            ),
+            favoriteArtists: preserved(
+              "favoriteArtists",
+              Array.from(new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])])),
+            ),
+            attendance: preserved("attendance", {
+              ...next.attendance,
+              ...current.attendance,
+            }),
+            playlistFestivals: preserved(
+              "playlistFestivals",
+              Array.from(
+                new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]),
+              ),
+            ),
+            savedFilters: preserved(
+              "savedFilters",
+              readDiscoveryPreferences({ ...current.savedFilters, ...next.savedFilters }),
+            ),
+          };
+        }),
       clear: () => setState(emptyPlannerState),
     }),
     [ready, state],
@@ -116,26 +140,16 @@ export function useLocalPlanner() {
   if (!value) throw new Error("Missing LocalPlannerProvider");
   return value;
 }
-export function FavoriteButton({
-  kind,
-  value,
-}: {
-  kind: "festival" | "artist";
-  value: string;
-}) {
+export function FavoriteButton({ kind, value }: { kind: "festival" | "artist"; value: string }) {
   const p = useLocalPlanner();
   const { t } = useLanguage();
-  const selected = (
-    kind === "festival" ? p.favoriteFestivals : p.favoriteArtists
-  ).includes(value);
+  const selected = (kind === "festival" ? p.favoriteFestivals : p.favoriteArtists).includes(value);
   return (
     <button
       className={`favoriteButton${selected ? " selected" : ""}`}
       type="button"
       aria-pressed={selected}
-      onClick={() =>
-        kind === "festival" ? p.toggleFestival(value) : p.toggleArtist(value)
-      }
+      onClick={() => (kind === "festival" ? p.toggleFestival(value) : p.toggleArtist(value))}
     >
       {t(selected ? "saved" : "save")}
     </button>
