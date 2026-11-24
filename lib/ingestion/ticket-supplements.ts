@@ -275,7 +275,7 @@ export function observeTicketSupplement(
             return false;
           }
         });
-      const sold = /(?:sold out|ausverkauft)\b/i.test(renderedTicketText(header));
+      const sold = /(?:sold out|ausverkauft)\b/i.test(renderedTicketText(card));
       if (buy.length > 1 || (sold && buy.length))
         return fail("conflicting ordinary admission inventory");
       if (buy.length === 1 && !sold) available = text(header.children(".title").text());

@@ -139,15 +139,16 @@ for (const slug of ["rock-am-ring", "rock-im-park"]) {
       [],
     );
   });
-  for (const notice of [
-    "<div>Sold</div><div>out</div>",
-    '<span style="display: block">Sold</span><span style="display: block">out</span>',
-    "<span>Sold<br>out</span>",
-    "<span>aus<strong>verkauft</strong></span>",
-    '<span>aus<span style="display: inline-block">verkauft</span></span>',
+  for (const [location, notice] of [
+    [".header", "<div>Sold</div><div>out</div>"],
+    [".header", '<span style="display: block">Sold</span><span style="display: block">out</span>'],
+    [".header", "<span>Sold<br>out</span>"],
+    [".header", "<span>aus<strong>verkauft</strong></span>"],
+    [".header", '<span>aus<span style="display: inline-block">verkauft</span></span>'],
+    [".footer-content", "<p>This Festival Ticket is sold out.</p>"],
   ]) {
     test(`${slug}: visible stock contradiction ${notice} prevents publication`, async () => {
-      const html = alter(($) => ordinary($).find(".header").append(notice));
+      const html = alter(($) => ordinary($).find(location).append(notice));
       const primary =
         '<main>4-6 June 2027 <a href="/line-up/synthetic-artist">Synthetic Artist</a></main>';
       const fetched = await fetchSource(source, {
