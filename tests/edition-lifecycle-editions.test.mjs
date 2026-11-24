@@ -39,7 +39,10 @@ const detail = (item) =>
 for (const locale of ["en", "de", "ru"]) {
   test("current edition row and detail suppress old scheduled facts in " + locale, () => {
     const before = structuredClone(paused);
-    const row = render(locale, h(EditionYearContent, { year: 2027, items: [paused] }));
+    const row = render(
+      locale,
+      h(EditionYearContent, { year: 2027, years: [2027], items: [paused] }),
+    );
     const html = render(locale, detail(paused));
     for (const output of [row, html]) {
       assert.ok(output.includes(translate(locale, "editionHiatus")));
@@ -76,7 +79,10 @@ for (const locale of ["en", "de", "ru"]) {
       assert.match(html, /Sample Artist|sample-artist/);
       assert.match(html, /lineupSection|status confirmed/);
       assert.ok(!html.includes(translate(locale, "editionHiatus")));
-      const archive = render(locale, h(ArchiveContent, { archived: [archived], future: [] }));
+      const archive = render(
+        locale,
+        h(ArchiveContent, { archived: [archived], future: [], years: [2026, 2027] }),
+      );
       assert.ok(!archive.includes(translate(locale, "editionHiatus")));
       assert.match(archive, /2026/);
       const unknown = render(locale, detail({ ...paused, editionLifecycle: undefined }));
@@ -93,6 +99,8 @@ test("current editions reject malformed or transferred notices rather than showi
     { ...paused, editionLifecycle: null },
   ]) {
     assert.throws(() => render("en", detail(item)));
-    assert.throws(() => render("en", h(EditionYearContent, { year: 2027, items: [item] })));
+    assert.throws(() =>
+      render("en", h(EditionYearContent, { year: 2027, years: [2027], items: [item] })),
+    );
   }
 });

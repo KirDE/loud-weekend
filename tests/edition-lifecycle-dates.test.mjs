@@ -233,7 +233,10 @@ test("hiatus has no advertised roster or shared-act recommendation; stored facts
 });
 for (const locale of ["en", "de", "ru"]) {
   test("actual homepage and artist detail omit paused appearances in " + locale, () => {
-    const home = render(locale, h(HomeContent, { festivals: [paused, active] }));
+    const home = render(
+      locale,
+      h(HomeContent, { festivals: [paused, active], years: [2027], freshness: {} }),
+    );
     const stats = home.match(/class="heroStats"[^]*?<\/section>/)[0];
     assert.ok(stats.includes(`<strong>1</strong> ${translate(locale, "withActs")}`));
     assert.ok(stats.includes(`<strong>2</strong> ${translate(locale, "festivals")}`));

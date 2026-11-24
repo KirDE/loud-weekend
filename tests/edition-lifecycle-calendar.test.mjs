@@ -7,7 +7,6 @@ import { transform } from "esbuild";
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as planning from "../lib/planning.ts";
-import * as lineup from "../lib/festival-lineup.ts";
 import * as lifecycle from "../lib/edition-lifecycle.ts";
 import * as language from "../components/LanguageProvider.tsx";
 import { LocalPlannerProvider } from "../components/LocalPlanner.tsx";
@@ -119,7 +118,9 @@ function readyPlanner(items, locale) {
     "@/lib/planning": planning,
     "@/lib/favorite-artist": require("../lib/favorite-artist.ts"),
     "./PersonalCalendar": { PersonalCalendar: () => null },
-    "@/lib/festival-lineup": lineup,
+    "@/lib/playlist-depth": require("../lib/playlist-depth.ts"),
+    "@/lib/playlist-selection": require("../lib/playlist-selection.ts"),
+    "./TripBudget": { TripBudget: () => null },
     "@/lib/edition-lifecycle": lifecycle,
     "./LanguageProvider": language,
     "./LocalPlanner": { useLocalPlanner: () => preferences },
@@ -136,7 +137,20 @@ function readyPlanner(items, locale) {
     module,
     module.exports,
   );
-  const html = render(locale, h(module.exports.PlannerPage, { festivals: items, artists: [] }));
+  const html = render(
+    locale,
+    h(module.exports.PlannerPage, {
+      festivals: items,
+      catalogueArtists: [
+        { slug: "sample-artist", name: "Sample Artist" },
+        { slug: "paused-only", name: "Paused Only Headliner" },
+      ],
+      lineups: {
+        artistSlugsByFestival: { [active.slug]: ["sample-artist"], [paused.slug]: ["paused-only"] },
+        legacyFavoriteSlugs: {},
+      },
+    }),
+  );
   assert.deepEqual({ ...preferences, setAttendance: undefined }, before);
   return html;
 }
@@ -197,7 +211,11 @@ for (const locale of ["en", "de", "ru"])
     );
     assert.equal(exported, "Sample Artist");
     assert.doesNotMatch(mixed, /Paused Only/);
-    assert.equal((mixed.match(/type="checkbox" checked=""/g) || []).length, 2);
+    assert.equal(
+      (mixed.match(/<div class="playlistFestivalGrid">(.*?)<\/div>/)[1].match(/checked=""/g) || [])
+        .length,
+      2,
+    );
   });
 
 test("an approved hiatus cannot create a personal-calendar conflict or erase attendance", () => {
