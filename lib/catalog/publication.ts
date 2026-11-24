@@ -475,18 +475,39 @@ export async function publishIngestionResult(
           diffs: true,
           evidence: true,
           attempt: {
-            select: { requestedUrl: true, finalUrl: true, httpStatus: true, endedAt: true },
+            select: {
+              festivalSlug: true,
+              requestedUrl: true,
+              finalUrl: true,
+              httpStatus: true,
+              endedAt: true,
+            },
           },
         },
       });
       if (!candidate || !candidate.publishable)
         throw new Error("Publishable ingestion candidate was not persisted");
+      const observed = input.result.candidate;
+      const stored = candidate.normalized as unknown as FestivalCandidate;
       if (
-        input.sourceLease &&
-        (candidate.festivalSlug !== input.result.festivalSlug ||
-          candidate.attempt.requestedUrl !== input.result.sourceUrl)
-      )
-        throw new Error("Leased candidate source does not match persisted attempt");
+        !stored ||
+        [
+          candidate.festivalSlug,
+          candidate.attempt.festivalSlug,
+          observed.festivalSlug,
+          stored.festivalSlug,
+        ].some((slug) => slug !== input.result.festivalSlug) ||
+        [candidate.attempt.requestedUrl, observed.sourceUrl, stored.sourceUrl].some(
+          (url) => url !== input.result.sourceUrl,
+        ) ||
+        !Array.isArray(stored.observedEditionYears) ||
+        !same(stored.observedEditionYears, observed.observedEditionYears) ||
+        stored.observedEditionYears.length > 1
+      ) {
+        throw new Error(
+          "Ingestion publication scope does not match the persisted festival, source and edition",
+        );
+      }
       const sourceId = `ingestion:${candidate.id}`;
       const existing = await db.catalogPublication.findUnique({
         where: { sourceId },
@@ -517,10 +538,7 @@ export async function publishIngestionResult(
       );
       if (!same(expected, persisted))
         throw new Error("Persisted ingestion diff does not match publication request");
-      const expectedYear =
-        input.result.candidate.observedEditionYears.length === 1
-          ? input.result.candidate.observedEditionYears[0]
-          : (candidate.sourceYear ?? undefined);
+      const expectedYear = stored.observedEditionYears[0] ?? candidate.sourceYear ?? undefined;
       if (
         !expectedYear &&
         input.result.changes.some(({ field }) => field === "lineup" || field === "headliners")
@@ -529,8 +547,6 @@ export async function publishIngestionResult(
       // Secondary ticket observations are publishable only with the same exact
       // source, edition, value and durable evidence that passed the producer.
       // Do not extend the separate Impericon/I-Days publication paths here (#497).
-      const observed = input.result.candidate;
-      const stored = candidate.normalized as unknown as FestivalCandidate;
       // Scope this stock-only guard to the product route, never the festival
       // slug: the primary homepage still publishes its independent date fields.
       // Durable route identities keep caller slug/source stripping fail-closed.
