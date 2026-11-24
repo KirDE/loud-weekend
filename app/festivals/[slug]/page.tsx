@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { lineupDayProfileSlugs } from "@/lib/festival-lineup";
 import { FestivalDetail } from "@/components/FestivalDetail";
+import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
 import { getCatalog } from "@/lib/catalog/repository";
 import { canonicalPath, festivalMusicEvent } from "@/lib/seo";
@@ -36,6 +37,7 @@ export default async function FestivalPage({ params }: { params: Promise<{ slug:
   const requestedSlug = (await params).slug;
   const item = festivals.find(({ slug }) => slug === requestedSlug);
   if (!item) notFound();
+  const overview = await readFestivalOverview(db, item);
   const history =
     item.editionYear === undefined ? [] : await readEditionHistory(db, item.slug, item.editionYear);
   const arrivalFacts = await readArrivalFacts(db, item);
@@ -48,6 +50,7 @@ export default async function FestivalPage({ params }: { params: Promise<{ slug:
         dangerouslySetInnerHTML={{ __html: JSON.stringify(event).replace(/</g, "\\u003c") }}
       />
       <FestivalDetail
+        overview={overview}
         item={item}
         arrivalFacts={arrivalFacts}
         festivals={festivals}

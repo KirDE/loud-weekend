@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { YOUTUBE_URL } from "./youtube-playlist-queue.ts";
 import { playlistCoverage } from "../playlist-coverage.ts";
 import { uniqueFavoriteSlugs, type DiscoveryLineups } from "../discovery-sort.ts";
@@ -205,6 +206,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         ...festival,
         headliners: [...festival.headliners],
         lineup: [...festival.lineup],
+        timetable: festival.timetable?.map((performance) => ({ ...performance })),
       };
     });
     const artists: ArtistProfile[] = artistRows
@@ -337,6 +339,10 @@ export async function readCatalog(
   });
 }
 
+// React shares the projection only within a request. Key by the normalized option
+// rather than the caller's options object so equivalent reads can be reused.
+const getRequestCatalog = cache((includeFreshness: boolean) => readCatalog({ includeFreshness }));
+
 export function getCatalog(options?: { includeFreshness?: boolean }) {
-  return readCatalog(options);
+  return getRequestCatalog(options?.includeFreshness === true);
 }

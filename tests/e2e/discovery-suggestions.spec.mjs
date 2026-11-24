@@ -38,6 +38,19 @@ for (const [locale, t] of Object.entries(labels)) {
     await search.press("Escape");
     await expect(panel).toHaveCount(0);
     await expect(page.locator(".festivalCard h2")).toHaveText(["Synthetic Fest"]);
+    await search.click();
+    await expect(panel.getByRole("region", { name: t.festivals })).toBeVisible();
+    await search.press("Escape");
+    await expect(panel).toHaveCount(0);
+    await search.press("ArrowDown");
+    await expect(
+      panel
+        .getByRole("region", { name: t.festivals })
+        .getByRole("link", { name: /Synthetic Fest/ }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(search).toBeFocused();
+    await expect(panel).toHaveCount(0);
     await search.fill("sample city");
     const city = panel.getByRole("button", { name: "Sample City · AT", exact: true });
     await expect(city).toBeVisible();
@@ -62,3 +75,53 @@ for (const [locale, t] of Object.entries(labels)) {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Second Artist");
   });
 }
+
+test("composition keys remain available to the input method", async ({ page }) => {
+  await page.goto("/en/");
+  await expect(page.locator(".search")).toHaveAttribute("data-ready", "true");
+  const search = page.locator(".search input");
+  const suggestion = page
+    .locator(".discoverySuggestions")
+    .getByRole("link", { name: /Synthetic Fest/ });
+  await search.fill("synthetic fest");
+  await expect(suggestion).toBeVisible();
+
+  const keyWasHandled = (key) =>
+    search.evaluate(
+      (input, key) =>
+        !input.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key,
+            bubbles: true,
+            cancelable: true,
+            isComposing: true,
+          }),
+        ),
+      key,
+    );
+  expect(await keyWasHandled("ArrowDown")).toBe(false);
+  await expect(search).toBeFocused();
+  expect(await keyWasHandled("Escape")).toBe(false);
+  await expect(suggestion).toBeVisible();
+
+  await search.press("ArrowDown");
+  await expect(suggestion).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(search).toBeFocused();
+  await expect(suggestion).toHaveCount(0);
+});
+
+test("ArrowDown can open suggestions before the typing debounce completes", async ({ page }) => {
+  await page.goto("/en/");
+  await expect(page.locator(".search")).toHaveAttribute("data-ready", "true");
+  const search = page.locator(".search input");
+  await page.clock.install();
+  await page.clock.pauseAt(new Date(Date.now() + 1000));
+  await search.fill("synthetic fest");
+  const suggestion = page
+    .locator(".discoverySuggestions")
+    .getByRole("link", { name: /Synthetic Fest/ });
+  await expect(suggestion).toHaveCount(0);
+  await search.press("ArrowDown");
+  await expect(suggestion).toBeFocused();
+});
