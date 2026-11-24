@@ -430,6 +430,32 @@ test("public freshness separates edition-bound checks, publication and source fa
     assert.equal(updatedDates[`/festivals/${slug}/2027/`], reviewedTicket.createdAt.toISOString());
     assert.equal(updatedDates["/editions/2027/"], undefined);
     assert.equal(updatedDates[`/festivals/${slug}/2026/`], archivePublished.toISOString());
+    const finalLineup = await db.catalogPublication.create({
+      data: {
+        source: "ADMIN",
+        sourceId: `${slug}-reviewed-final-lineup`,
+        festivalSlug: slug,
+        editionYear: current.year,
+        actorLabel: "fixture",
+        evidence: { reviewPolicy: "openclaw-import-conflicts-v1" },
+        fields: ["finalLineup"],
+      },
+    });
+    const finalDates = await sitemapDates();
+    for (const path of [
+      "/",
+      "/de/",
+      `/festivals/${slug}/`,
+      `/festivals/${slug}/2027/`,
+      "/countries/de/",
+      "/months/06/",
+      "/editions/2027/",
+    ]) {
+      assert.equal(finalDates[path], finalLineup.createdAt.toISOString(), path);
+    }
+    for (const path of ["/artists/sample-artist/", "/archive/", "/editions/2026/"]) {
+      assert.equal(finalDates[path], updatedDates[path], path);
+    }
   } finally {
     // Publication receipts are append-only; the unique fixture slug isolates reruns.
     await db.ingestionSourceState.deleteMany({ where: { festivalSlug: slug } });
