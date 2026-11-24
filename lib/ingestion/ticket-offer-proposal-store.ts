@@ -12,6 +12,18 @@ import {
 const digest = (value: z.infer<typeof schema>) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+/** List persisted current editions supported by the ticket-offer adapter. */
+export async function listTicketOfferReviewEditions(db: PrismaClient) {
+  const editions = await db.festivalEdition.findMany({
+    where: { recordState: "CURRENT", festival: { officialUrl: sourceUrl } },
+    select: { id: true, year: true, festival: { select: { slug: true, officialUrl: true } } },
+    orderBy: { year: "desc" },
+  });
+  return editions
+    .filter(({ festival }) => isHellfestOfferTarget(festival.slug, festival.officialUrl))
+    .map(({ id, year }) => ({ id, year }));
+}
+
 /** Durable REVIEW ONLY staging. No catalog writes, source health refresh,
  * publication, notification or provider work. Never accepts caller-built offers:
  * re-extract from the bounded response before persisting an immutable snapshot.

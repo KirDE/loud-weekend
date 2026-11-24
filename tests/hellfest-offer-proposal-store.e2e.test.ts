@@ -7,6 +7,7 @@ import { DatabaseCatalogRepository } from "../lib/catalog/repository.ts";
 import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
 import { collectPendingHellfestOffers } from "../lib/ingestion/hellfest-offer-collector.ts";
 import {
+  listTicketOfferReviewEditions,
   stageHellfestOffers,
   readPendingHellfestOffers,
 } from "../lib/ingestion/ticket-offer-proposal-store.ts";
@@ -72,6 +73,27 @@ test.after(async () => {
     await db.festival.deleteMany({ where: { slug, editions: { some: { id: editionId } } } });
   if (fixtureArtistId) await db.artist.delete({ where: { id: fixtureArtistId } });
   await db.$disconnect();
+});
+test("review targets require current edition state and exact adapter identity", async () => {
+  const edition = await db.festivalEdition.findUniqueOrThrow({ where: { id: editionId } });
+  assert.deepEqual(await listTicketOfferReviewEditions(db), [{ id: editionId, year: 2027 }]);
+  for (const patch of [{ slug: "synthetic-impostor" }, { officialUrl: "https://other.invalid/" }]) {
+    await db.festival.update({ where: { id: edition.festivalId }, data: patch });
+    try {
+      assert.deepEqual(await listTicketOfferReviewEditions(db), []);
+    } finally {
+      await db.festival.update({
+        where: { id: edition.festivalId },
+        data: { slug, officialUrl: "https://hellfest.fr/" },
+      });
+    }
+  }
+  await db.festivalEdition.update({ where: { id: editionId }, data: { recordState: "ARCHIVED" } });
+  try {
+    assert.deepEqual(await listTicketOfferReviewEditions(db), []);
+  } finally {
+    await db.festivalEdition.update({ where: { id: editionId }, data: { recordState: "CURRENT" } });
+  }
 });
 test("durable tier staging, pending readback, replay; no global/publication/provider mutation", async () => {
   const before = await db.festivalEdition.findUnique({ where: { id: editionId } });

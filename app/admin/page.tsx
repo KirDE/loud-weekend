@@ -6,6 +6,7 @@ import { currentAdmin } from "@/lib/admin-access";
 import { adminSnapshot } from "@/lib/admin-store";
 import { getCatalog } from "@/lib/catalog/repository";
 import { db } from "@/lib/db";
+import { listTicketOfferReviewEditions } from "@/lib/ingestion/ticket-offer-proposal-store";
 import { redirect } from "next/navigation";
 
 export const metadata = { title: "Administration | Loud Weekend" };
@@ -16,11 +17,7 @@ export default async function AdminPage() {
   const [snapshot, { festivals, editions, artists }, ticketOfferEditions] = await Promise.all([
     adminSnapshot(),
     getCatalog(),
-    db.festivalEdition.findMany({
-      where: { recordState: "CURRENT", festival: { slug: "hellfest" } },
-      select: { id: true, year: true },
-      orderBy: { year: "desc" },
-    }),
+    listTicketOfferReviewEditions(db),
   ]);
   return (
     <AdminConsole
