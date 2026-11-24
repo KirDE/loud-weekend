@@ -1,37 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { publicHistoryCopy } from "@/lib/catalog/public-history-copy";
 import type { EditionHistoryEntry } from "@/lib/catalog/public-history";
 import { useLanguage } from "./LanguageProvider";
-
-const labels = {
-  en: {
-    title: "Published changes",
-    dates: "Dates updated",
-    lineup: "Lineup updated",
-    tickets: "Ticket information updated",
-    timetable: "Timetable updated",
-    empty: "No published changes recorded for this edition.",
-    official: "Official festival site",
-  },
-  de: {
-    title: "Veröffentlichte Änderungen",
-    dates: "Termine aktualisiert",
-    lineup: "Line-up aktualisiert",
-    tickets: "Ticketinformationen aktualisiert",
-    timetable: "Zeitplan aktualisiert",
-    empty: "Für diese Ausgabe sind keine veröffentlichten Änderungen erfasst.",
-    official: "Offizielle Festival-Website",
-  },
-  ru: {
-    title: "Опубликованные изменения",
-    dates: "Даты обновлены",
-    lineup: "Лайнап обновлён",
-    tickets: "Информация о билетах обновлена",
-    timetable: "Расписание обновлено",
-    empty: "Для этого выпуска нет записей об опубликованных изменениях.",
-    official: "Официальный сайт фестиваля",
-  },
-};
 
 export function EditionHistory({
   entries,
@@ -41,7 +13,7 @@ export function EditionHistory({
   officialUrl: string;
 }) {
   const { language, locale } = useLanguage();
-  const copy = labels[language];
+  const copy = publicHistoryCopy[language];
   const format = new Intl.DateTimeFormat(locale, {
     dateStyle: "long",
     timeStyle: "short",
@@ -69,6 +41,9 @@ export function EditionHistory({
       ) : (
         <p>{copy.empty}</p>
       )}
+      <p>
+        <Link href={`/${language}/announcements/`}>{copy.timeline}</Link>
+      </p>
     </section>
   );
 }

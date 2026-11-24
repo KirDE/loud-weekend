@@ -75,3 +75,19 @@ test("invalid, oversized or unrelated query values never replace saved preferenc
   Array.from({ length: 100 }, () => invalidArtists.append("artist", "sample-artist"));
   assert.deepEqual(discoveryFromQuery(invalidArtists, lineups).favorites, []);
 });
+
+test("a private origin and filters that depend on it do not enter a shared URL", () => {
+  const query = discoveryShareQuery({
+    ...defaultDiscoveryPreferences,
+    origin: "prague",
+    customOrigin: { name: "Private origin", countryCode: "DE", latitude: 48.41, longitude: 9.5 },
+    maxDistance: "250",
+    sort: "distance",
+    country: "DE",
+  });
+  assert.equal(query, "filters=1&country=DE");
+  assert.deepEqual(discoveryFromQuery(new URLSearchParams(query)).filters, {
+    ...defaultDiscoveryPreferences,
+    country: "DE",
+  });
+});
