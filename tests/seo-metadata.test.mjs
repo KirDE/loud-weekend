@@ -22,8 +22,8 @@ test("all indexable route classes define self-canonical metadata", async () => {
 });
 
 test("sitemap uses content timestamps rather than future event dates", () => {
-  assert.match(sitemapSource, /updatedAt/);
-  assert.doesNotMatch(sitemapSource, /lastModified:\s*startDate/);
+  assert.match(sitemapSource, /lastModified:.*lastPublishedAt/);
+  assert.doesNotMatch(sitemapSource, /CATALOG_UPDATED_AT|lastModified:\s*(?:startDate|updatedAt)/);
 });
 
 test("MusicEvent omits unknown facts and maps verified ticket state", () => {
