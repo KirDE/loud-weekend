@@ -226,6 +226,26 @@ test("a reviewed alias keeps the published roster and does not emit a lineup cha
   );
 });
 
+test("an alias-only decision does not queue parser repair", async () => {
+  await db.artist.update({
+    where: { slug: "sample-artist" },
+    data: { aliases: ["Reviewed Artist Alias"] },
+  });
+  const c = await claim();
+  const receipt = await resolveCase(c, {
+    ...checked,
+    facts: { headliners: ["Reviewed Artist Alias"], lineup: [] },
+    evidence: ["headliners", "lineup"].map((field) => evidence(field)),
+  });
+  assert.equal(receipt.status, "resolved");
+  assert.equal(receipt.publicationId, null);
+  assert.equal(receipt.parserRepairId, null);
+  assert.equal(
+    await db.operationalState.count({ where: { key: { startsWith: "parser-repair-" } } }),
+    0,
+  );
+});
+
 test("two reviewed names for one canonical artist reject both billing and same-list duplicates", async () => {
   await db.artist.update({
     where: { slug: "sample-artist" },
