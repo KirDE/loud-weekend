@@ -1,3 +1,8 @@
+import { prepareLogoDraft, publishAdminLogoChange } from "@/lib/catalog/admin-logo-publication";
+import {
+  prepareArtistDraft,
+  publishAdminArtistChange,
+} from "@/lib/catalog/admin-artist-publication";
 import { assertAdminArtistReviewAllowed } from "@/lib/catalog/admin-artist-review";
 import {
   AdminChangeStatus,
@@ -111,6 +116,53 @@ export async function decideSubmission(
   );
 }
 
+async function draftChanges(
+  tx: Prisma.TransactionClient,
+  draft: { id: string; resourceKind: AdminResourceKind; resourceKey: string; baseRevision: number },
+  values: Record<string, unknown>,
+  before: Record<string, unknown>,
+) {
+  const { resourceKind, resourceKey, baseRevision } = draft;
+  const artistDraft =
+    resourceKind === AdminResourceKind.ARTIST
+      ? await prepareArtistDraft(tx, resourceKey, values)
+      : null;
+  const logoDraft =
+    resourceKind === AdminResourceKind.ASSET
+      ? await prepareLogoDraft(tx, resourceKey, values)
+      : null;
+  const changes =
+    artistDraft?.changes ??
+    logoDraft?.changes ??
+    Object.entries(values).map(([field, afterValue]) => ({
+      field,
+      beforeValue: before[field] ?? null,
+      afterValue: afterValue ?? null,
+    }));
+  const sourceEvidence = {
+    kind: "operator-draft",
+    draftId: draft.id,
+    ...(artistDraft
+      ? { kind: "artist-draft", artistId: artistDraft.artistId }
+      : logoDraft
+        ? { kind: "logo-draft", festivalId: logoDraft.festivalId }
+        : {}),
+  };
+  await tx.adminChange.createMany({
+    data: changes.map(({ field, beforeValue, afterValue }) => ({
+      field,
+      resourceKind,
+      resourceKey,
+      baseRevision,
+      beforeValue: beforeValue === null ? Prisma.JsonNull : json(beforeValue),
+      afterValue: afterValue === null ? Prisma.JsonNull : json(afterValue),
+      sourceEvidence,
+      confidence: 100,
+      draftId: draft.id,
+    })),
+  });
+}
+
 export async function saveDraft(
   input: { resourceKind: string; resourceKey: string; baseRevision: number; values: unknown },
   actor: { id: string; email: string },
@@ -150,19 +202,7 @@ export async function saveDraft(
         resource?.values && typeof resource.values === "object" && !Array.isArray(resource.values)
           ? (resource.values as Record<string, unknown>)
           : {};
-      await tx.adminChange.createMany({
-        data: Object.entries(values).map(([field, afterValue]) => ({
-          resourceKind,
-          resourceKey: input.resourceKey,
-          field,
-          baseRevision: currentRevision,
-          beforeValue: json(before[field] ?? null),
-          afterValue: json(afterValue ?? null),
-          sourceEvidence: json({ kind: "operator-draft", draftId: draft.id }),
-          confidence: 100,
-          draftId: draft.id,
-        })),
-      });
+      await draftChanges(tx, draft, values, before);
       await tx.adminAuditEntry.create({
         data: {
           actorId: actor.id,
@@ -217,19 +257,7 @@ export async function updateDraft(
           ? (resource.values as Record<string, unknown>)
           : {};
       await tx.adminChange.deleteMany({ where: { draftId: id } });
-      await tx.adminChange.createMany({
-        data: Object.entries(values).map(([field, afterValue]) => ({
-          resourceKind: draft.resourceKind,
-          resourceKey: draft.resourceKey,
-          field,
-          baseRevision: draft.baseRevision,
-          beforeValue: json(before[field] ?? null),
-          afterValue: json(afterValue ?? null),
-          sourceEvidence: json({ kind: "operator-draft", draftId: id }),
-          confidence: 100,
-          draftId: id,
-        })),
-      });
+      await draftChanges(tx, draft, values, before);
       const updated = await tx.adminDraft.update({
         where: { id },
         data: {
@@ -309,6 +337,18 @@ export async function decideChange(
         });
         throw new Error(`Revision conflict: expected ${currentRevision}`);
       }
+      if (decision === "approve" && change.resourceKind === AdminResourceKind.PLAYLIST)
+        throw new Error(
+          "Playlist drafts are not publishable until canonical playlist review is supported",
+        );
+      const artistPublication =
+        decision === "approve" && change.resourceKind === AdminResourceKind.ARTIST
+          ? await publishAdminArtistChange(tx, change)
+          : null;
+      const logoPublication =
+        decision === "approve" && change.resourceKind === AdminResourceKind.ASSET
+          ? await publishAdminLogoChange(tx, change)
+          : null;
       const status =
         decision === "approve" ? AdminChangeStatus.APPROVED : AdminChangeStatus.REJECTED;
       const updated = await tx.adminChange.updateMany({
@@ -412,6 +452,8 @@ export async function decideChange(
           metadata: json({
             changeId: change.id,
             field: change.field,
+            artistPublication,
+            logoPublication,
             catalogPublicationId: catalogPublication?.id ?? null,
             playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false,
           }),
@@ -420,6 +462,8 @@ export async function decideChange(
       const decided = await tx.adminChange.findUniqueOrThrow({ where: { id } });
       return {
         ...decided,
+        artistPublication,
+        logoPublication,
         catalogPublicationId: catalogPublication?.id ?? null,
         playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false,
       };

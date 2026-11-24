@@ -1,6 +1,9 @@
+import { readCatalog } from "../../lib/catalog/repository.ts";
 import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import sharp from "sharp";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:http";
@@ -131,6 +134,12 @@ test.before(async () => {
     update: { recordState: "ARCHIVED" },
   });
   await db.festivalSource.deleteMany({ where: { festivalSlug: festival.slug } });
+  await db.artist.updateMany({
+    where: { slug: "integration-headliner" },
+    data: { name: "Integration Headliner", aliases: [] },
+  });
+  await db.artistLink.deleteMany({ where: { artist: { slug: "integration-headliner" } } });
+  await db.artistProvenance.deleteMany({ where: { artist: { slug: "integration-headliner" } } });
   const configured = {
     festivalSlug: festival.slug,
     festivalId: festival.id,
@@ -339,10 +348,10 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   const city = await db.adminChange.findFirstOrThrow({
     where: { draftId: draft.id, field: "city" },
   });
-  assert.equal(
-    (await admin.json(`/api/admin/changes/${city.id}`, "POST", { decision: "approve" })).status,
-    200,
-  );
+  const cityApproval = await admin.json(`/api/admin/changes/${city.id}`, "POST", {
+    decision: "approve",
+  });
+  assert.equal(cityApproval.status, 200, await cityApproval.text());
   assert.deepEqual(
     (
       await db.adminResourceState.findUniqueOrThrow({
@@ -427,6 +436,192 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     ["Integration Headliner"],
   );
 
+  const artistSlug = "integration-headliner";
+  const originalArtist = await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } });
+  const editionId = publishedHeadliners[0].editionId;
+  for (const [start, artistId] of [
+    ["12:00", originalArtist.id],
+    ["18:00", null],
+  ]) {
+    const slot = {
+      editionId,
+      date: new Date("2027-07-28T00:00:00Z"),
+      stage: "Integration Stage",
+      start,
+      artistName: originalArtist.name,
+    };
+    await db.timetablePerformance.upsert({
+      where: { editionId_date_stage_start_artistName: slot },
+      create: { ...slot, artistId },
+      update: { artistId },
+    });
+  }
+  const artistName = "Integration Headliner Revised";
+  const officialSite = "https://artist.example.test/";
+  const artistResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist",
+    resourceKey: artistSlug,
+    baseRevision: 0,
+    values: { canonicalName: artistName, officialUrl: officialSite },
+  });
+  assert.equal(artistResponse.status, 201);
+  const artistDraft = await artistResponse.json();
+  const artistChanges = await db.adminChange.findMany({
+    where: { draftId: artistDraft.id },
+    orderBy: { field: "asc" },
+  });
+  assert.deepEqual(
+    artistChanges.map(({ beforeValue }) => beforeValue),
+    ["Integration Headliner", null],
+  );
+  const decideArtist = (id, decision = "approve") =>
+    admin.json(`/api/admin/changes/${id}`, "POST", { decision });
+
+  // A concurrent canonical edit outside the admin revision counters must not be overwritten.
+  await db.artist.update({
+    where: { id: originalArtist.id },
+    data: { name: "Integration Independent Edit" },
+  });
+  assert.equal((await decideArtist(artistChanges[0].id)).status, 409);
+  assert.equal(
+    (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
+    "Integration Independent Edit",
+  );
+  await db.artist.update({ where: { id: originalArtist.id }, data: { name: originalArtist.name } });
+
+  for (const change of artistChanges) {
+    const response = await decideArtist(change.id);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).artistPublication, "published");
+  }
+  const canonicalArtist = await db.artist.findUniqueOrThrow({
+    where: { slug: artistSlug },
+    include: { links: true, provenance: true },
+  });
+  assert.equal(canonicalArtist.id, originalArtist.id);
+  assert.equal(canonicalArtist.name, artistName);
+  assert.ok(canonicalArtist.aliases.includes(originalArtist.name));
+  assert.equal(canonicalArtist.links[0].url, officialSite);
+  assert.equal(canonicalArtist.provenance[0].url, officialSite);
+  const publishedCatalog = await readCatalog({ database: db });
+  const scheduled = publishedCatalog.festivals
+    .find(({ slug }) => slug === "wacken-open-air")
+    .timetable.filter(({ stage }) => stage === "Integration Stage");
+  assert.deepEqual(
+    scheduled.map(({ artist }) => artist),
+    [artistName, artistName],
+  );
+  assert.equal(
+    await db.timetablePerformance.count({
+      where: { editionId, artistName: originalArtist.name, stage: "Integration Stage" },
+    }),
+    2,
+  );
+
+  const publicArtist = await anonymous.json(`/artists/${artistSlug}/`);
+  assert.equal(publicArtist.status, 200);
+  const artistHtml = await publicArtist.text();
+  assert.match(artistHtml, /Integration Headliner Revised/);
+  assert.match(artistHtml, /https:\/\/artist\.example\.test\//);
+
+  const noopResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist",
+    resourceKey: artistSlug,
+    baseRevision: 2,
+    values: { officialUrl: officialSite },
+  });
+  assert.equal(noopResponse.status, 201);
+  const noopDraft = await noopResponse.json();
+  const noop = await db.adminChange.findFirstOrThrow({ where: { draftId: noopDraft.id } });
+  assert.equal((await (await decideArtist(noop.id)).json()).artistPublication, "unchanged");
+  assert.equal(await db.artistProvenance.count({ where: { artistId: originalArtist.id } }), 1);
+  const rejectedResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist",
+    resourceKey: artistSlug,
+    baseRevision: 3,
+    values: { canonicalName: "Unpublished Name" },
+  });
+  assert.equal(rejectedResponse.status, 201);
+  const rejectedDraft = await rejectedResponse.json();
+  const rejected = await db.adminChange.findFirstOrThrow({ where: { draftId: rejectedDraft.id } });
+  assert.equal((await decideArtist(rejected.id, "reject")).status, 200);
+  assert.equal(
+    (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
+    artistName,
+  );
+
+  const logoBytes = await sharp({
+    create: { width: 2, height: 2, channels: 3, background: "#c05040" },
+  })
+    .png()
+    .toBuffer();
+  const logoHash = createHash("sha256").update(logoBytes).digest("hex");
+  await db.assetBlob.upsert({
+    where: { sha256: logoHash },
+    create: {
+      sha256: logoHash,
+      mimeType: "image/png",
+      sizeBytes: logoBytes.length,
+      bytes: logoBytes,
+    },
+    update: {},
+  });
+  const festivalRecord = await db.festival.findUniqueOrThrow({
+    where: { slug: "wacken-open-air" },
+  });
+  await db.festivalLogo.deleteMany({ where: { festivalId: festivalRecord.id } });
+  const logoPath = "/api/logos/wacken-open-air.png/";
+  assert.equal((await anonymous.json(logoPath)).status, 404);
+  const invalidLogo = await admin.json("/api/admin", "POST", {
+    resourceKind: "asset",
+    resourceKey: "wacken-open-air",
+    baseRevision: 0,
+    values: { logoUrl: officialSite },
+  });
+  assert.equal(invalidLogo.status, 409);
+  const logoResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "asset",
+    resourceKey: "wacken-open-air",
+    baseRevision: 0,
+    values: { logoAssetHash: logoHash },
+  });
+  assert.equal(logoResponse.status, 201);
+  const logoDraft = await logoResponse.json();
+  const logoChange = await db.adminChange.findFirstOrThrow({ where: { draftId: logoDraft.id } });
+  assert.equal((await anonymous.json(logoPath)).status, 404);
+  const approvedLogo = await decideArtist(logoChange.id);
+  assert.equal(approvedLogo.status, 200);
+  assert.equal((await approvedLogo.json()).logoPublication, "published");
+  const servedLogo = await anonymous.json(logoPath);
+  assert.equal(servedLogo.status, 200);
+  assert.equal(servedLogo.headers.get("etag"), `"${logoHash}"`);
+  assert.deepEqual(Buffer.from(await servedLogo.arrayBuffer()), logoBytes);
+
+  const queueLogo = async (baseRevision) => {
+    const response = await admin.json("/api/admin", "POST", {
+      resourceKind: "asset",
+      resourceKey: "wacken-open-air",
+      baseRevision,
+      values: { logoAssetHash: logoHash },
+    });
+    assert.equal(response.status, 201);
+    const { id } = await response.json();
+    return db.adminChange.findFirstOrThrow({ where: { draftId: id } });
+  };
+  const noOpLogo = await queueLogo(1);
+  assert.equal((await (await decideArtist(noOpLogo.id)).json()).logoPublication, "unchanged");
+  const staleLogo = await queueLogo(2);
+  await db.festivalLogo.delete({ where: { festivalId: festivalRecord.id } });
+  assert.equal((await decideArtist(staleLogo.id)).status, 409);
+  assert.equal((await anonymous.json(logoPath)).status, 404);
+  assert.equal(
+    (await db.adminChange.findUniqueOrThrow({ where: { id: staleLogo.id } })).status,
+    "PENDING",
+  );
+
+  assert.equal((await decideArtist(staleLogo.id, "reject")).status, 200);
+  assert.equal((await anonymous.json(logoPath)).status, 404);
+
   const playlistResponse = await admin.json("/api/admin", "POST", {
     resourceKind: "playlist",
     resourceKey: "integration-playlist",
@@ -471,32 +666,17 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     playlistChanges.map((change) => change.field),
     ["platform", "status", "url"],
   );
-  for (const change of playlistChanges)
-    assert.equal(
-      (await admin.json(`/api/admin/changes/${change.id}`, "POST", { decision: "approve" })).status,
-      200,
-    );
-  const publishedPlaylist = await db.adminResourceState.findUniqueOrThrow({
-    where: {
-      resourceKind_resourceKey: { resourceKind: "PLAYLIST", resourceKey: "integration-playlist" },
-    },
-  });
-  assert.equal(publishedPlaylist.revision, 3);
-  assert.deepEqual(publishedPlaylist.values, {
-    url: "https://open.spotify.com/playlist/integration-updated",
-    platform: "spotify",
-    status: "published",
-  });
+  for (const change of playlistChanges) {
+    const response = await admin.json(`/api/admin/changes/${change.id}`, "POST", {
+      decision: "approve",
+    });
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /not publishable/);
+  }
+  assert.equal(await db.adminResourceState.count({ where: { resourceKind: "PLAYLIST" } }), 0);
   assert.equal(
-    (
-      await admin.json("/api/admin", "POST", {
-        resourceKind: "playlist",
-        resourceKey: "integration-playlist",
-        baseRevision: 0,
-        values: { status: "stale" },
-      })
-    ).status,
-    409,
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: playlist.id } })).status,
+    "QUEUED",
   );
   const disposablePlaylistResponse = await admin.json("/api/admin", "POST", {
     resourceKind: "playlist",
@@ -510,16 +690,6 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     200,
   );
   assert.equal(await db.adminDraft.count({ where: { id: disposablePlaylist.id } }), 0);
-
-  const disposableResponse = await admin.json("/api/admin", "POST", {
-    resourceKind: "asset",
-    resourceKey: "delete-me",
-    baseRevision: 0,
-    values: { logoUrl: "https://example.test/logo.svg" },
-  });
-  const disposable = await disposableResponse.json();
-  assert.equal((await admin.json(`/api/admin/drafts/${disposable.id}`, "DELETE")).status, 200);
-  assert.equal(await db.adminDraft.count({ where: { id: disposable.id } }), 0);
 
   const refreshPath = "/api/admin/refresh/wacken-open-air";
   assert.equal((await admin.json(`${refreshPath}?year=2026`, "POST")).status, 404);
