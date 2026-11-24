@@ -1186,9 +1186,20 @@ export async function publishAdminFestivalChange(
     editionYear?: number;
     editionId?: string;
   } | null;
-  const scoped = input.change.parserRunId && evidence?.kind === "scoped-refresh" ? evidence : null;
-  if (scoped && (!scoped.editionId || !Number.isInteger(scoped.editionYear)))
-    throw new Error("Reviewed edition binding is incomplete");
+  const scoped = input.change.parserRunId ? evidence : null;
+  // Older parser runs recorded field evidence but not the edition that was read.
+  // Never recover that binding from today's source configuration or current edition.
+  if (
+    input.change.parserRunId &&
+    (scoped?.kind !== "scoped-refresh" ||
+      typeof scoped.editionId !== "string" ||
+      !scoped.editionId.trim() ||
+      !Number.isInteger(scoped.editionYear))
+  ) {
+    throw new Error(
+      "Refresh proposal is missing its edition binding. Run an edition-scoped refresh and review the new proposal.",
+    );
+  }
   const applied = await applyFestivalChanges(db, {
     festivalSlug: input.change.resourceKey,
     expectedYear: scoped?.editionYear,
