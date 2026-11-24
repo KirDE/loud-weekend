@@ -422,6 +422,54 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
     404,
   );
 
+  const budgets = {
+    "synthetic-fest:2027": {
+      currency: "EUR",
+      people: 1,
+      days: 4,
+      nights: 1,
+      ticket: 25000,
+      travel: 10000,
+      lodging: 12000,
+      food: 3500,
+    },
+  };
+  const budgetWrite = await anonymous.json("/api/sync/budgets", "PUT", {
+    payload: budgets,
+    revision: 0,
+  });
+  assert.equal(budgetWrite.status, 201);
+  const budgetDoc = (await budgetWrite.json()).document;
+  assert.deepEqual(
+    (await (await anonymous.json("/api/sync/budgets")).json()).document.payload,
+    budgets,
+  );
+  assert.equal((await (await second.json("/api/sync/budgets")).json()).document, null);
+  assert.equal((await new Client().json("/api/sync/budgets")).status, 401);
+  assert.equal(
+    (await anonymous.json("/api/sync/budgets", "PUT", { payload: budgets, revision: 0 })).status,
+    409,
+  );
+  assert.equal(
+    (
+      await anonymous.json("/api/sync/budgets", "PUT", {
+        payload: { "synthetic-fest:2027": { ...budgets["synthetic-fest:2027"], ticket: -1 } },
+        revision: 1,
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await anonymous.json("/api/share", "POST", { documentId: budgetDoc.id })).status,
+    404,
+  );
+  await db.shareLink.create({
+    data: { userId: firstUser.id, documentId: budgetDoc.id, slug: "synthetic-budget-legacy-link" },
+  });
+  assert.equal((await new Client().json("/api/share/synthetic-budget-legacy-link")).status, 404);
+  const privatePage = await new Client().request("/share/synthetic-budget-legacy-link/");
+  assert.doesNotMatch(await privatePage.text(), /61000|25000|synthetic-fest:2027/);
+
   const share = await anonymous.json("/api/share", "POST", {
     documentId: createdBody.document.id,
     expiresAt: new Date(Date.now() + 60_000).toISOString(),

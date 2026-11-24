@@ -14,6 +14,7 @@ import {
   type DiscoveryLineups,
   type DiscoverySort,
 } from "@/lib/discovery-sort";
+import { OriginSearch } from "./OriginSearch";
 import { DiscoveryShare } from "./DiscoveryShare";
 import {
   discoveryFromQuery,
@@ -84,11 +85,24 @@ export function FestivalExplorer({
     [queryParams, discoveryLineups],
   );
   const [draft, setDraft] = useState<{ key: string; patch: Partial<DiscoveryPreferences> }>();
+  // Leaving a shared URL discards its temporary edits. Browser history
+  // restores the URL's own snapshot, not edits that were never in that URL.
+  if (draft && draft.key !== linkKey) setDraft(undefined);
   const activeFilters = shared
     ? { ...shared.filters, ...(draft?.key === linkKey ? draft.patch : {}) }
     : planner.savedFilters;
-  const { query, country, announcedOnly, month, ticketsOnly, genre, origin, maxDistance, sort } =
-    activeFilters;
+  const {
+    query,
+    country,
+    announcedOnly,
+    month,
+    ticketsOnly,
+    genre,
+    origin,
+    customOrigin,
+    maxDistance,
+    sort,
+  } = activeFilters;
   const linkedDates = useMemo(
     () => (queryParams ? datesFromQuery(queryParams) : null),
     [queryParams],
@@ -140,7 +154,10 @@ export function FestivalExplorer({
     const available = festivalGenres(festivals);
     return genre === "all" || available.includes(genre) ? available : [...available, genre].sort();
   }, [festivals, genre]);
-  const originCoordinates = origins[origin].coordinates;
+  const originCoordinates = customOrigin ?? origins[origin].coordinates;
+  const originLabel = customOrigin
+    ? `${customOrigin.name}, ${displayNames.of(customOrigin.countryCode)}`
+    : origins[origin].label;
   const filtered = useMemo(
     () =>
       festivals.filter((item) => {
@@ -305,11 +322,18 @@ export function FestivalExplorer({
         </select>
         <select
           aria-label={t("filterOrigin")}
-          value={origin}
-          onChange={(event) =>
-            updateFilters({ origin: event.target.value as DiscoveryPreferences["origin"] })
-          }
+          value={customOrigin ? "custom" : origin}
+          onChange={(event) => {
+            if (event.target.value !== "custom")
+              updateFilters({
+                origin: event.target.value as DiscoveryPreferences["origin"],
+                customOrigin: undefined,
+              });
+          }}
         >
+          {customOrigin && (
+            <option value="custom">{t("fromOrigin", { origin: originLabel })}</option>
+          )}
           {Object.entries(origins).map(([value, item]) => (
             <option key={value} value={value}>
               {t("fromOrigin", { origin: item.label })}
@@ -376,6 +400,7 @@ export function FestivalExplorer({
       <p className="srOnly" role="status" aria-live="polite" aria-atomic="true">
         {comparisonStatus}
       </p>
+      <OriginSearch onPick={(customOrigin) => updateFilters({ customOrigin })} />
       {compared.length > 0 && (
         <div className="compareTray">
           <div className="compareHeading">
@@ -398,7 +423,7 @@ export function FestivalExplorer({
             <FestivalComparison
               festivals={compared}
               origin={originCoordinates}
-              originLabel={origins[origin].label}
+              originLabel={originLabel}
               lineups={discoveryLineups}
               favorites={favoriteKeys}
             />
