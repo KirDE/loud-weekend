@@ -1,3 +1,4 @@
+import { hasArchiveRecords } from "@/lib/catalog/browse";
 import { availableFestivalMonths } from "@/lib/festival-dates";
 import type { MetadataRoute } from "next";
 import { supportedLanguages } from "@/lib/catalog/public";
@@ -56,8 +57,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: editionYear < 2027 ? ("yearly" as const) : ("weekly" as const),
       priority: 0.6,
     })),
-    { url: `${SITE_ORIGIN}/archive/`, changeFrequency: "monthly", priority: 0.5 },
-    { url: `${SITE_ORIGIN}/submit/`, changeFrequency: "monthly", priority: 0.4 },
+    {
+      url: `${SITE_ORIGIN}/browse/`,
+      changeFrequency: "weekly",
+      priority: 0.6,
+    },
+    ...(hasArchiveRecords(editions)
+      ? [
+          {
+            url: `${SITE_ORIGIN}/archive/`,
+            changeFrequency: "monthly" as const,
+            priority: 0.5,
+          },
+        ]
+      : []),
+    {
+      url: `${SITE_ORIGIN}/submit/`,
+      changeFrequency: "monthly",
+      priority: 0.4,
+    },
     ...supportedLanguages.flatMap((lang) =>
       ["about", "faq"].map((page) => ({ url: `${SITE_ORIGIN}/${lang}/${page}/` })),
     ),

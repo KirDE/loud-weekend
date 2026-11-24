@@ -625,6 +625,15 @@
   box-shadow: 7px 7px 0 #17171244;
 }
 
+.catalogueGroups a {
+  display: inline-block;
+  min-height: 32px;
+  padding-block: 6px;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 .personalCalendar a:where(:not(.primaryButton)) {
   text-decoration: underline;
 }
@@ -3505,6 +3514,39 @@ summary:focus-visible {
 .groupTripComment {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.siteHeader nav a[aria-current] {
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+.catalogueGroups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 18px 28px;
+  margin-top: 28px;
+}
+
+.catalogueGroups section {
+  min-width: 0;
+  margin: 0;
+}
+
+.catalogueGroups ul {
+  list-style: none;
+  padding: 0;
+}
+
+.browseArtistSearch {
+  display: grid;
+  gap: 6px;
+}
+
+.browseArtistSearch input {
+  min-width: 0;
+  padding: 8px;
+  width: 100%;
 }
 
 .playlistCoverage {
