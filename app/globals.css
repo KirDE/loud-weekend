@@ -3610,6 +3610,11 @@ summary:focus-visible {
   margin-block: 12px 0;
 }
 
+.artistMatchSummary {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .personalCalendar li {
   margin-block: 8px;
 }
