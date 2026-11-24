@@ -2,7 +2,7 @@ import { db } from "../db.ts";
 import type { Language } from "../language-preference.ts";
 import { festivalPreviewDate, type PreviewCard, type PreviewKind } from "../social-preview.ts";
 
-async function hasPublishedIngestionDate(
+async function hasPublishedDate(
   slug: string,
   year: number,
   field: "startDate" | "endDate",
@@ -12,8 +12,43 @@ async function hasPublishedIngestionDate(
   const receipt = await db.catalogPublication.findFirst({
     where: { festivalSlug: slug, editionYear: year, fields: { has: field } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { source: true, sourceId: true },
+    select: { source: true, sourceId: true, evidence: true },
   });
+  if (receipt?.source === "ADMIN" && receipt.sourceId.startsWith("admin:")) {
+    const id = receipt.sourceId.slice("admin:".length);
+    const evidence = receipt.evidence;
+    if (
+      !evidence ||
+      typeof evidence !== "object" ||
+      Array.isArray(evidence) ||
+      evidence.adminChangeId !== id ||
+      !Array.isArray(evidence.sourceEvidence) ||
+      !evidence.sourceEvidence.some(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          !Array.isArray(item) &&
+          item.field === field &&
+          typeof item.sourceUrl === "string" &&
+          /^https?:\/\//i.test(item.sourceUrl),
+      )
+    )
+      return false;
+
+    const change = await db.adminChange.findFirst({
+      where: {
+        id,
+        resourceKind: "FESTIVAL",
+        resourceKey: slug,
+        field,
+        status: "APPROVED",
+        afterValue: { equals: value },
+        parserRun: { festivalSlug: slug, status: { in: ["SUCCEEDED", "PARTIAL"] } },
+      },
+      select: { id: true },
+    });
+    return Boolean(change);
+  }
   if (receipt?.source !== "INGESTION" || !receipt.sourceId.startsWith("ingestion:")) return false;
 
   // An observation alone is not proof that this exact value was published.
@@ -76,10 +111,10 @@ export async function readSocialPreview(
   const [hasStart, hasEnd] = await Promise.all([
     evidence.has("dates") ||
       evidence.has("startDate") ||
-      hasPublishedIngestionDate(slug, edition.year, "startDate", startDate),
+      hasPublishedDate(slug, edition.year, "startDate", startDate),
     evidence.has("dates") ||
       evidence.has("endDate") ||
-      hasPublishedIngestionDate(slug, edition.year, "endDate", endDate),
+      hasPublishedDate(slug, edition.year, "endDate", endDate),
   ]);
   const hasLineup = evidence.has("lineup") || evidence.has("headliners");
   const detail = festivalPreviewDate(

@@ -2861,3 +2861,62 @@ test("invalid dates cannot publish or replace the last verified edition range", 
     });
   }
 });
+
+test("social previews show parser-backed approved dates but not unsupported edits", async () => {
+  const slug = `preview-admin-${suffix}`;
+  await seedCatalog(db, {
+    ...catalogSeed,
+    editions: [{ ...catalogSeed.editions[1], slug, endDate: "2027-06-13" }],
+    festivals: [
+      {
+        ...catalogSeed.festivals[0],
+        slug,
+        status: "tba",
+        startDate: "2027-06-10",
+        endDate: "2027-06-13",
+      },
+    ],
+  });
+  const actor = await db.user.create({ data: { email: `${slug}@example.test` } });
+  const sourceUrl = "https://festival.example.test/";
+  const run = await db.adminParserRun.create({
+    data: {
+      festivalSlug: slug,
+      sourceId: sourceUrl,
+      adapter: "fixture",
+      status: "SUCCEEDED",
+      log: [],
+    },
+  });
+  const { decideChange } = await import("../lib/admin-store.ts");
+  const { db: applicationDb } = await import("../lib/db.ts");
+  const { readSocialPreview } = await import("../lib/catalog/social-preview.ts");
+  const { festivalPreviewDate } = await import("../lib/social-preview.ts");
+  const preview = async () => (await readSocialPreview("festivals", slug, "en", 2027))?.detail;
+  const evidence = [{ field: "startDate", sourceUrl, excerpt: "2027-06-11" }];
+  const approve = async (baseRevision: number, beforeValue: string, afterValue: string) => {
+    const change = await db.adminChange.create({
+      data: {
+        resourceKind: "FESTIVAL",
+        resourceKey: slug,
+        field: "startDate",
+        beforeValue,
+        afterValue,
+        baseRevision,
+        sourceEvidence: baseRevision === 0 ? evidence : [],
+        parserRunId: baseRevision === 0 ? run.id : null,
+      },
+    });
+    await decideChange(change.id, "approve", actor);
+  };
+
+  try {
+    assert.equal(await preview(), festivalPreviewDate(2027, "en", null));
+    await approve(0, "2027-06-10", "2027-06-11");
+    assert.equal(await preview(), festivalPreviewDate(2027, "en", { startDate: "2027-06-11" }));
+    await approve(1, "2027-06-11", "2027-06-12");
+    assert.equal(await preview(), festivalPreviewDate(2027, "en", null));
+  } finally {
+    await applicationDb.$disconnect();
+  }
+});
