@@ -15,7 +15,8 @@ export type PublishedNotificationEvent = {
 
 const eventType = (change: FestivalChange): NotificationEventType | undefined => {
   if (change.kind === "artist_added" || change.kind === "headliner_added") return "ARTIST_ADDED";
-  if (change.kind === "artist_removed" || change.kind === "headliner_removed") return "ARTIST_CANCELLED";
+  if (change.kind === "artist_removed" || change.kind === "headliner_removed")
+    return "ARTIST_CANCELLED";
   if (change.kind === "date_changed") return "FESTIVAL_DATE_MOVED";
   if (change.kind === "timetable_published") return "TIMETABLE_PUBLISHED";
   if (change.kind === "ticket_status_changed") {
@@ -25,33 +26,51 @@ const eventType = (change: FestivalChange): NotificationEventType | undefined =>
   if (change.kind === "tickets_changed") return "TICKETS_ON_SALE";
 };
 
-const stablePart = (value?: string) => encodeURIComponent((value || "none").normalize("NFKC").trim().toLocaleLowerCase("en-US"));
+const stablePart = (value?: string) =>
+  encodeURIComponent((value || "none").normalize("NFKC").trim().toLocaleLowerCase("en-US"));
 
-export function notificationEventsForChanges(festival: Festival, changes: FestivalChange[], occurredAt: string): PublishedNotificationEvent[] {
+export function notificationEventsForChanges(
+  festival: Festival,
+  changes: FestivalChange[],
+  occurredAt: string,
+): PublishedNotificationEvent[] {
   const editionYear = festival.editionYear ?? Number(festival.startDate?.slice(0, 4));
-  if (!Number.isInteger(editionYear)) throw new Error(`Festival ${festival.slug} has no edition identity`);
+  if (!Number.isInteger(editionYear))
+    throw new Error(`Festival ${festival.slug} has no edition identity`);
+  // Use the resulting state so a later verified transition to paid tickets
+  // can still announce sales, while ancillary URL changes never invent them.
+  const freeAdmission =
+    (changes.find((c) => c.kind === "ticket_status_changed" && c.field === "ticketStatus")?.after ??
+      festival.ticketStatus) === "free";
   return changes.flatMap((change) => {
+    if (freeAdmission && ["tickets_changed", "ticket_status_changed"].includes(change.kind))
+      return [];
     let type = eventType(change);
     if (change.kind === "ticket_status_changed" && change.after === "low") type = "TICKETS_LOW";
     if (!type) return [];
     const subject = change.after || change.before || change.field;
-    return [{
-      dedupeKey: `festival:${festival.slug}:${editionYear}:${type}:${stablePart(subject)}`,
-      festivalId: `${festival.slug}:${editionYear}`,
-      type,
-      title: festival.name,
-      message: `${type.replaceAll("_", " ").toLocaleLowerCase()}: ${subject}`,
-      url: `https://loudweekend.eu/festivals/${festival.slug}`,
-      occurredAt,
-      payload: { editionYear, change },
-    }];
+    return [
+      {
+        dedupeKey: `festival:${festival.slug}:${editionYear}:${type}:${stablePart(subject)}`,
+        festivalId: `${festival.slug}:${editionYear}`,
+        type,
+        title: festival.name,
+        message: `${type.replaceAll("_", " ").toLocaleLowerCase()}: ${subject}`,
+        url: `https://loudweekend.eu/festivals/${festival.slug}`,
+        occurredAt,
+        payload: { editionYear, change },
+      },
+    ];
   });
 }
 
 // Match sequential recordChange upserts: the first event for a key wins,
 // including its original payload, while later same-key changes add no event.
-export function uniqueNotificationEvents(events: PublishedNotificationEvent[]): PublishedNotificationEvent[] {
+export function uniqueNotificationEvents(
+  events: PublishedNotificationEvent[],
+): PublishedNotificationEvent[] {
   const firstByKey = new Map<string, PublishedNotificationEvent>();
-  for (const event of events) if (!firstByKey.has(event.dedupeKey)) firstByKey.set(event.dedupeKey, event);
+  for (const event of events)
+    if (!firstByKey.has(event.dedupeKey)) firstByKey.set(event.dedupeKey, event);
   return [...firstByKey.values()];
 }

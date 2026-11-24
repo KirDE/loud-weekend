@@ -22,7 +22,11 @@ export async function POST(request: Request) {
   const data = await db.user.findUnique({
     where: { id: user.id },
     select: {
-      id: true, email: true, emailVerifiedAt: true, createdAt: true, updatedAt: true,
+      id: true,
+      email: true,
+      emailVerifiedAt: true,
+      createdAt: true,
+      updatedAt: true,
       documents: {
         orderBy: { kind: "asc" },
         select: { kind: true, payload: true, revision: true, createdAt: true, updatedAt: true },
@@ -41,7 +45,15 @@ export async function POST(request: Request) {
       },
       notificationPreferences: {
         orderBy: { createdAt: "asc" },
-        select: { festivalId: true, eventType: true, channel: true, frequency: true, enabled: true, createdAt: true, updatedAt: true },
+        select: {
+          festivalId: true,
+          eventType: true,
+          channel: true,
+          frequency: true,
+          enabled: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       },
       notificationSubscriptions: {
         orderBy: { createdAt: "asc" },
@@ -50,7 +62,11 @@ export async function POST(request: Request) {
       notificationDeliveries: {
         orderBy: { createdAt: "asc" },
         select: {
-          channel: true, frequency: true, status: true, createdAt: true, sentAt: true,
+          channel: true,
+          frequency: true,
+          status: true,
+          createdAt: true,
+          sentAt: true,
           event: { select: { festivalId: true, type: true, occurredAt: true } },
         },
       },
@@ -58,11 +74,17 @@ export async function POST(request: Request) {
   });
   if (!data) return Response.json({ error: "Authentication required." }, { status: 401, headers });
 
-  return Response.json({
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    account: data,
-  }, {
-    headers: { ...headers, "Content-Disposition": 'attachment; filename="loud-weekend-account-data.json"' },
-  });
+  return Response.json(
+    {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      account: data,
+    },
+    {
+      headers: {
+        ...headers,
+        "Content-Disposition": 'attachment; filename="loud-weekend-account-data.json"',
+      },
+    },
+  );
 }

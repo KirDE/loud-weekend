@@ -9,8 +9,10 @@ const labels = {
 for (const [locale, label] of Object.entries(labels)) {
   test(`account menu downloads the archive in ${locale}`, async ({ page }) => {
     const email = "synthetic-export@example.test";
-    await page.route("**/api/auth/me**", route => route.fulfill({ json: { user: { id: "synthetic", email } } }));
-    await page.route("**/api/auth/export**", route => {
+    await page.route("**/api/auth/me**", (route) =>
+      route.fulfill({ json: { user: { id: "synthetic", email } } }),
+    );
+    await page.route("**/api/auth/export**", (route) => {
       expect(route.request().method()).toBe("POST");
       return route.fulfill({
         json: { version: 1 },

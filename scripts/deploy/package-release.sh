@@ -7,7 +7,8 @@ stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 
 test -f .next/standalone/server.js
-mkdir -p "$stage/app/.next" "$stage/app/.runtime" "$stage/app/scripts/analytics" "$stage/app/scripts/deploy" "$stage/app/scripts/notifications" "$stage/app/scripts/spotify_gmm_2026"
+mkdir -p "$stage/app/.next" "$stage/app/.runtime" "$stage/app/scripts/analytics"\
+ "$stage/app/scripts/deploy" "$stage/app/scripts/notifications" "$stage/app/scripts/spotify_gmm_2026"
 "$(dirname "$0")/bundle-node-runtime.sh" "$stage/app/.runtime"
 cp -a .next/standalone/. "$stage/app/"
 cp -a .next/static "$stage/app/.next/static"
@@ -15,22 +16,30 @@ cp -a public "$stage/app/public"
 cp prisma.config.ts package.json package-lock.json "$stage/app/"
 cp -a prisma "$stage/app/prisma"
 cp -a lib "$stage/app/"
-cp scripts/add-artist-aliases.mjs scripts/ingest-festivals.mjs scripts/drain-ingestion-notifications.mjs scripts/export-ingestion-review-queue.mjs "$stage/app/scripts/"
+cp scripts/add-artist-aliases.mjs scripts/ingest-festivals.mjs\
+ scripts/drain-ingestion-notifications.mjs scripts/export-ingestion-review-queue.mjs "$stage/app/scripts/"
 cp scripts/configure-spotify-repertoire.ts "$stage/app/scripts/"
 cp scripts/import-event-receiver.mjs "$stage/app/scripts/"
 cp scripts/db-due-tick.mjs scripts/report-db-due-health.mjs scripts/report-db-due-run.mjs "$stage/app/scripts/"
-cp scripts/bootstrap-parser-repairs.mjs scripts/import-agent-client.mjs scripts/refresh-spotify-stats.mjs scripts/audit-catalog.ts scripts/import-timetable.mjs scripts/enrich-artists.mjs scripts/playlist-provider-worker.ts scripts/playlist-lease-guard.ts scripts/resolve-artist-identities.mjs scripts/check-festival-sources.mjs scripts/export-playlist-catalog.mjs "$stage/app/scripts/"
+cp scripts/bootstrap-parser-repairs.mjs scripts/import-agent-client.mjs\
+ scripts/refresh-spotify-stats.mjs scripts/audit-catalog.ts scripts/import-timetable.mjs\
+ scripts/enrich-artists.mjs scripts/playlist-provider-worker.ts scripts/playlist-lease-guard.ts\
+ scripts/resolve-artist-identities.mjs scripts/check-festival-sources.mjs\
+ scripts/export-playlist-catalog.mjs "$stage/app/scripts/"
 cp -a scripts/spotify_gmm_2026/. "$stage/app/scripts/spotify_gmm_2026/"
 cp requirements.txt "$stage/app/"
 # Resolve wheels for the production minor, not the builder; fail closed on sdists.
-python3 -m pip install --disable-pip-version-check --no-input --only-binary=:all: --python-version 3.13 --target "$stage/app/.python" -r requirements.txt
+python3 -m pip install --disable-pip-version-check --no-input --only-binary=:all: --python-version\
+ 3.13 --target "$stage/app/.python" -r requirements.txt
 cp scripts/deploy/check-prisma-release.mjs "$stage/app/scripts/deploy/"
 cp scripts/deploy/check-python-release.sh "$stage/app/scripts/deploy/"
 cp scripts/deploy/reconfigure-webserver.sh "$stage/app/scripts/deploy/"
 cp scripts/deploy/provider-timers.sh "$stage/app/scripts/deploy/"
 cp scripts/analytics/prune-production.sh "$stage/app/scripts/analytics/"
 cp scripts/deploy/run-collection-job.sh "$stage/app/scripts/deploy/"
-cp scripts/deploy/db-due-scheduler-assets.sh scripts/deploy/db-due-scheduler scripts/deploy/check-db-due-tick-ready scripts/deploy/run-db-due-operation.sh scripts/deploy/start-db-due scripts/deploy/db-due-assets.sh "$stage/app/scripts/deploy/"
+cp scripts/deploy/db-due-scheduler-assets.sh scripts/deploy/db-due-scheduler\
+ scripts/deploy/check-db-due-tick-ready scripts/deploy/run-db-due-operation.sh\
+ scripts/deploy/start-db-due scripts/deploy/db-due-assets.sh "$stage/app/scripts/deploy/"
 cp scripts/notifications/dispatch-production.sh "$stage/app/scripts/notifications/"
 chmod 0755 "$stage/app/scripts/deploy/reconfigure-webserver.sh"
 chmod 0755 "$stage/app/scripts/analytics/prune-production.sh"
@@ -72,3 +81,4 @@ grep -Fxq 'app/scripts/deploy/provider-timers.sh' "$archive_contents"
 grep -Fxq 'app/scripts/deploy/check-python-release.sh' "$archive_contents"
 
 grep -Fxq 'app/scripts/add-artist-aliases.mjs' "$archive_contents"
+grep -Fxq 'app/lib/catalog/arrival-import.ts' "$archive_contents"
