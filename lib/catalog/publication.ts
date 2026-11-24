@@ -213,6 +213,18 @@ async function updateAnnouncedRoster(
 
   if (additions.length)
     await db.lineupEntry.createMany({ data: additions.map((entry) => ({ ...entry, editionId })) });
+
+  // Position shifts alone do not announce an artist.
+  return [
+    ...removed.map(({ artistId }) => artistId),
+    ...additions.map(({ artistId }) => artistId),
+    ...next
+      .filter(
+        ({ artistId, billing }) =>
+          byArtist.has(artistId) && byArtist.get(artistId)?.billing !== billing,
+      )
+      .map(({ artistId }) => artistId),
+  ];
 }
 
 async function replaceLineup(
@@ -233,7 +245,7 @@ async function replaceLineup(
   const announced = existing.filter(({ status }) => status === "ANNOUNCED");
   const cancelled = existing.filter(({ status }) => status === "CANCELLED");
   const current = announced.map(({ artist }) => artist.name);
-  if (same(current, names)) return false;
+  if (same(current, names)) return null;
   if (expected && !same(current, expected)) throw new Error("Stale reviewed lineup");
   const other = await db.lineupEntry.findMany({
     where: { editionId, billing: otherBilling },
@@ -257,8 +269,8 @@ async function replaceLineup(
       artists.map((a) => a.id),
     )
   )
-    return false;
-  await updateAnnouncedRoster(
+    return null;
+  return updateAnnouncedRoster(
     db,
     editionId,
     announced,
@@ -269,7 +281,6 @@ async function replaceLineup(
       cancelled,
     ),
   );
-  return true;
 }
 
 async function addLineupArtist(
@@ -287,7 +298,7 @@ async function addLineupArtist(
     if (existing.status === "CANCELLED")
       throw new Error("Cancellation requires separate explicit review");
     if (existing.billing !== billing) throw new Error(`Ambiguous billing change for ${name}`);
-    return false;
+    return null;
   }
   const last = await db.lineupEntry.aggregate({
     where: { editionId, billing },
@@ -296,7 +307,7 @@ async function addLineupArtist(
   await db.lineupEntry.create({
     data: { editionId, artistId: artist.id, billing, position: (last._max.position ?? -1) + 1 },
   });
-  return true;
+  return artist.id;
 }
 
 async function applyFestivalChanges(
@@ -343,6 +354,7 @@ async function applyFestivalChanges(
   }
 
   const changedFields: string[] = [];
+  const affectedArtistIds: string[] = [];
   for (const change of input.changes) {
     let current: unknown;
     let changed = false;
@@ -455,7 +467,7 @@ async function applyFestivalChanges(
         // Admin replacements arrive as arrays; an ingestion diff adds one
         // artist verbatim, including commas in an official billing name.
         if (Array.isArray(change.after)) {
-          changed = await replaceLineup(
+          const affected = await replaceLineup(
             db,
             edition.id,
             billing,
@@ -463,10 +475,20 @@ async function applyFestivalChanges(
             ensureArtist,
             input.expectedEditionId ? stringList(change.before, change.field) : undefined,
           );
+          changed = affected !== null;
+          if (affected) affectedArtistIds.push(...affected);
         } else {
           if (typeof change.after !== "string" || !change.after.trim())
             throw new Error("Invalid announced artist");
-          changed = await addLineupArtist(db, edition.id, billing, change.after, ensureArtist);
+          const artistId = await addLineupArtist(
+            db,
+            edition.id,
+            billing,
+            change.after,
+            ensureArtist,
+          );
+          changed = artistId !== null;
+          if (artistId) affectedArtistIds.push(artistId);
         }
         break;
       }
@@ -483,7 +505,7 @@ async function applyFestivalChanges(
       data: { sourceUpdatedAt: input.observedAt },
     });
   }
-  return { edition, changedFields: [...new Set(changedFields)] };
+  return { edition, changedFields: [...new Set(changedFields)], affectedArtistIds };
 }
 
 async function createPublication(
@@ -495,6 +517,7 @@ async function createPublication(
     editionYear: number;
     actorLabel: string;
     fields: string[];
+    affectedArtistIds?: string[];
     evidence: unknown;
     playlistRefreshDeferral?: { policy: string; reason: string };
   },
@@ -509,6 +532,7 @@ async function createPublication(
       editionYear: input.editionYear,
       actorLabel: input.actorLabel,
       fields: input.fields,
+      affectedArtistIds: [...new Set(input.affectedArtistIds)].sort(),
       lineupChanged,
       evidence: json(input.evidence),
     },
@@ -1137,6 +1161,7 @@ export async function publishIngestionResult(
         editionYear: applied.edition.year,
         actorLabel: "automatic-ingestion",
         fields: applied.changedFields,
+        affectedArtistIds: applied.affectedArtistIds,
         evidence: {
           candidateId: candidate.id,
           sourceCommit: input.sourceCommit,
@@ -1249,6 +1274,7 @@ export async function publishAdminFestivalChange(
     editionYear: applied.edition.year,
     actorLabel: input.actorLabel,
     fields: applied.changedFields,
+    affectedArtistIds: applied.affectedArtistIds,
     evidence: { adminChangeId: input.change.id, sourceEvidence: input.change.sourceEvidence },
   });
 }
@@ -1339,6 +1365,7 @@ export async function publishAgentFestivalResolution(
     })) === 0;
   const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
+  const affectedArtistIds: string[] = [];
   if (input.facts.headliners !== undefined && input.facts.lineup !== undefined) {
     const headliners = stringList(input.facts.headliners, "headliners"),
       lineup = stringList(input.facts.lineup, "lineup");
@@ -1375,10 +1402,11 @@ export async function publishAgentFestivalResolution(
       const cancelled = edition.lineup.filter((l) => l.status === "CANCELLED");
       if (artistIds.some((id) => cancelled.some((l) => l.artistId === id)))
         throw new Error("Cancellation requires separate explicit review");
-      await updateAnnouncedRoster(db, edition.id, announced, cancelled, [
+      const affected = await updateAnnouncedRoster(db, edition.id, announced, cancelled, [
         ...rosterPositions("HEADLINER", artistIds.slice(0, headliners.length), cancelled),
         ...rosterPositions("LINEUP", artistIds.slice(headliners.length), cancelled),
       ]);
+      affectedArtistIds.push(...affected);
       changedFields.push("headliners", "lineup");
       await db.festivalEdition.updateMany({
         where: { id: edition.id, sourceUpdatedAt: { lt: input.observedAt } },
@@ -1439,6 +1467,7 @@ export async function publishAgentFestivalResolution(
     editionYear: edition.year,
     actorLabel: "openclaw-import-agent",
     fields: [...new Set(changedFields)],
+    affectedArtistIds,
     evidence: {
       reason: input.reason,
       officialEvidence: input.evidence,
