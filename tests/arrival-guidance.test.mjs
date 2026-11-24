@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  graspopRailSources,
+  parseGraspopRailShuttle,
   parseGraspopArrival,
   parseWackenArrival,
 } from "../lib/ingestion/adapters/arrival-guidance.ts";
@@ -42,6 +44,41 @@ test("Wacken requires the edition-specific vehicle, drop-off and route rules", (
   );
   assert.equal(
     parseWackenArrival(wacken.replace("Routenkategorie", "Parkfläche"), 2027),
+    undefined,
+  );
+});
+
+test("rail shuttles require linked edition-specific proof in both directions", () => {
+  const [, operatorUrl] = graspopRailSources("graspop");
+  const organizer = read("graspop-rail-organizer");
+  const timetable = read("graspop-rail-operator");
+  const parse = (html, list = organizer) =>
+    parseGraspopRailShuttle(list, html, 2027, {
+      startDate: "2027-06-17",
+      endDate: "2027-06-20",
+    });
+  const complete = parse(timetable);
+  assert.match(complete.description.en, /Brussels-Midi, Eindhoven Centraal/);
+  assert.equal(complete.supportingSourceUrl, operatorUrl);
+  const reduced = parse(
+    timetable.replace("Station Brussels South (Gare du Midi)", "Unverified station"),
+  );
+  assert.doesNotMatch(reduced.description.en, /Brussels-Midi/);
+  assert.equal(parse(timetable.replace("21/06/2027", "21/06/2028")), undefined);
+  assert.equal(parse(timetable.replace("21/06/2027", "20/06/2027")), undefined);
+  assert.equal(parse(timetable.replace("21/06/2027", "14/06/2027")), undefined);
+  assert.equal(parse(timetable.replace("16/06/2027", "23/06/2027")), undefined);
+  assert.equal(parse(timetable.replace("16/06/2027", "09/06/2027")), undefined);
+  assert.equal(parse(timetable.replace("21/06/2027", "28/06/2027")), undefined);
+  assert.equal(
+    parse(timetable, organizer.replace(operatorUrl, "https://elsewhere.example/")),
+    undefined,
+  );
+  assert.equal(
+    parse(
+      timetable,
+      organizer.replace("A separate ticket is required", "No separate ticket is required"),
+    ),
     undefined,
   );
 });
