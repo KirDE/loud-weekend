@@ -24,8 +24,9 @@ type OfflineDatabase = Pick<PrismaClient, "festivalEdition">;
 const compare = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
 const dateOnly = (date: Date | null) => date?.toISOString().slice(0, 10) ?? null;
 
-export function projectOfflineCatalog(rows: readonly OfflineEdition[]) {
-  if (!rows.length) throw new Error("Offline catalogue unavailable");
+export function projectOfflineCatalog(rows: readonly OfflineEdition[], editionYear: number) {
+  if (!rows.length || !Number.isInteger(editionYear) || editionYear < 1000 || editionYear > 9999)
+    throw new Error("Offline catalogue unavailable");
   const festivals = rows
     .map((row) => ({
       slug: row.festival.slug,
@@ -52,8 +53,8 @@ export function projectOfflineCatalog(rows: readonly OfflineEdition[]) {
     .sort((a, b) => compare(a.slug, b.slug));
   return {
     schemaVersion: 1,
-    dataVersion: "festivals-2027-v1",
-    editionYear: 2027,
+    dataVersion: `festivals-${editionYear}-v1`,
+    editionYear,
     // A live deterministic representation has no build/generation timestamp.
     generatedAt: null,
     timetableStatus: festivals.some((festival) => festival.timetable.length)
@@ -65,11 +66,18 @@ export function projectOfflineCatalog(rows: readonly OfflineEdition[]) {
 
 export async function readOfflineCatalog(database?: OfflineDatabase) {
   const client = database ?? (await import("../db.ts")).db;
+  // A future announcement is not the active catalogue season until it is CURRENT.
+  const season = await client.festivalEdition.findFirst({
+    where: { recordState: "CURRENT" },
+    orderBy: { year: "desc" },
+    select: { year: true },
+  });
+  if (!season) throw new Error("Offline catalogue unavailable");
   const rows = await client.festivalEdition.findMany({
-    where: { year: 2027, recordState: "CURRENT" },
+    where: { year: season.year, recordState: "CURRENT" },
     select: offlineSelect,
   });
-  return projectOfflineCatalog(rows);
+  return projectOfflineCatalog(rows, season.year);
 }
 
 export async function serveOfflineCatalog(
