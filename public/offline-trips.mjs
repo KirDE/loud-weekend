@@ -80,6 +80,29 @@ export const offlineTripCopy = {
   },
 };
 
+export async function fetchOfflineTrip(basePath, slug, year) {
+  const response = await fetch(
+    `${basePath}/api/offline/trips/${encodeURIComponent(slug)}/${year}/`,
+    {
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "error",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  if (
+    response.status !== 200 ||
+    !/^application\/json(?:;|$)/i.test(response.headers.get("content-type") || "")
+  ) {
+    throw new Error("Trip download unavailable");
+  }
+  const trip = parseOfflineTrip(await response.json());
+  if (!trip || trip.slug !== slug || trip.year !== year)
+    throw new Error("Unexpected trip download");
+  return trip;
+}
+
 export function offlineTripKey(slug, year) {
   return `${prefix}${slug}:${year}`;
 }

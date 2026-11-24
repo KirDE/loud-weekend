@@ -1,7 +1,7 @@
 /* Loud Weekend public-only service worker. DB catalogue freshness uses its ETag. */
 const BASE = new URL(self.registration?.scope ?? self.location.origin).pathname.replace(/\/$/, "");
 const CACHE_SCOPE = BASE ? `:${encodeURIComponent(BASE)}` : "";
-const CACHE_VERSION = `festival-radar-public-v6${CACHE_SCOPE}`;
+const CACHE_VERSION = `festival-radar-public-v7${CACHE_SCOPE}`;
 const CATALOG = `${BASE}/api/offline/catalog`;
 const TRIP_MODULE = `${BASE}/offline-trips.mjs`;
 const MAX_ENTRIES = 80;
