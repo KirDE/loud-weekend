@@ -1,4 +1,4 @@
-import { isBarcelonaSource } from "./adapters/barcelona-banner.ts";
+import { validateBarcelonaFetch } from "./adapters/barcelona-banner.ts";
 import { RFP_STOCK, reduceRfpStockDocument } from "./rfp-ticket-stock.ts";
 import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
@@ -151,20 +151,13 @@ async function fetchSourceWithoutTicketSupplement(
     throw new Error("Fetch attempts exhausted without a response");
   };
 
-  const barcelona = source.festivalSlug === "barcelona-rock-fest";
-  if (barcelona && (!isBarcelonaSource(source) || source.fetchUrl || source.followLinkPattern))
-    throw Object.assign(new Error("Barcelona homepage identity is not configured"), {
-      attempts: 0,
-    });
+  validateBarcelonaFetch(source);
 
   if (isRoskildeSource(source) && !options.fetchImpl)
     return fetchRoskildeDocuments(source.editionYear);
 
   let initial = await fetchWithRetry(source.fetchUrl ?? source.url);
-  if (barcelona && initial.response.url && initial.response.url !== new URL(source.url).href)
-    throw Object.assign(new Error("Barcelona homepage identity changed"), {
-      attempts: initial.attempts,
-    });
+  validateBarcelonaFetch(source, initial);
   if (
     source.festivalSlug === "area53" &&
     (source.url !== "https://area53festival.at/de/" ||

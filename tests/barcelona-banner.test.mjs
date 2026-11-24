@@ -356,3 +356,16 @@ test("Barcelona fetch accepts an equivalent root URL but rejects unreviewed requ
     assert.equal(requested, false);
   }
 });
+
+test("responsive Barcelona sale evidence must share a viewport with the dated banner", () => {
+  const desktop = '<div class="hidden md:block">' + html + "</div>";
+  const candidate = parse(desktop);
+  assert.equal(candidate.startDate, "2027-07-01");
+  assert.equal(candidate.ticketStatus, "available");
+
+  const separate = html
+    .replace(/(<h2[^>]*par-2[^>]*>.*?<\/h2>)/, '<div class="md:hidden">$1</div>')
+    .replace(/(<h2[^>]*par-3[^>]*>.*?<\/h2>)/, '<div class="hidden md:block">$1</div>');
+  assert.equal(parse(separate).startDate, "2027-07-01");
+  assert.equal(parse(separate).ticketStatus, undefined);
+});
