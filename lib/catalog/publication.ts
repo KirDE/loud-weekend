@@ -1280,6 +1280,7 @@ export async function publishAgentFestivalResolution(
       });
     }
   }
+  // A reviewed edition status is not evidence about catalogue completeness.
   const scalar = Object.entries(input.facts)
     .filter(([field]) => field !== "headliners" && field !== "lineup" && field !== "finalLineup")
     .map(([field, after]) => ({ field, after }));
@@ -1292,20 +1293,6 @@ export async function publishAgentFestivalResolution(
       observedAt: input.observedAt,
     });
     changedFields.push(...applied.changedFields);
-  }
-  if (input.facts.status) {
-    const completeness = {
-      confirmed: "COMPLETE",
-      partial: "PARTIAL",
-      tba: "TBA",
-    } as const;
-    if (edition.completeness !== completeness[input.facts.status]) {
-      await db.festivalEdition.update({
-        where: { id: edition.id },
-        data: { completeness: completeness[input.facts.status] },
-      });
-      changedFields.push("completeness");
-    }
   }
   if (finalLineup) {
     const entries = finalLineup.complete
@@ -1327,9 +1314,7 @@ export async function publishAgentFestivalResolution(
     changedFields.push("finalLineup");
   }
   for (const field of new Set(changedFields)) {
-    const evidence = input.evidence.find(
-      (e) => e.field === field || (field === "completeness" && e.field === "status"),
-    );
+    const evidence = input.evidence.find((e) => e.field === field);
     if (!evidence) throw new Error("Reviewed field has no official evidence");
     await db.editionProvenance.create({
       data: {
