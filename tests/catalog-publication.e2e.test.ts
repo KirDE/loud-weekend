@@ -2105,40 +2105,7 @@ test("Provinssi provenance drift rolls back catalogue, completeness and provider
   }
 });
 
-test("a scoped refresh approval cannot roll an invalid calendar date into the next month", async () => {
-  const edition = await db.festivalEdition.findFirstOrThrow({
-    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
-  });
-  const id = randomUUID();
-  await assert.rejects(
-    db.$transaction((tx) =>
-      publishAdminFestivalChange(tx, {
-        change: {
-          id,
-          resourceKey: "synthetic-fest",
-          field: "endDate",
-          beforeValue: edition.endDate!.toISOString().slice(0, 10),
-          afterValue: "2027-06-31",
-          sourceEvidence: {
-            kind: "scoped-refresh",
-            editionId: edition.id,
-            editionYear: edition.year,
-          },
-          parserRunId: randomUUID(),
-        },
-        actorLabel: "synthetic-date-review",
-      }),
-    ),
-    /Invalid catalogue date/,
-  );
-  assert.equal(await db.catalogPublication.count({ where: { sourceId: `admin:${id}` } }), 0);
-  assert.deepEqual(
-    await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } }),
-    edition,
-  );
-});
-
-test("a scoped refresh approval cannot persist reversed edition dates", async () => {
+test("a scoped refresh approval rejects invalid calendar dates and reversed ranges", async () => {
   const rollback = new Error("rollback scoped date fixture");
   await assert.rejects(
     db.$transaction(async (tx) => {
@@ -2174,6 +2141,7 @@ test("a scoped refresh approval cannot persist reversed edition dates", async ()
           change: { ...change, afterValue },
           actorLabel: "synthetic-date-review",
         });
+      await assert.rejects(approve("2027-06-31"), /Festival dates must be valid calendar dates/);
       await assert.rejects(
         approve(change.afterValue),
         /Festival end date cannot precede the start date/,
