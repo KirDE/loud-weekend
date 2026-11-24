@@ -31,7 +31,7 @@ function makeEdition(overrides = {}) {
   };
 }
 
-// Execute the real route and its JSX with only the catalogue and Next boundary
+// Execute the real route and its JSX with only the database-backed readers and Next boundary
 // stubbed. Unexpected imports fail closed, so this cannot reach a database.
 const source = await readFile(
   new URL("../app/festivals/[slug]/[year]/page.tsx", import.meta.url),
@@ -54,6 +54,8 @@ function loadPage(editions, artists = []) {
       },
     },
     "@/lib/social-preview": { socialPreviewMetadata },
+    "@/lib/db": { db: {} },
+    "@/lib/catalog/arrival-facts": { readArrivalFacts: async () => [] },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
   };

@@ -1058,7 +1058,8 @@ function idaysResult(name: string): IngestionResult {
 }
 
 test("verified I-Days additions publish atomically without provider jobs, including replay", async () => {
-  const value = idaysResult(`Synthetic Idays Headliner ${suffix}`);
+  const headliner = `Synthetic Idays Headliner ${suffix}`;
+  const value = idaysResult(headliner);
   const attempt = await persist(value);
   const before = await db.catalogPlaylistRefresh.count();
   const publication = await publishIngestionResult(db, {
@@ -1073,6 +1074,10 @@ test("verified I-Days additions publish atomically without provider jobs, includ
   });
   assert.equal(stored.reviewState, "PUBLISHED");
   assert.equal(stored.catalogueVersion, publication.id);
+  const { readSocialPreview } = await import("../lib/catalog/social-preview.ts");
+  assert.deepEqual((await readSocialPreview("festivals", "idays", "en", 2027))?.headliners, [
+    headliner,
+  ]);
   assert.ok(
     await db.lineupEntry.findFirst({
       where: {
@@ -2945,6 +2950,38 @@ test("social previews show parser-backed approved dates but not unsupported edit
     assert.equal(await preview(), festivalPreviewDate(2027, "en", { startDate: "2027-06-11" }));
     await approve(1, "2027-06-11", "2027-06-12");
     assert.equal(await preview(), festivalPreviewDate(2027, "en", null));
+
+    const headliner = `Fixture Preview Headliner ${suffix}`;
+    const replacement = `Unsupported Preview Headliner ${suffix}`;
+    const headliners = async () =>
+      (await readSocialPreview("festivals", slug, "en", 2027))?.headliners;
+    const approveHeadliners = async (
+      beforeValue: string[],
+      afterValue: string[],
+      backed: boolean,
+    ) => {
+      const revision = await db.adminResourceState.findUnique({
+        where: { resourceKind_resourceKey: { resourceKind: "FESTIVAL", resourceKey: slug } },
+      });
+      const change = await db.adminChange.create({
+        data: {
+          resourceKind: "FESTIVAL",
+          resourceKey: slug,
+          field: "headliners",
+          beforeValue,
+          afterValue,
+          baseRevision: revision?.revision ?? 0,
+          sourceEvidence: backed ? [{ field: "headliners", sourceUrl }] : [],
+          parserRunId: backed ? run.id : null,
+        },
+      });
+      await decideChange(change.id, "approve", actor);
+    };
+    assert.equal(await headliners(), undefined);
+    await approveHeadliners([], [headliner], true);
+    assert.deepEqual(await headliners(), [headliner]);
+    await approveHeadliners([headliner], [headliner, replacement], false);
+    assert.equal(await headliners(), undefined);
   } finally {
     await applicationDb.$disconnect();
   }
