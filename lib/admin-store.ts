@@ -330,6 +330,23 @@ export async function deleteDraft(id: string, actor: { id: string; email: string
   );
 }
 
+async function finishReviewedDraft(
+  tx: Prisma.TransactionClient,
+  draftId: string,
+  status: AdminDraftStatus,
+) {
+  const unresolved = await tx.adminChange.findMany({
+    where: { draftId, status: { in: [AdminChangeStatus.PENDING, AdminChangeStatus.CONFLICT] } },
+    select: { status: true },
+    distinct: ["status"],
+  });
+  if (unresolved.some((change) => change.status === AdminChangeStatus.PENDING)) return;
+  await tx.adminDraft.update({
+    where: { id: draftId },
+    data: { status: unresolved.length ? AdminDraftStatus.CONFLICT : status },
+  });
+}
+
 export async function decideChange(
   id: string,
   decision: "approve" | "reject",
@@ -350,11 +367,25 @@ export async function decideChange(
       });
       const currentRevision = resource?.revision ?? 0;
       if (decision === "approve" && currentRevision !== change.baseRevision) {
-        await tx.adminChange.update({
-          where: { id },
-          data: { status: AdminChangeStatus.CONFLICT },
+        const status = AdminChangeStatus.CONFLICT;
+        const updated = await tx.adminChange.updateMany({
+          where: { id, status: AdminChangeStatus.PENDING },
+          data: { status, decidedById: actor.id, decidedAt: new Date() },
         });
-        throw new Error(`Revision conflict: expected ${currentRevision}`);
+        if (updated.count !== 1) throw new Error("Change was decided concurrently");
+        if (change.draftId)
+          await finishReviewedDraft(tx, change.draftId, AdminDraftStatus.CONFLICT);
+        await tx.adminAuditEntry.create({
+          data: {
+            actorId: actor.id,
+            actorLabel: actor.email,
+            action: "CHANGE_CONFLICT",
+            resourceKind: change.resourceKind,
+            resourceKey: change.resourceKey,
+            metadata: { changeId: id, baseRevision: change.baseRevision, currentRevision },
+          },
+        });
+        return { conflict: { status, error: `Revision conflict: expected ${currentRevision}` } };
       }
       const playlistPublication =
         decision === "approve" && change.resourceKind === AdminResourceKind.PLAYLIST
@@ -447,16 +478,11 @@ export async function decideChange(
         });
       }
       if (change.draftId) {
-        const pending = await tx.adminChange.count({
-          where: { draftId: change.draftId, status: AdminChangeStatus.PENDING, NOT: { id } },
-        });
-        if (!pending)
-          await tx.adminDraft.update({
-            where: { id: change.draftId },
-            data: {
-              status: decision === "approve" ? AdminDraftStatus.APPLIED : AdminDraftStatus.REJECTED,
-            },
-          });
+        await finishReviewedDraft(
+          tx,
+          change.draftId,
+          decision === "approve" ? AdminDraftStatus.APPLIED : AdminDraftStatus.REJECTED,
+        );
       }
       await tx.adminAuditEntry.create({
         data: {
@@ -481,12 +507,14 @@ export async function decideChange(
       });
       const decided = await tx.adminChange.findUniqueOrThrow({ where: { id } });
       return {
-        ...decided,
-        artistPublication,
-        logoPublication,
-        playlistPublication,
-        catalogPublicationId: catalogPublication?.id ?? null,
-        playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false,
+        decided: {
+          ...decided,
+          artistPublication,
+          logoPublication,
+          playlistPublication,
+          catalogPublicationId: catalogPublication?.id ?? null,
+          playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false,
+        },
       };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
