@@ -223,6 +223,19 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     assert.equal(await db.catalogPublication.count({ where: receiptScope }), 1);
     assert.equal(receipt.lineupChanged, false);
     assert.equal((await read()).freshness?.lastPublishedAt, receipt.createdAt.toISOString());
+    const reobservation = { ...input, observedAt: "2026-10-01T12:00:00Z" };
+    assert.deepEqual(await importLineupDays(db, reobservation), { checkOnly: true, changed: 0 });
+    assert.deepEqual(await importLineupDays(db, reobservation, false), {
+      checkOnly: false,
+      changed: 0,
+    });
+    assert.equal(await db.catalogPublication.count({ where: receiptScope }), 1);
+    assert.equal(await db.adminAuditEntry.count({ where: auditScope }), 1);
+    assert.equal((await read()).freshness?.lastPublishedAt, receipt.createdAt.toISOString());
+    assert.equal(
+      (await read()).lineupDays?.find((row) => row.artistSlug === artist.slug)?.observedAt,
+      "2026-10-01T12:00:00.000Z",
+    );
     assert.equal((await read()).timetable, undefined);
     await db.lineupEntry.update({
       where: { editionId_artistId: { editionId: edition.id, artistId: artist.id } },
@@ -258,6 +271,10 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
       entries: [{ artistSlug: artist.slug, dates: ["2027-08-01"], status: "cancelled" }],
       observedAt: "2026-10-02T12:00:00Z",
     };
+    await assert.rejects(
+      importLineupDays(db, { ...revision, observedAt: "2026-10-01T06:00:00Z" }, false),
+      /newer official observation/,
+    );
     assert.equal((await importLineupDays(db, revision, false)).changed, 1);
     assert.equal(await db.catalogPublication.count({ where: receiptScope }), 2);
     await assert.rejects(importLineupDays(db, input, false), /newer official observation/);

@@ -82,25 +82,32 @@ export async function importLineupDays(db: PrismaClient, document: unknown, chec
         }
         const previous = existing.get(artistId);
         const status = entry.status === "cancelled" ? "CANCELLED" : "ANNOUNCED";
-        const after = {
+        const allocationContent = {
           dates,
           status,
           startDate: input.startDate,
           endDate: input.endDate,
           sourceUrl: source.href,
-          observedAt: observedAt.toISOString(),
         };
-        const before = previous
+        const priorContent = previous
           ? {
               dates: previous.dates.map(dateOnly),
               status: previous.status,
               startDate: dateOnly(previous.startDate),
               endDate: dateOnly(previous.endDate),
               sourceUrl: previous.sourceUrl,
-              observedAt: previous.observedAt.toISOString(),
             }
           : null;
-        if (JSON.stringify(before) === JSON.stringify(after)) continue;
+        if (previous && JSON.stringify(priorContent) === JSON.stringify(allocationContent)) {
+          // Advance the evidence fence without manufacturing a public publication.
+          if (!checkOnly && observedAt > previous.observedAt) {
+            await tx.editionLineupDayAllocation.update({
+              where: { editionId_artistId: { editionId: edition.id, artistId } },
+              data: { observedAt },
+            });
+          }
+          continue;
+        }
         if (previous && observedAt.getTime() <= previous.observedAt.getTime()) {
           throw new Error("A changed allocation requires a newer official observation");
         }
@@ -126,8 +133,11 @@ export async function importLineupDays(db: PrismaClient, document: unknown, chec
             actorLabel: "reviewed-lineup-days-import",
             target: edition.id,
             resourceKey: artistId,
-            beforeValue: before ?? undefined,
-            afterValue: after,
+            beforeValue:
+              priorContent && previous
+                ? { ...priorContent, observedAt: previous.observedAt.toISOString() }
+                : undefined,
+            afterValue: { ...allocationContent, observedAt: observedAt.toISOString() },
           },
         });
       }
