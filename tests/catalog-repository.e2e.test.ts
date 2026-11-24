@@ -154,11 +154,8 @@ test("provider playlist coverage reads the current edition and independent measu
   });
   playlist = await get();
   assert.equal(playlist.spotifyUrl, currentSpotifyUrl);
-  assert.deepEqual(playlist.coverage?.spotify, {
-    matchedArtists: 110,
-    tracks: 220,
-    recordedAt: secondSync.toISOString(),
-  });
+  // The legacy Spotify count includes artists with no usable tracks.
+  assert.equal(playlist.coverage?.spotify, undefined);
   await db.festivalPlaylist.update({ where: { id: currentSpotify.id }, data: { syncedAt: null } });
   playlist = await get();
   assert.equal(playlist.spotifyUrl, currentSpotifyUrl);

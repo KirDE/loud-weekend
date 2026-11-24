@@ -238,7 +238,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         updatedAt:
           instant(spotify?.syncedAt ?? youtube?.syncedAt ?? null) ??
           row.sourceUpdatedAt.toISOString(),
-        coverage: { spotify: playlistCoverage(spotify), youtubeMusic: playlistCoverage(youtube) },
+        coverage: { youtubeMusic: playlistCoverage(youtube) },
       };
     }
     const freshness = {
