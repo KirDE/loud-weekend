@@ -1,13 +1,10 @@
+import { organizerReviewCollector } from "../lib/ingestion/organizer-collector.ts";
 import { drainImportEvents } from "../lib/ingestion/import-events.ts";
 import { sendImportEvent, transportConfigured } from "../lib/ingestion/import-event-transport.mjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { listConfiguredSources } from "../lib/sources/repository.ts";
-import {
-  collectArrivalCandidate,
-  registeredArrivalSource,
-} from "../lib/ingestion/arrival-collector.ts";
 import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
 import { fetchSource } from "../lib/ingestion/fetch.ts";
 import { evaluateCandidate } from "../lib/ingestion/policy.ts";
@@ -90,15 +87,8 @@ const hydratedSources = dueOnly
 const eligible = dueOnly
   ? dueFestivalSources(hydratedSources)
   : hydratedSources.filter((source) => source.enabled);
-const isArrivalSource = (source) =>
-  registeredArrivalSource({
-    slug: source.festivalSlug,
-    year: source.editionYear,
-    url: source.url,
-    parserKey: source.parserKey,
-  });
 let selected = eligible.filter(
-  (source) => (!slugArg || source.festivalSlug === slugArg) && !isArrivalSource(source),
+  (source) => (!slugArg || source.festivalSlug === slugArg) && !organizerReviewCollector(source),
 );
 const notificationEndpoint =
   !dbDue &&
@@ -252,13 +242,14 @@ for (const source of selected) {
     const startedAt = new Date();
     let response;
     let html;
-    let arrivalResult;
+    let organizerReview;
+    const collectReview = sourceLease && organizerReviewCollector(source);
     failureStage = "fetch";
     try {
-      if (sourceLease && isArrivalSource(source)) {
+      if (collectReview) {
         if (current.editionYear !== source.editionYear)
-          throw new Error("Arrival source does not match the current edition");
-        arrivalResult = await collectArrivalCandidate(source, fetch, current);
+          throw new Error("Organizer source does not match the current edition");
+        organizerReview = await collectReview(source, fetch, current);
       } else if (!fixturePath) {
         const fetched = await fetchSource(source);
         response = fetched.response;
@@ -328,8 +319,8 @@ for (const source of selected) {
     let result;
     failureStage = "extraction";
     try {
-      candidate = arrivalResult?.candidate ?? extractFestivalCandidate(html, source, fetchedAt);
-      result = arrivalResult ?? evaluateCandidate(current, candidate, aliasArtists);
+      candidate = organizerReview?.candidate ?? extractFestivalCandidate(html, source, fetchedAt);
+      result = organizerReview ?? evaluateCandidate(current, candidate, aliasArtists);
     } catch (error) {
       failureOutcome = "parser_error";
       if (run)
@@ -366,8 +357,8 @@ for (const source of selected) {
           festivalSlug: source.festivalSlug,
           requestedUrl: source.url,
           finalUrl: response?.url ?? source.url,
-          httpStatus: arrivalResult ? 200 : (response?.status ?? null),
-          ...(arrivalResult && { sourceLease }),
+          httpStatus: organizerReview ? 200 : (response?.status ?? null),
+          ...(organizerReview && { sourceLease }),
           durationMs: Date.now() - startedAt.getTime(),
           startedAt,
           endedAt: new Date(),

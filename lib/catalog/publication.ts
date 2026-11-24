@@ -1,3 +1,7 @@
+import {
+  publishOverviewObservation,
+  type OverviewObservation,
+} from "./festival-overview-import.ts";
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import {
@@ -103,8 +107,9 @@ function artistResolver(db: Database, observedAt: Date) {
     };
   };
   let snapshot: ReturnType<typeof load> | undefined;
-  return async (name: string) => {
-    const { lookup, bySlug } = await (snapshot ??= load());
+  const index = () => (snapshot ??= load());
+  const ensure = async (name: string) => {
+    const { lookup, bySlug } = await index();
     const slug = artistSlug(name);
     const matches = lookup(name);
     if (matches.length > 1) throw new Error(`Ambiguous artist identity for ${name}`);
@@ -134,6 +139,20 @@ function artistResolver(db: Database, observedAt: Date) {
     bySlug.set(created.slug, created);
     return created;
   };
+  return Object.assign(ensure, {
+    async observedIn(name: string, roster: unknown) {
+      if (!Array.isArray(roster)) return false;
+      const { lookup } = await index();
+      const owners = lookup(name);
+      if (owners.length > 1) throw new Error(`Ambiguous artist identity for ${name}`);
+      if (!owners.length) return roster.includes(name);
+      return roster.some((entry) => {
+        if (typeof entry !== "string") return false;
+        const matches = lookup(entry);
+        return matches.length === 1 && matches[0].id === owners[0].id;
+      });
+    },
+  });
 }
 
 type EnsureArtist = ReturnType<typeof artistResolver>;
@@ -203,6 +222,7 @@ async function replaceLineup(
   billing: LineupBilling,
   names: string[],
   ensureArtist: EnsureArtist,
+  expected?: string[],
 ) {
   const otherBilling =
     billing === LineupBilling.HEADLINER ? LineupBilling.LINEUP : LineupBilling.HEADLINER;
@@ -213,13 +233,9 @@ async function replaceLineup(
   });
   const announced = existing.filter(({ status }) => status === "ANNOUNCED");
   const cancelled = existing.filter(({ status }) => status === "CANCELLED");
-  if (
-    same(
-      announced.map(({ artist }) => artist.name),
-      names,
-    )
-  )
-    return false;
+  const current = announced.map(({ artist }) => artist.name);
+  if (same(current, names)) return false;
+  if (expected && !same(current, expected)) throw new Error("Stale reviewed lineup");
   const other = await db.lineupEntry.findMany({
     where: { editionId, billing: otherBilling },
     include: { artist: true },
@@ -289,10 +305,12 @@ async function applyFestivalChanges(
   input: {
     festivalSlug: string;
     expectedYear?: number;
+    expectedEditionId?: string;
     changes: CatalogChange[];
     strictBefore: boolean;
     observedAt: Date;
   },
+  ensureArtist = artistResolver(db, input.observedAt),
 ) {
   const festival = await db.festival.findUnique({
     where: { slug: input.festivalSlug },
@@ -302,6 +320,8 @@ async function applyFestivalChanges(
   if (festival.editions.length !== 1)
     throw new Error(`Ambiguous current edition for ${input.festivalSlug}`);
   const edition = festival.editions[0];
+  if (input.expectedEditionId !== undefined && edition.id !== input.expectedEditionId)
+    throw new Error("Reviewed edition is no longer current");
   if (input.expectedYear !== undefined && edition.year !== input.expectedYear)
     throw new Error(
       `Candidate edition ${input.expectedYear} does not match catalogue edition ${edition.year}`,
@@ -323,7 +343,6 @@ async function applyFestivalChanges(
     if (problem) throw new Error(problem);
   }
 
-  const ensureArtist = artistResolver(db, input.observedAt);
   const changedFields: string[] = [];
   for (const change of input.changes) {
     let current: unknown;
@@ -443,6 +462,7 @@ async function applyFestivalChanges(
             billing,
             stringList(change.after, change.field),
             ensureArtist,
+            input.expectedEditionId ? stringList(change.before, change.field) : undefined,
           );
         } else {
           if (typeof change.after !== "string" || !change.after.trim())
@@ -677,11 +697,26 @@ export async function publishIngestionResult(
       if (!same(expected, persisted))
         throw new Error("Persisted ingestion diff does not match publication request");
       const expectedYear = stored.observedEditionYears[0] ?? candidate.sourceYear ?? undefined;
-      if (
-        !expectedYear &&
-        input.result.changes.some(({ field }) => field === "lineup" || field === "headliners")
-      )
+      const artistChanges = input.result.changes.filter(
+        ({ field }) => field === "lineup" || field === "headliners",
+      );
+      if (artistChanges.length && !stored.observedEditionYears[0])
         throw new Error("Cannot publish a lineup without one verified edition year");
+      const ensureArtist = artistResolver(db, observedAt);
+      for (const { kind, field, after } of artistChanges) {
+        const billing = field === "headliners" ? "headliners" : "lineup";
+        if (
+          kind !== (billing === "headliners" ? "headliner_added" : "artist_added") ||
+          typeof after !== "string" ||
+          !after.trim()
+        )
+          throw new Error("Invalid automatic lineup addition");
+        if (
+          !(await ensureArtist.observedIn(after, stored[billing])) ||
+          !(await ensureArtist.observedIn(after, observed[billing]))
+        )
+          throw new Error("Lineup addition is missing from the observed billing");
+      }
       // Secondary ticket observations are publishable only with the same exact
       // source, edition, value and durable evidence that passed the producer.
       // Do not extend the separate Impericon/I-Days publication paths here (#497).
@@ -822,13 +857,17 @@ export async function publishIngestionResult(
             "Ticket supplement publication requires matching persisted official ticket evidence",
           );
       }
-      const applied = await applyFestivalChanges(db, {
-        festivalSlug: input.result.festivalSlug,
-        expectedYear,
-        changes: input.result.changes,
-        strictBefore: true,
-        observedAt,
-      });
+      const applied = await applyFestivalChanges(
+        db,
+        {
+          festivalSlug: input.result.festivalSlug,
+          expectedYear,
+          changes: input.result.changes,
+          strictBefore: true,
+          observedAt,
+        },
+        ensureArtist,
+      );
       // Rockharz 2027 publications retain exact edition/source/field and persisted
       // evidence guards. Verified lineup changes use the normal provider queue.
       const sourceField =
@@ -1236,8 +1275,29 @@ export async function publishAdminFestivalChange(
     input.change.field === "lineup" || input.change.field === "headliners"
       ? stringList(input.change.afterValue, input.change.field)
       : input.change.afterValue;
+  const evidence = input.change.sourceEvidence as {
+    kind?: string;
+    editionYear?: number;
+    editionId?: string;
+  } | null;
+  const scoped = input.change.parserRunId ? evidence : null;
+  // Older parser runs recorded field evidence but not the edition that was read.
+  // Never recover that binding from today's source configuration or current edition.
+  if (
+    input.change.parserRunId &&
+    (scoped?.kind !== "scoped-refresh" ||
+      typeof scoped.editionId !== "string" ||
+      !scoped.editionId.trim() ||
+      !Number.isInteger(scoped.editionYear))
+  ) {
+    throw new Error(
+      "Refresh proposal is missing its edition binding. Run an edition-scoped refresh and review the new proposal.",
+    );
+  }
   const applied = await applyFestivalChanges(db, {
     festivalSlug: input.change.resourceKey,
+    expectedYear: scoped?.editionYear,
+    expectedEditionId: scoped?.editionId,
     changes: [{ field: input.change.field, before: input.change.beforeValue, after: afterValue }],
     strictBefore: Boolean(input.change.parserRunId),
     observedAt,
@@ -1253,20 +1313,36 @@ export async function publishAdminFestivalChange(
   });
 }
 
-export async function publishAgentArrivalResolution(
+export async function publishAgentOrganizerResolution(
   db: Prisma.TransactionClient,
-  input: { sourceId: string; arrival: ArrivalObservation; evidence: unknown },
+  input: {
+    sourceId: string;
+    arrival?: ArrivalObservation;
+    overview?: OverviewObservation;
+    evidence: unknown;
+  },
 ) {
-  if (!(await publishArrivalObservation(db, input.arrival))) return null;
-  return createPublication(db, {
-    source: CatalogPublicationSource.INGESTION,
-    sourceId: input.sourceId,
-    festivalSlug: input.arrival.festivalSlug,
-    editionYear: input.arrival.editionYear,
-    actorLabel: "OpenClaw import-conflict agent",
-    fields: ["arrival"],
-    evidence: input.evidence,
-  });
+  const { arrival, overview } = input;
+  const observation = arrival ?? overview;
+  if (!observation) return { publication: null, arrivalPublished: false, overviewPublished: false };
+  const arrivalPublished = arrival ? await publishArrivalObservation(db, arrival) : false;
+  const overviewPublished = overview ? await publishOverviewObservation(db, overview) : false;
+  const fields = [
+    ...(arrivalPublished ? ["arrival"] : []),
+    ...(overviewPublished ? ["overview"] : []),
+  ];
+  const publication = fields.length
+    ? await createPublication(db, {
+        source: CatalogPublicationSource.INGESTION,
+        sourceId: input.sourceId,
+        festivalSlug: observation.festivalSlug,
+        editionYear: observation.editionYear,
+        actorLabel: "OpenClaw import-conflict agent",
+        fields,
+        evidence: input.evidence,
+      })
+    : null;
+  return { publication, arrivalPublished, overviewPublished };
 }
 
 /** Authenticated agent review: caller holds the issue/source lease and has

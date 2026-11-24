@@ -1,3 +1,4 @@
+import { overviewSourceUrls } from "./adapters/festival-overview.ts";
 import { POLANDROCK_NEWSROOM } from "./adapters/polandrock-admission.ts";
 import { TOLMINATOR_PRODUCT } from "./adapters/tolminator-stock.ts";
 import { queueImportEvent } from "./import-event-queue.ts";
@@ -39,13 +40,28 @@ export async function createIngestionRun(
 // caller-supplied candidate fields (a failed request has no candidate at all).
 const independentTicketUrls = [TOLMINATOR_PRODUCT, POLANDROCK_NEWSROOM];
 export const isIndependentTicketUrl = (url: string) => independentTicketUrls.includes(url);
-const attemptScope = (requestedUrl?: string): Prisma.IngestionAttemptWhereInput =>
-  requestedUrl ? { requestedUrl } : { requestedUrl: { notIn: independentTicketUrls } };
+const attemptScope = (
+  festivalSlug: string,
+  requestedUrl?: string,
+): Prisma.IngestionAttemptWhereInput =>
+  requestedUrl
+    ? { requestedUrl }
+    : { requestedUrl: { notIn: [...independentTicketUrls, ...overviewSourceUrls(festivalSlug)] } };
 
 export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
   return db.$transaction(async (tx) => {
-    if (Boolean(input.sourceLease) !== Boolean(input.result?.candidate.arrival))
-      throw new Error("Arrival observations require a source lease");
+    const { arrival, overview } = input.result?.candidate ?? {};
+    const organizer = arrival ?? overview;
+    if (Boolean(input.sourceLease) !== Boolean(organizer))
+      throw new Error("Organizer observations require a source lease");
+    if (
+      arrival &&
+      overview &&
+      (arrival.editionId !== overview.editionId ||
+        arrival.editionYear !== overview.editionYear ||
+        arrival.festivalSlug !== overview.festivalSlug)
+    )
+      throw new Error("Shared organizer observations must refer to the same edition");
     if (input.sourceLease) {
       const lease = input.sourceLease;
       const rows = await tx.$queryRaw<{ id: string }[]>`
@@ -53,8 +69,8 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
         WHERE id = ${lease.id} AND "leaseOwner" = ${lease.owner}
           AND enabled = true AND "configurationBackfilledAt" IS NOT NULL
           AND "festivalSlug" = ${input.festivalSlug} AND url = ${input.requestedUrl}
-          AND "editionId" = ${input.result?.candidate.arrival?.editionId ?? null}
-          AND "editionYear" = ${input.result?.candidate.arrival?.editionYear ?? null}
+          AND "editionId" = ${organizer?.editionId ?? null}
+          AND "editionYear" = ${organizer?.editionYear ?? null}
           AND "updatedAt" = (${lease.updatedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC')
           AND "leaseExpiresAt" > (clock_timestamp() AT TIME ZONE 'UTC')
         FOR UPDATE
@@ -62,8 +78,10 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
       if (rows.length !== 1) throw new Error("Ingestion source lease is no longer active");
     }
     const result = input.result;
-    const independent = isIndependentTicketUrl(input.requestedUrl);
-    const scope = attemptScope(independent ? input.requestedUrl : undefined);
+    const independent =
+      isIndependentTicketUrl(input.requestedUrl) ||
+      overviewSourceUrls(input.festivalSlug).includes(input.requestedUrl);
+    const scope = attemptScope(input.festivalSlug, independent ? input.requestedUrl : undefined);
     const status = !result
       ? "FAILED"
       : result.reviewReasons.length
@@ -108,7 +126,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
           sourceEdition: result.candidate.startDate,
           sourceYear: result.candidate.startDate
             ? Number(result.candidate.startDate.slice(0, 4))
-            : result.candidate.arrival?.editionYear,
+            : (result.candidate.arrival?.editionYear ?? result.candidate.overview?.editionYear),
           normalized: result.candidate as Prisma.InputJsonValue,
           warnings: result.candidate.warnings,
           publishable: result.publishable,
@@ -195,7 +213,7 @@ export const ingestionQueries = {
     db.ingestionRun.findMany({ orderBy: { startedAt: "desc" }, take, include: { attempts: true } }),
   latestResult: (db: Client, festivalSlug: string, requestedUrl?: string) =>
     db.ingestionAttempt.findFirst({
-      where: { festivalSlug, ...attemptScope(requestedUrl) },
+      where: { festivalSlug, ...attemptScope(festivalSlug, requestedUrl) },
       orderBy: { endedAt: "desc" },
       include: { candidate: { include: { evidence: true, diffs: true } } },
     }),
@@ -220,13 +238,13 @@ export const ingestionQueries = {
     }),
   lastSuccessfulExtraction: (db: Client, festivalSlug: string, requestedUrl?: string) =>
     db.ingestionEvidence.findFirst({
-      where: { candidate: { festivalSlug, attempt: attemptScope(requestedUrl) } },
+      where: { candidate: { festivalSlug, attempt: attemptScope(festivalSlug, requestedUrl) } },
       orderBy: { observedAt: "desc" },
       select: { observedAt: true },
     }),
   consecutiveFailures: async (db: Client, festivalSlug: string, requestedUrl?: string) => {
     const attempts = await db.ingestionAttempt.findMany({
-      where: { festivalSlug, ...attemptScope(requestedUrl) },
+      where: { festivalSlug, ...attemptScope(festivalSlug, requestedUrl) },
       orderBy: { endedAt: "desc" },
       take: 100,
       select: { status: true },
