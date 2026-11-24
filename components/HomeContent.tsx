@@ -1,5 +1,6 @@
 "use client";
 
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { CatalogFreshness } from "@/lib/domain/freshness";
 import type { Festival } from "@/lib/domain/festival";
 import { SeasonNavigation } from "./SeasonNavigation";
@@ -11,10 +12,12 @@ export function HomeContent({
   festivals,
   years,
   freshness,
+  discoveryLineups,
 }: {
   festivals: Festival[];
   years: readonly number[];
   freshness: CatalogFreshness;
+  discoveryLineups?: DiscoveryLineups;
 }) {
   const { t } = useLanguage();
   const announced = festivals.filter(hasAnnouncedLineup).length;
@@ -42,7 +45,11 @@ export function HomeContent({
         </div>
         <SeasonNavigation years={years} />
       </section>
-      <FestivalExplorer festivals={festivals} freshness={freshness} />
+      <FestivalExplorer
+        festivals={festivals}
+        freshness={freshness}
+        discoveryLineups={discoveryLineups}
+      />
     </>
   );
 }

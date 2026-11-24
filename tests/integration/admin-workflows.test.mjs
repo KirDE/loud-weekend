@@ -762,74 +762,92 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal((await decideArtist(staleLogo.id, "reject")).status, 200);
   assert.equal((await anonymous.json(logoPath)).status, 404);
 
-  const playlistResponse = await admin.json("/api/admin", "POST", {
-    resourceKind: "playlist",
-    resourceKey: "integration-playlist",
-    baseRevision: 0,
-    values: {
-      url: "https://open.spotify.com/playlist/integration",
-      platform: "spotify",
-      status: "draft",
-    },
+  const playlistEdition = await db.festivalEdition.findFirstOrThrow({
+    where: { festivalId: festivalRecord.id, recordState: "CURRENT" },
   });
-  assert.equal(playlistResponse.status, 201);
-  const playlist = await playlistResponse.json();
-  let playlistSnapshot = await (await admin.json("/api/admin")).json();
-  assert.deepEqual(playlistSnapshot.drafts.find((item) => item.id === playlist.id).values, {
-    url: "https://open.spotify.com/playlist/integration",
-    platform: "spotify",
-    status: "draft",
+  const playlistKey = `wacken-open-air:${playlistEdition.year}:spotify`;
+  const bindingKey = { editionId: playlistEdition.id, provider: "spotify" };
+  const managedUrl = "https://open.spotify.com/playlist/Managed000000000000001";
+  const reviewedUrl = "https://open.spotify.com/playlist/Reviewed00000000000001";
+  const otherUrl = "https://open.spotify.com/playlist/Reviewed00000000000002";
+  await db.festivalPlaylist.upsert({
+    where: { editionId_provider: bindingKey },
+    create: { ...bindingKey, url: managedUrl, artistCount: 3, trackCount: 7 },
+    update: { url: managedUrl, artistCount: 3, trackCount: 7 },
   });
-  assert.equal(
-    (
-      await admin.json(`/api/admin/drafts/${playlist.id}`, "PATCH", {
-        values: {
-          url: "https://open.spotify.com/playlist/integration-updated",
-          platform: "spotify",
-          status: "published",
-        },
-      })
-    ).status,
-    200,
-  );
-  playlistSnapshot = await (await admin.json("/api/admin")).json();
-  assert.deepEqual(playlistSnapshot.drafts.find((item) => item.id === playlist.id).values, {
-    url: "https://open.spotify.com/playlist/integration-updated",
-    platform: "spotify",
-    status: "published",
-  });
-  const playlistChanges = await db.adminChange.findMany({
-    where: { draftId: playlist.id },
-    orderBy: { field: "asc" },
-  });
-  assert.deepEqual(
-    playlistChanges.map((change) => change.field),
-    ["platform", "status", "url"],
-  );
-  for (const change of playlistChanges) {
-    const response = await admin.json(`/api/admin/changes/${change.id}`, "POST", {
-      decision: "approve",
+  await db.festivalPlaylistLink.deleteMany({ where: bindingKey });
+  const pendingProviderJobs = await db.catalogPlaylistRefresh.count();
+
+  async function savePlaylist(key, revision, url) {
+    return admin.json("/api/admin", "POST", {
+      resourceKind: "playlist",
+      resourceKey: key,
+      baseRevision: revision,
+      values: { url },
     });
-    assert.equal(response.status, 409);
-    assert.match((await response.json()).error, /not publishable/);
   }
-  assert.equal(await db.adminResourceState.count({ where: { resourceKind: "PLAYLIST" } }), 0);
-  assert.equal(
-    (await db.adminDraft.findUniqueOrThrow({ where: { id: playlist.id } })).status,
-    "QUEUED",
-  );
-  const disposablePlaylistResponse = await admin.json("/api/admin", "POST", {
-    resourceKind: "playlist",
-    resourceKey: "delete-playlist",
-    baseRevision: 0,
-    values: { url: "https://example.test/delete-playlist" },
+
+  async function queuePlaylist(revision, url) {
+    const response = await savePlaylist(playlistKey, revision, url);
+    assert.equal(response.status, 201);
+    const { id } = await response.json();
+    return db.adminChange.findFirstOrThrow({ where: { draftId: id } });
+  }
+
+  async function festivalPage() {
+    const response = await anonymous.json("/festivals/wacken-open-air/");
+    assert.equal(response.status, 200);
+    return response.text();
+  }
+
+  assert.equal((await savePlaylist("integration-playlist", 0, reviewedUrl)).status, 409);
+  assert.equal((await savePlaylist("wacken-open-air:2025:spotify", 0, reviewedUrl)).status, 409);
+  assert.equal((await savePlaylist(playlistKey, 0, "https://example.test/playlist")).status, 409);
+  const playlistChange = await queuePlaylist(0, otherUrl);
+  const updatedDraft = await admin.json(`/api/admin/drafts/${playlistChange.draftId}`, "PATCH", {
+    values: { url: reviewedUrl },
   });
-  const disposablePlaylist = await disposablePlaylistResponse.json();
+  assert.equal(updatedDraft.status, 200);
+  const updatedChange = await db.adminChange.findFirstOrThrow({
+    where: { draftId: playlistChange.draftId },
+  });
+  assert.deepEqual(updatedChange.sourceEvidence, {
+    kind: "playlist-draft",
+    editionId: playlistEdition.id,
+    draftId: playlistChange.draftId,
+  });
+  assert.ok(!(await festivalPage()).includes(reviewedUrl));
+  const playlistApproval = await decideArtist(updatedChange.id);
+  assert.equal(playlistApproval.status, 200);
+  assert.equal((await playlistApproval.json()).playlistPublication, "published");
+  assert.ok((await festivalPage()).includes(reviewedUrl));
   assert.equal(
-    (await admin.json(`/api/admin/drafts/${disposablePlaylist.id}`, "DELETE")).status,
+    (await db.festivalPlaylist.findUniqueOrThrow({ where: { editionId_provider: bindingKey } }))
+      .url,
+    managedUrl,
+  );
+
+  const noopPlaylist = await queuePlaylist(1, reviewedUrl);
+  assert.equal(
+    (await (await decideArtist(noopPlaylist.id)).json()).playlistPublication,
+    "unchanged",
+  );
+  const stalePlaylist = await queuePlaylist(2, null);
+  await db.festivalPlaylistLink.update({
+    where: { editionId_provider: bindingKey },
+    data: { url: otherUrl },
+  });
+  assert.equal((await decideArtist(stalePlaylist.id)).status, 409);
+  assert.ok((await festivalPage()).includes(otherUrl));
+
+  assert.equal(
+    (await admin.json(`/api/admin/drafts/${stalePlaylist.draftId}`, "DELETE")).status,
     200,
   );
-  assert.equal(await db.adminDraft.count({ where: { id: disposablePlaylist.id } }), 0);
+  const removal = await queuePlaylist(2, null);
+  assert.equal((await (await decideArtist(removal.id)).json()).playlistPublication, "removed");
+  assert.ok((await festivalPage()).includes(managedUrl));
+  assert.equal(await db.catalogPlaylistRefresh.count(), pendingProviderJobs);
 
   const refreshPath = "/api/admin/refresh/wacken-open-air";
   assert.equal((await admin.json(`${refreshPath}?year=2026`, "POST")).status, 404);
