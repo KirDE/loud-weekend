@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { AdminChange, Prisma } from "@prisma/client";
 import { artistAliasIndex } from "./artist-aliases";
 
@@ -45,6 +46,48 @@ function readSite(artist: Artist) {
   return rows[0];
 }
 
+const socialHost =
+  /^(?:www\.)?(?:instagram\.com|facebook\.com|tiktok\.com|x\.com|twitter\.com|youtube\.com)$/;
+const linkProof = z.strictObject({
+  url: z.string().max(2048),
+  sourceUrl: z.string().max(2048),
+  observedAt: z.string().datetime({ offset: true }),
+});
+
+function reviewSocialLink(artist: Artist, value: unknown) {
+  const proof = linkProof.parse(value);
+  const site = readSite(artist);
+  const candidate = artist.links.find(({ url }) => url === proof.url);
+  if (!candidate || candidate.label !== "Social profile" || candidate.source !== "musicbrainz") {
+    throw new Error("Choose an existing provider-discovered social profile for this artist");
+  }
+  const url = new URL(urlValue(candidate.url));
+  const evidence = new URL(urlValue(proof.sourceUrl));
+  if (
+    !socialHost.test(url.hostname) ||
+    url.port ||
+    url.pathname === "/" ||
+    url.search ||
+    url.hash ||
+    !site?.verified ||
+    evidence.origin !== new URL(urlValue(site.url)).origin ||
+    evidence.search ||
+    evidence.hash ||
+    evidence.href === url.href
+  ) {
+    throw new Error(
+      "Use a supported social profile and a public source on the verified artist site",
+    );
+  }
+  const observedAt = new Date(proof.observedAt);
+  if (observedAt.getTime() > Date.now()) throw new Error("Observation cannot be in the future");
+  return {
+    candidate,
+    site,
+    proof: { ...proof, sourceUrl: evidence.href, observedAt: observedAt.toISOString() },
+  };
+}
+
 async function assertUniqueName(tx: Prisma.TransactionClient, artist: Artist, name: string) {
   const identities = await tx.artist.findMany({
     select: { id: true, slug: true, name: true, aliases: true },
@@ -75,6 +118,20 @@ export async function prepareArtistDraft(
           afterValue: urlValue(value),
         });
         break;
+      case "socialProfile": {
+        const { candidate, site, proof } = reviewSocialLink(artist, value);
+        changes.push({
+          field,
+          beforeValue: {
+            id: candidate.id,
+            verified: candidate.verified,
+            siteId: site.id,
+            siteUrl: site.url,
+          },
+          afterValue: proof,
+        });
+        break;
+      }
       default:
         throw new Error("Unsupported artist field");
     }
@@ -132,6 +189,38 @@ export async function publishAdminArtistChange(tx: Prisma.TransactionClient, cha
           url,
           checkedAt: new Date(),
           position: (provenance?.position ?? -1) + 1,
+        },
+      });
+      return "published";
+    }
+    case "socialProfile": {
+      const { candidate, site, proof } = reviewSocialLink(artist, change.afterValue);
+      const before = change.beforeValue as {
+        id?: string;
+        verified?: boolean;
+        siteId?: string;
+        siteUrl?: string;
+      } | null;
+      if (before?.id !== candidate.id || before.siteId !== site.id || before.siteUrl !== site.url) {
+        throw new Error("Artist link or official source changed after review was queued");
+      }
+      if (candidate.verified) return "unchanged";
+      if (before.verified !== candidate.verified)
+        throw new Error("Artist link changed after review was queued");
+      await tx.artistLink.update({ where: { id: candidate.id }, data: { verified: true } });
+      const previous = await tx.artistProvenance.findFirst({
+        where: { artistId: artist.id },
+        orderBy: { position: "desc" },
+        select: { position: true },
+      });
+      await tx.artistProvenance.create({
+        data: {
+          artistId: artist.id,
+          field: "links",
+          source: "official",
+          url: proof.sourceUrl,
+          checkedAt: new Date(proof.observedAt),
+          position: (previous?.position ?? -1) + 1,
         },
       });
       return "published";

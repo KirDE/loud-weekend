@@ -21,7 +21,10 @@ import type { FestivalCandidate, IngestionResult } from "../../lib/ingestion/typ
 /** Frozen public structural source data, local synthetic DB and mocked GET only. */
 export function ticketProducerPublication(input: {
   slug: string;
-  produce: (archived?: boolean) => Promise<FestivalCandidate>;
+  produce: (
+    archived: boolean,
+    db: ReturnType<typeof createPrismaClient>,
+  ) => Promise<FestivalCandidate>;
 }) {
   test(
     `${input.slug}` +
@@ -60,7 +63,7 @@ export function ticketProducerPublication(input: {
       const read = async () =>
         (await readCatalog({ database: db })).festivals.find((f) => f.slug === input.slug)!;
       try {
-        const candidate = await input.produce();
+        const candidate = await input.produce(false, db);
         assert.ok(
           candidate.ticketStatus,
           "fixture must exercise actual source-backed ticket status",
@@ -174,7 +177,7 @@ export function ticketProducerPublication(input: {
         assert.deepEqual(evaluateCandidate(after, candidate).changes, []);
         assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
         assert.equal(await db.festivalPlaylist.count(), bindings);
-        const archived = evaluateCandidate(after, await input.produce(true));
+        const archived = evaluateCandidate(after, await input.produce(true, db));
         assert.equal(
           archived.publishable,
           false,
