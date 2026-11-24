@@ -27,6 +27,7 @@ const empty = {
   favoriteArtists: [],
   attendance: {},
   playlistFestivals: [],
+  playlistExcludedArtists: [],
   savedFilters: {
     query: "",
     country: "all",
@@ -135,10 +136,10 @@ for (const locale of ["en", "de", "ru"]) {
         await expect(dialog).not.toBeVisible();
         await expect.poll(() => state(page)).toEqual(empty);
         await page.getByRole("button", { name: t.undo }).click();
-        await expect.poll(() => state(page)).toEqual(saved);
+        await expect.poll(() => state(page)).toEqual({ ...saved, playlistExcludedArtists: [] });
         await page.reload();
         await expect(clear).toBeEnabled();
-        await expect.poll(() => state(page)).toEqual(saved);
+        await expect.poll(() => state(page)).toEqual({ ...saved, playlistExcludedArtists: [] });
         expect(writes()).toBe(0);
         expect(
           await page.evaluate(() => localStorage.getItem("synthetic-unrelated-preference")),
