@@ -52,7 +52,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
             orderBy: [{ billing: "asc" }, { position: "asc" }],
           },
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
-          lineupDays: true,
+          lineupDays: { include: { artist: { select: { name: true, slug: true } } } },
           timetable: {
             // Legacy display defaults are not evidence for data-quality coverage.
             ...(requireTimetableEvidence && {
@@ -121,6 +121,18 @@ export class DatabaseCatalogRepository implements CatalogRepository {
             observedAt: allocation?.observedAt.toISOString(),
           };
         });
+      const rosterIds = new Set(row.lineup.map(({ artistId }) => artistId));
+      for (const allocation of allocations.values()) {
+        if (allocation.status !== "CANCELLED" || rosterIds.has(allocation.artistId)) continue;
+        lineupDays.push({
+          artist: allocation.artist.name,
+          artistSlug: allocation.artist.slug,
+          dates: allocation.dates.map((date) => dateOnly(date)!),
+          cancelled: true,
+          sourceUrl: allocation.sourceUrl,
+          observedAt: allocation.observedAt.toISOString(),
+        });
+      }
       const roster = announced.map(({ artist }) => artist);
       const aliases = row.timetable.length ? artistAliasIndex(roster) : undefined;
       const rosterById = new Map(roster.map((artist) => [artist.id, artist.name]));

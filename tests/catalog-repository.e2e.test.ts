@@ -294,6 +294,19 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
       sourceUrl: input.sourceUrl,
       observedAt: revision.observedAt.replace("Z", ".000Z"),
     });
+    const removed = await db.lineupEntry.delete({
+      where: { editionId_artistId: { editionId: edition.id, artistId: artist.id } },
+    });
+    try {
+      const afterRemoval = await read();
+      assert.deepEqual(
+        afterRemoval.lineupDays?.find((row) => row.artistSlug === artist.slug),
+        readback,
+      );
+      assert.ok(![...afterRemoval.headliners, ...afterRemoval.lineup].includes(artist.name));
+    } finally {
+      await db.lineupEntry.create({ data: removed });
+    }
     const audit = await db.adminAuditEntry.findFirstOrThrow({
       where: { ...auditScope, beforeValue: { path: ["status"], equals: "ANNOUNCED" } },
     });
