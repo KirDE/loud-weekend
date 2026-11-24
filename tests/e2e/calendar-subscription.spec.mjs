@@ -84,6 +84,19 @@ test("feed follows synced plans and published dates but never another account", 
   const edition = await db.festivalEdition.findFirstOrThrow({
     where: { year: 2027, festival: { slug: "synthetic-fest" } },
   });
+  const otherEdition = await db.festivalEdition.create({
+    data: {
+      festivalId: edition.festivalId,
+      year: 2028,
+      recordState: "CURRENT",
+      status: "CONFIRMED",
+      ticketStatus: "UNKNOWN",
+      completeness: "PARTIAL",
+      sourceUpdatedAt: new Date(),
+      startDate: new Date("2028-07-20T00:00:00Z"),
+      endDate: new Date("2028-07-22T00:00:00Z"),
+    },
+  });
   try {
     expect((await request.get(subscription)).status()).toBe(401);
     expect((await request.post(subscription, { headers })).status()).toBe(401);
@@ -113,6 +126,12 @@ test("feed follows synced plans and published dates but never another account", 
     expect(await readStatus.json()).toEqual({ active: true, available: true });
     const stored = await db.calendarSubscription.findUniqueOrThrow({ where: { userId: user.id } });
     expect(stored.keyDigest !== key && stored.keyDigest.length === 64).toBe(true);
+    expect(stored.seasons).toEqual([2027]);
+    // An older subscription may have stored several current years.
+    await db.calendarSubscription.update({
+      where: { userId: user.id },
+      data: { seasons: [2027, 2028] },
+    });
     const url = `${feed}?key=${key}`;
     const first = await request.get(url);
     expect(first.status()).toBe(200);
@@ -121,6 +140,8 @@ test("feed follows synced plans and published dates but never another account", 
     expect(first.headers()["content-type"]).toContain("text/calendar");
     const ics = await first.text();
     expect(ics).toContain("SUMMARY:Synthetic Fest");
+    expect(ics).not.toContain("DTSTART;VALUE=DATE:20280720");
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1);
     expect(ics).not.toContain("SUMMARY:Synthetic Alpine");
     expect(ics).not.toContain("fixture-never-in-feed");
     expect(ics.includes(auth.email) || ics.includes(key)).toBe(false);
@@ -153,6 +174,7 @@ test("feed follows synced plans and published dates but never another account", 
         endDate: edition.endDate,
       },
     });
+    await db.festivalEdition.delete({ where: { id: otherEdition.id } });
     await db.$disconnect();
   }
 });

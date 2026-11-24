@@ -29,14 +29,14 @@ for (const width of [320, 375, 390]) {
   test(`mobile map popup stays usable at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/planner/");
-    const markers = page.locator(".mapMarker summary");
+    const markers = page.locator(".mapMarker > button");
     await expect(markers).toHaveCount(4);
     await expectNoDocumentOverflow(page);
 
     for (const index of await edgeMarkerIndexes(markers)) {
       const marker = markers.nth(index);
       await marker.click();
-      await expect(marker.locator("xpath=..")).toHaveAttribute("open", "");
+      await expect(marker).toHaveAttribute("aria-expanded", "true");
       const panel = marker.locator("xpath=../div");
       await expect(panel).toBeVisible();
       const box = await panel.boundingBox();
@@ -74,7 +74,7 @@ for (const width of [320, 375, 390]) {
 test("desktop map positioning and links remain operable", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/planner/");
-  const marker = page.locator(".mapMarker summary").filter({ hasText: "AT" });
+  const marker = page.locator(".mapMarker > button").filter({ hasText: "AT" });
   await marker.click();
   const panel = marker.locator("xpath=../div");
   await expect(panel).toBeVisible();

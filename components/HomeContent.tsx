@@ -5,18 +5,21 @@ import type { DiscoveryArtist } from "@/lib/discovery-artists";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { CatalogFreshness } from "@/lib/domain/freshness";
 import type { Festival } from "@/lib/domain/festival";
+import { SeasonNavigation } from "./SeasonNavigation";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { useLanguage } from "./LanguageProvider";
 import { hasAnnouncedLineup } from "@/lib/festival-lineup";
 
 export function HomeContent({
   festivals,
+  years,
   freshness,
   discoveryLineups,
   matchingArtists,
   suggestionArtists,
 }: {
   festivals: Festival[];
+  years: readonly number[];
   freshness: CatalogFreshness;
   discoveryLineups?: DiscoveryLineups;
   matchingArtists?: readonly DiscoveryArtist[];
@@ -46,6 +49,7 @@ export function HomeContent({
             <strong>{countries}</strong> {t("countries")}
           </span>
         </div>
+        <SeasonNavigation years={years} />
       </section>
       <FestivalExplorer
         festivals={festivals}
