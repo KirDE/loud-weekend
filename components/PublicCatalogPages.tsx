@@ -3,6 +3,8 @@
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
 import type { FestivalEdition } from "@/lib/domain/edition";
+import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
+import { FestivalArrival } from "./FestivalArrival";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { SeasonNavigation } from "./SeasonNavigation";
 import { useLanguage } from "./LanguageProvider";
@@ -263,9 +265,11 @@ export function EditionYearContent({
 export function FestivalEditionContent({
   item,
   artistSlugs = {},
+  arrivalFacts = [],
 }: {
   item: FestivalEdition;
   artistSlugs?: Readonly<Record<string, string>>;
+  arrivalFacts?: readonly PublicArrivalFact[];
 }) {
   const { t, date, dateTime, range } = usePublicCopy();
   const artists = [...item.headliners, ...item.lineup];
@@ -282,8 +286,8 @@ export function FestivalEditionContent({
       <Link className="back" href={"/editions/" + item.editionYear + "/"}>
         {t.backEdition(item.editionYear)}
       </Link>
-      <section className="detailHero">
-        <div>
+      <section className="detailHero editionDetailHero">
+        <div className="editionDetailBody">
           <div className="eyebrow">
             {t.states[item.recordState]} {t.edition} · {item.countryCode}
           </div>
@@ -315,6 +319,7 @@ export function FestivalEditionContent({
           </div>
         )}
       </section>
+      <FestivalArrival facts={arrivalFacts} />
       <section className="sourceNote">
         <strong>{t.provenance}</strong>
         {item.snapshotAt && (
