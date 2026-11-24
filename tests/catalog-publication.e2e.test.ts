@@ -248,6 +248,104 @@ test("commits catalog rows, candidate state, audit snapshot and playlist request
   );
 });
 
+test("ingestion saves a compound billing as one addition without replacing existing artists", async () => {
+  const compound = `Synthetic, Compound Act ${suffix}`;
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+  });
+  const before = await db.lineupEntry.findMany({ where: { editionId: edition.id } });
+  const facts = result(compound);
+  const attempt = await persist(facts);
+  const publication = await publishIngestionResult(db, {
+    attemptId: attempt.id,
+    result: facts,
+    sourceCommit: suffix,
+  });
+  assert.ok(publication);
+  const after = await db.lineupEntry.findMany({
+    where: { editionId: edition.id },
+    include: { artist: true },
+  });
+  const inserted = after.find((row) => row.artist.name === compound);
+  assert.ok(inserted);
+  createdArtists.push(inserted.artist.slug);
+  assert.equal(after.length, before.length + 1);
+  assert.ok(before.every((row) => after.some((saved) => saved.id === row.id)));
+  const snapshot = await readCatalog({ database: db });
+  assert.ok(
+    snapshot.festivals.find((item) => item.slug === "synthetic-fest")?.lineup.includes(compound),
+  );
+  assert.equal(
+    (
+      await publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: facts,
+        sourceCommit: suffix,
+      })
+    )?.id,
+    publication.id,
+  );
+});
+
+test("automatic ingestion and ordinary admin edits cannot reinstate a cancelled identity", async () => {
+  const cancelled = await db.lineupEntry.findFirstOrThrow({
+    where: {
+      edition: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+      billing: "LINEUP",
+    },
+    include: { artist: true },
+  });
+  await db.lineupEntry.update({ where: { id: cancelled.id }, data: { status: "CANCELLED" } });
+  try {
+    const facts = result(cancelled.artist.name);
+    const attempt = await persist(facts);
+    await assert.rejects(
+      publishIngestionResult(db, { attemptId: attempt.id, result: facts, sourceCommit: suffix }),
+      /Cancellation requires separate explicit review/,
+    );
+    assert.equal(
+      (await db.ingestionCandidate.findUniqueOrThrow({ where: { attemptId: attempt.id } }))
+        .reviewState,
+      "PENDING",
+    );
+
+    const edit = (afterValue: string[]) =>
+      db.$transaction((tx) =>
+        publishAdminFestivalChange(tx, {
+          change: {
+            id: randomUUID(),
+            resourceKey: "synthetic-fest",
+            field: "lineup",
+            beforeValue: null,
+            afterValue,
+            sourceEvidence: null,
+            parserRunId: null,
+          },
+          actorLabel: "test reviewer",
+        }),
+      );
+    await assert.rejects(
+      edit([cancelled.artist.name]),
+      /Cancellation requires separate explicit review/,
+    );
+    // Build the edit from the same catalogue roster the Admin Console loads.
+    const before = (await readCatalog({ database: db })).festivals.find(
+      (item) => item.slug === "synthetic-fest",
+    );
+    assert.ok(before);
+    assert.ok(!before.lineup.includes(cancelled.artist.name));
+    const name = `Synthetic Reviewed Replacement ${suffix}`;
+    assert.ok(await edit([...before.lineup, name]));
+    const inserted = await db.artist.findFirstOrThrow({ where: { name } });
+    createdArtists.push(inserted.slug);
+    const retained = await db.lineupEntry.findUniqueOrThrow({ where: { id: cancelled.id } });
+    assert.equal(retained.status, "CANCELLED");
+    assert.equal(retained.position, cancelled.position);
+  } finally {
+    await db.lineupEntry.update({ where: { id: cancelled.id }, data: { status: "ANNOUNCED" } });
+  }
+});
+
 test("fails closed and rolls back every catalog row when artist identity is ambiguous", async () => {
   const requestedName = `Ambiguous Artist ${suffix}`;
   const slug = encodeURIComponent(
