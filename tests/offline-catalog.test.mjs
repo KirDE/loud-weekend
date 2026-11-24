@@ -138,7 +138,7 @@ test("public content changes invalidate old validators without timestamp updates
   assert.equal(projectOfflineCatalog([row], 2027).timetableStatus, "not-published");
 });
 
-test("DB query selects only current-season public fields; missing/failed DB fails closed even with wildcard", async (t) => {
+test("Offline query uses current-season public fields and fails closed", async (t) => {
   const now = new Date("2026-11-23T12:00:00.000Z");
   t.mock.timers.enable({ apis: ["Date"], now });
   let query;
