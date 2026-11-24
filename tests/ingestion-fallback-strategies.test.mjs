@@ -32,6 +32,45 @@ const ticket =
 const extract = (html, overrides = {}) =>
   extractFestivalCandidate(html, { ...source, ...overrides }, fetchedAt);
 
+test("conflicting HTML festival date metadata holds otherwise safe ticket updates", () => {
+  for (const [role, currentDate, competingDate] of [
+    ["start", current.startDate, "2027-07-29"],
+    ["end", current.endDate, "2027-08-01"],
+  ]) {
+    for (const dates of [
+      [currentDate, competingDate],
+      [competingDate, currentDate],
+    ]) {
+      const [first, second] = dates;
+      const html =
+        `<meta property="event:${role}_time" content="${first}">` +
+        `<meta name="festival:${role}_date" content="${second}">` +
+        ticket;
+      const candidate = extract(html);
+      const result = evaluateCandidate(current, candidate);
+      const field = `${role}Date`;
+      assert.equal(candidate[field], first);
+      assert.ok(
+        candidate.evidence.find((evidence) => evidence.field === field).excerpt.includes(first),
+      );
+      assert.ok(result.changes.some((change) => change.field === "ticketsUrl"));
+      assert.equal(result.publishable, false);
+      assert.ok(result.reviewReasons.includes(`Conflicting HTML festival ${role} date metadata`));
+    }
+  }
+});
+
+test("equivalent HTML festival date metadata does not block ticket updates", () => {
+  const html =
+    '<meta property="event:start_time" content="2027-07-28T23:00:00-04:00">' +
+    '<meta name="festival:start_date" content="2027-07-28">' +
+    ticket;
+  const candidate = extract(html);
+  assert.equal(candidate.startDate, current.startDate);
+  assert.deepEqual(candidate.warnings, []);
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
+});
+
 test("Wacken's real ticket correction publishes through fallback without optional JSON-LD", () => {
   const candidate = extract(ticket);
   assert.equal(
