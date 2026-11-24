@@ -3569,6 +3569,26 @@ summary:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.dataQualityCount {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  margin-block: 0.5rem;
+}
+
+.dataQualityCount dd {
+  margin: 0;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dataQualityLink {
+  max-width: 1120px;
+  margin: 1rem auto;
+  padding-inline: 1.25rem;
+}
+
 .correctionReport {
   margin-block: 2rem;
   max-width: 38rem;
