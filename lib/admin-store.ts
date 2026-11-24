@@ -184,7 +184,8 @@ export async function saveDraft(
     !input.resourceKey ||
     !Number.isInteger(input.baseRevision) ||
     typeof input.values !== "object" ||
-    !input.values
+    !input.values ||
+    Array.isArray(input.values)
   )
     throw new Error("Invalid draft");
   return db.$transaction(
@@ -559,25 +560,26 @@ async function refreshSource(
       throw new Error("Official source provided no supported evidence");
     if (candidate.observedEditionYears.some((year) => year !== active.editionYear))
       throw new Error("Official source returned another edition");
-    const fields = [
-      "startDate",
-      "endDate",
-      "city",
-      "headliners",
-      "lineup",
-      "ticketsUrl",
-      "ticketStatus",
-      "status",
-    ] as const;
-    const proposals = fields.flatMap((field) => {
+    const reviewReasons = [...result.reviewReasons];
+    const fields = {
+      startDate: "Start date",
+      endDate: "End date",
+      city: "City",
+      headliners: "Headliners",
+      lineup: "Lineup",
+      ticketsUrl: "Ticket URL",
+      ticketStatus: "Ticket availability",
+      status: "Status",
+    } as const;
+    const proposals = (Object.keys(fields) as (keyof typeof fields)[]).flatMap((field) => {
       const differences = result.changes.filter((item) => item.field === field);
       const evidence = candidate.evidence.filter((item) => item.field === field);
       if (!differences.length || !evidence.length) return [];
-      if (
-        (field === "lineup" || field === "headliners") &&
-        !candidate.observedEditionYears.includes(active.editionYear)
-      )
+      const observedYears = candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
+      if (!observedYears.includes(active.editionYear)) {
+        reviewReasons.push(`${fields[field]} could not be verified for the selected edition.`);
         return [];
+      }
       const afterValue =
         field === "lineup" || field === "headliners"
           ? [
@@ -654,7 +656,7 @@ async function refreshSource(
         const updated = await tx.adminParserRun.update({
           where: { id: run.id },
           data: {
-            status: result.reviewReasons.length ? AdminRunStatus.PARTIAL : AdminRunStatus.SUCCEEDED,
+            status: reviewReasons.length ? AdminRunStatus.PARTIAL : AdminRunStatus.SUCCEEDED,
             finishedAt,
             durationMs: finishedAt.getTime() - run.startedAt.getTime(),
             extracted: candidate.evidence.length,
@@ -664,7 +666,7 @@ async function refreshSource(
               {
                 at: finishedAt.toISOString(),
                 message: "Parse completed",
-                reviewReasons: result.reviewReasons,
+                reviewReasons,
                 queued,
               },
             ]),

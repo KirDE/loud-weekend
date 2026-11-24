@@ -6,10 +6,12 @@ import { festivalDateInterval } from "@/lib/festival-dates";
 import { lineupPresentation } from "@/lib/festival-lineup";
 import { StageTimetable } from "./StageTimetable";
 import type { Festival } from "@/lib/domain/festival";
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { FestivalEdition } from "@/lib/domain/edition";
 import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
 import { FestivalArrival } from "./FestivalArrival";
 import { FestivalExplorer } from "./FestivalExplorer";
+import { SeasonNavigation } from "./SeasonNavigation";
 import { useLanguage } from "./LanguageProvider";
 
 // Public route bodies use the selected UI language; their server routes and SEO
@@ -19,13 +21,11 @@ const copy = {
     editions: "FESTIVAL EDITIONS",
     archiveTitle: "Archived and future records",
     archiveIntro:
-      "Every row is an edition record with explicit source evidence" +
-      ". Archived snapshots are immutable; future editions appear o" +
-      "nly after an official edition-specific announcement.",
+      "Archived and tracked editions are listed with explicit source evidence. " +
+      "Archived snapshots are immutable; future editions appear only after an official edition-specific announcement.",
     archived: "Archived editions",
     future: "Future tracking",
     futureEmpty: "No officially announced future editions are being tracked yet.",
-    browseCurrent: "Browse the current 2027 season →",
     datesTba: "Dates TBA",
     archivedArtists: (n: number) => n + " archived artists",
     openEdition: "Open edition →",
@@ -72,7 +72,6 @@ const copy = {
     archived: "Archivierte Ausgaben",
     future: "Künftige Ausgaben",
     futureEmpty: "Derzeit werden keine offiziell angekündigten künftigen Ausgaben verfolgt.",
-    browseCurrent: "Zur aktuellen Saison 2027 →",
     datesTba: "Termine offen",
     archivedArtists: (n: number) => n + " archivierte Künstler",
     openEdition: "Ausgabe öffnen →",
@@ -123,7 +122,6 @@ const copy = {
     archived: "Архивные выпуски",
     future: "Будущие выпуски",
     futureEmpty: "Пока нет официально объявленных будущих выпусков.",
-    browseCurrent: "К текущему сезону 2027 →",
     datesTba: "Даты уточняются",
     archivedArtists: (n: number) => "Артистов в архиве: " + n,
     openEdition: "Открыть выпуск →",
@@ -208,9 +206,11 @@ function EditionRow({ item, archive = false }: { item: FestivalEdition; archive?
 export function ArchiveContent({
   archived,
   future,
+  years,
 }: {
   archived: FestivalEdition[];
   future: FestivalEdition[];
+  years: readonly number[];
 }) {
   const { t } = usePublicCopy();
   return (
@@ -218,6 +218,7 @@ export function ArchiveContent({
       <p className="eyebrow">{t.editions}</p>
       <h1>{t.archiveTitle}</h1>
       <p>{t.archiveIntro}</p>
+      <SeasonNavigation years={years} />
       <section>
         <h2>{t.archived}</h2>
         {archived.map((item) => (
@@ -232,27 +233,36 @@ export function ArchiveContent({
           <p>{t.futureEmpty}</p>
         )}
       </section>
-      <Link className="textLink" href="/editions/2027/">
-        {t.browseCurrent}
-      </Link>
     </div>
   );
 }
 
-export function EditionYearContent({ year, items }: { year: number; items: FestivalEdition[] }) {
+export function EditionYearContent({
+  year,
+  items,
+  years,
+  hasArchive,
+}: {
+  year: number;
+  items: FestivalEdition[];
+  years: readonly number[];
+  hasArchive: boolean;
+}) {
   const { t } = usePublicCopy();
+  const { t: ui } = useLanguage();
   return (
     <div className="directoryPage">
       <p className="eyebrow">{t.editionYear}</p>
       <h1>{t.editionHeading(year)}</h1>
       <p>{t.records(items.length)}</p>
+      <SeasonNavigation years={years} selectedYear={year} />
       <section>
         {items.map((item) => (
-          <EditionRow item={item} key={item.slug} />
+          <EditionRow item={item} archive={item.recordState === "archived"} key={item.slug} />
         ))}
       </section>
-      <Link className="textLink" href="/archive/">
-        {t.archiveBack}
+      <Link className="textLink" href={hasArchive ? "/archive/" : "/browse/"}>
+        {hasArchive ? t.archiveBack : ui("browseCatalogue")}
       </Link>
     </div>
   );
@@ -388,22 +398,32 @@ export function CountryContent({
   countryCode,
   country,
   festivals,
+  discoveryLineups,
 }: {
   countryCode: string;
   country: string;
   festivals: Festival[];
+  discoveryLineups?: DiscoveryLineups;
 }) {
   const { t, locale } = usePublicCopy();
   const name = new Intl.DisplayNames([locale], { type: "region" }).of(countryCode) || country;
   return (
     <div className="directoryPage">
       <h1>{t.country(name)}</h1>
-      <FestivalExplorer festivals={festivals} />
+      <FestivalExplorer festivals={festivals} discoveryLineups={discoveryLineups} />
     </div>
   );
 }
 
-export function MonthContent({ month, festivals }: { month: string; festivals: Festival[] }) {
+export function MonthContent({
+  month,
+  festivals,
+  discoveryLineups,
+}: {
+  month: string;
+  festivals: Festival[];
+  discoveryLineups?: DiscoveryLineups;
+}) {
   const { t, locale } = usePublicCopy();
   const russianMonths = [
     "январе",
@@ -428,7 +448,7 @@ export function MonthContent({ month, festivals }: { month: string; festivals: F
   return (
     <div className="directoryPage">
       <h1>{t.month(name || month)}</h1>
-      <FestivalExplorer festivals={festivals} />
+      <FestivalExplorer festivals={festivals} discoveryLineups={discoveryLineups} />
     </div>
   );
 }

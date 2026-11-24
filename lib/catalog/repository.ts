@@ -1,4 +1,7 @@
 import { timetableEntrySchema } from "../timetables.ts";
+import { cache } from "react";
+import { YOUTUBE_URL } from "./youtube-playlist-queue.ts";
+import { playlistCoverage } from "../playlist-coverage.ts";
 import { uniqueFavoriteSlugs, type DiscoveryLineups } from "../discovery-sort.ts";
 import { rosterFingerprint } from "./lineup-proof.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
@@ -18,6 +21,8 @@ export type CatalogSnapshot = Readonly<{
   discoveryLineups: DiscoveryLineups;
   freshness: CatalogFreshness;
 }>;
+type CatalogReadOptions = { includeFreshness?: boolean; requireTimetableEvidence?: boolean };
+
 export interface CatalogRepository {
   read(): Promise<CatalogSnapshot>;
 }
@@ -33,7 +38,10 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     this.client = client;
   }
 
-  async read({ includeFreshness = false } = {}): Promise<CatalogSnapshot> {
+  async read({
+    includeFreshness = false,
+    requireTimetableEvidence = false,
+  }: CatalogReadOptions = {}): Promise<CatalogSnapshot> {
     const now = new Date();
     const [editionRows, artistRows, freshnessEvidence] = await Promise.all([
       this.client.festivalEdition.findMany({
@@ -45,7 +53,17 @@ export class DatabaseCatalogRepository implements CatalogRepository {
             orderBy: [{ billing: "asc" }, { position: "asc" }],
           },
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
-          timetable: { orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }] },
+          timetable: {
+            // Legacy display defaults are not evidence for data-quality coverage.
+            ...(requireTimetableEvidence && {
+              where: {
+                sourceUrl: { not: null },
+                observedAt: { not: null },
+                timeZone: { not: null },
+              },
+            }),
+            orderBy: [{ date: "asc" }, { start: "asc" }, { stage: "asc" }],
+          },
           playlists: { orderBy: { provider: "asc" } },
           playlistLinks: { select: { provider: true, url: true } },
         },
@@ -187,6 +205,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         ...festival,
         headliners: [...festival.headliners],
         lineup: [...festival.lineup],
+        timetable: festival.timetable?.map((performance) => ({ ...performance })),
       };
     });
     const artists: ArtistProfile[] = artistRows
@@ -243,18 +262,27 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       .sort((left, right) => left.name.localeCompare(right.name));
     const playlists: Record<string, PlaylistStatus> = {};
     for (const row of editionRows.filter(({ recordState }) => recordState === "CURRENT")) {
-      const spotify = row.playlists.find(({ provider }) => provider === "spotify");
-      const youtube = row.playlists.find(({ provider }) => provider === "youtube_music");
-      if (!spotify) continue;
+      const spotify = row.playlists.find(
+        ({ provider, url }) =>
+          provider === "spotify" &&
+          /^https:\/\/open\.spotify\.com\/playlist\/[A-Za-z0-9]{22}(?:\?[^\s#]*)?$/.test(url),
+      );
+      const youtube = row.playlists.find(
+        ({ provider, url }) => provider === "youtube_music" && YOUTUBE_URL.test(url),
+      );
+      if (!spotify && !youtube) continue;
       playlists[row.festival.slug] = {
-        spotifyUrl: spotify.url,
+        spotifyUrl: spotify?.url,
         youtubeMusicUrl: youtube?.url,
         youtubeMusicArtists: youtube?.artistCount ?? undefined,
         youtubeMusicTracks: youtube?.trackCount ?? undefined,
         artists:
-          spotify.artistCount ?? row.lineup.filter(({ status }) => status === "ANNOUNCED").length,
-        tracks: spotify.trackCount ?? 0,
-        updatedAt: instant(spotify.syncedAt) ?? row.sourceUpdatedAt.toISOString(),
+          spotify?.artistCount ?? row.lineup.filter(({ status }) => status === "ANNOUNCED").length,
+        tracks: spotify?.trackCount ?? 0,
+        updatedAt:
+          instant(spotify?.syncedAt ?? youtube?.syncedAt ?? null) ??
+          row.sourceUpdatedAt.toISOString(),
+        coverage: { youtubeMusic: playlistCoverage(youtube) },
       };
     }
     const freshness = {
@@ -283,6 +311,11 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     const visibleSlugs = new Set(Object.values(artistSlugsByFestival).flat());
     const discoveryLineups = {
       artistSlugsByFestival,
+      artistNamesBySlug: Object.fromEntries(
+        artistRows
+          .filter((artist) => visibleSlugs.has(artist.slug))
+          .map(({ slug, name }) => [slug, name]),
+      ),
       legacyFavoriteSlugs: uniqueFavoriteSlugs(artistRows, visibleSlugs),
     };
     return Object.freeze({
@@ -296,15 +329,21 @@ export class DatabaseCatalogRepository implements CatalogRepository {
   }
 }
 
-export async function readCatalog(
-  options: { database?: PrismaClient; includeFreshness?: boolean } = {},
-): Promise<CatalogSnapshot> {
-  const database = options.database ?? (await import("../db.ts")).db;
-  return new DatabaseCatalogRepository(database).read({
-    includeFreshness: options.includeFreshness,
-  });
+export async function readCatalog({
+  database,
+  ...options
+}: CatalogReadOptions & { database?: PrismaClient } = {}): Promise<CatalogSnapshot> {
+  return new DatabaseCatalogRepository(database ?? (await import("../db.ts")).db).read(options);
 }
 
-export function getCatalog(options?: { includeFreshness?: boolean }) {
-  return readCatalog(options);
+// Normalize options so equivalent reads share a projection within a request.
+const getRequestCatalog = cache((includeFreshness: boolean, requireTimetableEvidence: boolean) =>
+  readCatalog({ includeFreshness, requireTimetableEvidence }),
+);
+
+export function getCatalog(options?: CatalogReadOptions) {
+  return getRequestCatalog(
+    options?.includeFreshness === true,
+    options?.requireTimetableEvidence === true,
+  );
 }

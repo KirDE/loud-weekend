@@ -57,8 +57,8 @@ test("[no-db] brand and submission navigation stay bare after a language choice"
   await expect(page.locator("a.brand")).toHaveAttribute("href", "/");
   await expect(page.locator("header nav a").first()).toHaveAttribute("href", "/");
   await expect(page.locator("header nav a").nth(1)).toHaveAttribute("href", "/planner/");
-  await expect(page.locator("footer > a")).toHaveAttribute("href", "/submit/");
-  await page.locator("footer > a").click();
+  await expect(page.locator('footer a[href="/submit/"]')).toHaveAttribute("href", "/submit/");
+  await page.locator('footer a[href="/submit/"]').click();
   await expect(page).toHaveURL(/\/submit\/$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Предложить фестиваль");
   await expect(page.getByRole("button", { name: "Отправить редакции" })).toBeVisible();

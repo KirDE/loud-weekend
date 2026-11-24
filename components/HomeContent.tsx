@@ -1,22 +1,32 @@
 "use client";
 
+import Link from "next/link";
+import type { SuggestionArtist } from "@/lib/discovery-suggestions";
+import type { DiscoveryArtist } from "@/lib/discovery-artists";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { CatalogFreshness } from "@/lib/domain/freshness";
 import type { Festival } from "@/lib/domain/festival";
+import { SeasonNavigation } from "./SeasonNavigation";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { useLanguage } from "./LanguageProvider";
 import { hasAnnouncedLineup } from "@/lib/festival-lineup";
 
 export function HomeContent({
   festivals,
+  years,
   freshness,
   discoveryLineups,
+  matchingArtists,
+  suggestionArtists,
 }: {
   festivals: Festival[];
+  years: readonly number[];
   freshness: CatalogFreshness;
   discoveryLineups?: DiscoveryLineups;
+  matchingArtists?: readonly DiscoveryArtist[];
+  suggestionArtists?: readonly SuggestionArtist[];
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const announced = festivals.filter(hasAnnouncedLineup).length;
   const countries = new Set(festivals.map((item) => item.countryCode)).size;
   return (
@@ -40,12 +50,20 @@ export function HomeContent({
             <strong>{countries}</strong> {t("countries")}
           </span>
         </div>
+        <SeasonNavigation years={years} />
       </section>
       <FestivalExplorer
         festivals={festivals}
         freshness={freshness}
         discoveryLineups={discoveryLineups}
+        matchingArtists={matchingArtists}
+        suggestionArtists={suggestionArtists}
       />
+      <p className="dataQualityLink">
+        <Link className="textLink" href={`/${language}/data-quality/`}>
+          {t("dataQuality")}
+        </Link>
+      </p>
     </>
   );
 }
