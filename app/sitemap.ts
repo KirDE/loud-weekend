@@ -10,10 +10,13 @@ export const dynamic = "force-dynamic";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const { db } = await import("@/lib/db");
   const now = new Date();
-  const [{ festivals, artists, editions }, publications] = await db.$transaction(async (tx) => {
-    const catalog = await new DatabaseCatalogRepository(tx).read();
-    return [catalog, await readSitemapPublications(tx, now)] as const;
-  }, { isolationLevel: "RepeatableRead" });
+  const [{ festivals, artists, editions }, publications] = await db.$transaction(
+    async (tx) => {
+      const catalog = await new DatabaseCatalogRepository(tx).read();
+      return [catalog, await readSitemapPublications(tx, now)] as const;
+    },
+    { isolationLevel: "RepeatableRead" },
+  );
   const entries = new Map<string, MetadataRoute.Sitemap[number]>();
   const sharedNames = new Map<string, string | undefined>();
   for (const { slug, sharedName } of publications.values()) {
@@ -22,11 +25,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const add = (path: string, lastModified?: string, languages?: Record<string, string>) => {
     const url = SITE_ORIGIN + path;
-    entries.set(url, { url, ...(lastModified && { lastModified }), ...(languages && { alternates: { languages } }) });
+    entries.set(url, {
+      url,
+      ...(lastModified && { lastModified }),
+      ...(languages && { alternates: { languages } }),
+    });
   };
   const addLocalized = (path: string, lastModified?: string) => {
     const paths = localizedAlternates(path);
-    const languages = Object.fromEntries(Object.entries(paths).map(([lang, href]) => [lang, SITE_ORIGIN + href]));
+    const languages = Object.fromEntries(
+      Object.entries(paths).map(([lang, href]) => [lang, SITE_ORIGIN + href]),
+    );
     for (const href of Object.values(paths)) add(href, lastModified, languages);
   };
 
@@ -36,7 +45,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const months = new Map<number, string | undefined>();
   for (const festival of festivals) {
     const { slug, editionYear, countryCode, lineup, headliners } = festival;
-    const publication = editionYear === undefined ? undefined : publications.get(editionKey(slug, editionYear));
+    const publication =
+      editionYear === undefined ? undefined : publications.get(editionKey(slug, editionYear));
     const nameDate = sharedNames.get(slug);
     const lastModified = latestDate([publication?.festival ?? undefined, nameDate]);
     const directoryDate = latestDate([publication?.directory ?? undefined, nameDate]);
@@ -50,12 +60,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       countries.set(countryCode, latestDate([countries.get(countryCode), directoryDate]));
     }
     for (let month = 1; month <= 12; month += 1) {
-      if (festivalOverlapsMonth(festival, month)) months.set(month, latestDate([months.get(month), directoryDate]));
+      if (festivalOverlapsMonth(festival, month))
+        months.set(month, latestDate([months.get(month), directoryDate]));
     }
   }
 
   addLocalized("/", latestDate(homeDates));
-  for (const { name, slug } of artists) addLocalized(`/artists/${slug}/`, appearanceDates.get(name));
+  for (const { name, slug } of artists)
+    addLocalized(`/artists/${slug}/`, appearanceDates.get(name));
   for (const [code, date] of countries) add(`/countries/${code.toLowerCase()}/`, date);
   for (const [month, date] of months) add(`/months/${String(month).padStart(2, "0")}/`, date);
 
@@ -64,8 +76,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   for (const { slug, editionYear, snapshotAt, recordState } of editions) {
     const publication = publications.get(editionKey(slug, editionYear));
     const nameDate = sharedNames.get(slug);
-    const validSnapshot = snapshotAt && Date.parse(snapshotAt) <= now.getTime() ? snapshotAt : undefined;
-    add(`/festivals/${slug}/${editionYear}/`, latestDate([publication?.edition ?? undefined, nameDate, validSnapshot]));
+    const validSnapshot =
+      snapshotAt && Date.parse(snapshotAt) <= now.getTime() ? snapshotAt : undefined;
+    add(
+      `/festivals/${slug}/${editionYear}/`,
+      latestDate([publication?.edition ?? undefined, nameDate, validSnapshot]),
+    );
     const listingDate = latestDate([publication?.listing ?? undefined, nameDate]);
     years.set(editionYear, latestDate([years.get(editionYear), listingDate]));
     if (recordState === "archived" || recordState === "tracking") archiveDates.push(listingDate);
