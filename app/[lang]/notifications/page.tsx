@@ -18,9 +18,15 @@ export async function generateMetadata({ params }: { params: Promise<{ lang: str
   return { title: titles[lang], alternates: { canonical: `/${lang}/notifications/` } };
 }
 
-export default async function LocalizedNotifications({ params }: { params: Promise<{ lang: string }> }) {
+export default async function LocalizedNotifications({
+  params,
+}: {
+  params: Promise<{ lang: string }>;
+}) {
   const lang = (await params).lang as Language;
   if (!supportedLanguages.includes(lang)) notFound();
   const { festivals } = await getCatalog();
-  return <NotificationSettings festivals={festivals.map(({ slug, name }) => ({ id: slug, name }))} />;
+  return (
+    <NotificationSettings festivals={festivals.map(({ slug, name }) => ({ id: slug, name }))} />
+  );
 }

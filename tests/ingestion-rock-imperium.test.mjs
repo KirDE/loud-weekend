@@ -5,193 +5,515 @@ import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
 import { fetchSource } from "../lib/ingestion/fetch.ts";
 import { evaluateCandidate } from "../lib/ingestion/policy.ts";
 import { envelopeKind } from "../lib/ingestion/adapters/rock-imperium.ts";
-const fixture = n => readFileSync(new URL(`./fixtures/rock-imperium/${n}.html`, import.meta.url), "utf8");
-const source = { festivalSlug: "rock-imperium", url: "https://www.rockimperiumfestival.es/", strategies: ["json_ld_event", "html_fallback"], editionYear: 2027, enabled: true, refreshPolicy: "daily" };
+const fixture = (n) =>
+  readFileSync(new URL(`./fixtures/rock-imperium/${n}.html`, import.meta.url), "utf8");
+const source = {
+  festivalSlug: "rock-imperium",
+  url: "https://www.rockimperiumfestival.es/",
+  strategies: ["json_ld_event", "html_fallback"],
+  editionYear: 2027,
+  enabled: true,
+  refreshPolicy: "daily",
+};
 const landing = "https://www.madnesslive.es/es/pagina/377-rock-imperium-festival-2027";
 const category = "https://www.madnesslive.es/es/85-rock-imperium-festival-2027";
-const product = "https://www.madnesslive.es/es/rock-imperium-festival-2027/2041-comprar-entrada-abono-rock-imperium-festival-2027-cartagena.html";
-const files = () => new Map([[source.url, fixture("home")], [landing, fixture("landing")], [category, fixture("category")], [product, fixture("product")]]);
-const envelope = () => ({ kind: envelopeKind, home: fixture("home"), documents: [{ url: landing, html: fixture("landing") }, { url: category, html: fixture("category") }, { url: product, html: fixture("product") }] });
-const extract = (e = envelope(), s = source) => extractFestivalCandidate(JSON.stringify(e), s, "2026-10-10T15:30:00Z");
+const product =
+  "https://www.madnesslive.es/es/rock-imperium-festival-2027/20" +
+  "41-comprar-entrada-abono-rock-imperium-festival-2027-cartage" +
+  "na.html";
+const files = () =>
+  new Map([
+    [source.url, fixture("home")],
+    [landing, fixture("landing")],
+    [category, fixture("category")],
+    [product, fixture("product")],
+  ]);
+const envelope = () => ({
+  kind: envelopeKind,
+  home: fixture("home"),
+  documents: [
+    { url: landing, html: fixture("landing") },
+    { url: category, html: fixture("category") },
+    { url: product, html: fixture("product") },
+  ],
+});
+const extract = (e = envelope(), s = source) =>
+  extractFestivalCandidate(JSON.stringify(e), s, "2026-10-10T15:30:00Z");
 
-const direct = () => ({ kind: envelopeKind, home: fixture("direct-home"), documents: envelope().documents.slice(1) });
+const direct = () => ({
+  kind: envelopeKind,
+  home: fixture("direct-home"),
+  documents: envelope().documents.slice(1),
+});
 test("2026-10-21 real homepage bypasses the landing and still verifies the current general pass", async () => {
-  const pages = new Map([[source.url, fixture("direct-home")], [category, fixture("category")], [product, fixture("product")]]);
+  const pages = new Map([
+    [source.url, fixture("direct-home")],
+    [category, fixture("category")],
+    [product, fixture("product")],
+  ]);
   const requests = [];
-  const fetched = await fetchSource(source, { maxAttempts: 1, fetchImpl: async (url, options) => {
-    requests.push(url); assert.ok(pages.has(url));
-    if (url !== source.url) assert.equal(options.redirect, "error");
-    return new Response(pages.get(url));
-  } });
-  assert.deepEqual(requests, [...pages.keys()]); assert.equal(fetched.attempts, 3);
+  const fetched = await fetchSource(source, {
+    maxAttempts: 1,
+    fetchImpl: async (url, options) => {
+      requests.push(url);
+      assert.ok(pages.has(url));
+      if (url !== source.url) assert.equal(options.redirect, "error");
+      return new Response(pages.get(url));
+    },
+  });
+  assert.deepEqual(requests, [...pages.keys()]);
+  assert.equal(fetched.attempts, 3);
   const c = extractFestivalCandidate(await fetched.response.text(), source, "2026-10-21T13:47:35Z");
-  assert.equal(c.ticketStatus, "available"); assert.equal(c.ticketsUrl, source.url);
-  assert.equal(c.startDate, "2027-07-02"); assert.equal(c.endDate, "2027-07-04");
-  assert.deepEqual(c.warnings, []); assert.equal(c.lineup, undefined); assert.equal(c.status, undefined);
-  const r = evaluateCandidate({ slug: "rock-imperium", editionYear: 2027, startDate: "2027-07-02", endDate: "2027-07-04", ticketsUrl: source.url, ticketStatus: "available", status: "partial", headliners: ["Bruce Dickinson", "Children of Bodom", "Helloween"], lineup: ["Mayhem", "Erik Grönwall"] }, c);
-  assert.deepEqual(r.changes, []); assert.deepEqual(r.reviewReasons, []);
+  assert.equal(c.ticketStatus, "available");
+  assert.equal(c.ticketsUrl, source.url);
+  assert.equal(c.startDate, "2027-07-02");
+  assert.equal(c.endDate, "2027-07-04");
+  assert.deepEqual(c.warnings, []);
+  assert.equal(c.lineup, undefined);
+  assert.equal(c.status, undefined);
+  const r = evaluateCandidate(
+    {
+      slug: "rock-imperium",
+      editionYear: 2027,
+      startDate: "2027-07-02",
+      endDate: "2027-07-04",
+      ticketsUrl: source.url,
+      ticketStatus: "available",
+      status: "partial",
+      headliners: ["Bruce Dickinson", "Children of Bodom", "Helloween"],
+      lineup: ["Mayhem", "Erik Grönwall"],
+    },
+    c,
+  );
+  assert.deepEqual(r.changes, []);
+  assert.deepEqual(r.reviewReasons, []);
 });
 test("direct category supports later years and changing category/product IDs", () => {
-  const e = JSON.parse(JSON.stringify(direct()).replaceAll("2027", "2028").replaceAll("/85-", "/999-").replaceAll("2041-", "8888-"));
+  const e = JSON.parse(
+    JSON.stringify(direct())
+      .replaceAll("2027", "2028")
+      .replaceAll("/85-", "/999-")
+      .replaceAll("2041-", "8888-"),
+  );
   assert.equal(extract(e, { ...source, editionYear: 2028 }).ticketStatus, "available");
 });
 test("translated navigation to the same category is one gateway, with the requested language preferred", async () => {
   const enSource = { ...source, url: source.url + "en/" };
-  const enCategory = category.replace("/es/", "/en/"), enProduct = product.replace("/es/", "/en/");
-  const pages = new Map([[enSource.url, fixture("direct-home")], [enCategory, fixture("category").replaceAll("/es/", "/en/")], [enProduct, fixture("product")]]);
+  const enCategory = category.replace("/es/", "/en/"),
+    enProduct = product.replace("/es/", "/en/");
+  const pages = new Map([
+    [enSource.url, fixture("direct-home")],
+    [enCategory, fixture("category").replaceAll("/es/", "/en/")],
+    [enProduct, fixture("product")],
+  ]);
   const requests = [];
-  const r = await fetchSource(enSource, { maxAttempts: 1, fetchImpl: async url => { requests.push(url); assert.ok(pages.has(url)); return new Response(pages.get(url)); } });
+  const r = await fetchSource(enSource, {
+    maxAttempts: 1,
+    fetchImpl: async (url) => {
+      requests.push(url);
+      assert.ok(pages.has(url));
+      return new Response(pages.get(url));
+    },
+  });
   assert.deepEqual(requests, [...pages.keys()]);
-  assert.equal(extractFestivalCandidate(await r.response.text(), enSource, "now").ticketStatus, "available");
+  assert.equal(
+    extractFestivalCandidate(await r.response.text(), enSource, "now").ticketStatus,
+    "available",
+  );
 });
 test("direct gateway remains ambiguous with another current landing or category", () => {
   for (const other of [landing, category.replace("/85-", "/999-")]) {
-    const e = direct(); e.home += `<a href="${other}">Entradas</a>`;
+    const e = direct();
+    e.home += `<a href="${other}">Entradas</a>`;
     assert.equal(extract(e).ticketsUrl, undefined);
   }
 });
 test("direct gateway cannot use stale, foreign, query-bearing or commented links", () => {
-  for (const url of [category.replace("2027", "2026"), category.replace("www.madnesslive.es", "evil.example"), category + "?redirect=elsewhere"]) {
-    const e = direct(); e.home = `<title>Rock Imperium Festival 2027</title><a href="${url}">Tickets</a><!-- <a href="${category}">Tickets</a> -->`;
+  for (const url of [
+    category.replace("2027", "2026"),
+    category.replace("www.madnesslive.es", "evil.example"),
+    category + "?redirect=elsewhere",
+  ]) {
+    const e = direct();
+    e.home =
+      '<title>Rock Imperium Festival 2027</title><a href="' +
+      `${url}` +
+      '">Tickets</a><!-- <a href="' +
+      `${category}` +
+      '">Tickets</a> -->';
     assert.equal(extract(e).ticketsUrl, undefined);
   }
-  const e = direct(); e.documents[0].html = e.documents[0].html.replaceAll("2027", "2026");
+  const e = direct();
+  e.documents[0].html = e.documents[0].html.replaceAll("2027", "2026");
   assert.equal(extract(e).ticketStatus, undefined);
 });
 test("direct category requires actual enabled general pass and preserves seller HTTP failures", async () => {
-  const e = direct(); e.documents[1].html = e.documents[1].html.replace('type="submit"', 'type="submit" disabled');
+  const e = direct();
+  e.documents[1].html = e.documents[1].html.replace('type="submit"', 'type="submit" disabled');
   assert.equal(extract(e).ticketStatus, undefined);
-  const r = await fetchSource(source, { maxAttempts: 1, fetchImpl: async url => url === source.url ? new Response(fixture("direct-home")) : new Response("blocked", { status: 403 }) });
-  assert.equal(r.response.status, 403); assert.equal(r.attempts, 2);
+  const r = await fetchSource(source, {
+    maxAttempts: 1,
+    fetchImpl: async (url) =>
+      url === source.url
+        ? new Response(fixture("direct-home"))
+        : new Response("blocked", { status: 403 }),
+  });
+  assert.equal(r.response.status, 403);
+  assert.equal(r.attempts, 2);
 });
 
 test("real correction: stale navigation loses to verified current gateway and enabled general pass", () => {
   const c = extract();
-  assert.equal(c.startDate, "2027-07-02"); assert.equal(c.endDate, "2027-07-04");
-  assert.equal(c.ticketsUrl, source.url); assert.equal(c.ticketStatus, "available");
-  assert.equal(c.lineup, undefined); assert.equal(c.headliners, undefined); assert.equal(c.status, undefined);
-  assert.deepEqual(c.warnings, []); assert.deepEqual(c.observedEditionYears, [2027]);
-  assert.equal(c.evidence.find(e => e.field === "ticketStatus").sourceUrl, product);
+  assert.equal(c.startDate, "2027-07-02");
+  assert.equal(c.endDate, "2027-07-04");
+  assert.equal(c.ticketsUrl, source.url);
+  assert.equal(c.ticketStatus, "available");
+  assert.equal(c.lineup, undefined);
+  assert.equal(c.headliners, undefined);
+  assert.equal(c.status, undefined);
+  assert.deepEqual(c.warnings, []);
+  assert.deepEqual(c.observedEditionYears, [2027]);
+  assert.equal(c.evidence.find((e) => e.field === "ticketStatus").sourceUrl, product);
 });
 test("corrected partial bill, dates and tickets remain untouched by the corrected parse", () => {
-  const current = { slug: "rock-imperium", editionYear: 2027, startDate: "2027-07-02", endDate: "2027-07-04", ticketsUrl: source.url, ticketStatus: "available", status: "partial", headliners: ["Bruce Dickinson", "Children of Bodom", "Helloween"], lineup: ["Mayhem", "Erik Grönwall"] };
-  const r = evaluateCandidate(current, extract()); assert.deepEqual(r.changes, []); assert.deepEqual(r.reviewReasons, []);
+  const current = {
+    slug: "rock-imperium",
+    editionYear: 2027,
+    startDate: "2027-07-02",
+    endDate: "2027-07-04",
+    ticketsUrl: source.url,
+    ticketStatus: "available",
+    status: "partial",
+    headliners: ["Bruce Dickinson", "Children of Bodom", "Helloween"],
+    lineup: ["Mayhem", "Erik Grönwall"],
+  };
+  const r = evaluateCandidate(current, extract());
+  assert.deepEqual(r.changes, []);
+  assert.deepEqual(r.reviewReasons, []);
 });
 test("later edition, dates, landing/category/product identifiers are discovered, never frozen", () => {
-  const e = JSON.parse(JSON.stringify(envelope()).replaceAll("2027", "2028").replaceAll("377-", "888-").replaceAll("/85-", "/99-").replaceAll("2041-", "9000-").replaceAll("2-3-4 Julio", "4-5-6 Agosto"));
+  const e = JSON.parse(
+    JSON.stringify(envelope())
+      .replaceAll("2027", "2028")
+      .replaceAll("377-", "888-")
+      .replaceAll("/85-", "/99-")
+      .replaceAll("2041-", "9000-")
+      .replaceAll("2-3-4 Julio", "4-5-6 Agosto"),
+  );
   const c = extract(e, { ...source, editionYear: 2028 });
-  assert.equal(c.ticketStatus, "available"); assert.equal(c.startDate, "2028-08-04"); assert.equal(c.endDate, "2028-08-06");
+  assert.equal(c.ticketStatus, "available");
+  assert.equal(c.startDate, "2028-08-04");
+  assert.equal(c.endDate, "2028-08-06");
 });
-for (const change of ["disabled", 'disabled="disabled"', 'aria-disabled="true"']) test(`disabled current pass is not available: ${change}`, () => {
-  const e = envelope(); e.documents[2].html = e.documents[2].html.replace('type="submit"', `type="submit" ${change}`);
-  assert.equal(extract(e).ticketStatus, undefined);
-});
+for (const change of ["disabled", 'disabled="disabled"', 'aria-disabled="true"'])
+  test(`disabled current pass is not available: ${change}`, () => {
+    const e = envelope();
+    e.documents[2].html = e.documents[2].html.replace('type="submit"', `type="submit" ${change}`);
+    assert.equal(extract(e).ticketStatus, undefined);
+  });
 test("sold-out, early-bird exhaustion and generic gateway CTA never prove pass availability", () => {
-  const e = envelope(); e.documents[2].html = e.documents[2].html.replace("Comprar\n", "Agotado\n") + '<p>Early bird tickets sold out</p><a>Buy tickets</a>';
+  const e = envelope();
+  e.documents[2].html =
+    e.documents[2].html.replace("Comprar\n", "Agotado\n") +
+    "<p>Early bird tickets sold out</p><a>Buy tickets</a>";
   assert.equal(extract(e).ticketStatus, undefined);
-  e.documents.pop(); assert.equal(extract(e).ticketStatus, undefined);
+  e.documents.pop();
+  assert.equal(extract(e).ticketStatus, undefined);
 });
 test("stale title or wrong general-pass edition fails closed", () => {
-  const e = envelope(); e.home = e.home.replaceAll("2027", "2026"); assert.equal(extract(e).ticketsUrl, undefined);
-  const p = envelope(); p.documents[2].html = p.documents[2].html.replaceAll("2027", "2026"); assert.equal(extract(p).ticketStatus, undefined);
+  const e = envelope();
+  e.home = e.home.replaceAll("2027", "2026");
+  assert.equal(extract(e).ticketsUrl, undefined);
+  const p = envelope();
+  p.documents[2].html = p.documents[2].html.replaceAll("2027", "2026");
+  assert.equal(extract(p).ticketStatus, undefined);
 });
 test("impossible calendar dates are not published", () => {
-  const e = envelope(); e.home = e.home.replace("2-3-4 Julio", "29-30-31 Febrero"); const c = extract(e); assert.equal(c.startDate, undefined); assert.equal(c.endDate, undefined);
+  const e = envelope();
+  e.home = e.home.replace("2-3-4 Julio", "29-30-31 Febrero");
+  const c = extract(e);
+  assert.equal(c.startDate, undefined);
+  assert.equal(c.endDate, undefined);
 });
 test("ambiguous current seller gateways do not select the first link", () => {
-  const e = envelope(); e.home += `<a href="${landing.replace("377-", "888-")}">Entradas</a>`; assert.equal(extract(e).ticketsUrl, undefined);
+  const e = envelope();
+  e.home += `<a href="${landing.replace("377-", "888-")}">Entradas</a>`;
+  assert.equal(extract(e).ticketsUrl, undefined);
 });
 test("missing primary purchase form or only related product buttons do not prove availability", () => {
-  const e = envelope(); e.documents[2].html = e.documents[2].html.replace('id="add-to-cart-or-refresh"', 'id="related-product"'); assert.equal(extract(e).ticketStatus, undefined);
+  const e = envelope();
+  e.documents[2].html = e.documents[2].html.replace(
+    'id="add-to-cart-or-refresh"',
+    'id="related-product"',
+  );
+  assert.equal(extract(e).ticketStatus, undefined);
 });
 test("commented gateway and foreign seller are ignored; no lineup replacement from old news", () => {
-  const e = envelope(); e.home = `<title>Rock Imperium Festival 2027</title><!-- <a href="${landing}">Entradas</a> --><a href="https://evil.example/es/pagina/377-rock-imperium-festival-2027">Entradas</a><section class="lineup">Old artist</section>`;
-  const c = extract(e); assert.equal(c.ticketsUrl, undefined); assert.equal(c.lineup, undefined);
+  const e = envelope();
+  e.home =
+    '<title>Rock Imperium Festival 2027</title><!-- <a href="' +
+    `${landing}` +
+    '">Entradas</a> --><a href="https://evil.example/es/pagina/37' +
+    '7-rock-imperium-festival-2027">Entradas</a><section class="l' +
+    'ineup">Old artist</section>';
+  const c = extract(e);
+  assert.equal(c.ticketsUrl, undefined);
+  assert.equal(c.lineup, undefined);
 });
 test("fetch discovers exactly four live documents and skips stale navigation/PMR products", async () => {
-  const pages = files(), requests = [];
-  const result = await fetchSource(source, { maxAttempts: 1, fetchImpl: async (url, options) => {
-    requests.push(url); assert.ok(pages.has(url)); if (url !== source.url) assert.equal(options.redirect, "error"); return new Response(pages.get(url));
-  } });
-  assert.deepEqual(requests, [...pages.keys()]); assert.equal(result.attempts, 4); assert.equal(extractFestivalCandidate(await result.response.text(), source, "now").ticketStatus, "available");
+  const pages = files(),
+    requests = [];
+  const result = await fetchSource(source, {
+    maxAttempts: 1,
+    fetchImpl: async (url, options) => {
+      requests.push(url);
+      assert.ok(pages.has(url));
+      if (url !== source.url) assert.equal(options.redirect, "error");
+      return new Response(pages.get(url));
+    },
+  });
+  assert.deepEqual(requests, [...pages.keys()]);
+  assert.equal(result.attempts, 4);
+  assert.equal(
+    extractFestivalCandidate(await result.response.text(), source, "now").ticketStatus,
+    "available",
+  );
 });
 test("future live link IDs are followed rather than pinned to historical documents", async () => {
-  const pages = new Map([...files()].map(([u, html]) => [u.replaceAll("377-", "888-").replaceAll("/85-", "/99-").replaceAll("2041-", "9000-"), html.replaceAll("377-", "888-").replaceAll("/85-", "/99-").replaceAll("2041-", "9000-")]));
-  const result = await fetchSource(source, { maxAttempts: 1, fetchImpl: async u => { assert.ok(pages.has(u)); return new Response(pages.get(u)); } });
-  assert.equal(extractFestivalCandidate(await result.response.text(), source, "now").ticketStatus, "available");
+  const pages = new Map(
+    [...files()].map(([u, html]) => [
+      u.replaceAll("377-", "888-").replaceAll("/85-", "/99-").replaceAll("2041-", "9000-"),
+      html.replaceAll("377-", "888-").replaceAll("/85-", "/99-").replaceAll("2041-", "9000-"),
+    ]),
+  );
+  const result = await fetchSource(source, {
+    maxAttempts: 1,
+    fetchImpl: async (u) => {
+      assert.ok(pages.has(u));
+      return new Response(pages.get(u));
+    },
+  });
+  assert.equal(
+    extractFestivalCandidate(await result.response.text(), source, "now").ticketStatus,
+    "available",
+  );
 });
 test("genuine linked seller 403 remains HTTP failure and source-backoff input", async () => {
-  const pages = files(); const result = await fetchSource(source, { maxAttempts: 1, fetchImpl: async u => u === product ? new Response("blocked", { status: 403 }) : new Response(pages.get(u)) });
-  assert.equal(result.response.status, 403); assert.equal(result.attempts, 4);
+  const pages = files();
+  const result = await fetchSource(source, {
+    maxAttempts: 1,
+    fetchImpl: async (u) =>
+      u === product ? new Response("blocked", { status: 403 }) : new Response(pages.get(u)),
+  });
+  assert.equal(result.response.status, 403);
+  assert.equal(result.attempts, 4);
 });
 test("network failure is not converted into parser success", async () => {
-  await assert.rejects(fetchSource(source, { maxAttempts: 1, fetchImpl: async u => { if (u !== source.url) throw new Error("network"); return new Response(fixture("home")); } }), /network/);
+  await assert.rejects(
+    fetchSource(source, {
+      maxAttempts: 1,
+      fetchImpl: async (u) => {
+        if (u !== source.url) throw new Error("network");
+        return new Response(fixture("home"));
+      },
+    }),
+    /network/,
+  );
 });
 test("ambiguous general-pass product cards are not selected", async () => {
-  const pages = files(); pages.set(category, fixture("category") + fixture("category").replaceAll("2041-", "9999-"));
-  const requests = []; const result = await fetchSource(source, { fetchImpl: async u => { requests.push(u); return new Response(pages.get(u)); } });
-  assert.equal(requests.length, 3); assert.equal(extractFestivalCandidate(await result.response.text(), source, "now").ticketStatus, undefined);
+  const pages = files();
+  pages.set(category, fixture("category") + fixture("category").replaceAll("2041-", "9999-"));
+  const requests = [];
+  const result = await fetchSource(source, {
+    fetchImpl: async (u) => {
+      requests.push(u);
+      return new Response(pages.get(u));
+    },
+  });
+  assert.equal(requests.length, 3);
+  assert.equal(
+    extractFestivalCandidate(await result.response.text(), source, "now").ticketStatus,
+    undefined,
+  );
 });
 test("product redirect mismatch is rejected, not used as general-pass evidence", async () => {
-  const pages = files(); await assert.rejects(fetchSource(source, { fetchImpl: async u => { const r = new Response(pages.get(u)); if (u === product) Object.defineProperty(r, "url", { value: "https://evil.example/" }); return r; } }), /redirected/);
+  const pages = files();
+  await assert.rejects(
+    fetchSource(source, {
+      fetchImpl: async (u) => {
+        const r = new Response(pages.get(u));
+        if (u === product) Object.defineProperty(r, "url", { value: "https://evil.example/" });
+        return r;
+      },
+    }),
+    /redirected/,
+  );
 });
 test("unrelated festivals and manual-review strategy keep existing behavior", () => {
-  const c = extractFestivalCandidate('<a href="https://tickets.example/">Tickets</a>', { ...source, festivalSlug: "other" }, "now"); assert.equal(c.ticketsUrl, "https://tickets.example/");
-  const m = extractFestivalCandidate(fixture("home"), { ...source, strategies: ["manual_review"] }, "now"); assert.equal(m.ticketsUrl, undefined); assert.match(m.warnings[0], /Manual review/);
+  const c = extractFestivalCandidate(
+    '<a href="https://tickets.example/">Tickets</a>',
+    { ...source, festivalSlug: "other" },
+    "now",
+  );
+  assert.equal(c.ticketsUrl, "https://tickets.example/");
+  const m = extractFestivalCandidate(
+    fixture("home"),
+    { ...source, strategies: ["manual_review"] },
+    "now",
+  );
+  assert.equal(m.ticketsUrl, undefined);
+  assert.match(m.warnings[0], /Manual review/);
 });
 
 test("production bot English navigation follows translated product slug and Buy control", async () => {
-  const pages = new Map([...files()].map(([u, html]) => [u === source.url ? u : u.replaceAll("/es/", "/en/").replaceAll("comprar-entrada", "buy-tickets"), html.replaceAll("/es/", "/en/").replaceAll("comprar-entrada", "buy-tickets").replaceAll("Comprar entradas", "Buy tickets").replaceAll("Comprar\n", "Buy\n")]));
-  const r = await fetchSource(source, { maxAttempts: 1, fetchImpl: async u => { assert.ok(pages.has(u)); return new Response(pages.get(u)); } });
-  const c = extractFestivalCandidate(await r.response.text(), source, "now"); assert.equal(c.ticketStatus, "available"); assert.deepEqual(c.warnings, []);
+  const pages = new Map(
+    [...files()].map(([u, html]) => [
+      u === source.url
+        ? u
+        : u.replaceAll("/es/", "/en/").replaceAll("comprar-entrada", "buy-tickets"),
+      html
+        .replaceAll("/es/", "/en/")
+        .replaceAll("comprar-entrada", "buy-tickets")
+        .replaceAll("Comprar entradas", "Buy tickets")
+        .replaceAll("Comprar\n", "Buy\n"),
+    ]),
+  );
+  const r = await fetchSource(source, {
+    maxAttempts: 1,
+    fetchImpl: async (u) => {
+      assert.ok(pages.has(u));
+      return new Response(pages.get(u));
+    },
+  });
+  const c = extractFestivalCandidate(await r.response.text(), source, "now");
+  assert.equal(c.ticketStatus, "available");
+  assert.deepEqual(c.warnings, []);
 });
 
-const announced = () => { const e = envelope(); e.documents[0].html += fixture("announcement"); return e; };
+const announced = () => {
+  const e = envelope();
+  e.documents[0].html += fixture("announcement");
+  return e;
+};
 test("real second correction: current linked promoter prose supplies Mayhem and Erik without stale Venom", () => {
   const c = extract(announced());
   assert.deepEqual(c.lineup, ["Helloween", "Children Of Bodom", "Mayhem", "Erik Grönwall"]);
-  assert.equal(c.lineupScope, "announcement"); assert.equal(c.status, "partial"); assert.equal(c.headliners, undefined);
-  assert.equal(c.ticketStatus, "available"); assert.equal(c.ticketsUrl, source.url);
-  assert.equal(c.evidence.find(e => e.field === "lineup").sourceUrl, landing);
-  const current = { slug: "rock-imperium", editionYear: 2027, startDate: "2027-07-02", endDate: "2027-07-04", ticketsUrl: source.url, ticketStatus: "available", status: "partial", headliners: ["Bruce Dickinson", "Children of Bodom", "Helloween"], lineup: ["Mayhem", "Erik Grönwall"] };
-  const r = evaluateCandidate(current, c); assert.deepEqual(r.changes, []); assert.deepEqual(r.reviewReasons, []);
+  assert.equal(c.lineupScope, "announcement");
+  assert.equal(c.status, "partial");
+  assert.equal(c.headliners, undefined);
+  assert.equal(c.ticketStatus, "available");
+  assert.equal(c.ticketsUrl, source.url);
+  assert.equal(c.evidence.find((e) => e.field === "lineup").sourceUrl, landing);
+  const current = {
+    slug: "rock-imperium",
+    editionYear: 2027,
+    startDate: "2027-07-02",
+    endDate: "2027-07-04",
+    ticketsUrl: source.url,
+    ticketStatus: "available",
+    status: "partial",
+    headliners: ["Bruce Dickinson", "Children of Bodom", "Helloween"],
+    lineup: ["Mayhem", "Erik Grönwall"],
+  };
+  const r = evaluateCandidate(current, c);
+  assert.deepEqual(r.changes, []);
+  assert.deepEqual(r.reviewReasons, []);
   const missing = evaluateCandidate({ ...current, lineup: [] }, c);
-  assert.deepEqual(missing.changes.map(x => x.after), ["Mayhem", "Erik Grönwall"]);
+  assert.deepEqual(
+    missing.changes.map((x) => x.after),
+    ["Mayhem", "Erik Grönwall"],
+  );
 });
 test("future named confirmations and entity-encoded artists are parsed, not a frozen bill", () => {
-  const e = announced(); e.documents[0].html = e.documents[0].html.replaceAll("Helloween", "The Offspring").replaceAll("Children Of Bodom", "Sons Of Apollo").replaceAll("Mayhem", "Parkway Drive").replaceAll("Erik Grönwall", "Rock &amp; Roll");
-  assert.deepEqual(extract(e).lineup, ["The Offspring", "Sons Of Apollo", "Parkway Drive", "Rock & Roll"]);
+  const e = announced();
+  e.documents[0].html = e.documents[0].html
+    .replaceAll("Helloween", "The Offspring")
+    .replaceAll("Children Of Bodom", "Sons Of Apollo")
+    .replaceAll("Mayhem", "Parkway Drive")
+    .replaceAll("Erik Grönwall", "Rock &amp; Roll");
+  assert.deepEqual(extract(e).lineup, [
+    "The Offspring",
+    "Sons Of Apollo",
+    "Parkway Drive",
+    "Rock & Roll",
+  ]);
 });
 test("first-wave absence never removes reviewed acts or downgrades a full bill", () => {
-  const r = evaluateCandidate({ slug: "rock-imperium", editionYear: 2027, status: "confirmed", headliners: ["Helloween"], lineup: ["Venom", "Bruce Dickinson", "Children Of Bodom", "Mayhem", "Erik Grönwall"] }, extract(announced()));
-  assert.ok(!r.changes.some(x => /removed/.test(x.kind) || x.field === "status"));
+  const r = evaluateCandidate(
+    {
+      slug: "rock-imperium",
+      editionYear: 2027,
+      status: "confirmed",
+      headliners: ["Helloween"],
+      lineup: ["Venom", "Bruce Dickinson", "Children Of Bodom", "Mayhem", "Erik Grönwall"],
+    },
+    extract(announced()),
+  );
+  assert.ok(!r.changes.some((x) => /removed/.test(x.kind) || x.field === "status"));
 });
-for (const phrase of ["cancelación", "retirada", "no actuará", "sustituye"]) test(`cancellation/replacement language blocks additive announcement: ${phrase}`, () => {
-  const e = announced(); e.documents[0].html = e.documents[0].html.replace("auténtico lujo", phrase);
-  assert.equal(extract(e).lineup, undefined); assert.ok(extract(e).warnings.some(w => /announcement/.test(w)));
-});
+for (const phrase of ["cancelación", "retirada", "no actuará", "sustituye"])
+  test(`cancellation/replacement language blocks additive announcement: ${phrase}`, () => {
+    const e = announced();
+    e.documents[0].html = e.documents[0].html.replace("auténtico lujo", phrase);
+    assert.equal(extract(e).lineup, undefined);
+    assert.ok(extract(e).warnings.some((w) => /announcement/.test(w)));
+  });
 test("wrong edition promoter title and unlinked document cannot supply lineup", () => {
-  const e = announced(); e.documents[0].html = e.documents[0].html.replaceAll("2027", "2026"); assert.equal(extract(e).lineup, undefined);
-  const u = envelope(); u.documents.push({ url: "https://www.rockimperiumfestival.es/es/primeras-bandas-anunciadas-para-rock-imperium-2027/", html: fixture("announcement") + "<p>Venom</p>" }); assert.equal(extract(u).lineup, undefined);
+  const e = announced();
+  e.documents[0].html = e.documents[0].html.replaceAll("2027", "2026");
+  assert.equal(extract(e).lineup, undefined);
+  const u = envelope();
+  u.documents.push({
+    url: "https://www.rockimperiumfestival.es/es/primeras-bandas-anunciadas-para-rock-imperium-2027/",
+    html: fixture("announcement") + "<p>Venom</p>",
+  });
+  assert.equal(extract(u).lineup, undefined);
 });
 test("current year header does not license old-edition announcement paragraphs", () => {
-  const e = announced(); e.documents[0].html = e.documents[0].html.replace("España de 2027", "España de 2026"); assert.equal(extract(e).lineup, undefined);
+  const e = announced();
+  e.documents[0].html = e.documents[0].html.replace("España de 2027", "España de 2026");
+  assert.equal(extract(e).lineup, undefined);
 });
 test("unknown prose subjects fail closed, never becoming artist names", () => {
-  const e = announced(); e.documents[0].html = e.documents[0].html.replace("Mayhem, estandartes", "La formación, estandartes"); assert.equal(extract(e).lineup, undefined);
+  const e = announced();
+  e.documents[0].html = e.documents[0].html.replace(
+    "Mayhem, estandartes",
+    "La formación, estandartes",
+  );
+  assert.equal(extract(e).lineup, undefined);
 });
 test("future edition follows live prose but never pins poster names or hashes", () => {
   const e = JSON.parse(JSON.stringify(announced()).replaceAll("2027", "2028"));
-  assert.deepEqual(extract(e, { ...source, editionYear: 2028 }).lineup, ["Helloween", "Children Of Bodom", "Mayhem", "Erik Grönwall"]);
+  assert.deepEqual(extract(e, { ...source, editionYear: 2028 }).lineup, [
+    "Helloween",
+    "Children Of Bodom",
+    "Mayhem",
+    "Erik Grönwall",
+  ]);
 });
 
 test("live English promoter text supplies the same additive confirmations", () => {
-  const e = envelope(); e.documents[0].html += fixture("announcement-en");
-  assert.deepEqual(extract(e).lineup, ["Helloween", "Children Of Bodom", "Mayhem", "Erik Grönwall"]);
+  const e = envelope();
+  e.documents[0].html += fixture("announcement-en");
+  assert.deepEqual(extract(e).lineup, [
+    "Helloween",
+    "Children Of Bodom",
+    "Mayhem",
+    "Erik Grönwall",
+  ]);
   assert.deepEqual(extract(e).warnings, []);
 });
 test("English later announcement uses new subjects and blocks explicit withdrawals", () => {
-  const e = envelope(); e.documents[0].html += fixture("announcement-en").replaceAll("Mayhem", "New Band").replaceAll("Erik Grönwall", "Another Artist");
-  assert.deepEqual(extract(e).lineup, ["Helloween", "Children Of Bodom", "New Band", "Another Artist"]);
-  e.documents[0].html += "<p>New Band will not perform.</p>"; assert.equal(extract(e).lineup, undefined);
+  const e = envelope();
+  e.documents[0].html += fixture("announcement-en")
+    .replaceAll("Mayhem", "New Band")
+    .replaceAll("Erik Grönwall", "Another Artist");
+  assert.deepEqual(extract(e).lineup, [
+    "Helloween",
+    "Children Of Bodom",
+    "New Band",
+    "Another Artist",
+  ]);
+  e.documents[0].html += "<p>New Band will not perform.</p>";
+  assert.equal(extract(e).lineup, undefined);
 });
