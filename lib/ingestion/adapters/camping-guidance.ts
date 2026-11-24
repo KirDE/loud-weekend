@@ -129,10 +129,35 @@ export function parseCampingGuidance(html: string, slug: CampingSlug, year: numb
       .get();
     const dates = singleMatch(
       paragraphs,
-      /^The Alcatraz campsite is open from (\w+) (\d{1,2})\/(\d{1,2}) \(\d{1,2}h\) till /,
+      new RegExp(
+        String.raw`^The Alcatraz campsite is open from (\w+) (\d{1,2})/(\d{1,2}) \((\d{1,2})h\) ` +
+          String.raw`till (\w+) (\d{1,2})/(\d{1,2}) \((noon|\d{1,2}h)\)\.?$`,
+      ),
     );
     if (!dates) return;
-    const earliestDate = observedDate(year, +dates[3], +dates[2], dates[1]);
+    const [
+      ,
+      openingWeekday,
+      openingDay,
+      openingMonth,
+      openingTime,
+      closingWeekday,
+      closingDay,
+      closingMonth,
+      closingTime,
+    ] = dates;
+    const earliestDate = observedDate(year, +openingMonth, +openingDay, openingWeekday);
+    const closingDate = observedDate(year, +closingMonth, +closingDay, closingWeekday);
+    const closingHour = closingTime === "noon" ? 12 : Number(closingTime.slice(0, -1));
+    if (
+      !earliestDate ||
+      !closingDate ||
+      earliestDate > closingDate ||
+      +openingTime > 23 ||
+      closingHour > 23 ||
+      (earliestDate === closingDate && +openingTime >= closingHour)
+    )
+      return;
     const graveyard = $("h5").filter((_, el) => plain($(el).text()) === "Alcatraz Graveyard");
     const motorhomes = $("h5").filter((_, el) => plain($(el).text()) === "Motorhomes");
     if (graveyard.length !== 1 || motorhomes.length !== 1) return;
@@ -144,15 +169,13 @@ export function parseCampingGuidance(html: string, slug: CampingSlug, year: numb
       .siblings("p")
       .map((_, el) => plain($(el).text()))
       .get();
-    const corroborated =
-      earliestDate &&
-      pass.some((item) =>
-        item.includes(
-          `The campsite is open from ${dates[1]} ${Number(dates[2])} ${months[Number(dates[3]) - 1]} at `,
-        ),
-      );
+    const corroborated = pass.some((item) =>
+      item.includes(
+        `The campsite is open from ${openingWeekday} ${+openingDay} ` +
+          `${months[+openingMonth - 1]} at `,
+      ),
+    );
     if (
-      !earliestDate ||
       !corroborated ||
       !singleMatch(
         pass,

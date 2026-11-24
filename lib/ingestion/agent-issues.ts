@@ -162,6 +162,12 @@ export async function inspectSource(db: Database, sourceId: string) {
     source: config(s),
     kind,
     facts,
+    ...(camping && {
+      camping: {
+        editionId: camping.editionId,
+        facts: [...camping.facts].sort((a, b) => a.field.localeCompare(b.field)),
+      },
+    }),
     ...(arrival && {
       arrival: {
         ...arrival,

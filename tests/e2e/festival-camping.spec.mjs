@@ -6,6 +6,7 @@ import { collectCampingCandidate } from "../../lib/ingestion/camping-collector.t
 import { campingSources, campingSourceUrl } from "../../lib/ingestion/adapters/camping-guidance.ts";
 import {
   claimAgentIssue,
+  listAgentIssues,
   releaseAgentIssue,
   resolveAgentIssue,
 } from "../../lib/ingestion/agent-issues.ts";
@@ -100,6 +101,7 @@ test("validated edition camping facts are accessible in every locale", async ({ 
       inputs[0],
       inputs[0].html + "<!-- replacement -->",
     );
+    expect(replacement.issueId).toBe(firstIssue.issueId);
     await expect(resolveAgentIssue(db, approve(obsolete))).rejects.toThrow("stale");
     await releaseAgentIssue(db, obsolete.issueId, obsolete.leaseToken);
     previews[0] = replacement;
@@ -142,6 +144,12 @@ test("validated edition camping facts are accessible in every locale", async ({ 
         }),
       ).toBe(1);
     }
+
+    const changedHtml = inputs[0].html.replaceAll("Thursday 5", "Friday 6");
+    const changedIssue = await stage(db, inserted[0], inputs[0], changedHtml);
+    expect(changedIssue.issueId).not.toBe(firstIssue.issueId);
+    const pending = await listAgentIssues(db);
+    expect(pending.issues.some(({ issueId }) => issueId === changedIssue.issueId)).toBe(true);
 
     for (const [lang, heading] of Object.entries({
       en: "Camping and on-site facilities",
