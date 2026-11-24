@@ -1,3 +1,4 @@
+import { TOLMINATOR_PRODUCT } from "./adapters/tolminator-stock.ts";
 import { queueImportEvent } from "./import-event-queue.ts";
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -32,9 +33,17 @@ export async function createIngestionRun(
   return db.ingestionRun.create({ data: { schemaVersion: INGESTION_SCHEMA_VERSION, ...input } });
 }
 
+// Only reviewed independent endpoints are excluded. Do not infer scope from
+// caller-supplied candidate fields (a failed request has no candidate at all).
+const independentTicketUrls = [TOLMINATOR_PRODUCT];
+const attemptScope = (requestedUrl?: string): Prisma.IngestionAttemptWhereInput =>
+  requestedUrl ? { requestedUrl } : { requestedUrl: { notIn: independentTicketUrls } };
+
 export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
   return db.$transaction(async (tx) => {
     const result = input.result;
+    const independent = independentTicketUrls.includes(input.requestedUrl);
+    const scope = attemptScope(independent ? input.requestedUrl : undefined);
     const status = !result
       ? "FAILED"
       : result.reviewReasons.length
@@ -43,7 +52,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
           ? "PUBLISHABLE"
           : "UNCHANGED";
     const previous = await tx.ingestionAttempt.findFirst({
-      where: { festivalSlug: input.festivalSlug },
+      where: { festivalSlug: input.festivalSlug, ...scope },
       orderBy: { endedAt: "desc" },
       select: { id: true },
     });
@@ -66,7 +75,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
     });
     if (result) {
       const prior = await tx.ingestionCandidate.findFirst({
-        where: { festivalSlug: input.festivalSlug },
+        where: { festivalSlug: input.festivalSlug, attempt: scope },
         orderBy: { createdAt: "desc" },
         select: { id: true },
       });
@@ -113,7 +122,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
           })),
         });
     }
-    if (result)
+    if (result && !independent)
       await tx.ingestionSourceState.upsert({
         where: { festivalSlug: input.festivalSlug },
         create: {
@@ -162,9 +171,9 @@ export async function finishIngestionRun(db: Client, runId: string) {
 export const ingestionQueries = {
   runHistory: (db: Client, take = 50) =>
     db.ingestionRun.findMany({ orderBy: { startedAt: "desc" }, take, include: { attempts: true } }),
-  latestResult: (db: Client, festivalSlug: string) =>
+  latestResult: (db: Client, festivalSlug: string, requestedUrl?: string) =>
     db.ingestionAttempt.findFirst({
-      where: { festivalSlug },
+      where: { festivalSlug, ...attemptScope(requestedUrl) },
       orderBy: { endedAt: "desc" },
       include: { candidate: { include: { evidence: true, diffs: true } } },
     }),
@@ -181,15 +190,15 @@ export const ingestionQueries = {
     }),
   sourceStates: (db: Client) =>
     db.ingestionSourceState.findMany({ select: { festivalSlug: true, lastSuccessfulCheck: true } }),
-  lastSuccessfulExtraction: (db: Client, festivalSlug: string) =>
+  lastSuccessfulExtraction: (db: Client, festivalSlug: string, requestedUrl?: string) =>
     db.ingestionEvidence.findFirst({
-      where: { candidate: { festivalSlug } },
+      where: { candidate: { festivalSlug, attempt: attemptScope(requestedUrl) } },
       orderBy: { observedAt: "desc" },
       select: { observedAt: true },
     }),
-  consecutiveFailures: async (db: Client, festivalSlug: string) => {
+  consecutiveFailures: async (db: Client, festivalSlug: string, requestedUrl?: string) => {
     const attempts = await db.ingestionAttempt.findMany({
-      where: { festivalSlug },
+      where: { festivalSlug, ...attemptScope(requestedUrl) },
       orderBy: { endedAt: "desc" },
       take: 100,
       select: { status: true },
