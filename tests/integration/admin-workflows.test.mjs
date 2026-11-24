@@ -968,6 +968,8 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
       sourceId: sourceOrigin + "/primary",
       adapter: "json_ld_event",
       status: "SUCCEEDED",
+      startedAt: new Date("2026-01-01T10:00:00Z"),
+      finishedAt: new Date("2026-01-01T10:01:00Z"),
       log: [],
     },
   });
