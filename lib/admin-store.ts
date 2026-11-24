@@ -186,12 +186,19 @@ export async function saveDraft(
         throw new Error(`Revision conflict: expected ${currentRevision}`);
       const values = input.values as Record<string, unknown>;
       if (!Object.keys(values).length) throw new Error("Draft has no fields");
+      const latestDraft = await tx.adminDraft.findFirst({
+        where: { resourceKind, resourceKey: input.resourceKey },
+        orderBy: { revision: "desc" },
+        select: { revision: true },
+      });
+      // Pending and rejected drafts still occupy their draft revisions.
+      const draftRevision = Math.max(currentRevision, latestDraft?.revision ?? 0) + 1;
       const draft = await tx.adminDraft.create({
         data: {
           resourceKind,
           resourceKey: input.resourceKey,
           baseRevision: currentRevision,
-          revision: currentRevision + 1,
+          revision: draftRevision,
           status: AdminDraftStatus.QUEUED,
           values: json(values),
           validation: json({ valid: true, checkedAt: new Date().toISOString() }),

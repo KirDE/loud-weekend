@@ -136,7 +136,7 @@ test.before(async () => {
   await db.festivalSource.deleteMany({ where: { festivalSlug: festival.slug } });
   await db.artist.updateMany({
     where: { slug: "integration-headliner" },
-    data: { name: "Integration Headliner", aliases: [] },
+    data: { name: "Integration Headliner", aliases: [], biography: null },
   });
   await db.artistLink.deleteMany({ where: { artist: { slug: "integration-headliner" } } });
   await db.artistProvenance.deleteMany({ where: { artist: { slug: "integration-headliner" } } });
@@ -548,6 +548,146 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal(
     (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
     artistName,
+  );
+
+  const socialUrl = "https://www.instagram.com/synthetic-artist/";
+  const evidenceUrl = "https://artist.example.test/official-links/";
+  const observedAt = "2026-01-01T00:00:00Z";
+  const candidate = await db.artistLink.create({
+    data: {
+      artistId: originalArtist.id,
+      url: socialUrl,
+      label: "Social profile",
+      source: "musicbrainz",
+      position: 1,
+    },
+  });
+  const saveSocial = (proof, baseRevision = 3) =>
+    admin.json("/api/admin", "POST", {
+      resourceKind: "artist",
+      resourceKey: artistSlug,
+      baseRevision,
+      values: { socialProfile: proof },
+    });
+  const proof = { url: socialUrl, sourceUrl: evidenceUrl, observedAt };
+  assert.equal(
+    (await saveSocial({ ...proof, sourceUrl: "https://other.example.test/" })).status,
+    409,
+  );
+  assert.equal(
+    (await saveSocial({ ...proof, sourceUrl: evidenceUrl + "?secret=test" })).status,
+    409,
+  );
+  assert.equal((await saveSocial({ ...proof, url: socialUrl + "wrong-identity" })).status, 409);
+  const socialResponse = await saveSocial(proof);
+  assert.equal(socialResponse.status, 201, await socialResponse.clone().text());
+  const savedSocial = await socialResponse.json();
+  const socialChange = await db.adminChange.findFirstOrThrow({
+    where: { draftId: savedSocial.id },
+  });
+  const getCandidate = () => db.artistLink.findUniqueOrThrow({ where: { id: candidate.id } });
+  assert.equal((await getCandidate()).verified, false);
+  const officialLinkId = canonicalArtist.links[0].id;
+  await db.artistLink.update({
+    where: { id: officialLinkId },
+    data: { url: "https://artist.example.test/new/" },
+  });
+  assert.equal((await decideArtist(socialChange.id)).status, 409);
+  assert.equal((await getCandidate()).verified, false);
+  await db.artistLink.update({ where: { id: officialLinkId }, data: { url: officialSite } });
+  const approvedSocial = await decideArtist(socialChange.id);
+  assert.equal(approvedSocial.status, 200);
+  assert.equal((await approvedSocial.json()).artistPublication, "published");
+  assert.equal((await getCandidate()).verified, true);
+  const socialProof = await db.artistProvenance.findFirstOrThrow({
+    where: {
+      artistId: originalArtist.id,
+      field: "links",
+      source: "official",
+      url: evidenceUrl,
+    },
+  });
+  assert.equal(socialProof.checkedAt.toISOString(), "2026-01-01T00:00:00.000Z");
+  assert.ok(
+    await db.adminAuditEntry.findFirst({
+      where: {
+        action: "CHANGE_APPROVED",
+        resourceKey: artistSlug,
+        afterValue: { path: ["sourceUrl"], equals: evidenceUrl },
+      },
+    }),
+  );
+  const publishedArtist = await anonymous.json(`/artists/${artistSlug}/`);
+  assert.match(
+    await publishedArtist.text(),
+    /href="https:\/\/www\.instagram\.com\/synthetic-artist\/"/,
+  );
+
+  const biography = {
+    text: "The integration fixture blends two guitar styles.",
+    sourceUrl: "https://artist.example.test/biography/",
+    observedAt: "2026-01-02T00:00:00Z",
+  };
+  const saveBiography = (client, proof, baseRevision = 4) =>
+    client.json("/api/admin", "POST", {
+      resourceKind: "artist",
+      resourceKey: artistSlug,
+      baseRevision,
+      values: { biography: proof },
+    });
+  const getArtist = () => db.artist.findUniqueOrThrow({ where: { id: originalArtist.id } });
+  assert.equal((await saveBiography(anonymous, biography)).status, 403);
+  assert.equal(
+    (await saveBiography(admin, { ...biography, sourceUrl: "https://unrelated.example.test/" }))
+      .status,
+    409,
+  );
+  assert.equal(
+    (await saveBiography(admin, { ...biography, observedAt: "2099-01-01T00:00:00Z" })).status,
+    409,
+  );
+  const queuedBiography = await saveBiography(admin, biography);
+  assert.equal(queuedBiography.status, 201, await queuedBiography.clone().text());
+  const biographyDraft = await queuedBiography.json();
+  const biographyChange = await db.adminChange.findFirstOrThrow({
+    where: { draftId: biographyDraft.id },
+  });
+  assert.equal((await getArtist()).biography, null);
+  assert.doesNotMatch(
+    await (await anonymous.json(`/artists/${artistSlug}/`)).text(),
+    /blends two guitar styles/,
+  );
+  await db.artist.update({
+    where: { id: originalArtist.id },
+    data: { biography: "Previously reviewed biography" },
+  });
+  assert.equal((await decideArtist(biographyChange.id)).status, 409);
+  assert.equal((await getArtist()).biography, "Previously reviewed biography");
+  await db.artist.update({ where: { id: originalArtist.id }, data: { biography: null } });
+  const approvedBiography = await decideArtist(biographyChange.id);
+  assert.equal(approvedBiography.status, 200, await approvedBiography.clone().text());
+  assert.equal((await approvedBiography.json()).artistPublication, "published");
+  assert.equal((await getArtist()).biography, biography.text);
+  const publicBiography = await (await anonymous.json(`/artists/${artistSlug}/`)).text();
+  assert.match(publicBiography, /blends two guitar styles/);
+  assert.match(publicBiography, /href="https:\/\/artist\.example\.test\/biography\/"/);
+  assert.equal(
+    (await saveBiography(admin, { ...biography, text: "Stale edit", observedAt }, 5)).status,
+    409,
+  );
+  const noopBiography = await saveBiography(admin, biography, 5);
+  assert.equal(noopBiography.status, 201, await noopBiography.clone().text());
+  const noopBiographyDraft = await noopBiography.json();
+  const noopBiographyChange = await db.adminChange.findFirstOrThrow({
+    where: { draftId: noopBiographyDraft.id },
+  });
+  assert.equal(
+    (await (await decideArtist(noopBiographyChange.id)).json()).artistPublication,
+    "unchanged",
+  );
+  assert.equal(
+    await db.artistProvenance.count({ where: { artistId: originalArtist.id, field: "biography" } }),
+    1,
   );
 
   const logoBytes = await sharp({
