@@ -535,21 +535,6 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   const noop = await db.adminChange.findFirstOrThrow({ where: { draftId: noopDraft.id } });
   assert.equal((await (await decideArtist(noop.id)).json()).artistPublication, "unchanged");
   assert.equal(await db.artistProvenance.count({ where: { artistId: originalArtist.id } }), 1);
-  const rejectedResponse = await admin.json("/api/admin", "POST", {
-    resourceKind: "artist",
-    resourceKey: artistSlug,
-    baseRevision: 3,
-    values: { canonicalName: "Unpublished Name" },
-  });
-  assert.equal(rejectedResponse.status, 201);
-  const rejectedDraft = await rejectedResponse.json();
-  const rejected = await db.adminChange.findFirstOrThrow({ where: { draftId: rejectedDraft.id } });
-  assert.equal((await decideArtist(rejected.id, "reject")).status, 200);
-  assert.equal(
-    (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
-    artistName,
-  );
-
   const socialUrl = "https://www.instagram.com/synthetic-artist/";
   const evidenceUrl = "https://artist.example.test/official-links/";
   const observedAt = "2026-01-01T00:00:00Z";
@@ -688,6 +673,55 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal(
     await db.artistProvenance.count({ where: { artistId: originalArtist.id, field: "biography" } }),
     1,
+  );
+
+  const rejectedResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist",
+    resourceKey: artistSlug,
+    baseRevision: 6,
+    values: { canonicalName: "Unpublished Name" },
+  });
+  assert.equal(rejectedResponse.status, 201);
+  const rejectedDraft = await rejectedResponse.json();
+  const rejected = await db.adminChange.findFirstOrThrow({ where: { draftId: rejectedDraft.id } });
+  assert.equal((await decideArtist(rejected.id, "reject")).status, 200);
+  assert.equal(
+    (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
+    artistName,
+  );
+
+  // A rejection does not change the live revision and must not prevent a
+  // corrected proposal from using that same base. Keep the old audit record.
+  const submitArtistCorrection = (canonicalName) =>
+    admin.json("/api/admin", "POST", {
+      resourceKind: "artist",
+      resourceKey: artistSlug,
+      baseRevision: 6,
+      values: { canonicalName },
+    });
+  const correctionResponse = await submitArtistCorrection("Integration Reviewer Correction");
+  assert.equal(correctionResponse.status, 201);
+  const correction = await correctionResponse.json();
+  assert.ok(correction.revision > rejectedDraft.revision);
+  assert.equal(correction.baseRevision, rejectedDraft.baseRevision);
+  const competingResponse = await submitArtistCorrection("Integration Competing Correction");
+  assert.equal(competingResponse.status, 201);
+  const competing = await competingResponse.json();
+  assert.ok(competing.revision > correction.revision);
+
+  const correctedName = await db.adminChange.findFirstOrThrow({
+    where: { draftId: correction.id },
+  });
+  const competingName = await db.adminChange.findFirstOrThrow({ where: { draftId: competing.id } });
+  assert.equal((await decideArtist(correctedName.id)).status, 200);
+  assert.equal((await decideArtist(competingName.id)).status, 409);
+  assert.equal(
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: rejectedDraft.id } })).status,
+    "REJECTED",
+  );
+  assert.equal(
+    (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
+    "Integration Reviewer Correction",
   );
 
   const logoBytes = await sharp({
