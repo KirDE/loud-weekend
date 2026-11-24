@@ -104,8 +104,10 @@ test("database reads do not retain a process-lifetime catalogue snapshot", async
 });
 
 test("reviewed lineup days are edition-bound, audited, and independent of stage schedules", async () => {
+  const slug = `lineup-days-${randomUUID()}`;
+  await db.festival.update({ where: { slug: "synthetic-fest" }, data: { slug } });
   const edition = await db.festivalEdition.findFirstOrThrow({
-    where: { year: 2027, festival: { slug: "synthetic-fest" } },
+    where: { year: 2027, festival: { slug } },
   });
   const artist = await db.artist.findUniqueOrThrow({ where: { slug: "sample-artist" } });
   const spare = await db.artist.create({
@@ -118,9 +120,14 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     },
   });
   const auditScope = { action: "lineup_day_allocation.publish", target: edition.id };
+  const receiptScope = {
+    festivalSlug: slug,
+    editionYear: 2027,
+    fields: { equals: ["lineupDays"] },
+  };
   const day = (date: string) => new Date(date + "T00:00:00Z");
   const input = {
-    festivalSlug: "synthetic-fest",
+    festivalSlug: slug,
     editionYear: 2027,
     startDate: "2027-07-31",
     endDate: "2027-08-02",
@@ -128,7 +135,8 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     observedAt: "2026-10-01T00:30:00+02:00",
     entries: [{ artistSlug: artist.slug, dates: ["2027-07-31"], status: "announced" }],
   };
-  const read = async () => (await readCatalog({ database: db })).festivals[0];
+  const read = async () =>
+    (await readCatalog({ database: db, includeFreshness: true })).festivals[0];
   try {
     await db.festivalEdition.update({
       where: { id: edition.id },
@@ -148,6 +156,7 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     assert.equal((await read()).lineupDays, undefined);
     assert.deepEqual(await importLineupDays(db, input), { checkOnly: true, changed: 1 });
     assert.equal(await db.adminAuditEntry.count({ where: auditScope }), 0);
+    assert.equal(await db.catalogPublication.count({ where: receiptScope }), 0);
     assert.equal(
       await db.editionLineupDayAllocation.count({ where: { editionId: edition.id } }),
       0,
@@ -195,6 +204,7 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
       /distinct artist/,
     );
     assert.equal(await db.adminAuditEntry.count({ where: auditScope }), 0);
+    assert.equal(await db.catalogPublication.count({ where: receiptScope }), 0);
     assert.equal(
       await db.editionLineupDayAllocation.count({ where: { editionId: edition.id } }),
       0,
@@ -209,7 +219,23 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     );
     assert.deepEqual(await importLineupDays(db, input, false), { checkOnly: false, changed: 0 });
     assert.equal(await db.adminAuditEntry.count({ where: auditScope }), 1);
+    const receipt = await db.catalogPublication.findFirstOrThrow({ where: receiptScope });
+    assert.equal(await db.catalogPublication.count({ where: receiptScope }), 1);
+    assert.equal(receipt.lineupChanged, false);
+    assert.equal((await read()).freshness?.lastPublishedAt, receipt.createdAt.toISOString());
     assert.equal((await read()).timetable, undefined);
+    await db.lineupEntry.update({
+      where: { editionId_artistId: { editionId: edition.id, artistId: artist.id } },
+      data: { status: "CANCELLED" },
+    });
+    const afterCancellation = await read();
+    assert.ok(
+      ![...afterCancellation.headliners, ...afterCancellation.lineup].includes(artist.name),
+    );
+    const cancelled = afterCancellation.lineupDays?.find((row) => row.artistSlug === artist.slug);
+    assert.equal(cancelled?.cancelled, true);
+    assert.deepEqual(cancelled?.dates, ["2027-07-31"]);
+    assert.equal(cancelled?.sourceUrl, input.sourceUrl);
     assert.deepEqual(
       (await read()).lineupDays?.find((row) => row.artistSlug === spare.slug)?.dates,
       [],
@@ -220,6 +246,7 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
       observedAt: "2026-10-02T12:00:00Z",
     };
     assert.equal((await importLineupDays(db, revision, false)).changed, 1);
+    assert.equal(await db.catalogPublication.count({ where: receiptScope }), 2);
     await assert.rejects(importLineupDays(db, input, false), /newer official observation/);
     const readback = (await read()).lineupDays?.find((row) => row.artistSlug === artist.slug);
     assert.deepEqual(readback, {
@@ -241,6 +268,11 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     });
     assert.equal((await read()).lineupDays, undefined);
   } finally {
+    await db.festival.update({ where: { slug }, data: { slug: "synthetic-fest" } });
+    await db.lineupEntry.update({
+      where: { editionId_artistId: { editionId: edition.id, artistId: artist.id } },
+      data: { status: "ANNOUNCED" },
+    });
     await db.editionLineupDayAllocation.deleteMany({ where: { editionId: edition.id } });
     await db.lineupEntry.deleteMany({ where: { artistId: spare.id } });
     await db.artist.delete({ where: { id: spare.id } });

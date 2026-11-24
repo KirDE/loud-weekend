@@ -219,7 +219,11 @@ export function FestivalDetail({
           </>
         )}
         {item.lineupDays && (
-          <LineupByDay key={`${item.slug}:${item.editionYear}`} appearances={item.lineupDays} />
+          <LineupByDay
+            key={`${item.slug}:${item.editionYear}`}
+            appearances={item.lineupDays}
+            artistSlugs={artistSlugs}
+          />
         )}
       </section>
       <PlanningTools item={item} festivals={festivals} />

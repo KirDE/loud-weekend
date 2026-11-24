@@ -5,7 +5,13 @@ import Link from "next/link";
 import type { LineupDayAppearance } from "@/lib/domain/festival";
 import { useLanguage } from "./LanguageProvider";
 
-export function LineupByDay({ appearances }: { appearances: LineupDayAppearance[] }) {
+export function LineupByDay({
+  appearances,
+  artistSlugs,
+}: {
+  appearances: LineupDayAppearance[];
+  artistSlugs: Readonly<Record<string, string>>;
+}) {
   const { locale, t } = useLanguage();
   const [selection, setSelection] = useState("");
   const dates = [...new Set(appearances.flatMap((appearance) => appearance.dates))].sort();
@@ -45,7 +51,11 @@ export function LineupByDay({ appearances }: { appearances: LineupDayAppearance[
             <ul>
               {artists.map(({ artist, artistSlug, cancelled, sourceUrl }) => (
                 <li key={artistSlug}>
-                  <Link href={`/artists/${artistSlug}/`}>{artist}</Link>
+                  {Object.hasOwn(artistSlugs, artist) ? (
+                    <Link href={`/artists/${artistSlugs[artist]}/`}>{artist}</Link>
+                  ) : (
+                    artist
+                  )}
                   {cancelled && <> — {t("lineupDayCancelled")}</>}
                   {sourceUrl && (
                     <>

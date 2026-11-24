@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { timetableEntrySchema } from "../timetables.ts";
@@ -127,6 +128,19 @@ export async function importLineupDays(db: PrismaClient, document: unknown, chec
             resourceKey: artistId,
             beforeValue: before ?? undefined,
             afterValue: after,
+          },
+        });
+      }
+      if (!checkOnly && changed > 0) {
+        await tx.catalogPublication.create({
+          data: {
+            source: "ADMIN",
+            sourceId: `lineup-days:${randomUUID()}`,
+            festivalSlug: edition.festival.slug,
+            editionYear: edition.year,
+            actorLabel: "reviewed-lineup-days-import",
+            fields: ["lineupDays"],
+            evidence: { sourceUrl: source.href, observedAt: observedAt.toISOString(), changed },
           },
         });
       }

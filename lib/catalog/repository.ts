@@ -36,7 +36,6 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           festival: true,
           sources: { where: { enabled: true }, select: { deprecatedAt: true } },
           lineup: {
-            where: { status: "ANNOUNCED" },
             include: { artist: true },
             orderBy: [{ billing: "asc" }, { position: "asc" }],
           },
@@ -61,10 +60,11 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       throw new Error("database catalogue is empty or incomplete");
 
     const editions: FestivalEdition[] = editionRows.map((row) => {
-      const headliners = row.lineup
+      const announced = row.lineup.filter(({ status }) => status === "ANNOUNCED");
+      const headliners = announced
         .filter(({ billing }) => billing === "HEADLINER")
         .map(({ artist }) => artist.name);
-      const lineup = row.lineup
+      const lineup = announced
         .filter(({ billing }) => billing === "LINEUP")
         .map(({ artist }) => artist.name);
       const checks = freshnessEvidence?.checksByEdition.get(row.id) ?? [];
@@ -85,17 +85,19 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           )
           .map((allocation) => [allocation.artistId, allocation]),
       );
-      const lineupDays = row.lineup.map(({ artist, status }) => {
-        const allocation = allocations.get(artist.id);
-        return {
-          artist: artist.name,
-          artistSlug: artist.slug,
-          dates: allocation?.dates.map((date) => dateOnly(date)!) ?? [],
-          cancelled: status === "CANCELLED" || allocation?.status === "CANCELLED",
-          sourceUrl: allocation?.sourceUrl,
-          observedAt: allocation?.observedAt.toISOString(),
-        };
-      });
+      const lineupDays = row.lineup
+        .filter(({ artistId, status }) => status === "ANNOUNCED" || allocations.has(artistId))
+        .map(({ artist, status }) => {
+          const allocation = allocations.get(artist.id);
+          return {
+            artist: artist.name,
+            artistSlug: artist.slug,
+            dates: allocation?.dates.map((date) => dateOnly(date)!) ?? [],
+            cancelled: status === "CANCELLED" || allocation?.status === "CANCELLED",
+            sourceUrl: allocation?.sourceUrl,
+            observedAt: allocation?.observedAt.toISOString(),
+          };
+        });
       return {
         lineupDays: lineupDays.some(({ sourceUrl }) => sourceUrl) ? lineupDays : undefined,
         ...(freshnessEvidence && {
