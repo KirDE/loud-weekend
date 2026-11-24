@@ -28,7 +28,9 @@ export async function generateMetadata({ params }: { params: Params }) {
 
 async function readQuality() {
   try {
-    return summarizeDataQuality(await getCatalog({ includeFreshness: true }));
+    return summarizeDataQuality(
+      await getCatalog({ includeFreshness: true, requireTimetableEvidence: true }),
+    );
   } catch {
     // Do not serialize connection diagnostics or source failures into the page.
     return undefined;
