@@ -324,7 +324,7 @@ test("cancelled artists do not count as announced in the public catalogue", asyn
     data: {
       editionId: entry.editionId,
       provider: "spotify",
-      url: "https://open.spotify.com/playlist/synthetic",
+      url: "https://open.spotify.com/playlist/3234567890123456789012",
     },
   });
   await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "CANCELLED" } });
@@ -342,6 +342,67 @@ test("cancelled artists do not count as announced in the public catalogue", asyn
     await db.festivalPlaylist.delete({ where: { id: playlist.id } });
     await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "ANNOUNCED" } });
   }
+});
+
+test("provider playlist coverage reads the current edition and independent measured timestamps", async () => {
+  const current = await db.festivalEdition.findFirstOrThrow({ where: { recordState: "CURRENT" } });
+  const archived = await db.festivalEdition.findFirstOrThrow({
+    where: { recordState: "ARCHIVED" },
+  });
+  const spotifyUrl = "https://open.spotify.com/playlist/1234567890123456789012";
+  const youtubeUrl = "https://music.youtube.com/playlist?list=Synthetic01";
+  const firstSync = new Date("2026-11-18T14:00:00.000Z");
+  const secondSync = new Date("2026-11-20T12:00:00.000Z");
+  const get = async () => (await readCatalog({ database: db })).playlists["synthetic-fest"];
+  await db.festivalPlaylist.createMany({
+    data: [
+      {
+        editionId: archived.id,
+        provider: "spotify",
+        url: spotifyUrl,
+        artistCount: 999,
+        trackCount: 1999,
+        syncedAt: secondSync,
+      },
+      {
+        editionId: current.id,
+        provider: "youtube_music",
+        url: youtubeUrl,
+        artistCount: 8,
+        trackCount: 14,
+        syncedAt: firstSync,
+      },
+    ],
+  });
+  let playlist = await get();
+  assert.equal(playlist.spotifyUrl, undefined);
+  assert.equal(playlist.youtubeMusicUrl, youtubeUrl);
+  assert.deepEqual(playlist.coverage?.youtubeMusic, {
+    matchedArtists: 8,
+    tracks: 14,
+    recordedAt: firstSync.toISOString(),
+  });
+
+  const currentSpotifyUrl = "https://open.spotify.com/playlist/2234567890123456789012";
+  const currentSpotify = await db.festivalPlaylist.create({
+    data: {
+      editionId: current.id,
+      provider: "spotify",
+      url: currentSpotifyUrl,
+      artistCount: 110,
+      trackCount: 220,
+      syncedAt: secondSync,
+    },
+  });
+  playlist = await get();
+  assert.equal(playlist.spotifyUrl, currentSpotifyUrl);
+  // The legacy Spotify count includes artists with no usable tracks.
+  assert.equal(playlist.coverage?.spotify, undefined);
+  await db.festivalPlaylist.update({ where: { id: currentSpotify.id }, data: { syncedAt: null } });
+  playlist = await get();
+  assert.equal(playlist.spotifyUrl, currentSpotifyUrl);
+  assert.equal(playlist.coverage?.spotify, undefined);
+  assert.equal(playlist.coverage?.youtubeMusic?.recordedAt, firstSync.toISOString());
 });
 
 test("public freshness separates edition-bound checks, publication and source failures", async () => {

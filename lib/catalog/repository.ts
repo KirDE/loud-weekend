@@ -1,3 +1,5 @@
+import { YOUTUBE_URL } from "./youtube-playlist-queue.ts";
+import { playlistCoverage } from "../playlist-coverage.ts";
 import { uniqueFavoriteSlugs, type DiscoveryLineups } from "../discovery-sort.ts";
 import { rosterFingerprint } from "./lineup-proof.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
@@ -259,18 +261,27 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       .sort((left, right) => left.name.localeCompare(right.name));
     const playlists: Record<string, PlaylistStatus> = {};
     for (const row of editionRows.filter(({ recordState }) => recordState === "CURRENT")) {
-      const spotify = row.playlists.find(({ provider }) => provider === "spotify");
-      const youtube = row.playlists.find(({ provider }) => provider === "youtube_music");
-      if (!spotify) continue;
+      const spotify = row.playlists.find(
+        ({ provider, url }) =>
+          provider === "spotify" &&
+          /^https:\/\/open\.spotify\.com\/playlist\/[A-Za-z0-9]{22}(?:\?[^\s#]*)?$/.test(url),
+      );
+      const youtube = row.playlists.find(
+        ({ provider, url }) => provider === "youtube_music" && YOUTUBE_URL.test(url),
+      );
+      if (!spotify && !youtube) continue;
       playlists[row.festival.slug] = {
-        spotifyUrl: spotify.url,
+        spotifyUrl: spotify?.url,
         youtubeMusicUrl: youtube?.url,
         youtubeMusicArtists: youtube?.artistCount ?? undefined,
         youtubeMusicTracks: youtube?.trackCount ?? undefined,
         artists:
-          spotify.artistCount ?? row.lineup.filter(({ status }) => status === "ANNOUNCED").length,
-        tracks: spotify.trackCount ?? 0,
-        updatedAt: instant(spotify.syncedAt) ?? row.sourceUpdatedAt.toISOString(),
+          spotify?.artistCount ?? row.lineup.filter(({ status }) => status === "ANNOUNCED").length,
+        tracks: spotify?.trackCount ?? 0,
+        updatedAt:
+          instant(spotify?.syncedAt ?? youtube?.syncedAt ?? null) ??
+          row.sourceUpdatedAt.toISOString(),
+        coverage: { youtubeMusic: playlistCoverage(youtube) },
       };
     }
     const freshness = {
