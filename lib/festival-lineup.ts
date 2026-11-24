@@ -56,7 +56,7 @@ export function sortFestivalLineup(
     .map(({ name }) => name);
 }
 
-type FestivalLineup = Pick<Festival, "headliners" | "lineup">;
+type FestivalLineup = { headliners: readonly string[]; lineup: readonly string[] };
 
 export function announcedArtists(item: FestivalLineup) {
   return [...item.headliners, ...item.lineup];
@@ -64,6 +64,14 @@ export function announcedArtists(item: FestivalLineup) {
 
 export function hasAnnouncedLineup(item: FestivalLineup) {
   return item.headliners.length + item.lineup.length > 0;
+}
+
+// Published acts are evidence of announcements, not of a final roster.
+export function lineupPresentation(item: FestivalLineup & Pick<Festival, "finalLineup">) {
+  if (!hasAnnouncedLineup(item)) return { tone: "tba", label: "noCurrentActs" } as const;
+  return item.finalLineup
+    ? ({ tone: "confirmed", label: "finalLineup" } as const)
+    : ({ tone: "partial", label: "actsAnnounced" } as const);
 }
 
 export function lineupPreviewArtists(item: FestivalLineup) {
