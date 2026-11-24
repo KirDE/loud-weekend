@@ -3,9 +3,9 @@
 From the signed-in planner, sync the plan and create a private subscription
 URL. Add the URL as a subscription in a calendar application, rather than
 importing it as a one-time download. The feed includes dated Going and Maybe
-choices synced to the account for the seasons current when the link was issued.
-Local-only changes do not appear until synced. To include a newly opened
-season, replace the URL and update the calendar application.
+choices synced from the original 2027 planner. Those choices are stored by
+festival slug, so they are never used to subscribe to another edition.
+Local-only changes do not appear until synced.
 
 The feed uses stable edition IDs and all-day, exclusive end dates per
 [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545.html). Published dates are
