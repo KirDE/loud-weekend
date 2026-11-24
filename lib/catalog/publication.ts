@@ -5,6 +5,7 @@ import {
   matchesTolminatorStockEdition,
 } from "../ingestion/adapters/tolminator-stock.ts";
 import { POLANDROCK_NEWSROOM } from "../ingestion/adapters/polandrock-admission.ts";
+import { rosterFingerprint } from "./lineup-proof.ts";
 import { editionDateProblem } from "../domain/edition-dates.ts";
 import { publishArrivalObservation, type ArrivalObservation } from "./arrival-import.ts";
 import {
@@ -1296,6 +1297,9 @@ export async function publishAgentFestivalResolution(
   });
   if (edition.festival.slug !== input.festivalSlug || edition.recordState !== "CURRENT")
     throw new Error("Reviewed edition mismatch");
+  const finalLineup = input.facts.finalLineup;
+  if (finalLineup && finalLineup.year !== edition.year)
+    throw new Error("Reviewed lineup edition mismatch");
   const dateProblem = editionDateProblem(
     edition.year,
     input.facts.startDate ?? isoDate(edition.startDate),
@@ -1368,7 +1372,7 @@ export async function publishAgentFestivalResolution(
   }
   // A reviewed edition status is not evidence about catalogue completeness.
   const scalar = Object.entries(input.facts)
-    .filter(([field]) => field !== "headliners" && field !== "lineup")
+    .filter(([field]) => field !== "headliners" && field !== "lineup" && field !== "finalLineup")
     .map(([field, after]) => ({ field, after }));
   if (scalar.length) {
     const applied = await applyFestivalChanges(db, {
@@ -1379,6 +1383,25 @@ export async function publishAgentFestivalResolution(
       observedAt: input.observedAt,
     });
     changedFields.push(...applied.changedFields);
+  }
+  if (finalLineup) {
+    const entries = finalLineup.complete
+      ? await db.lineupEntry.findMany({
+          where: { editionId: edition.id },
+          select: { artistId: true, billing: true, status: true },
+        })
+      : [];
+    if (finalLineup.complete && !entries.some((entry) => entry.status === "ANNOUNCED"))
+      throw new Error("A final lineup requires announced artists");
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: {
+        finalLineupFingerprint: finalLineup.complete
+          ? rosterFingerprint(edition.id, entries)
+          : null,
+      },
+    });
+    changedFields.push("finalLineup");
   }
   for (const field of new Set(changedFields)) {
     const evidence = input.evidence.find((e) => e.field === field);
