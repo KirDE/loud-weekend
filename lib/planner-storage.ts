@@ -3,6 +3,7 @@ type PlannerState = {
   favoriteArtists: string[];
   attendance: Record<string, "going" | "maybe" | "not-going">;
   playlistFestivals: string[];
+  savedFilters?: unknown;
 };
 
 export function serializePlannerState(state: PlannerState) {

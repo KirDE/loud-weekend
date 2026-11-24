@@ -61,6 +61,14 @@ test("a lineup for another edition still fails closed", () => {
   );
 });
 
+test("headliner-only announcements still need matching edition evidence", () => {
+  const headlinersOnly = { ...candidate, lineup: undefined, headliners: ["Example Band"] };
+  assert.equal(evaluateCandidate(current, headlinersOnly).publishable, true);
+  const unbound = evaluateCandidate(current, { ...headlinersOnly, observedEditionYears: [] });
+  assert.equal(unbound.publishable, false);
+  assert.match(unbound.reviewReasons.join("; "), /edition could not be verified/);
+});
+
 test("date additions cannot publish with impossible, reversed or out-of-edition dates", () => {
   for (const [startDate, endDate, reason] of [
     ["2027-02-29", undefined, /valid calendar dates/],
