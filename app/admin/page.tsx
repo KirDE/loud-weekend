@@ -48,6 +48,12 @@ export default async function AdminPage() {
         officialUrl: links.find(
           ({ label, source }) => label === "Official site" && source === "official",
         )?.url,
+        socialCandidates: links
+          .filter(
+            ({ label, source, verified }) =>
+              label === "Social profile" && source === "musicbrainz" && !verified,
+          )
+          .map(({ url }) => url),
       }))}
       initialChanges={snapshot.changes.map((item) => ({
         id: item.id,
