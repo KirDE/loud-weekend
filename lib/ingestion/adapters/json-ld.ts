@@ -46,21 +46,20 @@ function text(value: unknown): string | undefined {
   return undefined;
 }
 
-function date(value: unknown): string | undefined {
+function eventDate(value: unknown): { day: string; instant?: number } | undefined {
   if (typeof value !== "string") return undefined;
   const valueText = value.trim();
   const plainDate = valueText.match(
     /^(\d{4}-\d{2}-\d{2})(?:[Tt ](?:[01]\d|2[0-3]):\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})?)?$/,
   )?.[1];
-  if (
-    !plainDate ||
-    !festivalDateInterval({ startDate: plainDate }) ||
-    !Number.isFinite(Date.parse(valueText))
-  ) {
+  const parsed = Date.parse(valueText);
+  if (!plainDate || !festivalDateInterval({ startDate: plainDate }) || !Number.isFinite(parsed)) {
     return undefined;
   }
   // Use the local date in the official timestamp, not its UTC day.
-  return plainDate;
+  const hasOffset =
+    valueText.length > plainDate.length && /(?:z|[+-]\d{2}:?\d{2})$/i.test(valueText);
+  return { day: plainDate, instant: hasOffset ? parsed : undefined };
 }
 
 function city(location: unknown): string | undefined {
@@ -141,15 +140,20 @@ export function extractJsonLdCandidate(
 ): FestivalCandidate {
   const events = eventRecords(html).map((record) => ({
     ...record,
-    startDate: date(record.event.startDate),
-    endDate: date(record.event.endDate),
+    startDate: eventDate(record.event.startDate),
+    endDate: eventDate(record.event.endDate),
   }));
-  const matches = events.filter(
-    ({ startDate, endDate }) =>
-      !startDate || !endDate || festivalDateInterval({ startDate, endDate }),
-  );
+  const matches = events.filter(({ startDate, endDate }) => {
+    if (!startDate || !endDate) return true;
+    if (!festivalDateInterval({ startDate: startDate.day, endDate: endDate.day })) return false;
+    return (
+      startDate.instant === undefined ||
+      endDate.instant === undefined ||
+      endDate.instant >= startDate.instant
+    );
+  });
   const matching = matches.filter(({ startDate }) =>
-    startDate?.startsWith(`${source.editionYear}-`),
+    startDate?.day.startsWith(`${source.editionYear}-`),
   );
   const selected = matching[0] ?? matches[0];
   const candidate: FestivalCandidate = {
@@ -170,8 +174,8 @@ export function extractJsonLdCandidate(
   }
 
   const fields = {
-    startDate: selected.startDate,
-    endDate: selected.endDate,
+    startDate: selected.startDate?.day,
+    endDate: selected.endDate?.day,
     city: city(selected.event.location),
     lineup: names(selected.event.performer),
     ticketsUrl: ticketUrl(selected.event.offers),
