@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import {
+  fetchOfflineTrip,
   offlineTripCopy,
   offlineTripKey,
-  parseOfflineTrip,
   readOfflineTrip,
   saveOfflineTrip,
   type OfflineTrip,
@@ -44,34 +44,23 @@ export function OfflineTripDownload({ slug, year }: { slug: string; year: number
     setBusy(true);
     setNotice(null);
     try {
-      let trip: OfflineTrip | null;
+      const previous = localStorage.getItem(key);
+      let trip: OfflineTrip;
       try {
-        const response = await fetch(
-          `${basePath}/api/offline/trips/${encodeURIComponent(slug)}/${year}/`,
-          {
-            credentials: "omit",
-            cache: "no-store",
-            redirect: "error",
-            headers: { Accept: "application/json" },
-            signal: AbortSignal.timeout(15_000),
-          },
-        );
-        if (
-          response.status !== 200 ||
-          !/^application\/json(?:;|$)/i.test(response.headers.get("content-type") || "")
-        )
-          return setNotice("unavailable");
-        trip = parseOfflineTrip(await response.json());
-        if (!trip || trip.slug !== slug || trip.year !== year) return setNotice("unavailable");
+        trip = await fetchOfflineTrip(basePath, slug, year);
       } catch {
         return setNotice("unavailable");
       }
-      try {
-        setRecord(saveOfflineTrip(localStorage, trip));
-        setNotice("saved");
-      } catch {
-        setNotice("storage");
+      // Match the offline shell: another tab's edit or removal wins over
+      // a response to an earlier request.
+      if (localStorage.getItem(key) !== previous) {
+        setRecord(readOfflineTrip(localStorage, slug, year));
+        return;
       }
+      setRecord(saveOfflineTrip(localStorage, trip));
+      setNotice("saved");
+    } catch {
+      setNotice("storage");
     } finally {
       setBusy(false);
     }

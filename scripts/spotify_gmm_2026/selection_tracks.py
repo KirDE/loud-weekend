@@ -15,13 +15,17 @@ from spotify_repertoire import validate_profile, eligible_track
 
 EXCLUDED_NAMES = frozenset(name.casefold() for name in GLOBAL_EXCLUDES)
 ID = re.compile(r"^[A-Za-z0-9]{22}$")
+TRACKS_PER_ARTIST = {"quick": 1, "preview": 4, "deep": 8}
 
 
 def select_selection_tracks(value):
     rows = value.get("artists") if isinstance(value, dict) else None
     if not isinstance(rows, list) or len(rows) > 250:
         raise ValueError("Invalid bounded selection")
-    selected, unresolved, seen_uris, seen_songs = [], [], set(), set()
+    depth = value.get("depth", "quick")
+    if not isinstance(depth, str) or depth not in TRACKS_PER_ARTIST:
+        raise ValueError("Invalid playlist depth")
+    ranked_artists = []
     for row in rows:
         if (
             not isinstance(row, dict)
@@ -48,7 +52,7 @@ def select_selection_tracks(value):
             )
             or (profile is None and identity is None)
         ):
-            unresolved.append(requested)
+            ranked_artists.append((requested, []))
             continue
         eligible = []
         for track in tracks:
@@ -103,18 +107,25 @@ def select_selection_tracks(value):
                 t["id"],
             )
         )
-        chosen = next(
-            (
-                t
-                for t in eligible
-                if t["uri"] not in seen_uris and canonical_track_key(t["name"]) not in seen_songs
-            ),
-            None,
-        )
-        if chosen is None:
-            unresolved.append(requested)
-            continue
-        seen_uris.add(chosen["uri"])
-        seen_songs.add(canonical_track_key(chosen["name"]))
-        selected.append({"artist": requested, "uri": chosen["uri"]})
+        ranked_artists.append((requested, eligible))
+
+    selected, seen_uris, seen_songs = [], set(), set()
+    represented = set()
+    # Fill each artist's first slot before adding depth. Later rounds therefore
+    # cannot take another artist's only eligible version of a shared song.
+    for _ in range(TRACKS_PER_ARTIST[depth]):
+        for index, (requested, tracks) in enumerate(ranked_artists):
+            for track in tracks:
+                song = canonical_track_key(track["name"])
+                if track["uri"] in seen_uris or song in seen_songs:
+                    continue
+                seen_uris.add(track["uri"])
+                seen_songs.add(song)
+                represented.add(index)
+                selected.append({"artist": requested, "uri": track["uri"]})
+                break
+    unresolved = [
+        requested for index, (requested, _) in enumerate(ranked_artists)
+        if index not in represented
+    ]
     return {"selected": selected, "unresolved": unresolved}

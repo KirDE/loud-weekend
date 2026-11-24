@@ -34,10 +34,16 @@ export function discoveryShareQuery(
 ) {
   const query = new URLSearchParams([[shareMarker, "1"]]);
   for (const field of textFields) {
+    if (
+      filters.customOrigin &&
+      (field === "origin" || (field === "sort" && filters.sort === "distance"))
+    )
+      continue;
     if (filters[field] !== defaultDiscoveryPreferences[field]) query.set(field, filters[field]);
   }
   for (const field of flags) if (filters[field]) query.set(field, "1");
-  if (filters.maxDistance !== "all") query.set("radius", filters.maxDistance);
+  if (!filters.customOrigin && filters.maxDistance !== "all")
+    query.set("radius", filters.maxDistance);
   if (boundedText(filters.query, 120)) query.set("q", filters.query);
   for (const [key, value] of new URLSearchParams(dateShareQuery(filters))) query.set(key, value);
   for (const slug of readArtistSelection(filters.artistSelection).sort())
