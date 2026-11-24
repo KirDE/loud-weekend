@@ -563,6 +563,12 @@ const translations = {
     noLineupOverlap: "No announced lineup overlap yet",
     noDiscoveryMatches:
       "Try a wider distance, another origin, or remove a genre filter. Your comparison selections are preserved.",
+    discoverySort: "Sort festivals",
+    discoverySort_date: "Date",
+    discoverySort_name: "Name",
+    discoverySort_distance: "Straight-line distance",
+    discoverySort_acts: "Most announced acts",
+    discoverySort_favorites: "Most favorite artists",
     dateFilters: "Date filters",
     dateFrom: "From",
     dateTo: "Through",
@@ -734,6 +740,12 @@ const translations = {
       "Wähle eine größere Entfernung oder einen anderen Ausgangspun" +
       "kt oder entferne den Genre-Filter. Deine Vergleichsauswahl b" +
       "leibt erhalten.",
+    discoverySort: "Festivals sortieren",
+    discoverySort_date: "Datum",
+    discoverySort_name: "Name",
+    discoverySort_distance: "Luftlinie",
+    discoverySort_acts: "Meiste angekündigte Acts",
+    discoverySort_favorites: "Meiste Lieblingskünstler",
     dateFilters: "Datumsfilter",
     dateFrom: "Von",
     dateTo: "Bis einschließlich",
@@ -901,6 +913,12 @@ const translations = {
       "Увеличьте расстояние, выберите другую точку отсчёта или убер" +
       "ите фильтр по жанру. Выбранные для сравнения фестивали сохра" +
       "нятся.",
+    discoverySort: "Сортировка фестивалей",
+    discoverySort_date: "Дата",
+    discoverySort_name: "Название",
+    discoverySort_distance: "Расстояние по прямой",
+    discoverySort_acts: "Больше объявленных артистов",
+    discoverySort_favorites: "Больше избранных артистов",
     dateFilters: "Фильтры по датам",
     dateFrom: "С",
     dateTo: "По включительно",
