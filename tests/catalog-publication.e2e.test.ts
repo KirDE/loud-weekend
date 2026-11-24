@@ -11,7 +11,11 @@ import test from "node:test";
 import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 import { seedCatalog } from "./support/seed-catalog.ts";
-import { publishAdminFestivalChange, publishIngestionResult } from "../lib/catalog/publication.ts";
+import {
+  publishAdminFestivalChange,
+  publishAgentFestivalResolution,
+  publishIngestionResult,
+} from "../lib/catalog/publication.ts";
 import { catalogSeed } from "./support/catalog.ts";
 import { createIngestionRun, persistAttempt } from "../lib/ingestion/repository.ts";
 import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
@@ -2912,7 +2916,32 @@ test("social previews show parser-backed approved dates but not unsupported edit
 
   try {
     assert.equal(await preview(), festivalPreviewDate(2027, "en", null));
-    await approve(0, "2027-06-10", "2027-06-11");
+    const edition = await db.festivalEdition.findFirstOrThrow({
+      where: { festival: { slug }, year: 2027 },
+      select: { id: true },
+    });
+    const observedAt = new Date();
+    await db.$transaction((tx) =>
+      publishAgentFestivalResolution(tx, {
+        editionId: edition.id,
+        festivalSlug: slug,
+        sourceId: `openclaw:${slug}`,
+        reason: "Fixture-backed date review",
+        facts: { startDate: "2027-06-09" },
+        evidence: [
+          {
+            field: "startDate",
+            url: sourceUrl,
+            checkedAt: observedAt.toISOString(),
+            contentHash: "a".repeat(64),
+            excerpt: "2027-06-09",
+          },
+        ],
+        observedAt,
+      }),
+    );
+    assert.equal(await preview(), festivalPreviewDate(2027, "en", { startDate: "2027-06-09" }));
+    await approve(0, "2027-06-09", "2027-06-11");
     assert.equal(await preview(), festivalPreviewDate(2027, "en", { startDate: "2027-06-11" }));
     await approve(1, "2027-06-11", "2027-06-12");
     assert.equal(await preview(), festivalPreviewDate(2027, "en", null));

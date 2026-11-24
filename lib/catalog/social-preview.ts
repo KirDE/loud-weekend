@@ -1,20 +1,25 @@
+import type { Prisma } from "@prisma/client";
 import { db } from "../db.ts";
 import type { Language } from "../language-preference.ts";
 import { festivalPreviewDate, type PreviewCard, type PreviewKind } from "../social-preview.ts";
 
 async function hasPublishedDate(
+  tx: Prisma.TransactionClient,
   slug: string,
   year: number,
   field: "startDate" | "endDate",
   value: string | undefined,
+  hasProvenance: boolean,
 ) {
   if (!value) return false;
-  const receipt = await db.catalogPublication.findFirst({
+  const receipt = await tx.catalogPublication.findFirst({
     where: { festivalSlug: slug, editionYear: year, fields: { has: field } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { source: true, sourceId: true, evidence: true },
   });
-  if (receipt?.source === "ADMIN" && receipt.sourceId.startsWith("admin:")) {
+  if (!receipt) return hasProvenance;
+
+  if (receipt.source === "ADMIN" && receipt.sourceId.startsWith("admin:")) {
     const id = receipt.sourceId.slice("admin:".length);
     const evidence = receipt.evidence;
     if (
@@ -35,7 +40,7 @@ async function hasPublishedDate(
     )
       return false;
 
-    const change = await db.adminChange.findFirst({
+    const change = await tx.adminChange.findFirst({
       where: {
         id,
         resourceKind: "FESTIVAL",
@@ -49,10 +54,30 @@ async function hasPublishedDate(
     });
     return Boolean(change);
   }
-  if (receipt?.source !== "INGESTION" || !receipt.sourceId.startsWith("ingestion:")) return false;
+  if (receipt.source === "ADMIN" && receipt.sourceId.startsWith("openclaw:")) {
+    const evidence = receipt.evidence;
+    return (
+      hasProvenance &&
+      evidence !== null &&
+      typeof evidence === "object" &&
+      !Array.isArray(evidence) &&
+      evidence.reviewPolicy === "openclaw-import-conflicts-v1" &&
+      Array.isArray(evidence.officialEvidence) &&
+      evidence.officialEvidence.some(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          !Array.isArray(item) &&
+          item.field === field &&
+          typeof item.url === "string" &&
+          /^https?:\/\//i.test(item.url),
+      )
+    );
+  }
+  if (receipt.source !== "INGESTION" || !receipt.sourceId.startsWith("ingestion:")) return false;
 
   // An observation alone is not proof that this exact value was published.
-  const diff = await db.ingestionDiff.findFirst({
+  const diff = await tx.ingestionDiff.findFirst({
     where: {
       candidateId: receipt.sourceId.slice("ingestion:".length),
       field,
@@ -83,55 +108,70 @@ export async function readSocialPreview(
     return artist && publicBilling ? { kind, language, name: artist.name } : null;
   }
 
-  const edition = await db.festivalEdition.findFirst({
-    where: { festival: { slug }, year, recordState: { in: ["CURRENT", "ARCHIVED"] } },
-    select: {
-      year: true,
-      startDate: true,
-      endDate: true,
-      festival: { select: { name: true } },
-      provenance: {
-        where: { field: { in: ["dates", "startDate", "endDate", "lineup", "headliners"] } },
-        distinct: ["field"],
-        select: { field: true },
-      },
-      lineup: {
-        where: { billing: "HEADLINER", status: "ANNOUNCED" },
-        orderBy: { position: "asc" },
-        take: 2,
-        select: { artist: { select: { name: true } } },
-      },
-    },
-  });
-  if (!edition) return null;
-  const evidence = new Set(edition.provenance.map(({ field }) => field));
-  const date = (value: Date | null) => value?.toISOString().slice(0, 10);
-  const startDate = date(edition.startDate);
-  const endDate = date(edition.endDate);
-  const [hasStart, hasEnd] = await Promise.all([
-    evidence.has("dates") ||
-      evidence.has("startDate") ||
-      hasPublishedDate(slug, edition.year, "startDate", startDate),
-    evidence.has("dates") ||
-      evidence.has("endDate") ||
-      hasPublishedDate(slug, edition.year, "endDate", endDate),
-  ]);
-  const hasLineup = evidence.has("lineup") || evidence.has("headliners");
-  const detail = festivalPreviewDate(
-    edition.year,
-    language,
-    hasStart
-      ? {
+  return db.$transaction(
+    async (tx) => {
+      const edition = await tx.festivalEdition.findFirst({
+        where: { festival: { slug }, year, recordState: { in: ["CURRENT", "ARCHIVED"] } },
+        select: {
+          year: true,
+          startDate: true,
+          endDate: true,
+          festival: { select: { name: true } },
+          provenance: {
+            where: { field: { in: ["dates", "startDate", "endDate", "lineup", "headliners"] } },
+            distinct: ["field"],
+            select: { field: true },
+          },
+          lineup: {
+            where: { billing: "HEADLINER", status: "ANNOUNCED" },
+            orderBy: { position: "asc" },
+            take: 2,
+            select: { artist: { select: { name: true } } },
+          },
+        },
+      });
+      if (!edition) return null;
+      const evidence = new Set(edition.provenance.map(({ field }) => field));
+      const date = (value: Date | null) => value?.toISOString().slice(0, 10);
+      const startDate = date(edition.startDate);
+      const endDate = date(edition.endDate);
+      const [hasStart, hasEnd] = await Promise.all([
+        hasPublishedDate(
+          tx,
+          slug,
+          edition.year,
+          "startDate",
           startDate,
-          endDate: hasEnd ? endDate : undefined,
-        }
-      : null,
+          evidence.has("dates") || evidence.has("startDate"),
+        ),
+        hasPublishedDate(
+          tx,
+          slug,
+          edition.year,
+          "endDate",
+          endDate,
+          evidence.has("dates") || evidence.has("endDate"),
+        ),
+      ]);
+      const hasLineup = evidence.has("lineup") || evidence.has("headliners");
+      const detail = festivalPreviewDate(
+        edition.year,
+        language,
+        hasStart
+          ? {
+              startDate,
+              endDate: hasEnd ? endDate : undefined,
+            }
+          : null,
+      );
+      return {
+        kind,
+        language,
+        name: edition.festival.name,
+        detail,
+        headliners: hasLineup ? edition.lineup.map(({ artist }) => artist.name) : undefined,
+      };
+    },
+    { isolationLevel: "RepeatableRead" },
   );
-  return {
-    kind,
-    language,
-    name: edition.festival.name,
-    detail,
-    headliners: hasLineup ? edition.lineup.map(({ artist }) => artist.name) : undefined,
-  };
 }
