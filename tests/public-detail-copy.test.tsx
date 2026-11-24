@@ -243,7 +243,7 @@ for (const language of ["en", "de", "ru"] as const) {
           <LocalPlannerProvider>{content}</LocalPlannerProvider>
         </LanguageProvider>,
       );
-    const home = wrap(<HomeContent festivals={[item]} freshness={freshness} />);
+    const home = wrap(<HomeContent years={[]} festivals={[item]} freshness={freshness} />);
     const detail = wrap(<FestivalDetail item={item} festivals={[item]} artistSlugs={{}} />);
     for (const html of [home, detail]) {
       assert.ok(html.includes(translate(language, "latestSourceCheck")));
@@ -260,7 +260,7 @@ for (const language of ["en", "de", "ru"] as const) {
     assert.ok(withoutEvidence.includes(translate(language, "sourceCheckUnavailable")));
     assert.doesNotMatch(withoutEvidence, /<time /);
     assert.ok(
-      wrap(<HomeContent festivals={[festival]} freshness={{}} />).includes(
+      wrap(<HomeContent years={[]} festivals={[festival]} freshness={{}} />).includes(
         translate(language, "sourceCheckUnavailable"),
       ),
     );
