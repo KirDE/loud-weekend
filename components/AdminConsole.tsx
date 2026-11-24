@@ -142,7 +142,10 @@ export function AdminConsole({
     setRefreshing(true);
     setNotice(null);
     try {
-      const response = await fetch(`/api/admin/refresh/${selected.slug}`, { method: "POST" });
+      const query = selected.editionYear ? `?year=${selected.editionYear}` : "";
+      const response = await fetch(`/api/admin/refresh/${selected.slug}${query}`, {
+        method: "POST",
+      });
       if (!response.ok) return setNotice({ key: failureKey(response.status, "refreshFailed") });
       const body = await response.json();
       setNotice({

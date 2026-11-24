@@ -11,6 +11,7 @@ export const arrivalObservation = z.strictObject({
   editionId: z.string().min(1),
   festivalSlug: z.string().min(1),
   editionYear: z.number().int().positive(),
+  editionInterval: z.strictObject({ startDate: z.iso.date(), endDate: z.iso.date() }).optional(),
   countryCode: z.string().regex(/^[A-Z]{2}$/),
   organizerHost: z.string().min(1),
   facts: z
@@ -38,12 +39,18 @@ export async function publishArrivalObservation(
     select: {
       year: true,
       recordState: true,
+      startDate: true,
+      endDate: true,
       festival: { select: { slug: true, officialUrl: true, countryCode: true } },
       arrivalFacts: true,
     },
   });
   if (
     edition.recordState !== "CURRENT" ||
+    (record.editionInterval &&
+      (edition.startDate?.toISOString().slice(0, 10) !== record.editionInterval.startDate ||
+        edition.endDate?.toISOString().slice(0, 10) !== record.editionInterval.endDate)) ||
+    (record.facts.some((fact) => fact.kind === "railShuttle") && !record.editionInterval) ||
     edition.year !== record.editionYear ||
     edition.festival.slug !== record.festivalSlug ||
     edition.festival.countryCode !== record.countryCode ||
