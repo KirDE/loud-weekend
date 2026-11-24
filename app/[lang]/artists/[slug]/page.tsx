@@ -21,5 +21,11 @@ export default async function ArtistPage({ params }: Props) {
   if (!isLanguage(lang)) notFound();
   const data = await readArtistPage(slug);
   if (!data) notFound();
-  return <ArtistDetail artist={data.artist} appearances={data.appearances} />;
+  return (
+    <ArtistDetail
+      artist={data.artist}
+      appearances={data.appearances}
+      legacyFavoriteNames={data.legacyFavoriteNames}
+    />
+  );
 }

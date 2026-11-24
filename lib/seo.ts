@@ -3,7 +3,6 @@ import { announcedArtists } from "./festival-lineup.ts";
 import type { Festival } from "@/lib/domain/festival";
 
 export const SITE_ORIGIN = "https://loudweekend.eu";
-export const CATALOG_UPDATED_AT = "2026-09-01T15:18:00.000Z";
 
 export function canonicalPath(path: string) {
   const normalized = path.startsWith("/") ? path : `/${path}`;
@@ -45,6 +44,7 @@ export function festivalMusicEvent(item: Festival, language?: string) {
     ...(performers.length ? { performer: performers } : {}),
     url: `${SITE_ORIGIN}${language ? `/${language}` : ""}/festivals/${item.slug}/`,
     sameAs: item.officialUrl,
+    ...(item.ticketStatus === "free" ? { isAccessibleForFree: true } : {}),
     ...(item.ticketsUrl && availability
       ? { offers: { "@type": "Offer", url: item.ticketsUrl, availability } }
       : {}),

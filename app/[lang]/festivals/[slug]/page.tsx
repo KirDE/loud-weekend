@@ -39,7 +39,7 @@ export default async function LocalizedFestivalPage({
 }) {
   const { lang, slug } = await params;
   if (!supportedLanguages.includes(lang as Language)) notFound();
-  const { festivals, artists, playlists } = await getCatalog();
+  const { festivals, artists, playlists } = await getCatalog({ includeFreshness: true });
   const item = festivals.find((festival) => festival.slug === slug);
   if (!item) notFound();
   const event = festivalMusicEvent(item, lang);

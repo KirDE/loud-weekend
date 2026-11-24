@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { cache } from "react";
+import { legacyFavoriteNames } from "./favorite-artist";
 import { getCatalog } from "./catalog/repository";
 import type { Festival } from "./domain/festival";
 import type { Language } from "./language-preference";
@@ -31,7 +32,7 @@ export const readArtistPage = cache(async (slug: string) => {
         (item) => item.headliners.includes(artist.name) || item.lineup.includes(artist.name),
       )
     : [];
-  return { artist, appearances };
+  return { artist, appearances, legacyFavoriteNames: legacyFavoriteNames(artist, artists) };
 });
 
 export function artistMetadata(
