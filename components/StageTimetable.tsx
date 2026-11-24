@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { assessPerformanceSelections } from "@/lib/timetable-plan";
+import { assessPerformanceSelections, orderPerformanceSelections } from "@/lib/timetable-plan";
 import { useTimetablePlan } from "./useTimetablePlan";
 import type { TimetableEntry } from "@/lib/domain/festival";
 import { useLanguage, type Language } from "./LanguageProvider";
@@ -129,6 +129,17 @@ const plannerCopy = {
   },
 };
 
+function performanceTimes({ window, timeZone }: TimetableEntry) {
+  if (!window) return { start: null, end: null, showOffsets: false };
+  const start = timetableLocalDateTime(window.startsAt, timeZone);
+  const end = timetableLocalDateTime(window.endsAt, timeZone);
+  const showOffsets =
+    start.offset !== end.offset ||
+    isRepeatedTimetableTime(window.startsAt, timeZone, start) ||
+    isRepeatedTimetableTime(window.endsAt, timeZone, end);
+  return { start, end, showOffsets };
+}
+
 export function StageTimetable({
   entries,
   slug,
@@ -152,11 +163,11 @@ export function StageTimetable({
         <span>{t.empty}</span>
       </div>
     );
-  const selected = entries
-    .filter(
+  const selected = orderPerformanceSelections(
+    entries.filter(
       (entry) => entry.sourcePerformanceId && plan.selected.includes(entry.sourcePerformanceId),
-    )
-    .sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
+    ),
+  );
   const { conflicts: overlaps, incomplete } = assessPerformanceSelections(selected);
   const dates = [...new Set(entries.map(({ date }) => date))].sort();
   const stages = [...new Set(entries.map(({ stage }) => stage))].sort((a, b) =>
@@ -231,12 +242,19 @@ export function StageTimetable({
           <p>{planner.local}</p>
           {selected.length > 0 && (
             <ul>
-              {selected.map((entry) => (
-                <li key={entry.sourcePerformanceId}>
-                  {entry.artist} · {entry.stage} · {dayLabel(entry.date)} {entry.start}
-                  {entry.status === "cancelled" && ` · ${t.cancelled}`}
-                </li>
-              ))}
+              {selected.map((entry) => {
+                const { start, showOffsets } = performanceTimes(entry);
+                return (
+                  <li key={entry.sourcePerformanceId}>
+                    {entry.artist} · {entry.stage} · {dayLabel(entry.date)}{" "}
+                    <time dateTime={entry.window?.startsAt ?? `${entry.date}T${entry.start}`}>
+                      {entry.start}
+                      {showOffsets && ` ${start?.offset}`}
+                    </time>
+                    {entry.status === "cancelled" && ` · ${t.cancelled}`}
+                  </li>
+                );
+              })}
             </ul>
           )}
           {overlaps.length > 0 && (
@@ -266,19 +284,7 @@ export function StageTimetable({
                 <h4>{stage.stage}</h4>
                 <ol>
                   {stage.entries.map((entry) => {
-                    const start = entry.window
-                      ? timetableLocalDateTime(entry.window.startsAt, entry.timeZone)
-                      : null;
-                    const end = entry.window
-                      ? timetableLocalDateTime(entry.window.endsAt, entry.timeZone)
-                      : null;
-                    const showOffsets =
-                      entry.window &&
-                      start &&
-                      end &&
-                      (start.offset !== end.offset ||
-                        isRepeatedTimetableTime(entry.window.startsAt, entry.timeZone, start) ||
-                        isRepeatedTimetableTime(entry.window.endsAt, entry.timeZone, end));
+                    const { start, end, showOffsets } = performanceTimes(entry);
                     const id = slug && year ? entry.sourcePerformanceId : undefined;
                     const saved = id ? plan.selected.includes(id) : false;
                     return (

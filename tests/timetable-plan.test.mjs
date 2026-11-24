@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assessPerformanceSelections,
+  orderPerformanceSelections,
   parsePerformanceSelections,
   togglePerformanceSelection,
 } from "../lib/timetable-plan.ts";
@@ -36,4 +37,21 @@ test("clashes require verified half-open UTC windows for both scheduled performa
     conflicts: [],
     incomplete: false,
   });
+});
+
+test("saved performances follow verified instants through a repeated local hour", () => {
+  const entry = (artist, start, startsAt) => ({
+    artist,
+    date: "2027-10-31",
+    start,
+    ...(startsAt ? { window: { startsAt } } : {}),
+  });
+  const first = entry("First", "02:50", "2027-10-31T02:50:00+02:00");
+  const second = entry("Second", "02:10", "2027-10-31T02:10:00+01:00");
+  const early = entry("Early", "01:30");
+  const unknown = entry("Unknown occurrence", "02:20");
+  const late = entry("Late", "03:10");
+  const inputs = [late, first, unknown, second, early];
+  assert.deepEqual(orderPerformanceSelections(inputs), [early, first, unknown, second, late]);
+  assert.deepEqual(inputs, [late, first, unknown, second, early]);
 });
