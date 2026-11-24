@@ -638,6 +638,7 @@
   text-decoration: underline;
 }
 
+.editionHistory a,
 .siteInformation a {
   text-decoration: underline;
 }
@@ -3713,4 +3714,21 @@ summary:focus-visible {
 
 .personalCalendarConflicts h3 {
   margin: 0;
+}
+
+.editionHistory {
+  border-top: 1px solid var(--line);
+  padding-block: 2rem;
+}
+
+.editionHistory ol {
+  padding-inline-start: 1.25rem;
+}
+
+.editionHistory li + li {
+  margin-top: 1rem;
+}
+
+.editionHistory time {
+  color: var(--muted);
 }
