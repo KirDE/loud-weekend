@@ -1,3 +1,4 @@
+import { renderedTicketText } from "../rendered-ticket-text.ts";
 import { load } from "cheerio";
 import type { FestivalCandidate, FestivalSource } from "../types.ts";
 import { INGESTION_SCHEMA_VERSION } from "../types.ts";
@@ -85,7 +86,7 @@ export function observeRoskildeStock(
   if (description.length !== 1 || clean(description.text()) !== fullPassDescription) fail();
   if (
     clean(group.find("h3.ProductsNameCellProductName").text()) !== "Partout" ||
-    /udsolgt|ikke til salg|not on sale|sold out/i.test(group.text())
+    /udsolgt|ikke til salg|not on sale|sold out/i.test(renderedTicketText(group))
   )
     fail();
   const variants = group.next();
@@ -106,7 +107,7 @@ export function observeRoskildeStock(
     ordinaryDescription.length !== 1 ||
     clean(ordinaryDescription.text()) !== "Fra 15 år og opefter." ||
     /udsolgt|sold out|ikke til salg|not on sale|venteliste|waitlist|donation|medlem|membership/i.test(
-      ordinary.text(),
+      renderedTicketText(ordinary),
     )
   )
     fail();

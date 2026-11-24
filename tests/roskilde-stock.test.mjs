@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { load } from "cheerio";
+import { evaluateCandidate } from "../lib/ingestion/policy.ts";
 import {
   observeRoskildeStock,
   ROSKILDE_STOCK_SOURCE as source,
@@ -114,6 +115,40 @@ for (const [label, fn] of [
   test(label + " rejects instead of healthy empty or festival sold_out", () =>
     assert.throws(() => parse(mutate(fn)), /not verified/),
   );
+test("verified ordinary stock can publish but rendered negative notices cannot", () => {
+  const current = {
+    slug: source.festivalSlug,
+    editionYear: 2027,
+    status: "partial",
+    headliners: [],
+    lineup: [],
+    ticketStatus: "unknown",
+  };
+  const result = evaluateCandidate(current, parse());
+  assert.equal(result.publishable, true);
+  assert.ok(result.changes.some(({ field }) => field === "ticketStatus"));
+  for (const notice of [
+    "<div>Ikke</div><div>til salg</div>",
+    '<span style="display: block">Not</span><span style="display: block">on sale</span>',
+    "<span>Sold<br>out</span>",
+    '<span>Ud<span style="display: inline-block">solgt</span></span>',
+  ]) {
+    for (const variant of [false, true]) {
+      assert.throws(
+        () => {
+          const candidate = parse(
+            mutate(($, group, details, stock) => {
+              (variant ? stock : group).append(notice);
+            }),
+          );
+          evaluateCandidate(current, candidate);
+        },
+        /not verified/,
+        notice,
+      );
+    }
+  }
+});
 for (const status of [201, 204, 206, 301, 302, 403, 429, 500])
   test("HTTP " + status + " is not stock", () =>
     assert.throws(() => parse(html, source, { status, finalUrl: url })),
