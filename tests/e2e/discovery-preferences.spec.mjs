@@ -177,6 +177,7 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
     favoriteArtists: ["local-artist"],
     attendance: { "local-festival": "going" },
     playlistFestivals: ["local-playlist"],
+    playlistExcludedArtists: ["local-excluded-artist"],
     savedFilters: activeFilters,
   };
   await page.addInitScript(

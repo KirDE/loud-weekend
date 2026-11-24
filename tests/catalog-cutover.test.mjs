@@ -31,9 +31,10 @@ test("public catalogue routes resolve fresh data at request time", async () => {
   assert.match(artistLoader, /readArtistPage = cache\(async/);
   assert.match(artistLoader, /await getCatalog\(\)/);
   const homeLoader = await readFile("lib/home-metadata.ts", "utf8");
+  assert.match(homeLoader, /getHomeCatalog\s*=\s*cache\(async\s*\(\)\s*=>\s*\{/);
   assert.match(
     homeLoader,
-    /getHomeCatalog\s*=\s*cache\(\(\)\s*=>\s*getCatalog\(\{\s*includeFreshness:\s*true\s*\}\)\)/,
+    /const catalogue = await getCatalog\(\{\s*includeFreshness:\s*true\s*\}\)/,
   );
 });
 
