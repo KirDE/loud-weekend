@@ -65,6 +65,10 @@ export const timetableEntrySchema = z
     stage: z.string().trim().min(1).max(100),
     start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
     artist: z.string().trim().min(1).max(200),
+    sourcePerformanceId: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/)
+      .optional(),
     timeZone: z.string().refine((value) => {
       try {
         new Intl.DateTimeFormat("en", { timeZone: value });
@@ -175,6 +179,7 @@ export function validateFestivalTimetable(festival: Festival, entries: Timetable
   const parsed = entries.map((entry) => timetableEntrySchema.parse(entry));
   const errors: string[] = [];
   const identities = new Set<string>();
+  const publishedIds = new Set<string>();
   for (const entry of parsed) {
     if (festival.startDate && entry.date < festival.startDate)
       errors.push(`${entry.artist}: ${entry.date} precedes festival start`);
@@ -192,6 +197,11 @@ export function validateFestivalTimetable(festival: Festival, entries: Timetable
     ].join("\u0000");
     if (identities.has(identity)) errors.push(`${entry.artist}: duplicate timetable row`);
     identities.add(identity);
+    if (entry.sourcePerformanceId) {
+      if (publishedIds.has(entry.sourcePerformanceId))
+        errors.push(`${entry.artist}: duplicate organizer performance ID`);
+      publishedIds.add(entry.sourcePerformanceId);
+    }
   }
   for (const conflict of findTimetableConflicts(parsed))
     errors.push(

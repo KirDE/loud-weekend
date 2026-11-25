@@ -35,6 +35,7 @@ test("published days and stages can be filtered without hiding cancellations or 
           start: "18:30",
           artist: "First Fixture",
           status: "scheduled",
+          sourcePerformanceId: "fixture:set-1",
           window: { startsAt: "2027-06-10T18:30:00+02:00", endsAt: "2027-06-10T19:15:00+02:00" },
         },
         {
@@ -117,6 +118,59 @@ test("published days and stages can be filtered without hiding cancellations or 
         await context.close();
       }
     }
+    const [identified, ...others] = input.entries;
+    const replace = (entry) =>
+      importTimetable(db, { ...input, entries: [entry, ...others] }, false);
+    await expect(replace({ ...identified, sourcePerformanceId: undefined })).rejects.toThrow(
+      "explicit retained or cancelled",
+    );
+    await expect(replace({ ...identified, artist: "Unrelated Fixture" })).rejects.toThrow(
+      "separate identity review",
+    );
+    await expect(replace({ ...identified, observedAt: "2027-05-31T10:00:00Z" })).rejects.toThrow(
+      "older evidence",
+    );
+
+    const moved = {
+      ...identified,
+      stage: "Fourth stage",
+      start: "19:30",
+      observedAt: "2027-06-02T10:00:00Z",
+      window: { startsAt: "2027-06-10T19:30:00+02:00", endsAt: "2027-06-10T20:15:00+02:00" },
+    };
+    expect((await replace(moved)).changed).toBe(1);
+    const readIdentity = () =>
+      db.timetablePerformance.findUniqueOrThrow({
+        where: {
+          editionId_sourcePerformanceId: {
+            editionId: edition.id,
+            sourcePerformanceId: identified.sourcePerformanceId,
+          },
+        },
+      });
+    expect(await readIdentity()).toMatchObject({
+      stage: "Fourth stage",
+      start: "19:30",
+      status: "ANNOUNCED",
+    });
+    expect(
+      (
+        await replace({
+          ...moved,
+          window: undefined,
+          status: "cancelled",
+          observedAt: "2027-06-03T10:00:00Z",
+        })
+      ).changed,
+    ).toBe(1);
+    expect(await readIdentity()).toMatchObject({
+      stage: "Fourth stage",
+      start: "19:30",
+      status: "CANCELLED",
+      startsAt: null,
+      endsAt: null,
+    });
+    await expect(replace(moved)).rejects.toThrow("older evidence");
   } finally {
     if (importedEditionId)
       await db.timetablePerformance.deleteMany({ where: { editionId: importedEditionId } });

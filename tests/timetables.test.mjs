@@ -135,6 +135,26 @@ test("only exact verified windows become schedule ranges, including overnight an
   }
 });
 
+test("public organizer IDs are optional, bounded and unique within the edition import", () => {
+  assert.equal(validateFestivalTimetable(festival, [base])[0].sourcePerformanceId, undefined);
+  const identified = { ...base, sourcePerformanceId: "official:set.42" };
+  assert.equal(
+    validateFestivalTimetable(festival, [identified])[0].sourcePerformanceId,
+    "official:set.42",
+  );
+  assert.throws(
+    () =>
+      validateFestivalTimetable(festival, [identified, { ...identified, stage: "Other Stage" }]),
+    /duplicate organizer performance ID/,
+  );
+  for (const sourcePerformanceId of ["auto relative path", "", "x".repeat(129)]) {
+    assert.throws(
+      () => validateFestivalTimetable(festival, [{ ...base, sourcePerformanceId }]),
+      /sourcePerformanceId/,
+    );
+  }
+});
+
 test("repeated local hours keep verified instants distinct without guessing for start-only rows", () => {
   const edition = { ...festival, startDate: undefined, endDate: undefined };
   const first = {

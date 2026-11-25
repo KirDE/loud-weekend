@@ -202,6 +202,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
                 start: performance.start,
                 artist: name,
                 timeZone: performance.timeZone ?? "UTC",
+                sourcePerformanceId: performance.sourcePerformanceId ?? undefined,
                 status: performance.status === "CANCELLED" ? "cancelled" : "scheduled",
                 sourceUrl: performance.sourceUrl ?? row.festival.officialUrl,
                 observedAt: instant(performance.observedAt) ?? row.sourceUpdatedAt.toISOString(),

@@ -55,6 +55,16 @@ cancellation with the official source. Production verification is complete
 only after the merged deployment displays a populated representative festival
 and its source link returns successfully.
 
+An optional organizer performance ID (sourcePerformanceId) must be a stable,
+public ID for that specific performance in that edition. Artist names, stage
+and start-time combinations, and row positions are not stable source IDs. If
+the organizer does not publish a stable ID, omit it and do not try to match
+later versions automatically. For an already identified performance, retain
+the same ID on verified moves or explicit cancellations. Reusing the ID for a
+different artist, switching the organizer hostname, omitting that row, or
+replacing it from an older observation
+fails the import without modifying the existing timetable.
+
 ## Official lineup by day
 
 A day allocation is independent of a stage timetable. Publish an allocation

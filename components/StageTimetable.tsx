@@ -195,7 +195,11 @@ export function StageTimetable({ entries }: { entries?: TimetableEntry[] }) {
                     return (
                       <li
                         className={entry.status === "cancelled" ? "cancelled" : undefined}
-                        key={`${entry.start}-${entry.artist}`}
+                        key={
+                          entry.sourcePerformanceId
+                            ? `official:${entry.sourcePerformanceId}`
+                            : `local:${entry.start}-${entry.artist}`
+                        }
                       >
                         <span className="timetableSlotTime">
                           <time dateTime={entry.window?.startsAt ?? `${entry.date}T${entry.start}`}>

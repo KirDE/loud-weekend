@@ -507,6 +507,7 @@ model TimetablePerformance {
   editionId  String
   artistId   String?
   artistName String
+  sourcePerformanceId String?
   date       DateTime          @db.Date
   stage      String
   start      String
@@ -520,6 +521,7 @@ model TimetablePerformance {
   artist     Artist?           @relation(fields: [artistId], references: [id], onDelete: SetNull)
 
   @@unique([editionId, date, stage, start, artistName])
+  @@unique([editionId, sourcePerformanceId])
   @@index([artistId, date])
 }
 
