@@ -1,3 +1,5 @@
+import { readApprovedTicketOffers } from "../ingestion/ticket-offer-proposal-store.ts";
+import type { PublicTicketOffers } from "../domain/ticket-offer-proposal.ts";
 import { timetableEntrySchema } from "../timetables.ts";
 import { cache } from "react";
 import { YOUTUBE_URL } from "./youtube-playlist-queue.ts";
@@ -105,6 +107,25 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         if (notice) lifecycles.set(row.id, notice);
       }
     }
+    const currentIds = editionRows
+      .filter((row) => row.recordState === "CURRENT")
+      .map((row) => row.id);
+    const approvedTiers = new Map<string, PublicTicketOffers>();
+    for (const { editionId, proposal } of await readApprovedTicketOffers(tx, currentIds)) {
+      const { editionYear, sourceUrl, observedAt, offers } = proposal;
+      approvedTiers.set(editionId, {
+        editionYear,
+        sourceUrl,
+        observedAt,
+        offers: offers.map(({ key, kind, status, price, saleDateText }) => ({
+          key,
+          kind,
+          status,
+          price,
+          saleDateText,
+        })),
+      });
+    }
     const editions = editionRows.map((row) => {
       const announced = row.lineup.filter(({ status }) => status === "ANNOUNCED");
       const headliners = announced
@@ -206,6 +227,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           row.sources?.length && row.sources.every((s) => s.deprecatedAt !== null)
             ? row.sources.map((s) => s.deprecatedAt!.toISOString()).sort()[0]
             : undefined,
+        ...(approvedTiers.has(row.id) ? { ticketOffers: approvedTiers.get(row.id)! } : {}),
         ticketStatus: lower(row.ticketStatus),
         updatedAt: row.sourceUpdatedAt.toISOString(),
         genres: row.festival.genres,

@@ -1,4 +1,6 @@
 "use client";
+
+import { TicketOfferReviewQueue } from "./TicketOfferReviewQueue";
 import Link from "next/link";
 import { correctionQueueLabel } from "./CorrectionQueue";
 
@@ -57,12 +59,14 @@ export function AdminConsole({
   editionOptions = [],
   sourceHealth = [],
   lifecycleTargets = [],
+  ticketOfferEditions = [],
 }: {
   lifecycleTargets?: {
     id: string;
     year: number;
     festival: { slug: string; officialUrl: string };
   }[];
+  ticketOfferEditions?: { id: string; year: number }[];
   festivals: Festival[];
   artists: EditableArtist[];
   initialChanges: ReviewChange[];
@@ -302,6 +306,14 @@ export function AdminConsole({
                 year={target.year}
                 festivalSlug={target.festival.slug}
                 sourceUrl={target.festival.officialUrl}
+                locale={language}
+              />
+            ))}
+            {ticketOfferEditions.map((edition) => (
+              <TicketOfferReviewQueue
+                key={edition.id}
+                editionId={edition.id}
+                year={edition.year}
                 locale={language}
               />
             ))}

@@ -3,7 +3,10 @@ import type { MetadataRoute } from "next";
 import { supportedLanguages } from "@/lib/catalog/public";
 import { DatabaseCatalogRepository } from "@/lib/catalog/repository";
 import { editionKey, latestDate } from "@/lib/catalog/freshness";
-import { readSitemapPublications } from "@/lib/catalog/sitemap-publications";
+import {
+  readSitemapPublications,
+  readSitemapTicketOfferApprovals,
+} from "@/lib/catalog/sitemap-publications";
 import { guideTopics } from "@/lib/festival-guides";
 import { festivalOverlapsMonth } from "@/lib/festival-dates";
 import { localizedAlternates, SITE_ORIGIN } from "@/lib/seo";
@@ -14,10 +17,12 @@ export const dynamic = "force-dynamic";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const { db } = await import("@/lib/db");
   const now = new Date();
-  const [{ festivals, artists, editions }, publications] = await db.$transaction(
+  const [{ festivals, artists, editions }, publications, tierApprovals] = await db.$transaction(
     async (tx) => {
       const catalog = await new DatabaseCatalogRepository(tx).read();
-      return [catalog, await readSitemapPublications(tx, now)] as const;
+      const publications = await readSitemapPublications(tx, now);
+      const tierApprovals = await readSitemapTicketOfferApprovals(tx, catalog.festivals, now);
+      return [catalog, publications, tierApprovals] as const;
     },
     { isolationLevel: "RepeatableRead" },
   );
@@ -49,10 +54,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const months = new Map<number, string | undefined>();
   for (const festival of festivals) {
     const { slug, editionYear, countryCode, lineup, headliners } = festival;
-    const publication =
-      editionYear === undefined ? undefined : publications.get(editionKey(slug, editionYear));
+    const key = editionYear === undefined ? undefined : editionKey(slug, editionYear);
+    const publication = key === undefined ? undefined : publications.get(key);
     const nameDate = sharedNames.get(slug);
-    const lastModified = latestDate([publication?.festival ?? undefined, nameDate]);
+    const lastModified = latestDate([
+      publication?.festival ?? undefined,
+      nameDate,
+      key === undefined ? undefined : tierApprovals.get(key),
+    ]);
     const directoryDate = latestDate([publication?.directory ?? undefined, nameDate]);
     const appearanceDate = latestDate([publication?.appearance ?? undefined, nameDate]);
     homeDates.push(lastModified);

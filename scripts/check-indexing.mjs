@@ -5,8 +5,27 @@ import robotsParser from "robots-parser";
 
 const site = "https://loudweekend.eu";
 const namespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
+const xhtmlNamespace = "http://www.w3.org/1999/xhtml";
 const languages = ["x-default", "en", "de", "ru"];
 const crawlers = ["Googlebot", "Bingbot"];
+const monitor = "LoudWeekendIndexingCheck/1.0";
+// Next.js serves blocking head metadata for Bingbot. Keep the monitor
+// identifiable while requesting that HTML-only crawler representation.
+const htmlMonitor = monitor + " (Bingbot metadata compatibility)";
+const fixedPaths = ["/", "/en/", "/de/", "/ru/", "/submit/"];
+const localizedGuide = /^\/(?:(?:en|de|ru)\/)?guides\/(?:germany|multi-day)\/$/;
+const editionDirectory = /^\/(?:(?:en|de|ru)\/)?editions\/\d{4}\/$/;
+const routeClasses = [
+  /^\/browse\/$/,
+  /^\/(?:en|de|ru)\/(?:about|faq)\/$/,
+  /^\/festivals\/[^/]+\/$/,
+  /^\/artists\/[^/]+\/$/,
+  /^\/festivals\/[^/]+\/\d{4}\/$/,
+  editionDirectory,
+  /^\/countries\/[a-z]{2}\/$/,
+  /^\/months\/(?:0[1-9]|1[0-2])\/$/,
+];
+const localizedDetail = /^\/(?:(?:en|de|ru)\/)?(?:festivals|artists)\/[^/]+\/$/;
 
 // A header may scope a rule to a crawler. Image preview limits also use
 // a colon, but "none" in that value position is not an indexing directive.
@@ -17,7 +36,7 @@ async function get(origin, path, mime, limit) {
   const response = await fetch(new URL(path, origin), {
     redirect: "manual",
     signal: AbortSignal.timeout(10_000),
-    headers: { "User-Agent": "LoudWeekendIndexingCheck/1.0" },
+    headers: { "User-Agent": mime.includes("text/html") ? htmlMonitor : monitor },
   });
   const type = response.headers.get("content-type")?.split(";")[0];
   if (response.status !== 200 || !mime.includes(type) || !response.body) {
@@ -46,13 +65,19 @@ async function get(origin, path, mime, limit) {
   }
 }
 
+function xmlNamespace(element, binding) {
+  for (let node = element; node; node = node.parent) {
+    if (node.attribs && Object.hasOwn(node.attribs, binding)) return node.attribs[binding];
+  }
+}
+
 export function inspectSitemap(xml, now = Date.now()) {
   const $ = load(xml, { xml: true });
   const root = $.root().children();
   assert.equal(root.length, 1, "expected one sitemap root");
   assert.equal(root.get(0)?.name, "urlset");
   assert.equal(root.attr("xmlns"), namespace);
-  assert.equal(root.attr("xmlns:xhtml"), "http://www.w3.org/1999/xhtml");
+  assert.equal(root.attr("xmlns:xhtml"), xhtmlNamespace);
   assert.ok(xml.trimEnd().endsWith("</urlset>"), "unclosed sitemap");
   const entries = new Map();
   const urls = root.children();
@@ -65,13 +90,31 @@ export function inspectSitemap(xml, now = Date.now()) {
   };
   for (const node of urls) {
     assert.equal(node.name, "url");
+    assert.equal(xmlNamespace(node, "xmlns"), namespace, "invalid url namespace");
     const entry = $(node);
-    assert.equal(entry.children("loc").length, 1);
-    const path = canonicalPath(entry.children("loc").text());
+    const location = entry.children("loc");
+    assert.equal(location.length, 1);
+    assert.equal(xmlNamespace(location[0], "xmlns"), namespace, "invalid loc namespace");
+    assert.equal(location.children().length, 0, "invalid loc content");
+    const path = canonicalPath(location.text());
+    assert.ok(
+      fixedPaths.includes(path) ||
+        path === "/archive/" ||
+        localizedDetail.test(path) ||
+        localizedGuide.test(path) ||
+        routeClasses.some((type) => type.test(path)),
+      `unsupported sitemap path: ${path}`,
+    );
     assert.ok(!entries.has(path), `duplicate sitemap path: ${path}`);
     const timestamps = entry.children("lastmod");
     assert.ok(timestamps.length <= 1, `duplicate lastmod on ${path}`);
     if (timestamps.length) {
+      assert.equal(
+        xmlNamespace(timestamps[0], "xmlns"),
+        namespace,
+        `invalid lastmod namespace on ${path}`,
+      );
+      assert.equal(timestamps.children().length, 0, `invalid lastmod content on ${path}`);
       const stamp = timestamps.text(),
         date = new Date(stamp);
       assert.ok(
@@ -82,6 +125,11 @@ export function inspectSitemap(xml, now = Date.now()) {
     }
     const alternates = new Map();
     for (const link of entry.children("xhtml\\:link")) {
+      assert.equal(
+        xmlNamespace(link, "xmlns:xhtml"),
+        xhtmlNamespace,
+        `invalid alternate namespace on ${path}`,
+      );
       const attrs = link.attribs;
       assert.equal(attrs.rel, "alternate");
       assert.ok(
@@ -93,7 +141,7 @@ export function inspectSitemap(xml, now = Date.now()) {
     entries.set(path, alternates);
   }
   for (const [path, alternates] of entries) {
-    if (/^\/(?:(?:en|de|ru)\/)?(?:festivals|artists)\/[^/]+\/$/.test(path)) {
+    if (localizedDetail.test(path) || localizedGuide.test(path) || editionDirectory.test(path)) {
       assert.equal(alternates.size, languages.length, `missing detail hreflang on ${path}`);
     }
     if (!alternates.size) continue;
@@ -156,16 +204,8 @@ export async function checkIndexing(origin = site) {
   // Check all members of a representative localized cluster plus the canonical
   // path for each catalogue route class; do not crawl the entire site.
   const examples = [...entries.keys()].sort();
-  const sample = new Set(["/", "/en/", "/de/", "/ru/", "/submit/"]);
-  const editionDirectory = /^\/editions\/\d+\/$/;
-  for (const type of [
-    /^\/festivals\/[^/]+\/$/,
-    /^\/artists\/[^/]+\/$/,
-    /^\/festivals\/[^/]+\/\d+\/$/,
-    editionDirectory,
-    /^\/countries\/[a-z]{2}\/$/,
-    /^\/months\/\d{2}\/$/,
-  ]) {
+  const sample = new Set([...fixedPaths, ...examples.filter((path) => localizedGuide.test(path))]);
+  for (const type of routeClasses) {
     const path = examples.find((value) => type.test(value));
     assert.ok(path, `missing sitemap route class ${type}`);
     sample.add(path);
@@ -177,7 +217,7 @@ export async function checkIndexing(origin = site) {
     const $ = load(html);
     const lang = /^\/(en|de|ru)\//.exec(path)?.[1];
     if (lang) assert.equal($("html").attr("lang"), lang, `document language mismatch on ${path}`);
-    const canonical = $('link[rel="canonical"]').filter(outsideTemplate);
+    const canonical = $('head link[rel="canonical"]').filter(outsideTemplate);
     assert.equal(canonical.length, 1, `expected a single canonical on ${path}`);
     assert.equal(canonical.attr("href"), site + path, `canonical mismatch on ${path}`);
     const robotsDirectives = $(
@@ -193,7 +233,7 @@ export async function checkIndexing(origin = site) {
       `not indexable: ${path}`,
     );
     for (const [lang, target] of entries.get(path)) {
-      const link = $(`link[rel="alternate"][hreflang="${lang}"]`).filter(outsideTemplate);
+      const link = $(`head link[rel="alternate"][hreflang="${lang}"]`).filter(outsideTemplate);
       assert.equal(link.length, 1, `missing/duplicate ${lang} alternate on ${path}`);
       assert.equal(link.attr("href"), site + target, `alternate mismatch on ${path}`);
     }

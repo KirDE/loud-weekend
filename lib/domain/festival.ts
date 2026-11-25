@@ -1,4 +1,5 @@
 import type { PublicEditionLifecycle } from "./edition-lifecycle-review.ts";
+import type { PublicTicketOffers } from "./ticket-offer-proposal.ts";
 import type { EditionFreshness } from "./freshness.ts";
 
 // Catalogue shapes are independent of the live, repository-backed seed data.
@@ -38,6 +39,7 @@ export type Festival = {
   finalLineup?: true;
   officialUrl: string;
   ticketsUrl?: string;
+  ticketOffers?: PublicTicketOffers;
   playlistUrl?: string;
   reviewedPlaylistLinks?: { spotify?: string; youtube_music?: string };
   freshness?: EditionFreshness;
