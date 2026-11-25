@@ -12,7 +12,8 @@ import { emptyPlannerState, type PlannerState, useLocalPlanner } from "./LocalPl
 type Kind =
   "favorites" | "collections" | "saved-filters" | "plans" | "season-attendance" | "budgets";
 type Document = { id: string; payload: unknown; revision: number; updatedAt: string };
-type Conflict = { kind: Kind; local: unknown; remote: Document };
+type ConflictMode = "replace" | "merge" | "spotify";
+type Conflict = { kind: Kind; remote: Document; mode: ConflictMode };
 const kinds: Kind[] = [
   "favorites",
   "collections",
@@ -133,6 +134,13 @@ const labels = {
 function playlistSelection(value: unknown) {
   const { playlistFestivals, playlistExcludedArtists } = readCollections(value);
   return { playlistFestivals, playlistExcludedArtists };
+}
+function spotifySelection(remote: unknown, planner: ReturnType<typeof useLocalPlanner>) {
+  const collections = readCollections(remote);
+  return {
+    ...mergeCollections(collections, { playlistFestivals: planner.playlistFestivals }),
+    playlistExcludedArtists: planner.playlistExcludedArtists ?? collections.playlistExcludedArtists,
+  };
 }
 function payloads(p: ReturnType<typeof useLocalPlanner>): Record<Kind, unknown> {
   return {
@@ -282,7 +290,12 @@ export function AccountSyncPanel({
       window.removeEventListener("loud-weekend-signed-out", listener);
     };
   }, []);
-  async function put(kind: Kind, payload: unknown, revision: number) {
+  async function put(
+    kind: Kind,
+    payload: unknown,
+    revision: number,
+    mode: ConflictMode = "replace",
+  ) {
     if (!user) throw new Error(t.failed);
     const accountId = user.id;
     const response = await fetch(`/api/sync/${kind}`, {
@@ -293,7 +306,7 @@ export function AccountSyncPanel({
     if (response.status === 409) {
       const latest = await readDocument(kind, accountId);
       if (!latest) throw new Error(t.failed);
-      setConflict({ kind, local: payload, remote: latest });
+      setConflict({ kind, remote: latest, mode });
       throw new Error("conflict");
     }
     if (!response.ok) throw new Error(t.failed);
@@ -324,7 +337,12 @@ export function AccountSyncPanel({
           mode === "merge" && next[kind]
             ? mergePayload(kind, next[kind]!.payload, local[kind])
             : local[kind];
-        next[kind] = await put(kind, content, next[kind]?.revision ?? 0);
+        next[kind] = await put(
+          kind,
+          content,
+          next[kind]?.revision ?? 0,
+          mode === "merge" ? "merge" : "replace",
+        );
       }
       if (mode === "merge") planner.merge(plannerFrom(next));
       setStatus(t.current);
@@ -340,9 +358,13 @@ export function AccountSyncPanel({
     if (!conflict) return;
     setBusy(true);
     try {
-      const { kind, local, remote } = conflict;
+      const { kind, remote, mode } = conflict;
       if (useLocal) {
-        await put(kind, local, remote.revision);
+        const local = payloads(planner)[kind];
+        let content = local;
+        if (mode === "merge") content = mergePayload(kind, remote.payload, local);
+        if (mode === "spotify") content = spotifySelection(remote.payload, planner);
+        await put(kind, content, remote.revision, mode);
       } else {
         const state = plannerFrom({ [kind]: remote });
         const fields = {
@@ -365,7 +387,7 @@ export function AccountSyncPanel({
       setConflict(null);
       setStatus(t.resolved);
     } catch (reason) {
-      setStatus(reason instanceof Error ? reason.message : t.failed);
+      if (!(reason instanceof Error && reason.message === "conflict")) setStatus(t.failed);
     } finally {
       setBusy(false);
     }
@@ -401,13 +423,8 @@ export function AccountSyncPanel({
     try {
       // Preserve unsynchronized device selection first, under the same revision
       // checks as normal sync. A conflict aborts before calling the provider.
-      const remoteCollections = readCollections(docs.collections?.payload);
-      const selection = {
-        ...mergeCollections(remoteCollections, { playlistFestivals: planner.playlistFestivals }),
-        playlistExcludedArtists:
-          planner.playlistExcludedArtists ?? remoteCollections.playlistExcludedArtists,
-      };
-      const saved = await put("collections", selection, docs.collections?.revision ?? 0);
+      const selection = spotifySelection(docs.collections?.payload, planner);
+      const saved = await put("collections", selection, docs.collections?.revision ?? 0, "spotify");
       planner.merge(playlistSelection(saved.payload));
       const response = await fetch("/api/spotify/sync", {
         method: "POST",
@@ -418,7 +435,7 @@ export function AccountSyncPanel({
         if (!user) throw new Error(t.failed);
         const document = await readDocument("collections", user.id);
         if (!document) throw new Error(t.failed);
-        setConflict({ kind: "collections", local: selection, remote: document });
+        setConflict({ kind: "collections", remote: document, mode: "spotify" });
         setStatus(t.conflict);
         return;
       }
