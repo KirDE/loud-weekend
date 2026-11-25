@@ -67,7 +67,12 @@ export type FestivalCandidate = Partial<
   /** Announcement feeds add artists; absence is not a removal. */
   artistListMode?: "additive";
   /** Explicit producer provenance; persisted with normalized candidate evidence. */
-  ticketSupplement?: { sourceUrl: string; ticketUrl: string; editionYear: number };
+  ticketSupplement?: {
+    sourceUrl: string;
+    ticketUrl: string;
+    editionYear: number;
+    scope?: { namespace: string; productId: string };
+  };
   /** Edition observations from the strategy that supplied each merged proposal field. */
   fieldEditionYears?: Partial<Record<Exclude<FieldEvidence["field"], "timetable">, number[]>>;
   timetable?: { date: string; stage: string; start: string; artist: string }[];

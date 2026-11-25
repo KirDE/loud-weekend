@@ -16,8 +16,9 @@ import { publishArrivalObservation, type ArrivalObservation } from "./arrival-im
 import {
   ticketSupplementUrl,
   ticketSupplementPurchaseUrl,
+  ticketSupplementScope,
+  ticketPublicationPolicy,
 } from "../ingestion/ticket-supplements.ts";
-import { isProvinssiAnnouncement, PROVINSSI_HOME } from "../ingestion/adapters/provinssi.ts";
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { isDownloadAnnouncement } from "../ingestion/adapters/download.ts";
@@ -490,7 +491,18 @@ async function applyFestivalChanges(
     }
     if (changed) changedFields.push(change.field);
   }
-  return { edition, changedFields: [...new Set(changedFields)] };
+  return {
+    edition,
+    resultingDates: {
+      startDate: proposed.has("startDate")
+        ? isoDate(dateOnly(proposed.get("startDate")))
+        : isoDate(edition.startDate),
+      endDate: proposed.has("endDate")
+        ? isoDate(dateOnly(proposed.get("endDate")))
+        : isoDate(edition.endDate),
+    },
+    changedFields: [...new Set(changedFields)],
+  };
 }
 
 async function createPublication(
@@ -822,7 +834,13 @@ export async function publishIngestionResult(
             "Tolminator stock publication requires matching persisted ticket-only proof",
           );
       }
-      if (observed.ticketSupplement || stored.ticketSupplement) {
+      // Required ticket fields cannot bypass durable proof by omitting both markers.
+      const ticketPolicy = ticketPublicationPolicy(input.result.festivalSlug);
+      if (
+        observed.ticketSupplement ||
+        stored.ticketSupplement ||
+        input.result.changes.some(({ field }) => ticketPolicy?.requiredFields.includes(field))
+      ) {
         const registeredSource = {
           festivalSlug: input.result.festivalSlug,
           url: input.result.sourceUrl,
@@ -835,15 +853,17 @@ export async function publishIngestionResult(
         };
         const ticketUrl = ticketSupplementUrl(registeredSource);
         const purchaseUrl = ticketSupplementPurchaseUrl(registeredSource);
+        const scope = ticketSupplementScope(registeredSource);
         const provenance = {
           sourceUrl: input.result.sourceUrl,
           ticketUrl,
           editionYear: expectedYear,
+          ...(scope ? { scope } : {}),
         };
         const valid =
           ticketUrl &&
-          same(observed.ticketSupplement, provenance) &&
-          same(stored.ticketSupplement, provenance) &&
+          isDeepStrictEqual(observed.ticketSupplement, provenance) &&
+          isDeepStrictEqual(stored.ticketSupplement, provenance) &&
           candidate.festivalSlug === input.result.festivalSlug &&
           candidate.attempt.requestedUrl === input.result.sourceUrl &&
           observed.sourceUrl === input.result.sourceUrl &&
@@ -1146,46 +1166,19 @@ export async function publishIngestionResult(
         !verifiedDownloadAnnouncement
       )
         throw new Error("Download publication requires verified official announcement evidence");
-      const provinssiPublication = input.result.festivalSlug === "provinssi";
-      const verifiedProvinssiAnnouncement =
-        provinssiPublication &&
-        candidate.festivalSlug === "provinssi" &&
-        candidate.attempt.requestedUrl === PROVINSSI_HOME &&
-        input.result.sourceUrl === PROVINSSI_HOME &&
-        isProvinssiAnnouncement(input.result.candidate, applied.edition.year) &&
-        isProvinssiAnnouncement(
-          candidate.normalized as unknown as FestivalCandidate,
-          applied.edition.year,
-        ) &&
-        input.result.changes.every(
-          ({ field, kind }) =>
-            ["startDate", "endDate", "city", "lineup", "ticketsUrl", "status"].includes(field) &&
-            (field !== "lineup" || kind === "artist_added") &&
-            candidate.evidence.some(
-              (e) =>
-                e.field === field &&
-                e.sourceUrl === PROVINSSI_HOME &&
-                same(
-                  e.observedValue,
-                  (input.result.candidate as unknown as Record<string, unknown>)[field],
-                ),
-            ),
-        ) &&
-        ["startDate", "endDate", "city", "lineup", "ticketsUrl", "status"].every((field) =>
-          same(
-            (candidate.normalized as Record<string, unknown>)[field],
-            (input.result.candidate as unknown as Record<string, unknown>)[field],
-          ),
-        );
-      if (provinssiPublication && !verifiedProvinssiAnnouncement)
-        throw new Error(
-          "Provinssi publication requires matching persisted official addition evidence",
-        );
-      const provinssiLineup =
-        verifiedProvinssiAnnouncement &&
-        input.result.changes.some((c) => c.kind === "artist_added");
+      const ticketPrimaryProof = ticketPolicy?.validatePrimary?.({
+        result: input.result,
+        requestedUrl: candidate.attempt.requestedUrl,
+        candidateSlug: candidate.festivalSlug,
+        stored,
+        evidence: candidate.evidence,
+        edition: {
+          year: applied.edition.year,
+          ...applied.resultingDates,
+        },
+      });
       if (
-        (graspopLineup || verifiedDownloadAnnouncement || provinssiLineup) &&
+        (graspopLineup || verifiedDownloadAnnouncement || ticketPrimaryProof?.markPartial) &&
         applied.edition.completeness === "TBA"
       ) {
         await db.festivalEdition.update({
@@ -1196,7 +1189,7 @@ export async function publishIngestionResult(
           applied.changedFields.push("completeness");
       }
       const playlistRefreshDeferral =
-        verifiedProvinssiAnnouncement ||
+        ticketPrimaryProof?.deferPlaylistRefreshFor ||
         idaysLineup ||
         graspopLineup ||
         (downloadLineup && verifiedDownloadAnnouncement)
@@ -1204,13 +1197,8 @@ export async function publishIngestionResult(
               policy: "explicit-refresh-only",
               reason:
                 "Verified " +
-                (input.result.festivalSlug === "provinssi"
-                  ? "Provinssi"
-                  : downloadLineup
-                    ? "Download"
-                    : graspopLineup
-                      ? "Graspop"
-                      : "I-Days") +
+                (ticketPrimaryProof?.deferPlaylistRefreshFor ??
+                  (downloadLineup ? "Download" : graspopLineup ? "Graspop" : "I-Days")) +
                 " catalog additions do not authorize provider activity",
             }
           : undefined;
