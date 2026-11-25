@@ -5,8 +5,9 @@ import {
 } from "./festival-overview-import.ts";
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
+import { admissionSources } from "../ingestion/adapters/admission-sources.ts";
 import { rosterFingerprint } from "./lineup-proof.ts";
-import { editionDateProblem } from "../domain/edition-dates.ts";
+import { editionDateProblem, isCalendarDate } from "../domain/edition-dates.ts";
 import { publishArrivalObservation, type ArrivalObservation } from "./arrival-import.ts";
 import {
   ticketSupplementUrl,
@@ -599,6 +600,77 @@ export async function publishIngestionResult(
         throw new Error(
           "Ingestion publication scope does not match the persisted festival, source and edition",
         );
+      }
+      // Either a reviewed admission endpoint or a free-admission claim invokes
+      // the same proof contract, even if the caller strips its source identity.
+      const admissionRoutes = [input.result.sourceUrl, candidate.attempt.finalUrl];
+      const admissionSource = admissionSources.find(({ url }) => admissionRoutes.includes(url));
+      if (
+        admissionSource ||
+        observed.ticketStatus === "free" ||
+        stored.ticketStatus === "free" ||
+        input.result.changes.some(
+          ({ field, after }) => field === "ticketStatus" && after === "free",
+        )
+      ) {
+        const { sourceUrl, fetchedAt, festivalSlug } = input.result;
+        const at = Date.parse(fetchedAt);
+        const fields = admissionSource?.fields ?? (["ticketStatus"] as const);
+        const year = observed.observedEditionYears[0];
+        const valid =
+          candidate.attempt.finalUrl === sourceUrl &&
+          candidate.attempt.httpStatus === 200 &&
+          Number.isFinite(at) &&
+          year !== undefined &&
+          (candidate.sourceYear === null || year === candidate.sourceYear) &&
+          observed.ticketStatus === "free" &&
+          isDeepStrictEqual(stored, observed) &&
+          observed.fetchedAt === fetchedAt &&
+          observed.warnings.length === 0 &&
+          (!admissionSource ||
+            (admissionSource.url === sourceUrl &&
+              admissionSource.festivalSlug === festivalSlug &&
+              isCalendarDate(observed.startDate) &&
+              isCalendarDate(observed.endDate) &&
+              !editionDateProblem(year, observed.startDate, observed.endDate) &&
+              Object.keys(observed).every((key) =>
+                [
+                  "schemaVersion",
+                  "festivalSlug",
+                  "sourceUrl",
+                  "fetchedAt",
+                  "observedEditionYears",
+                  "warnings",
+                  "evidence",
+                  ...fields,
+                ].includes(key),
+              ))) &&
+          input.result.changes.every(({ field, after }) => {
+            const proofField = fields.find((key) => key === field);
+            return proofField ? same(after, observed[proofField]) : !admissionSource;
+          }) &&
+          fields.every((field) =>
+            observed.evidence.some(
+              (e) =>
+                e.field === field &&
+                e.sourceUrl === sourceUrl &&
+                Date.parse(e.observedAt) === at &&
+                e.excerpt?.trim() &&
+                candidate.evidence.some(
+                  (saved) =>
+                    saved.field === field &&
+                    saved.sourceUrl === e.sourceUrl &&
+                    saved.observedAt.getTime() === at &&
+                    saved.excerpt === e.excerpt &&
+                    saved.contentHash === createHash("sha256").update(e.excerpt!).digest("hex") &&
+                    same(saved.observedValue, observed[field]),
+                ),
+            ),
+          );
+        if (!valid)
+          throw new Error(
+            "Free admission publication requires matching persisted official edition evidence",
+          );
       }
       const sourceId = `ingestion:${candidate.id}`;
       const existing = await db.catalogPublication.findUnique({

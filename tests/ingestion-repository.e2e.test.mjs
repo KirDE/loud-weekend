@@ -1,3 +1,4 @@
+import { POLANDROCK_NEWSROOM } from "../lib/ingestion/adapters/polandrock-admission.ts";
 import { TOLMINATOR_PRODUCT } from "../lib/ingestion/adapters/tolminator-stock.ts";
 import { createPrismaClient } from "../lib/prisma-client.mjs";
 import { ROSKILDE_PRODUCTS_URL } from "../lib/ingestion/adapters/roskilde-stock.ts";
@@ -142,8 +143,8 @@ test("persists partial failure, retry lineage and immutable candidate history", 
   );
 });
 
-for (const stockUrl of [TOLMINATOR_PRODUCT, ROSKILDE_PRODUCTS_URL]) {
-  test(`independent stock cannot reset primary health or lineage: ${stockUrl}`, async () => {
+for (const stockUrl of [TOLMINATOR_PRODUCT, ROSKILDE_PRODUCTS_URL, POLANDROCK_NEWSROOM]) {
+  test(`independent acquisition cannot reset primary health or lineage: ${stockUrl}`, async () => {
     const run = await createIngestionRun(db, {
       trigger: "TEST",
       sourceCommit: "health-isolation",

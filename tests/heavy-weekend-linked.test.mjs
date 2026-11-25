@@ -1,3 +1,4 @@
+import { heavyStockResponse } from "./support/heavy-stock-fixture.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -113,6 +114,8 @@ test("transport bounds official details and propagates HTTP failures and redirec
       maxAttempts: 1,
       fetchImpl: async (url, opts) => {
         calls.push(url);
+        const stock = heavyStockResponse(url);
+        if (stock) return stock;
         if (url === source.url) return new Response(capture.home);
         assert.equal(opts.redirect, "error");
         if (url.includes("cdn.prod"))
@@ -128,7 +131,7 @@ test("transport bounds official details and propagates HTTP failures and redirec
     });
     assert.equal(result.response.status, failure ? 403 : 200);
     if (!failure) {
-      assert.equal(calls.length, 8);
+      assert.equal(calls.length, 10);
       assert.deepEqual(parse(await result.response.text()).lineup, parse().lineup);
     } else assert.equal(calls.length, 2);
   }

@@ -1,4 +1,5 @@
 import { overviewSourceUrls } from "./adapters/festival-overview.ts";
+import { admissionSources } from "./adapters/admission-sources.ts";
 import { stockProofSources } from "./adapters/stock-proof-sources.ts";
 import { queueImportEvent } from "./import-event-queue.ts";
 import { createHash } from "node:crypto";
@@ -37,7 +38,11 @@ export async function createIngestionRun(
 
 // Only reviewed independent endpoints are excluded. Do not infer scope from
 // caller-supplied candidate fields (a failed request has no candidate at all).
-const independentTicketUrls = stockProofSources.map(({ url }) => url);
+const independentTicketUrls = [
+  ...stockProofSources.map(({ url }) => url),
+  ...admissionSources.map(({ url }) => url),
+];
+export const isIndependentTicketUrl = (url: string) => independentTicketUrls.includes(url);
 const attemptScope = (
   festivalSlug: string,
   requestedUrl?: string,
@@ -77,7 +82,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
     }
     const result = input.result;
     const independent =
-      independentTicketUrls.includes(input.requestedUrl) ||
+      isIndependentTicketUrl(input.requestedUrl) ||
       overviewSourceUrls(input.festivalSlug).includes(input.requestedUrl);
     const scope = attemptScope(input.festivalSlug, independent ? input.requestedUrl : undefined);
     const status = !result
@@ -228,6 +233,12 @@ export const ingestionQueries = {
     }),
   sourceStates: (db: Client) =>
     db.ingestionSourceState.findMany({ select: { festivalSlug: true, lastSuccessfulCheck: true } }),
+  lastSuccessfulCheck: (db: Client, festivalSlug: string, requestedUrl: string) =>
+    db.ingestionAttempt.findFirst({
+      where: { festivalSlug, requestedUrl, status: { not: "FAILED" } },
+      orderBy: { endedAt: "desc" },
+      select: { endedAt: true },
+    }),
   lastSuccessfulExtraction: (db: Client, festivalSlug: string, requestedUrl?: string) =>
     db.ingestionEvidence.findFirst({
       where: { candidate: { festivalSlug, attempt: attemptScope(festivalSlug, requestedUrl) } },
