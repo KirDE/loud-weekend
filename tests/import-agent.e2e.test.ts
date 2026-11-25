@@ -18,6 +18,7 @@ import {
   releaseAgentIssue,
   resumeAgentIssue,
 } from "../lib/ingestion/agent-issues.ts";
+import { readCatalog } from "../lib/catalog/repository.ts";
 import { GET, POST } from "../app/api/ingestion/agent/route.ts";
 import { createIngestionRun, persistAttempt } from "../lib/ingestion/repository.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
@@ -162,8 +163,122 @@ test("verified resolution commits audit/provenance once, replays safely and enqu
   const future = await listAgentIssues(db, new Date(Date.now() + 8 * 86400000));
   assert.equal(future.ready, 1);
 });
+test("reviewed catalogue freshness uses only evidence for committed facts", async () => {
+  const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
+  const where = { id: source.editionId! };
+  const checkedAt = new Date(Date.now() - 3_600_000);
+  const previous = new Date(checkedAt.getTime() - 3_600_000);
+  await db.festivalEdition.update({ where, data: { sourceUpdatedAt: previous } });
+  const first = await claim();
+  const decision = {
+    ...checked,
+    facts: { ...checked.facts, headliners: first.current.headliners, lineup: first.current.lineup },
+    evidence: [
+      { ...evidence("city"), checkedAt: checkedAt.toISOString() },
+      evidence("headliners"),
+      evidence("lineup"),
+    ],
+  };
+  const receipt = await resolveCase(first, decision);
+  assert.ok(receipt.publicationId);
+  assert.deepEqual(
+    (await db.festivalEdition.findUniqueOrThrow({ where })).sourceUpdatedAt,
+    checkedAt,
+  );
+
+  await db.operationalState.delete({ where: { key: first.key } });
+  const second = await claim();
+  const delayed = await resolveCase(second, {
+    ...checked,
+    facts: { city: "Another Verified City" },
+    evidence: [{ ...evidence("city"), checkedAt: previous.toISOString() }],
+  });
+  assert.ok(delayed.publicationId);
+  assert.deepEqual(
+    (await db.festivalEdition.findUniqueOrThrow({ where })).sourceUpdatedAt,
+    checkedAt,
+  );
+});
+for (const changedField of ["headliners", "lineup"] as const) {
+  test(`reviewed ${changedField} freshness excludes the unchanged billing group`, async () => {
+    const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
+    const where = { id: source.editionId! };
+    const checkedAt = new Date(Date.now() - 3_600_000);
+    await db.festivalEdition.update({
+      where,
+      data: { sourceUpdatedAt: new Date(checkedAt.getTime() - 3_600_000) },
+    });
+    const unchangedField = changedField === "lineup" ? "headliners" : "lineup";
+    const unchangedProvenance = { editionId: where.id, field: unchangedField };
+    const provenanceBefore = await db.editionProvenance.count({ where: unchangedProvenance });
+    const c = await claim();
+    const receipt = await resolveCase(c, {
+      ...checked,
+      facts: {
+        headliners: c.current.headliners,
+        lineup: c.current.lineup,
+        [changedField]: [...c.current[changedField], "Reviewed Additional Artist"],
+      },
+      evidence: [
+        { ...evidence(changedField), checkedAt: checkedAt.toISOString() },
+        evidence(unchangedField),
+      ],
+    });
+    assert.ok(receipt.publicationId);
+    assert.deepEqual(
+      (await db.festivalEdition.findUniqueOrThrow({ where })).sourceUpdatedAt,
+      checkedAt,
+    );
+    const publication = await db.catalogPublication.findUniqueOrThrow({
+      where: { id: String(receipt.publicationId) },
+    });
+    assert.deepEqual(publication.fields, [changedField]);
+    assert.equal(publication.lineupChanged, true);
+    assert.equal(
+      await db.editionProvenance.count({ where: unchangedProvenance }),
+      provenanceBefore,
+    );
+  });
+}
+for (const [before, after, completeness] of [
+  ["TBA", "confirmed", "PARTIAL"],
+  ["CONFIRMED", "partial", "COMPLETE"],
+] as const) {
+  test(`reviewed status ${after} preserves ${completeness} catalogue completeness`, async () => {
+    const source = await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } });
+    const editionId = source.editionId!;
+    const provenance = { where: { editionId, field: "completeness" } };
+    const provenanceBefore = await db.editionProvenance.count(provenance);
+    await db.festivalEdition.update({
+      where: { id: editionId },
+      data: { status: before, completeness },
+    });
+    const c = await claim();
+    const receipt = await resolveCase(c, {
+      action: "apply",
+      reason: "Reviewed official edition status independently of record completeness",
+      facts: { status: after },
+      evidence: [evidence("status")],
+    });
+
+    assert.equal(typeof receipt.publicationId, "string");
+    const edition = await db.festivalEdition.findUniqueOrThrow({ where: { id: editionId } });
+    assert.equal(edition.status, after.toUpperCase());
+    assert.equal(edition.completeness, completeness);
+    const publication = await db.catalogPublication.findUniqueOrThrow({
+      where: { id: String(receipt.publicationId) },
+    });
+    assert.deepEqual(publication.fields, ["status"]);
+    assert.equal(receipt.providerJobs, 0);
+    assert.equal(await db.editionProvenance.count(provenance), provenanceBefore);
+  });
+}
+
 test("billing promotion is atomic and keeps artist identity, completeness and provider boundaries", async () => {
   const c = await claim();
+  const original = await db.lineupEntry.findFirstOrThrow({
+    where: { editionId: c.current.editionId!, artist: { slug: "sample-artist" } },
+  });
   const receipt = await resolveCase(c, {
     action: "apply",
     reason: checked.reason,
@@ -179,8 +294,16 @@ test("billing promotion is atomic and keeps artist identity, completeness and pr
     where: { id: c.current.editionId! },
     include: { lineup: { include: { artist: true } } },
   });
-  assert.equal(edition.completeness, "PARTIAL");
+  assert.equal(edition.completeness, "COMPLETE");
+  assert.equal(
+    edition.lineup.find((entry) => entry.artistId === original.artistId)?.id,
+    original.id,
+  );
   assert.equal(edition.lineup.find((l) => l.artist.name === "Sample Artist")?.billing, "LINEUP");
+  assert.equal(
+    edition.lineup.find((entry) => entry.artistId === original.artistId)?.id,
+    original.id,
+  );
   assert.equal(
     edition.lineup.find((l) => l.artist.name === "Verified New Headliner")?.billing,
     "HEADLINER",
@@ -192,6 +315,78 @@ test("billing promotion is atomic and keeps artist identity, completeness and pr
     0,
   );
 });
+test("a reviewed alias keeps the published roster and does not emit a lineup change", async () => {
+  await db.artist.update({
+    where: { slug: "sample-artist" },
+    data: { aliases: ["Reviewed Artist Alias"] },
+  });
+  const c = await claim();
+  const where = { editionId: c.current.editionId! };
+  const before = await db.lineupEntry.findMany({ where, orderBy: { id: "asc" } });
+  const receipt = await resolveCase(c, {
+    ...checked,
+    facts: { headliners: ["Reviewed Artist Alias"], lineup: [], city: "Verified City" },
+    evidence: ["headliners", "lineup", "city"].map((field) => evidence(field)),
+  });
+  assert.deepEqual(await db.lineupEntry.findMany({ where, orderBy: { id: "asc" } }), before);
+  assert.ok(typeof receipt.publicationId === "string");
+  const publication = await db.catalogPublication.findUniqueOrThrow({
+    where: { id: receipt.publicationId },
+  });
+  assert.deepEqual(publication.fields, ["city"]);
+  assert.equal(publication.lineupChanged, false);
+  assert.equal(
+    await db.catalogPlaylistRefresh.count({ where: { publicationId: publication.id } }),
+    0,
+  );
+});
+
+test("an alias-only decision does not queue parser repair", async () => {
+  await db.artist.update({
+    where: { slug: "sample-artist" },
+    data: { aliases: ["Reviewed Artist Alias"] },
+  });
+  const c = await claim();
+  const receipt = await resolveCase(c, {
+    ...checked,
+    facts: { headliners: ["Reviewed Artist Alias"], lineup: [] },
+    evidence: ["headliners", "lineup"].map((field) => evidence(field)),
+  });
+  assert.equal(receipt.status, "resolved");
+  assert.equal(receipt.publicationId, null);
+  assert.equal(receipt.parserRepairId, null);
+  assert.equal(
+    await db.operationalState.count({ where: { key: { startsWith: "parser-repair-" } } }),
+    0,
+  );
+});
+
+test("two reviewed names for one canonical artist reject both billing and same-list duplicates", async () => {
+  await db.artist.update({
+    where: { slug: "sample-artist" },
+    data: { aliases: ["Reviewed Artist Alias"] },
+  });
+  const c = await claim();
+  const where = { editionId: c.current.editionId! };
+  const before = await db.lineupEntry.findMany({ where, orderBy: { id: "asc" } });
+  for (const roster of [
+    { headliners: ["Sample Artist"], lineup: ["Reviewed Artist Alias"] },
+    { headliners: ["Sample Artist", "Reviewed Artist Alias"], lineup: [] },
+  ]) {
+    await assert.rejects(
+      resolveCase(c, {
+        ...checked,
+        facts: { ...roster, city: "Verified City" },
+        evidence: ["headliners", "lineup", "city"].map((field) => evidence(field)),
+      }),
+      /duplicate alias identities/,
+    );
+  }
+  assert.deepEqual(await db.lineupEntry.findMany({ where, orderBy: { id: "asc" } }), before);
+  const festival = await db.festival.findUniqueOrThrow({ where: { slug: "synthetic-fest" } });
+  assert.equal(festival.city, "Sample City");
+});
+
 test("wrong edition, untrusted evidence and cross-billing duplicates roll back catalog writes", async () => {
   const c = await claim();
   await assert.rejects(
@@ -1300,4 +1495,96 @@ test("identical supplied source cannot pretend to repair a failed probe or bypas
   assert.ok(receipt.retryAt);
   assert.equal(receipt.parserRepairId, null);
   assert.deepEqual(await db.festivalSource.findUniqueOrThrow({ where: { id: sourceId } }), source);
+});
+
+test("only an explicitly reviewed edition and roster can show a final lineup", async () => {
+  const c = await claim();
+  const editionId = c.current.editionId!;
+  const decision = {
+    action: "apply",
+    reason: "The official edition announcement explicitly confirms the final roster.",
+    facts: {
+      finalLineup: { year: c.current.year, complete: true },
+      headliners: c.current.headliners,
+      lineup: c.current.lineup,
+    },
+    evidence: ["headliners", "lineup", "finalLineup"].map((field) => evidence(field)),
+  };
+  const current = async () =>
+    (await readCatalog({ database: db })).festivals.find((f) => f.slug === c.festivalSlug)!;
+  assert.equal(
+    (await current()).finalLineup,
+    undefined,
+    "legacy completeness is not final lineup evidence",
+  );
+  await assert.rejects(
+    resolveCase(c, {
+      ...decision,
+      facts: { ...decision.facts, finalLineup: { year: c.current.year + 1, complete: true } },
+    }),
+    /invalid/,
+  );
+  await assert.rejects(
+    resolveCase(c, {
+      ...decision,
+      facts: { finalLineup: decision.facts.finalLineup },
+    }),
+    /complete reviewed roster/,
+  );
+  await assert.rejects(
+    resolveCase(c, {
+      ...decision,
+      evidence: decision.evidence.filter((e) => e.field !== "finalLineup"),
+    }),
+    /invalid/,
+  );
+  const receipt = await resolveCase(c, decision);
+  assert.ok(receipt.publicationId);
+  assert.equal(receipt.providerJobs, 0);
+  assert.equal(receipt.parserRepairId, null);
+  assert.deepEqual(await resolveCase(c, decision), receipt);
+  const snapshot = await readCatalog({ database: db });
+  assert.equal((await current()).finalLineup, true);
+  assert.equal((await current()).completeness, c.current.completeness);
+  assert.ok(
+    snapshot.editions
+      .find((e) => e.slug === c.festivalSlug && e.editionYear === c.current.year)
+      ?.provenance.some((p) => p.field === "finalLineup"),
+  );
+  assert.ok(
+    snapshot.editions.filter((e) => e.editionYear !== c.current.year).every((e) => !e.finalLineup),
+  );
+
+  // A display-order edit can recreate entries with new row IDs. The same
+  // artists, billing and announcement states still match the review.
+  const before = await db.lineupEntry.findFirstOrThrow({ where: { editionId } });
+  const entry = await db.$transaction(async (tx) => {
+    await tx.lineupEntry.delete({ where: { id: before.id } });
+    const { id: _previousId, ...data } = before;
+    return tx.lineupEntry.create({ data: { ...data, position: before.position + 100 } });
+  });
+  assert.notEqual(entry.id, before.id);
+  assert.equal((await current()).finalLineup, true);
+
+  await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "CANCELLED" } });
+  const after = await current();
+  assert.equal(after.finalLineup, undefined);
+  assert.equal(
+    after.headliners.length + after.lineup.length,
+    c.current.headliners.length + c.current.lineup.length - 1,
+  );
+
+  // The next manual review can explicitly revoke the old evidence even when
+  // the badge has already fallen back after a roster change.
+  await db.operationalState.delete({ where: { key: c.key } });
+  const next = await claim();
+  const revoked = await resolveCase(next, {
+    action: "apply",
+    reason: "The official source no longer presents this roster as final.",
+    facts: { finalLineup: { year: next.current.year, complete: false } },
+    evidence: [evidence("finalLineup")],
+  });
+  assert.ok(revoked.publicationId);
+  await db.lineupEntry.update({ where: { id: entry.id }, data: { status: "ANNOUNCED" } });
+  assert.equal((await current()).finalLineup, undefined);
 });

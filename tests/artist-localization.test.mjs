@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { artistMetadata } from "../lib/artist-page.ts";
 
 const provider = await readFile(
   new URL("../components/LanguageProvider.tsx", import.meta.url),
@@ -70,7 +71,11 @@ test("artist deep links remain localized while UI navigation uses bare paths", (
   assert.match(providerRoute, /export const dynamic = "force-dynamic"/);
   assert.match(providerRoute, /export const dynamicParams = true/);
   assert.doesNotMatch(providerRoute, /generateStaticParams/);
-  assert.match(providerRoute, /canonical: `\/\$\{lang\}\/artists\/\$\{artist\.slug\}\//);
+  const artist = { name: "Example", slug: "example" };
+  for (const lang of Object.keys(expected)) {
+    const { alternates } = artistMetadata(artist, [], lang);
+    assert.equal(alternates.canonical, `/${lang}/artists/example/`);
+  }
   assert.match(artistDetail, /href="\/"/);
   assert.match(artistDetail, /href=\{`\/festivals\/\$\{festival\.slug\}/);
 });

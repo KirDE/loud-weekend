@@ -1,4 +1,11 @@
-import { ticketSupplementUrl, TICKET_SUPPLEMENT } from "./ticket-supplements.ts";
+import { alcatrazPrimaryUrl } from "./alcatraz-ticket-stock.ts";
+import { validateBarcelonaFetch } from "./adapters/barcelona-banner.ts";
+import { RFP_STOCK, reduceRfpStockDocument } from "./rfp-ticket-stock.ts";
+import {
+  matchesTicketPrimaryUrl,
+  ticketSupplementUrl,
+  TICKET_SUPPLEMENT,
+} from "./ticket-supplements.ts";
 import { createHash } from "node:crypto";
 import { isFullRewind, FULL_REWIND_BANDS, FULL_REWIND_DOCUMENTS } from "./adapters/full-rewind.ts";
 import { isDownloadSource, DOWNLOAD_ARTISTS, DOWNLOAD_DOCUMENTS } from "./adapters/download.ts";
@@ -86,7 +93,7 @@ import {
   GRASPOP_DOCUMENTS,
 } from "./adapters/graspop.ts";
 
-export type FetchAttempt = { response: Response; attempts: number };
+export type FetchAttempt = { response: Response; attempts: number; verifiedPrimaryUrl?: string };
 export type FetchOptions = {
   fetchImpl?: typeof fetch;
   sleep?: (milliseconds: number) => Promise<void>;
@@ -149,10 +156,13 @@ async function fetchSourceWithoutTicketSupplement(
     throw new Error("Fetch attempts exhausted without a response");
   };
 
+  validateBarcelonaFetch(source);
+
   if (isRoskildeSource(source) && !options.fetchImpl)
     return fetchRoskildeDocuments(source.editionYear);
 
   let initial = await fetchWithRetry(source.fetchUrl ?? source.url);
+  validateBarcelonaFetch(source, initial);
   if (
     source.festivalSlug === "area53" &&
     (source.url !== "https://area53festival.at/de/" ||
@@ -636,7 +646,16 @@ async function fetchSourceWithoutTicketSupplement(
           attempts: initial.attempts,
         });
       const linked = await fetchWithRetry(linkedUrl);
-      return { response: linked.response, attempts: initial.attempts + linked.attempts };
+      if (linked.response.ok && linked.response.url && linked.response.url !== linkedUrl)
+        throw Object.assign(
+          new Error("Motocultor announcement changed its discovered official identity"),
+          { attempts: initial.attempts + linked.attempts },
+        );
+      return {
+        response: linked.response,
+        attempts: initial.attempts + linked.attempts,
+        verifiedPrimaryUrl: linkedUrl,
+      };
     }
   }
 
@@ -1100,7 +1119,11 @@ export async function fetchSource(
   if (!primary.response.ok || !ticketUrl) return primary;
   let attempts = primary.attempts;
   try {
-    if (primary.response.url && primary.response.url !== source.url)
+    if (
+      !matchesTicketPrimaryUrl(source, primary.response.url) &&
+      primary.response.url !== primary.verifiedPrimaryUrl &&
+      !(source.festivalSlug === "alcatraz" && alcatrazPrimaryUrl(source.url, primary.response.url))
+    )
       throw new Error("Official ticket primary source changed identity");
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
@@ -1122,16 +1145,19 @@ export async function fetchSource(
       throw new Error("Official ticket destination changed identity");
     const type = ticket.response.headers.get("content-type") ?? "";
     const supportedType =
-      source.festivalSlug === "full-rewind"
-        ? /^(?:application\/json|text\/javascript|application\/javascript)\b/i.test(type)
-        : /^text\/html\b|^application\/xhtml\+xml\b/i.test(type);
+      source.festivalSlug === "alcatraz"
+        ? /^application\/json\b/i.test(type)
+        : source.festivalSlug === "full-rewind" || ticketUrl === RFP_STOCK
+          ? /^(?:application\/json|text\/javascript|application\/javascript)\b/i.test(type)
+          : /^text\/html\b|^application\/xhtml\+xml\b/i.test(type);
     if (!supportedType)
       throw new Error(
         source.festivalSlug === "full-rewind"
           ? "Official ticket destination returned a non-JSON document"
           : "Official ticket destination returned a non-HTML document",
       );
-    const html = await boundedTicketText(ticket.response);
+    const rawTicket = await boundedTicketText(ticket.response);
+    const html = ticketUrl === RFP_STOCK ? reduceRfpStockDocument(rawTicket) : rawTicket;
     const response = new Response(
       JSON.stringify({ kind: TICKET_SUPPLEMENT, body, ticket: { url: ticketUrl, html } }),
       { headers: { "content-type": "application/json" } },
