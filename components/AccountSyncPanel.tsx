@@ -216,7 +216,7 @@ export function AccountSyncPanel({
   const planner = useLocalPlanner();
   const { language, locale } = useLanguage();
   const t = labels[language];
-  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; email: string; signal: AbortSignal } | null>(null);
   const [docs, setDocs] = useState<Partial<Record<Kind, Document>>>({});
   const [busy, setBusyState] = useState(false);
   const [status, setStatus] = useState("");
@@ -276,7 +276,10 @@ export function AccountSyncPanel({
   useEffect(() => {
     let active: AbortController | undefined;
     async function load() {
-      active?.abort();
+      if (active) {
+        active.abort();
+        setBusy(false);
+      }
       const { signal } = (active = new AbortController());
       setUser(null);
       setDocs({});
@@ -290,7 +293,7 @@ export function AccountSyncPanel({
         const documents = await readDocuments(account.id, signal);
         if (signal.aborted) return;
         setDocs(documents);
-        setUser(account);
+        setUser({ ...account, signal });
       } catch {
         if (!signal.aborted) setStatus(t.failed);
       }
@@ -310,23 +313,28 @@ export function AccountSyncPanel({
     payload: unknown,
     base?: Document,
     mode: ConflictMode = "replace",
+    signal?: AbortSignal,
   ) {
     if (!user) throw new Error(t.failed);
+    signal?.throwIfAborted();
     const accountId = user.id;
     const revision = base?.revision ?? 0;
     const response = await fetch(`/api/sync/${kind}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ payload, revision, accountId }),
+      signal,
     });
     if (response.status === 409) {
-      const latest = await readDocument(kind, accountId);
+      const latest = await readDocument(kind, accountId, signal);
+      signal?.throwIfAborted();
       if (!latest) throw new Error(t.failed);
       setConflict({ kind, remote: latest, mode });
       throw new Error("conflict");
     }
     if (!response.ok) throw new Error(t.failed);
     const document = await parseDocument(kind, response, accountId);
+    signal?.throwIfAborted();
     if (!document || document.revision !== revision + 1 || (base && document.id !== base.id))
       throw new Error(t.failed);
     setDocs((current) => ({ ...current, [kind]: document }));
@@ -396,7 +404,8 @@ export function AccountSyncPanel({
   }
 
   async function resolve(useLocal: boolean) {
-    if (!user || !conflict) return;
+    if (!user || user.signal.aborted || !conflict) return;
+    const { id: accountId, signal } = user;
     setBusy(true);
     try {
       const { kind, remote, mode } = conflict;
@@ -405,10 +414,12 @@ export function AccountSyncPanel({
         let content = local;
         if (mode === "merge") content = mergePayload(kind, remote.payload, local);
         if (mode === "spotify") content = spotifySelection(remote.payload, planner);
-        const saved = await put(kind, content, remote, mode);
+        const saved = await put(kind, content, remote, mode, signal);
+        if (signal.aborted) return;
         if (mode === "merge") planner.merge(accountDocumentFields(kind, saved), planner);
       } else {
-        const latest = await readDocument(kind, user.id);
+        const latest = await readDocument(kind, accountId, signal);
+        if (signal.aborted) return;
         if (!latest || latest.id !== remote.id) throw new Error(t.failed);
         planner.replaceFields(accountDocumentFields(kind, latest), planner);
         setDocs((current) => ({ ...current, [kind]: latest }));
@@ -416,9 +427,10 @@ export function AccountSyncPanel({
       setConflict(null);
       setStatus(t.resolved);
     } catch (reason) {
-      if (!(reason instanceof Error && reason.message === "conflict")) setStatus(t.failed);
+      if (!signal.aborted && !(reason instanceof Error && reason.message === "conflict"))
+        setStatus(t.failed);
     } finally {
-      setBusy(false);
+      if (!signal.aborted) setBusy(false);
     }
   }
 
