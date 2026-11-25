@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { assessPerformanceSelections, orderPerformanceSelections } from "@/lib/timetable-plan";
+import {
+  assessPerformanceSelections,
+  orderPerformanceSelections,
+  runningOrderCalendar,
+} from "@/lib/timetable-plan";
 import { useTimetablePlan } from "./useTimetablePlan";
 import type { TimetableEntry } from "@/lib/domain/festival";
 import { useLanguage, type Language } from "./LanguageProvider";
@@ -101,6 +105,9 @@ const plannerCopy = {
     conflict: "Verified overlap",
     incomplete:
       "Some saved performances have no verified end time. Overlap could not be checked for those.",
+    download: "Download running order (.ics)",
+    calendarHint:
+      "Calendar files include only scheduled sets with verified times and do not update automatically.",
     storageFailed: "This browser could not save the running order.",
   },
   de: {
@@ -113,6 +120,9 @@ const plannerCopy = {
     conflict: "Bestätigte Überschneidung",
     incomplete:
       "Für einige gespeicherte Auftritte fehlt eine bestätigte Endzeit. Für diese ist keine Prüfung möglich.",
+    download: "Bühnenplan herunterladen (.ics)",
+    calendarHint:
+      "Die Kalenderdatei enthält nur Auftritte mit bestätigten Zeiten und wird nicht automatisch aktualisiert.",
     storageFailed: "Dieser Browser konnte den Bühnenplan nicht speichern.",
   },
   ru: {
@@ -125,6 +135,9 @@ const plannerCopy = {
     conflict: "Подтверждённое пересечение",
     incomplete:
       "Для выступлений без подтверждённого времени окончания нельзя проверить пересечение.",
+    download: "Скачать расписание (.ics)",
+    calendarHint:
+      "В файл входят только запланированные выступления с подтверждённым временем. Файл не обновляется автоматически.",
     storageFailed: "Браузер не смог сохранить расписание.",
   },
 };
@@ -169,6 +182,7 @@ export function StageTimetable({
     ),
   );
   const { conflicts: overlaps, incomplete } = assessPerformanceSelections(selected);
+  const calendar = slug && year ? runningOrderCalendar(selected, slug, year) : null;
   const dates = [...new Set(entries.map(({ date }) => date))].sort();
   const stages = [...new Set(entries.map(({ stage }) => stage))].sort((a, b) =>
     a.localeCompare(b, locale),
@@ -267,6 +281,19 @@ export function StageTimetable({
             </div>
           )}
           {incomplete && <p>{planner.incomplete}</p>}
+          {calendar && (
+            <>
+              <p>
+                <a
+                  download={`${slug}-${year}-running-order.ics`}
+                  href={`data:text/calendar;charset=utf-8,${encodeURIComponent(calendar)}`}
+                >
+                  {planner.download}
+                </a>
+              </p>
+              <p>{planner.calendarHint}</p>
+            </>
+          )}
           <button type="button" onClick={plan.clear}>
             {planner.clear}
           </button>

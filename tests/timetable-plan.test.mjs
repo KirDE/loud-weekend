@@ -4,6 +4,7 @@ import {
   assessPerformanceSelections,
   orderPerformanceSelections,
   parsePerformanceSelections,
+  runningOrderCalendar,
   togglePerformanceSelection,
 } from "../lib/timetable-plan.ts";
 
@@ -37,6 +38,30 @@ test("clashes require verified half-open UTC windows for both scheduled performa
     conflicts: [],
     incomplete: false,
   });
+});
+
+test("calendar export uses stable edition UIDs, exact instants and only scheduled verified sets", () => {
+  const entry = {
+    sourcePerformanceId: "fixture:set.7",
+    artist: "Группа ".repeat(20) + "Last, title",
+    stage: "Stage;West",
+    observedAt: "2027-06-01T20:00:00Z",
+    status: "scheduled",
+    window: { startsAt: "2027-06-10T23:30:00+02:00", endsAt: "2027-06-11T00:30:00+02:00" },
+  };
+  const cancelled = { ...entry, status: "cancelled", artist: "Canceled fixture" };
+  const unknown = { ...entry, window: undefined, artist: "No end fixture" };
+  assert.equal(runningOrderCalendar([cancelled, unknown], "fixture", 2027), null);
+  const calendar = runningOrderCalendar([unknown, entry, cancelled], "fixture", 2027);
+  const lines = calendar.split("\r\n");
+  assert.ok(lines.every((line) => Buffer.byteLength(line) <= 75));
+  assert.equal(lines.filter((line) => line === "BEGIN:VEVENT").length, 1);
+  assert.ok(lines.includes("UID:performance:2027:fixture:fixture%3Aset.7@festival-radar"));
+  assert.ok(lines.includes("DTSTAMP:20270601T200000Z"));
+  assert.ok(lines.includes("DTSTART:20270610T213000Z"));
+  assert.ok(lines.includes("DTEND:20270610T223000Z"));
+  assert.ok(lines.includes("LOCATION:Stage\\;West"));
+  assert.match(calendar.replace(/\r\n /g, ""), /Last\\, title/);
 });
 
 test("saved performances follow verified instants through a repeated local hour", () => {
