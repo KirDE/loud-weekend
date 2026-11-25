@@ -2357,23 +2357,25 @@ test("explicit ticket states survive reviewed publication and canonical public r
   }
 });
 
-for (const slug of ["wacken-open-air", "download", "rock-am-ring", "rock-im-park"]) {
+for (const slug of ["wacken-open-air", "download", "rock-am-ring", "rock-im-park", "motocultor"]) {
   test(`${slug}: fetch → producer → durable ticket evidence → canonical readback and replay`, async () => {
     const { fetchSource } = await import("../lib/ingestion/fetch.ts");
     const { TICKET_SUPPLEMENT, ticketSupplementUrl } =
       await import("../lib/ingestion/ticket-supplements.ts");
     const source = parserSource(slug, {
-      url:
-        slug === "download"
-          ? "https://downloadfestival.co.uk/"
-          : slug === "wacken-open-air"
-            ? "https://www.wacken.com/"
-            : `https://www.${slug}.com/`,
+      url: {
+        download: "https://downloadfestival.co.uk/",
+        motocultor: "https://www.motocultor-festival.com/",
+        "wacken-open-air": "https://www.wacken.com/",
+        "rock-am-ring": "https://www.rock-am-ring.com/",
+        "rock-im-park": "https://www.rock-im-park.com/",
+      }[slug]!,
       strategies: ["html_fallback"],
     });
     const ticketUrl = ticketSupplementUrl(source)!;
     const fixtureBySlug: Record<string, string> = {
       download: "download-regular-admission",
+      motocultor: "motocultor-regular-pass",
       "wacken-open-air": "wacken-standard-pass",
     };
     const fixtureName = fixtureBySlug[slug] ?? `${slug}-regular-admission`;

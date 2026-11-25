@@ -1,4 +1,5 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { coverageEvidence, spotifyCoverageCounts } from "../playlist-coverage.ts";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   assertSpotifyPlanCurrent,
   withPlaylistRefreshLease,
@@ -72,11 +73,14 @@ export async function publishSpotifyCheckpoint(
       )
         throw new Error("Unverified Spotify checkpoint creation");
     }
+    const syncedAt = new Date();
+    const counts = spotifyCoverageCounts(plan);
     const data = {
       url: result.url,
       artistCount: result.artists,
       trackCount: result.tracks,
-      syncedAt: new Date(),
+      syncedAt,
+      coverageEvidence: counts ? coverageEvidence(counts, syncedAt) : Prisma.DbNull,
     };
     if (current) {
       const updated = await tx.festivalPlaylist.updateMany({

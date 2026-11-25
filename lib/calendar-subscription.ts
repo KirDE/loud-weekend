@@ -74,20 +74,34 @@ export async function readCalendarFeed(db: PrismaClient, key: string) {
           endDate: true,
           updatedAt: true,
           festival: {
-            select: { slug: true, name: true, city: true, country: true, officialUrl: true },
+            select: {
+              slug: true,
+              name: true,
+              city: true,
+              country: true,
+              officialUrl: true,
+              updatedAt: true,
+            },
           },
         },
         orderBy: [{ startDate: "asc" }, { id: "asc" }],
       });
-      const events = editions.map((edition) => ({
-        ...edition.festival,
-        city: edition.festival.city ?? undefined,
-        editionYear: edition.year,
-        startDate: isoDate(edition.startDate),
-        endDate: isoDate(edition.endDate),
-        calendarId: edition.id,
-        calendarUpdatedAt: edition.updatedAt.toISOString(),
-      }));
+      const events = editions.map(({ festival, ...edition }) => {
+        const updatedAt =
+          festival.updatedAt > edition.updatedAt ? festival.updatedAt : edition.updatedAt;
+        return {
+          slug: festival.slug,
+          name: festival.name,
+          city: festival.city ?? undefined,
+          country: festival.country,
+          officialUrl: festival.officialUrl,
+          editionYear: edition.year,
+          startDate: isoDate(edition.startDate),
+          endDate: isoDate(edition.endDate),
+          calendarId: edition.id,
+          calendarUpdatedAt: updatedAt.toISOString(),
+        };
+      });
       return calendarFile(events);
     },
     { isolationLevel: "RepeatableRead" },
