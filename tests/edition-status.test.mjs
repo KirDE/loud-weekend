@@ -5,7 +5,8 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "esbuild";
-import { editionStatusLabel } from "../lib/edition-status.ts";
+import { editionRecordCompleteness } from "../lib/edition-status.ts";
+import { EditionHistory } from "../components/EditionHistory.tsx";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
 import { canonicalPath } from "../lib/seo.ts";
 import { LanguageProvider } from "../components/LanguageProvider.tsx";
@@ -31,7 +32,7 @@ function makeEdition(overrides = {}) {
   };
 }
 
-// Execute the real route and its JSX with only the catalogue and Next boundary
+// Execute the real route and its JSX with only the database-backed readers and Next boundary
 // stubbed. Unexpected imports fail closed, so this cannot reach a database.
 const source = await readFile(
   new URL("../app/festivals/[slug]/[year]/page.tsx", import.meta.url),
@@ -46,6 +47,7 @@ const { code: outputText } = await transform(source, {
 const require = createRequire(import.meta.url);
 function loadPage(editions, artists = []) {
   const module = { exports: {} };
+  const db = {};
   const dependencies = {
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": {
@@ -53,9 +55,21 @@ function loadPage(editions, artists = []) {
         throw new Error("NEXT_NOT_FOUND");
       },
     },
+    "@/lib/catalog/arrival-facts": { readArrivalFacts: async () => [] },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
     "@/lib/seo": { canonicalPath },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
+    "@/components/EditionHistory": { EditionHistory },
+    "@/lib/db": { db },
+    "@/lib/catalog/public-history": {
+      readEditionHistory: async (client, slug, year) => {
+        assert.equal(client, db);
+        assert.ok(
+          editions.some((edition) => edition.slug === slug && edition.editionYear === year),
+        );
+        return [];
+      },
+    },
   };
   new Function("require", "module", "exports", outputText)(
     (id) => {
@@ -87,7 +101,6 @@ test("stale TBA completeness derives only a partial record from published facts"
     },
     { startDate: "2027-07-07", endDate: "2027-07-10" },
     { startDate: "2027-07-07" },
-    { endDate: "2027-07-10" },
     { headliners: ["AMON AMARTH"] },
     { lineup: ["Artist"] },
   ]) {
@@ -99,7 +112,7 @@ test("stale TBA completeness derives only a partial record from published facts"
       }),
     );
     const before = structuredClone(item);
-    assert.equal(editionStatusLabel(item), "partial record");
+    assert.equal(editionRecordCompleteness(item), "partial");
     assert.deepEqual(item, before);
   }
 });
@@ -107,24 +120,18 @@ test("stale TBA completeness derives only a partial record from published facts"
 test("genuine TBA retains its label regardless of status or ticket availability", () => {
   for (const status of ["tba", "partial", "confirmed"]) {
     for (const ticketStatus of ["unknown", "unavailable", "available", "low"]) {
-      assert.equal(
-        editionStatusLabel(makeEdition({ status, ticketStatus })),
-        "Official dates and lineup TBA",
-      );
+      assert.equal(editionRecordCompleteness(makeEdition({ status, ticketStatus })), "tba");
     }
   }
-  assert.equal(
-    editionStatusLabel(makeEdition({ startDate: "", endDate: "" })),
-    "Official dates and lineup TBA",
-  );
+  assert.equal(editionRecordCompleteness(makeEdition({ startDate: "", endDate: "" })), "tba");
 });
 
 test("explicit non-TBA completeness keeps existing labels with or without published facts", () => {
   for (const completeness of ["partial", "complete"]) {
     for (const facts of [{}, { startDate: "2027-07-07", lineup: ["Artist"] }]) {
       assert.equal(
-        editionStatusLabel(makeEdition({ completeness, ...facts })),
-        `${completeness} record`,
+        editionRecordCompleteness(makeEdition({ completeness, ...facts })),
+        completeness,
       );
     }
   }
@@ -157,16 +164,16 @@ test(
     assert.equal((grid.match(/<span>/g) ?? []).length, 30);
     for (const artist of [...item.headliners, ...item.lineup])
       assert.ok(grid.includes(`<span>${artist}</span>`));
-    assert.doesNotMatch(html, /Official dates and lineup TBA|complete record|No artists published/);
+    assert.doesNotMatch(html, /Catalogue record pending|complete record|No current acts listed/);
     assert.deepEqual(item, before);
   },
 );
 
 test("canonical genuine TBA route retains badge, missing dates, and empty tracking lineup", async () => {
   const html = await renderEdition(makeEdition());
-  assert.match(html, /<span class="status tba">Official dates and lineup TBA<\/span>/);
+  assert.match(html, /<span class="status tba">Catalogue record pending<\/span>/);
   assert.match(html, /<p class="detailDate">Dates TBA<\/p>/);
-  assert.match(html, /No artists published/);
+  assert.match(html, /No current acts listed/);
   assert.match(html, /This is an explicit tracking state, not an empty confirmed lineup\./);
   assert.doesNotMatch(html, /lineupGrid|partial record|complete record/);
 });
@@ -178,14 +185,18 @@ test("canonical route preserves partial facts and explicit completeness for othe
     { lineup: ["Lineup Artist"] },
   ]) {
     const html = await renderEdition(makeEdition(facts));
-    assert.match(html, /<span class="status tba">partial record<\/span>/);
-    assert.doesNotMatch(html, /Official dates and lineup TBA|complete record/);
+    assert.match(html, /<span class="status partial">partial record<\/span>/);
+    assert.doesNotMatch(html, /Catalogue record pending|complete record/);
     if (!facts.startDate) assert.match(html, /Dates TBA/);
-    if (!facts.headliners && !facts.lineup) assert.match(html, /No artists published/);
+    if (!facts.headliners && !facts.lineup) assert.match(html, /No current acts listed/);
   }
   for (const completeness of ["partial", "complete"]) {
     const html = await renderEdition(makeEdition({ completeness, status: "confirmed" }));
-    assert.ok(html.includes(`<span class="status confirmed">${completeness} record</span>`));
+    assert.ok(
+      html.includes(
+        `<span class="status ${completeness === "complete" ? "confirmed" : "partial"}">${completeness} record</span>`,
+      ),
+    );
   }
 });
 
@@ -201,13 +212,13 @@ test("edition route keeps partial facts and localized badges in DE and RU", asyn
     ["ru", "частичная запись", "ru-RU"],
   ]) {
     const html = await renderEdition(item, [item], language);
-    assert.ok(html.includes('<span class="status tba">' + badge + "</span>"));
+    assert.ok(html.includes('<span class="status partial">' + badge + "</span>"));
     const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
       new Date("2027-07-07T12:00:00Z"),
     );
     assert.ok(html.includes(date));
     assert.ok(html.includes("<span>AMON AMARTH</span>"));
-    assert.doesNotMatch(html, /partial record|Official dates and lineup TBA/);
+    assert.doesNotMatch(html, /partial record|Catalogue record pending/);
   }
   assert.deepEqual(item, before);
 });
@@ -234,4 +245,25 @@ test("canonical edition links only resolved catalogue identities without modifyi
     assert.doesNotMatch(html, /artists\/(?:undefined|new-headliner|archive-only-artist)/);
   }
   assert.deepEqual(item, before);
+});
+
+test("a final lineup remains distinct from record completeness", async () => {
+  for (const [language, label] of [
+    ["en", "Full lineup verified"],
+    ["de", "Vollständiges Line-up bestätigt"],
+    ["ru", "Полный лайнап подтверждён"],
+  ]) {
+    const item = makeEdition({
+      finalLineup: true,
+      lineup: ["Verified Artist"],
+      completeness: "partial",
+    });
+    assert.ok((await renderEdition(item, [item], language)).includes(label));
+    const legacy = makeEdition({
+      status: "confirmed",
+      lineup: item.lineup,
+      completeness: "complete",
+    });
+    assert.ok(!(await renderEdition(legacy, [legacy], language)).includes(label));
+  }
 });
