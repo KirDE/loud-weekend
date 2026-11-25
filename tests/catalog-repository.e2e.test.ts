@@ -781,7 +781,7 @@ test("public freshness separates edition-bound checks, publication and source fa
             checkedAt: validAt.toISOString(),
           },
         ],
-        observedAt: validAt,
+        reviewedAt: validAt,
       }),
     );
     assert.ok(
