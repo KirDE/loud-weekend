@@ -34,6 +34,22 @@ test("accepts reciprocal alternate links to the same page in the declared langua
   assert.equal(inspectSitemap(urls).size, 12);
 });
 
+test("accepts the published guide topics and requires reciprocal locale links", () => {
+  const guides = cluster("/guides/germany/") + cluster("/guides/multi-day/");
+  assert.equal(inspectSitemap(sitemap(cluster("/") + guides)).size, 12);
+  assert.throws(
+    () =>
+      inspectSitemap(sitemap(cluster("/") + "<url><loc>" + site + "/guides/germany/</loc></url>")),
+    /missing detail hreflang/,
+  );
+  for (const path of ["/guides/internal/", "/fr/guides/germany/", "/guides/germany/draft/"]) {
+    assert.throws(
+      () => inspectSitemap(sitemap(cluster("/") + `<url><loc>${site}${path}</loc></url>`)),
+      /unsupported sitemap path/,
+    );
+  }
+});
+
 test("rejects reciprocal alternate links whose language targets are swapped", () => {
   const urls = sitemap(cluster("/", { "x-default": "/", en: "/de/", de: "/en/", ru: "/ru/" }));
   assert.throws(() => inspectSitemap(urls), /incorrect hreflang en/);
@@ -59,6 +75,8 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
     "/festivals/unsampled/",
     "/artists/synthetic/",
     "/editions/2027/",
+    "/guides/germany/",
+    "/guides/multi-day/",
   ];
   const otherPaths = [
     "/submit/",
@@ -123,7 +141,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
   await once(server, "listening");
   const origin = `http://127.0.0.1:${server.address().port}`;
   await t.test("allows pages that only suppress the image preview", async () => {
-    assert.deepEqual(await checkIndexing(origin), { entries: 32, sampled: 23 });
+    assert.deepEqual(await checkIndexing(origin), { entries: 40, sampled: 31 });
   });
   await t.test("rejects unsupported routes even when robots.txt allows them", async () => {
     try {
@@ -165,7 +183,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
     const previous = robotsMeta;
     try {
       robotsMeta += '<template><meta name="robots" content="noindex"></template>';
-      assert.deepEqual(await checkIndexing(origin), { entries: 32, sampled: 23 });
+      assert.deepEqual(await checkIndexing(origin), { entries: 40, sampled: 31 });
     } finally {
       robotsMeta = previous;
     }
@@ -212,7 +230,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
       `Sitemap: ${site}/sitemap.xml`,
       "",
     ].join("\n");
-    assert.deepEqual(await checkIndexing(origin), { entries: 32, sampled: 23 });
+    assert.deepEqual(await checkIndexing(origin), { entries: 40, sampled: 31 });
     robotsBody = openRobots;
   });
   await t.test("allows response headers that only suppress image previews", async () => {
@@ -221,7 +239,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
       "Googlebot: MAX-IMAGE-PREVIEW:none, nofollow",
     ]) {
       robotsHeader = header;
-      assert.deepEqual(await checkIndexing(origin), { entries: 32, sampled: 23 });
+      assert.deepEqual(await checkIndexing(origin), { entries: 40, sampled: 31 });
     }
   });
   await t.test("rejects bare and crawler-scoped HTTP indexing blocks", async () => {

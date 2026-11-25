@@ -12,6 +12,7 @@ const monitor = "LoudWeekendIndexingCheck/1.0";
 // identifiable while requesting that HTML-only crawler representation.
 const htmlMonitor = monitor + " (Bingbot metadata compatibility)";
 const fixedPaths = ["/", "/en/", "/de/", "/ru/", "/submit/"];
+const localizedGuide = /^\/(?:(?:en|de|ru)\/)?guides\/(?:germany|multi-day)\/$/;
 const editionDirectory = /^\/(?:(?:en|de|ru)\/)?editions\/\d{4}\/$/;
 const routeClasses = [
   /^\/browse\/$/,
@@ -89,6 +90,7 @@ export function inspectSitemap(xml, now = Date.now()) {
       fixedPaths.includes(path) ||
         path === "/archive/" ||
         localizedDetail.test(path) ||
+        localizedGuide.test(path) ||
         routeClasses.some((type) => type.test(path)),
       `unsupported sitemap path: ${path}`,
     );
@@ -117,7 +119,7 @@ export function inspectSitemap(xml, now = Date.now()) {
     entries.set(path, alternates);
   }
   for (const [path, alternates] of entries) {
-    if (localizedDetail.test(path) || editionDirectory.test(path)) {
+    if (localizedDetail.test(path) || localizedGuide.test(path) || editionDirectory.test(path)) {
       assert.equal(alternates.size, languages.length, `missing detail hreflang on ${path}`);
     }
     if (!alternates.size) continue;
@@ -180,7 +182,7 @@ export async function checkIndexing(origin = site) {
   // Check all members of a representative localized cluster plus the canonical
   // path for each catalogue route class; do not crawl the entire site.
   const examples = [...entries.keys()].sort();
-  const sample = new Set(fixedPaths);
+  const sample = new Set([...fixedPaths, ...examples.filter((path) => localizedGuide.test(path))]);
   for (const type of routeClasses) {
     const path = examples.find((value) => type.test(value));
     assert.ok(path, `missing sitemap route class ${type}`);
