@@ -20,7 +20,7 @@ export async function createSession(userId: string) {
   });
 }
 
-export async function currentUser() {
+export async function currentSession() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const session = await db.session.findUnique({
@@ -28,6 +28,12 @@ export async function currentUser() {
     include: { user: true },
   });
   if (!session || session.expiresAt <= new Date()) return null;
+  return session;
+}
+
+export async function currentUser() {
+  const session = await currentSession();
+  if (!session) return null;
   return {
     id: session.user.id,
     email: session.user.email,
