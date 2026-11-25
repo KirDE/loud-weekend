@@ -82,10 +82,25 @@ type TicketAcquisition = (transport: {
   readText: (response: Response) => Promise<string>;
 }) => Promise<{ response: Response } | { html: string }>;
 
+function acquireWithCountedTransport(
+  collector: (fetchImpl: typeof fetch) => Promise<{ html: string }>,
+): TicketAcquisition {
+  return async ({ fetchOnce }) => {
+    try {
+      const { html } = await collector(fetchOnce);
+      return { html };
+    } catch (error) {
+      // fetchOnce already counts each request; don't propagate the collector's local total.
+      if (!(error instanceof Error)) throw error;
+      throw new Error(error.message, { cause: error });
+    }
+  };
+}
+
 const ticketAcquisitions = new Map<string, TicketAcquisition>([
   [HEAVY_STOCK, fetchHeavyStockDocument],
-  [PROVINSSI_STOCK, ({ fetchOnce }) => fetchProvinssiStock(fetchOnce)],
-  [SUMMER_STOCK, ({ fetchOnce }) => fetchSummerStock(fetchOnce)],
+  [PROVINSSI_STOCK, acquireWithCountedTransport(fetchProvinssiStock)],
+  [SUMMER_STOCK, acquireWithCountedTransport(fetchSummerStock)],
 ]);
 
 export function ticketSupplementAcquisition(url: string): TicketAcquisition | undefined {

@@ -129,6 +129,26 @@ test("collector uses public CSRF and rate IDs without persisting auth, customer 
   assert.deepEqual(c.ticketSupplement.scope, SUMMER_SCOPE);
   assert.deepEqual(c.warnings, []);
 });
+test("composed acquisition reports every failed request once", async () => {
+  const calls = [];
+  await assert.rejects(
+    fetchSource(source, {
+      maxAttempts: 1,
+      fetchImpl: async (url) => {
+        calls.push(String(url));
+        if (url === source.url) {
+          const response = new Response(home);
+          Object.defineProperty(response, "url", { value: source.url });
+          return response;
+        }
+        assert.equal(url, SUMMER_EVENT_API);
+        return new Response(null, { status: 503 });
+      },
+    }),
+    (error) => error.attempts === 2,
+  );
+  assert.deepEqual(calls, [source.url, SUMMER_EVENT_API]);
+});
 test("HTTP/schema/redirect/token/oversized/network failures are not retried or healthy stock", async () => {
   for (const mode of ["token", "http", "media", "redirect", "size", "network"]) {
     let posts = 0,
