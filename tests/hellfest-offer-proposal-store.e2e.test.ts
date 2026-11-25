@@ -1,3 +1,4 @@
+import sitemap from "../app/sitemap.ts";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
@@ -246,6 +247,11 @@ test("strict GET collector to durable pending evidence; failures preserve last-g
 test("explicit review validates revision and authorization, audits and supports replay", async () => {
   const { decideHellfestOffers, readApprovedHellfestOffers } =
     await import("../lib/ingestion/ticket-offer-proposal-store.ts");
+  const sitemapDates = async () =>
+    Object.fromEntries(
+      (await sitemap()).map(({ url, lastModified }) => [new URL(url).pathname, lastModified]),
+    );
+  const baseline = await sitemapDates();
   const oldAllowlist = process.env.ADMIN_EMAILS;
   const actor = await db.user.create({
     data: { email: `synthetic-tier-${randomUUID()}@example.invalid`, role: "USER" },
@@ -322,11 +328,34 @@ test("explicit review validates revision and authorization, audits and supports 
     await assert.rejects(decideHellfestOffers(failAuditDb, review), /injected audit failure/);
     assert.equal(await db.ticketOfferReviewDecision.count(), 0);
     assert.equal(await readApprovedHellfestOffers(db, editionId), null);
+    assert.deepEqual(await sitemapDates(), baseline, "pending and rolled-back reviews are private");
     const [first, second] = await Promise.all([
       decideHellfestOffers(db, review),
       decideHellfestOffers(db, review),
     ]);
     assert.equal(first.id, second.id);
+    const published = await sitemapDates();
+    const dossierPaths = new Set([
+      "/",
+      "/en/",
+      "/de/",
+      "/ru/",
+      "/festivals/hellfest/",
+      "/en/festivals/hellfest/",
+      "/de/festivals/hellfest/",
+      "/ru/festivals/hellfest/",
+    ]);
+    assert.deepEqual(Object.keys(published), Object.keys(baseline));
+    for (const path of dossierPaths) assert.ok(path in published, path);
+    for (const [path, date] of Object.entries(published)) {
+      assert.equal(
+        date,
+        dossierPaths.has(path) ? first.createdAt.toISOString() : baseline[path],
+        path,
+      );
+    }
+    await decideHellfestOffers(db, review);
+    assert.deepEqual(await sitemapDates(), published, "decision replay leaves freshness unchanged");
     assert.equal(await db.adminAuditEntry.count({ where: { actorId: actor.id } }), 1);
     assert.equal((await readPendingHellfestOffers(db, editionId))!.reviewState, "approved");
     const publicOffers = (await publicItem()).ticketOffers!;
@@ -364,7 +393,9 @@ test("explicit review validates revision and authorization, audits and supports 
       expectedContentHash: newer.contentHash,
       decision: "reject" as const,
     };
+    assert.deepEqual(await sitemapDates(), published, "new staging stays private");
     await decideHellfestOffers(db, reject);
+    assert.deepEqual(await sitemapDates(), published, "rejection leaves freshness unchanged");
     assert.equal((await readPendingHellfestOffers(db, editionId))!.reviewState, "rejected");
     assert.deepEqual((await publicItem()).ticketOffers, publicOffers);
     await db.festivalEdition.update({
