@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
 import { readCampingFacts } from "../../lib/catalog/camping-facts.ts";
 import { editionKey, readFreshnessEvidence } from "../../lib/catalog/freshness.ts";
+import { readSitemapPublications } from "../../lib/catalog/sitemap-publications.ts";
 import { collectCampingCandidate } from "../../lib/ingestion/camping-collector.ts";
 import { campingSources, campingSourceUrl } from "../../lib/ingestion/adapters/camping-guidance.ts";
 import {
@@ -262,14 +263,30 @@ test("validated edition camping facts are accessible in every locale", async ({ 
     expect(await arrival()).toBe("2027-07-26");
     expect(await freshness()).toBe(previousPublication);
 
+    const sitemapBefore = await readSitemapPublications(db, new Date());
     const updated = await resolveAgentIssue(db, update);
     expect(updated.campingPublished).toBe(true);
     expect(await arrival()).toBe("2027-07-27");
     const updatedPublication = await freshness();
     expect(updatedPublication > previousPublication).toBe(true);
+    const sitemapAfter = await readSitemapPublications(db, new Date());
+    const sitemapKey = editionKey(wacken.slug, year);
+    const publication = await db.catalogPublication.findUniqueOrThrow({
+      where: { id: updated.publicationId },
+    });
+    expect(publication.fields).toEqual(["camping"]);
+    expect(sitemapAfter.get(sitemapKey)).toEqual({
+      ...sitemapBefore.get(sitemapKey),
+      festival: publication.createdAt.toISOString(),
+    });
+    expect(sitemapAfter.get(sitemapKey).festival).not.toBe(sitemapBefore.get(sitemapKey).festival);
+    for (const [key, timestamp] of sitemapBefore) {
+      if (key !== sitemapKey) expect(sitemapAfter.get(key)).toEqual(timestamp);
+    }
     expect(await resolveAgentIssue(db, update)).toEqual(updated);
 
     expect(await freshness()).toBe(updatedPublication);
+    expect(await readSitemapPublications(db, new Date())).toEqual(sitemapAfter);
   } finally {
     if (inserted.length) {
       await db.festivalSource.deleteMany({ where: { festivalId: { in: inserted } } });

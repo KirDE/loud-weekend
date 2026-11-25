@@ -1,5 +1,6 @@
 "use client";
 
+import { sendProductEvent } from "@/lib/product-events";
 import { useEffect, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
 
@@ -277,7 +278,13 @@ export function NotificationSettings({ festivals }: { festivals: { id: string; n
   useEffect(() => {
     void load();
   }, []);
-  async function call(url: string, method: string, body: unknown, successMessage?: string) {
+  async function call(
+    url: string,
+    method: string,
+    body: unknown,
+    successMessage?: string,
+    recordOptIn = false,
+  ) {
     setBusy(true);
     setMessage("");
     try {
@@ -288,6 +295,7 @@ export function NotificationSettings({ festivals }: { festivals: { id: string; n
       });
       await response.json();
       if (!response.ok) throw new Error(t.failed);
+      if (recordOptIn) sendProductEvent("NOTIFICATIONS_OPT_IN", language);
       setMessage(successMessage ?? (response.status === 202 ? t.queued : t.saved));
       await load();
     } catch {
@@ -351,13 +359,13 @@ export function NotificationSettings({ festivals }: { festivals: { id: string; n
         className="notificationForm"
         onSubmit={(e) => {
           e.preventDefault();
-          void call("/api/notifications/preferences", "PUT", {
-            festivalId: scope || null,
-            eventType,
-            channel,
-            frequency,
-            enabled: true,
-          });
+          void call(
+            "/api/notifications/preferences",
+            "PUT",
+            { festivalId: scope || null, eventType, channel, frequency, enabled: true },
+            undefined,
+            true,
+          );
         }}
       >
         <label>

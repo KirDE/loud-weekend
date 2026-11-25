@@ -1831,6 +1831,10 @@ main {
   gap: 10px;
 }
 
+.timetableStage li:where(:has(.timetableSlotTime time + time)) {
+  grid-template-columns: minmax(90px, 35%) minmax(0, 1fr) auto;
+}
+
 .timetableStage time {
   font-variant-numeric: tabular-nums;
   font-weight: 800;
@@ -3442,7 +3446,7 @@ summary:is(:hover, :focus-visible),
 .toggle:is(:hover, :focus-within),
 .recommendations a:is(:hover, :focus-visible),
 .calendarGrid > a:is(:hover, :focus-visible),
-.mapMarker > div a:is(:hover, :focus-visible),
+.festivalLocationPopup :where(a):is(:hover, :focus-visible),
 /* stylelint-disable-next-line no-descending-specificity
    -- Preserve component cascade against earlier .mapMarker > div a:is(:hover, :focus-visible).
 */
@@ -3820,7 +3824,7 @@ summary:focus-visible {
 }
 
 /* stylelint-disable no-descending-specificity -- Keep an explicit focus ring on map controls. */
-.mapMarker > button:focus-visible,
+
 .mapTextList summary:focus-visible,
 .mapTextList a:focus-visible {
   outline: 3px solid var(--ink);
@@ -3924,6 +3928,89 @@ summary:focus-visible {
 
 .personalCalendarConflicts h3 {
   margin: 0;
+}
+
+.festivalLocationMap {
+  margin-bottom: 1rem;
+}
+
+.festivalLocationViewport {
+  position: relative;
+  height: clamp(300px, 55vw, 480px);
+  overflow: hidden;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+
+.festivalLocationViewport > .festivalLocationCanvas {
+  position: absolute;
+  inset: 0;
+}
+
+.festivalLocationLoading {
+  position: relative;
+  padding: 1rem;
+}
+
+.festivalLocationMarker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 42px;
+  height: 42px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #232320;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.festivalLocationMarker:focus-visible,
+.festivalLocationToolbar :where(button):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.festivalLocationMarker[aria-expanded="true"] {
+  background: #883920;
+}
+
+.festivalLocationToolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.festivalLocationToolbar :where(button),
+.festivalLocationPopup :where(button) {
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0.35rem 0.65rem;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.festivalLocationToolbar :where(small) {
+  margin-inline-start: auto;
+}
+
+.festivalLocationPopup {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.festivalLocationPopup li {
+  margin-block: 0.5rem;
+}
+
+.festivalLocationPopup :where(a) {
+  text-decoration: underline;
 }
 
 .editionHistory {

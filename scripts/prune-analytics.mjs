@@ -8,9 +8,11 @@ cutoff.setUTCDate(cutoff.getUTCDate() - retentionDays);
 const db = createPrismaClient();
 try {
   const result = await db.analyticsDaily.deleteMany({ where: { day: { lt: cutoff } } });
+  const events = await db.productEventDaily.deleteMany({ where: { day: { lt: cutoff } } });
   console.log(
     JSON.stringify({
       deletedAggregateRows: result.count,
+      deletedProductEventRows: events.count,
       cutoff: cutoff.toISOString(),
       retentionDays,
     }),
