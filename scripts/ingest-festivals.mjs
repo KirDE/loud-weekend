@@ -1,3 +1,4 @@
+import { organizerReviewCollector } from "../lib/ingestion/organizer-collector.ts";
 import { drainImportEvents } from "../lib/ingestion/import-events.ts";
 import { sendImportEvent, transportConfigured } from "../lib/ingestion/import-event-transport.mjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -74,7 +75,9 @@ const hydratedSources = configuredSources.map((source) => ({
 const eligible = dueOnly
   ? dueFestivalSources(hydratedSources)
   : hydratedSources.filter((source) => source.enabled);
-let selected = eligible.filter((source) => !slugArg || source.festivalSlug === slugArg);
+let selected = eligible.filter(
+  (source) => (!slugArg || source.festivalSlug === slugArg) && !organizerReviewCollector(source),
+);
 const notificationEndpoint =
   !dbDue &&
   (process.env.NOTIFICATION_EVENTS_URL ||
@@ -226,9 +229,15 @@ for (const source of selected) {
     const startedAt = new Date();
     let response;
     let html;
+    let organizerReview;
+    const collectReview = sourceLease && organizerReviewCollector(source);
     failureStage = "fetch";
     try {
-      if (!fixturePath) {
+      if (collectReview) {
+        if (current.editionYear !== source.editionYear)
+          throw new Error("Organizer source does not match the current edition");
+        organizerReview = await collectReview(source, fetch, current);
+      } else if (!fixturePath) {
         const fetched = await fetchSource(source);
         response = fetched.response;
         if (!response.ok)
@@ -239,7 +248,7 @@ for (const source of selected) {
       }
       html = fixturePath
         ? await readFile(path.resolve(fixturePath), "utf8")
-        : await response.text();
+        : await response?.text();
     } catch (error) {
       const attempts = Number(error?.attempts) || 1;
       if (run) {
@@ -297,8 +306,8 @@ for (const source of selected) {
     let result;
     failureStage = "extraction";
     try {
-      candidate = extractFestivalCandidate(html, source, fetchedAt);
-      result = evaluateCandidate(current, candidate, aliasArtists);
+      candidate = organizerReview?.candidate ?? extractFestivalCandidate(html, source, fetchedAt);
+      result = organizerReview ?? evaluateCandidate(current, candidate, aliasArtists);
     } catch (error) {
       failureOutcome = "parser_error";
       if (run)
@@ -335,7 +344,8 @@ for (const source of selected) {
           festivalSlug: source.festivalSlug,
           requestedUrl: source.url,
           finalUrl: response?.url ?? source.url,
-          httpStatus: response?.status ?? null,
+          httpStatus: organizerReview ? 200 : (response?.status ?? null),
+          ...(organizerReview && { sourceLease }),
           durationMs: Date.now() - startedAt.getTime(),
           startedAt,
           endedAt: new Date(),
@@ -352,11 +362,11 @@ for (const source of selected) {
     if (result.changes.length) summary.changed += 1;
     if (result.publishable) summary.publishable += 1;
     if (result.reviewReasons.length) summary.reviewRequired += 1;
-    let outcome = result.changes.length
-      ? result.reviewReasons.length
-        ? "review_required"
-        : "dry_run"
-      : "unchanged";
+    let outcome = result.reviewReasons.length
+      ? "review_required"
+      : result.changes.length
+        ? "dry_run"
+        : "unchanged";
     let catalogPublication = null;
     failureStage = "publication";
     if (publish && result.publishable && !result.reviewReasons.length) {
