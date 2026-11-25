@@ -1,5 +1,6 @@
 "use client";
 
+import { sendProductEvent } from "@/lib/product-events";
 import type { PlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-readback";
 
 import { useState } from "react";
@@ -54,7 +55,7 @@ export function FestivalDetail({
   arrivalFacts?: readonly PublicArrivalFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
-  const { locale, t } = useLanguage();
+  const { language, locale, t } = useLanguage();
   const [lineupSort, setLineupSort] = useState<LineupSort>("official");
   const sortedLineup = sortFestivalLineup(item, lineupSort, locale, artistPopularity);
   const planner = useLocalPlanner();
@@ -130,6 +131,7 @@ export function FestivalDetail({
             target="_blank"
             rel="noreferrer"
             data-ticket-status={tickets.status}
+            onClick={() => sendProductEvent("TICKET_OUTBOUND", language)}
           >
             <small>{t(tickets.status === "available" ? "passes" : tickets.label)}</small>
             <strong>
