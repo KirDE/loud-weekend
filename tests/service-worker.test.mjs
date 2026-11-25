@@ -347,8 +347,8 @@ test("a new revision replaces body and validator; a subsequent offline request u
   assert.deepEqual(await (await dispatch(listeners)).json(), payload("Festival B"));
 });
 
-for (const status of [200, 304]) {
-  test(`a delayed ${status} cannot overwrite a newer successful public response`, async () => {
+for (const outcome of [200, 304, "network failure"]) {
+  test(`a delayed ${outcome} cannot return an older catalogue than a newer successful response`, async () => {
     const { cache, caches } = memoryCache();
     await seed(cache);
     const started = Promise.withResolvers();
@@ -371,7 +371,8 @@ for (const status of [200, 304]) {
     const older = dispatch(listeners);
     await started.promise;
     assert.deepEqual(await (await dispatch(listeners)).json(), payload("Festival B"));
-    delayedReply.resolve(catalogReply(revisionA, { status }));
+    if (outcome === "network failure") delayedReply.reject(new TypeError("offline"));
+    else delayedReply.resolve(catalogReply(revisionA, { status: outcome }));
     const late = await older;
     assert.deepEqual(await late.json(), payload("Festival B"));
     assert.equal((await cache.match(CATALOG_URL)).headers.get("etag"), `"${revisionB}"`);

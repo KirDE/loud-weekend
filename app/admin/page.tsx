@@ -1,3 +1,4 @@
+import type { ReviewChange } from "@/lib/admin";
 import { readNewFestivalDraft } from "@/lib/submission-new-festival";
 import { readFollowOnDraft } from "@/lib/submission-follow-on-edition";
 import { readSubmissionEditionLink } from "@/lib/submission-edition-link";
@@ -77,7 +78,7 @@ export default async function AdminPage() {
         detected: JSON.stringify(item.afterValue),
         source: JSON.stringify(item.sourceEvidence),
         confidence: item.confidence ?? 0,
-        status: item.status.toLowerCase() as "pending" | "approved" | "rejected",
+        status: item.status.toLowerCase() as ReviewChange["status"],
         conflict: item.status === "CONFLICT",
       }))}
       parserRuns={snapshot.runs.map((item) => ({

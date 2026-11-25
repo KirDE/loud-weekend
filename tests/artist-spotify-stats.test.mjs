@@ -311,6 +311,7 @@ test("repository projects serializable Spotify stats and suppresses a stale or u
     ticketStatus: "UNKNOWN",
     recordState: "CURRENT",
     completeness: "PARTIAL",
+    lineupDays: [],
     lineup: [
       {
         billing: "LINEUP",
