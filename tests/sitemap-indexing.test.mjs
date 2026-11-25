@@ -34,6 +34,27 @@ test("accepts reciprocal alternate links to the same page in the declared langua
   assert.equal(inspectSitemap(urls).size, 12);
 });
 
+test("does not accept sitemap entries whose namespaces were overridden", () => {
+  const urls = sitemap(cluster("/"));
+  for (const [tag, replacement, error] of [
+    ["<url>", '<url xmlns="">', /invalid url namespace/],
+    ["<loc>", '<loc xmlns="">', /invalid loc namespace/],
+    ["<xhtml:link ", '<xhtml:link xmlns:xhtml="urn:other" ', /invalid alternate namespace/],
+  ]) {
+    assert.throws(() => inspectSitemap(urls.replace(tag, replacement)), error);
+  }
+});
+
+test("requires simple text in sitemap URL and last-modified fields", () => {
+  const urls = sitemap(cluster("/"));
+  for (const [original, replacement, error] of [
+    [`<loc>${site}/</loc>`, `<loc><value>${site}/</value></loc>`, /invalid loc content/],
+    ["</loc>", "</loc><lastmod><value>2026-01-01</value></lastmod>", /invalid lastmod content/],
+  ]) {
+    assert.throws(() => inspectSitemap(urls.replace(original, replacement)), error);
+  }
+});
+
 test("accepts the published guide topics and requires reciprocal locale links", () => {
   const guides = cluster("/guides/germany/") + cluster("/guides/multi-day/");
   assert.equal(inspectSitemap(sitemap(cluster("/") + guides)).size, 12);
