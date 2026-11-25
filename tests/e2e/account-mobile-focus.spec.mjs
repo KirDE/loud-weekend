@@ -12,7 +12,9 @@ for (const [lang, name] of Object.entries(accountNames)) {
       );
       await page.goto(`/${lang}/`);
       const trigger = page.getByRole("button", { name, exact: true });
+      await expect(trigger).toBeEnabled();
       await trigger.focus();
+      await expect(trigger).toBeFocused();
       await page.keyboard.press("Enter");
       const popover = page.getByRole("region", { name, exact: true });
       await expect(popover).toBeVisible();
