@@ -507,9 +507,12 @@ model TimetablePerformance {
   editionId  String
   artistId   String?
   artistName String
+  sourcePerformanceId String?
   date       DateTime          @db.Date
   stage      String
   start      String
+  startsAt   DateTime?
+  endsAt     DateTime?
   timeZone   String?
   status     LineupEntryStatus @default(ANNOUNCED)
   sourceUrl  String?
@@ -518,6 +521,7 @@ model TimetablePerformance {
   artist     Artist?           @relation(fields: [artistId], references: [id], onDelete: SetNull)
 
   @@unique([editionId, date, stage, start, artistName])
+  @@unique([editionId, sourcePerformanceId])
   @@index([artistId, date])
 }
 
@@ -983,6 +987,26 @@ model AnalyticsDaily {
 
   @@unique([day, path, locale])
   @@index([day])
+}
+
+enum ProductEvent {
+  SEARCH_SUBMIT
+  FILTER_USED
+  COMPARE
+  SAVE
+  TICKET_OUTBOUND
+  PLAYLIST_START
+  PLAYLIST_SUCCESS
+  NOTIFICATIONS_OPT_IN
+}
+
+model ProductEventDaily {
+  day    DateTime     @db.Date
+  event  ProductEvent
+  locale String       @db.VarChar(2)
+  count  Int          @default(0)
+
+  @@id([day, event, locale])
 }
 
 // Durable provider progress; catalogue identities require reviewed publication.

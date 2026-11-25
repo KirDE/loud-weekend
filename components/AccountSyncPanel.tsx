@@ -2,6 +2,7 @@
 
 import { CalendarSubscription } from "./CalendarSubscription";
 import { useEffect, useState } from "react";
+import { z } from "zod";
 import { readTripBudgets } from "@/lib/trip-budget";
 import { readDiscoveryPreferences } from "@/lib/discovery-preferences";
 import { readCollections, mergeCollections } from "@/lib/collections";
@@ -20,6 +21,27 @@ const kinds: Kind[] = [
   "season-attendance",
   "budgets",
 ];
+const favoritesPayload = z.object({
+  favoriteFestivals: z.array(z.string()).optional(),
+  favoriteArtists: z.array(z.string()).optional(),
+});
+const plansPayload = z.object({
+  attendance: z.record(z.string(), z.enum(["going", "maybe", "not-going"])).optional(),
+});
+const savedFiltersPayload = z.object({
+  savedFilters: z
+    .object({
+      query: z.string(),
+      country: z.string(),
+      announcedOnly: z.boolean(),
+      month: z.string(),
+      ticketsOnly: z.boolean(),
+      genre: z.string(),
+      origin: z.string(),
+      maxDistance: z.string(),
+    })
+    .partial(),
+});
 const labels = {
   en: {
     title: "Account sync",
@@ -126,15 +148,20 @@ function payloads(p: ReturnType<typeof useLocalPlanner>): Record<Kind, unknown> 
   };
 }
 function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
-  const value = (kind: Kind) => (documents[kind]?.payload || {}) as Partial<PlannerState>;
+  const favorites = documents.favorites?.payload as z.infer<typeof favoritesPayload> | undefined;
+  const plans = documents.plans?.payload as z.infer<typeof plansPayload> | undefined;
+  const filters = documents["saved-filters"]?.payload as { savedFilters?: unknown } | undefined;
+  const season = documents["season-attendance"];
   return {
-    ...emptyPlannerState,
-    ...value("favorites"),
+    favoriteFestivals: favorites?.favoriteFestivals ?? emptyPlannerState.favoriteFestivals,
+    favoriteArtists: favorites?.favoriteArtists ?? emptyPlannerState.favoriteArtists,
+    attendance: plans?.attendance ?? emptyPlannerState.attendance,
     ...playlistSelection(documents.collections?.payload),
-    savedFilters: readDiscoveryPreferences(value("saved-filters").savedFilters),
-    ...value("plans"),
-    seasonAttendance: documents["season-attendance"]
-      ? readSeasonAttendance(value("season-attendance").seasonAttendance)
+    savedFilters: readDiscoveryPreferences(filters?.savedFilters),
+    seasonAttendance: season
+      ? readSeasonAttendance(
+          (season.payload as { seasonAttendance?: unknown } | null)?.seasonAttendance,
+        )
       : undefined,
     tripBudgets: readTripBudgets(documents.budgets?.payload),
   };
@@ -201,11 +228,16 @@ export function AccountSyncPanel({
       throw new Error(t.failed);
     }
     if (kind === "collections" && document) readCollections(document.payload);
-    if (kind === "saved-filters" && document) {
-      const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
-      if (!filters || typeof filters !== "object" || Array.isArray(filters))
-        throw new Error(t.failed);
-    }
+    if (kind === "favorites" && document && !favoritesPayload.safeParse(document.payload).success)
+      throw new Error(t.failed);
+    if (kind === "plans" && document && !plansPayload.safeParse(document.payload).success)
+      throw new Error(t.failed);
+    if (
+      kind === "saved-filters" &&
+      document &&
+      !savedFiltersPayload.safeParse(document.payload).success
+    )
+      throw new Error(t.failed);
     return document;
   }
 

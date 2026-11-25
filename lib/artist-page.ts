@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { cache } from "react";
+import { localizedAlternates } from "./seo";
 import { socialPreviewMetadata } from "./social-preview";
 import { getCatalog } from "./catalog/repository";
 import type { Festival } from "./domain/festival";
@@ -54,7 +55,7 @@ export function artistMetadata(
     description,
     alternates: {
       canonical,
-      languages: { "x-default": path, en: `/en${path}`, de: `/de${path}`, ru: `/ru${path}` },
+      languages: localizedAlternates(path),
     },
   };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { sendProductEvent } from "@/lib/product-events";
 import { favoriteArtistLabels, type FavoriteArtistIdentity } from "@/lib/favorite-artist";
 import Link from "next/link";
 import { useState } from "react";
@@ -284,6 +285,7 @@ export function PlannerPage({
     .filter((f) => festivalDateInterval(f))
     .sort((a, b) => a.startDate!.localeCompare(b.startDate!));
   async function createPlaylist() {
+    sendProductEvent("PLAYLIST_START", language);
     setPlaylist({ status: "creating", message: t.creating });
     try {
       const response = await fetch("/api/spotify/selection-playlist", {
@@ -310,6 +312,7 @@ export function PlannerPage({
         return;
       }
       if (!response.ok || !result.playlistUrl) throw new Error(t.playlistFailed);
+      sendProductEvent("PLAYLIST_SUCCESS", language);
       setPlaylist({
         status: "created",
         url: result.playlistUrl,

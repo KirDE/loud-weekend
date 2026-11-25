@@ -12,7 +12,7 @@ import { socialPreviewMetadata } from "@/lib/social-preview";
 import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
 import { getCatalog } from "@/lib/catalog/repository";
-import { festivalMusicEvent } from "@/lib/seo";
+import { festivalMusicEvent, localizedAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 export const dynamicParams = true;
@@ -37,12 +37,7 @@ export async function generateMetadata({
     title: festival.name,
     alternates: {
       canonical,
-      languages: {
-        "x-default": `/festivals/${festival.slug}/`,
-        en: `/en/festivals/${festival.slug}/`,
-        de: `/de/festivals/${festival.slug}/`,
-        ru: `/ru/festivals/${festival.slug}/`,
-      },
+      languages: localizedAlternates(`/festivals/${festival.slug}/`),
     },
   };
 }

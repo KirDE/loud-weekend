@@ -10,7 +10,7 @@ import { socialPreviewMetadata } from "@/lib/social-preview";
 import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
 import { getCatalog } from "@/lib/catalog/repository";
-import { canonicalPath, festivalMusicEvent } from "@/lib/seo";
+import { canonicalPath, festivalMusicEvent, localizedAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 export const dynamicParams = true;
@@ -33,7 +33,7 @@ export async function generateMetadata({
       )),
     title: festival.name,
     description: `${festival.name}: dates, lineup, tickets, playlist and setlists.`,
-    alternates: { canonical },
+    alternates: { canonical, languages: localizedAlternates(canonical) },
   };
 }
 

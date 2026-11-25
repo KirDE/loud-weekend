@@ -165,7 +165,15 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
       .toEqual(activeFilters);
     await secondPage.unroute(filtersRoute);
 
-    for (const response of [{ status: 503 }, { json: {} }, invalidPayload]) {
+    const invalidFields = {
+      json: {
+        document: {
+          ...previous,
+          payload: { savedFilters: { ...activeFilters, origin: 42, ticketsOnly: "true" } },
+        },
+      },
+    };
+    for (const response of [{ status: 503 }, { json: {} }, invalidPayload, invalidFields]) {
       await secondPage.route(filtersRoute, (route) => route.fulfill(response));
       await pull.click();
       await expect(secondPage.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
@@ -180,8 +188,34 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
       await secondPage.unroute(filtersRoute);
     }
 
+    const plansRoute = "**/api/sync/plans*";
+    const { document: plans } = await (await page.request.get("/api/sync/plans/")).json();
+    await secondPage.route(plansRoute, (route) =>
+      route.fulfill({
+        json: { document: { ...plans, payload: { attendance: "invalid" } } },
+      }),
+    );
+    await pull.click();
+    await expect(secondPage.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
+    await expect
+      .poll(() =>
+        secondPage.evaluate(
+          (key) => JSON.parse(localStorage.getItem(key)).savedFilters,
+          storageKey,
+        ),
+      )
+      .toEqual(activeFilters);
+    await secondPage.unroute(plansRoute);
+
+    // A valid older plan may contain extra fields. They do not own discovery preferences.
+    await secondPage.route(plansRoute, (route) =>
+      route.fulfill({
+        json: { document: { ...plans, payload: { attendance: {}, savedFilters: activeFilters } } },
+      }),
+    );
     await pull.click();
     await expect(secondPage.getByText("Everything is synchronized.")).toBeVisible();
+    await secondPage.unroute(plansRoute);
     await secondPage.goto("/en/");
     await expectFilters(secondPage, latest);
     await expect(secondPage.locator(".festivalCard h2")).toHaveText(["Synthetic Fest"]);
@@ -237,6 +271,20 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
   });
   expect(updated.status()).toBe(200);
   expect((await updated.json()).document.revision).toBe(baseline.revision + 1);
+
+  const favoritesRoute = "**/api/sync/favorites*";
+  const { document } = await (await page.request.get("/api/sync/favorites/")).json();
+  await page.route(favoritesRoute, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          json: { document: { ...document, payload: { favoriteFestivals: [false] } } },
+        })
+      : route.continue(),
+  );
+  await page.getByRole("button", { name: "Sync now", exact: true }).click();
+  await expect(page.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use other device", exact: true })).toHaveCount(0);
+  await page.unroute(favoritesRoute);
 
   const conflict = page.waitForResponse(
     (response) =>
