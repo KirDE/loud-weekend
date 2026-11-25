@@ -16,6 +16,7 @@
     "ingest": "node scripts/ingest-festivals.mjs",
     "tickets:collect-hellfest": "node --import tsx scripts/collect-hellfest-offers.mjs",
     "timetables:import": "node scripts/import-timetable.mjs",
+    "venues:import": "node scripts/import-venue.mjs",
     "enrich:artists": "node scripts/enrich-artists.mjs",
     "test:artist-enrichment": "node --experimental-strip-types --test tests/artist-enrichment-publication.test.mjs tests/artist-enrichment.test.mjs",
     "test:artist-enrichment-db": "node --experimental-strip-types --test tests/artist-enrichment-publication.e2e.test.mjs",

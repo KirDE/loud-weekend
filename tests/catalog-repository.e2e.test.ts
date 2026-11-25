@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { createPrismaClient } from "../lib/prisma-client.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
@@ -14,6 +15,8 @@ import {
   publishAgentFestivalResolution,
 } from "../lib/catalog/publication.ts";
 import type { IngestionResult } from "../lib/ingestion/types.ts";
+import { brutalAssaultVenueSource } from "../lib/ingestion/adapters/brutal-assault-venue.ts";
+import { collectReviewedVenue } from "../lib/ingestion/venue-collector.ts";
 import sitemap from "../app/sitemap.ts";
 import { importLineupDays } from "../lib/catalog/lineup-days-import.ts";
 import { readEditionHistory } from "../lib/catalog/public-history.ts";
@@ -840,4 +843,54 @@ test("public freshness separates edition-bound checks, publication and source fa
     await db.ingestionCandidate.deleteMany({ where: { runId: run.id } });
     await db.ingestionRun.delete({ where: { id: run.id } });
   }
+});
+
+test("reviewed public venue changes advance only the localized homepage sitemap clock", async () => {
+  const { festivalSlug: slug, countryCode, organizerHost, sourceUrl } = brutalAssaultVenueSource;
+  await seedCatalog(db, {
+    ...catalogSeed,
+    festivals: [
+      {
+        ...festival,
+        slug,
+        countryCode,
+        city: "Jaroměř",
+        officialUrl: `https://${organizerHost}/`,
+      },
+    ],
+    editions: catalogSeed.editions.map((edition) => ({ ...edition, slug })),
+  });
+  const sitemapDates = async () =>
+    Object.fromEntries(
+      (await sitemap()).map(({ url, lastModified }) => [new URL(url).pathname, lastModified]),
+    );
+  const before = await sitemapDates();
+  const original = readFileSync(
+    new URL("./fixtures/brutal-assault/about-venue.html", import.meta.url),
+    "utf8",
+  );
+  const fetchImpl: typeof fetch = async () => {
+    const response = new Response(original.replace("Josefov Fortress", "Updated fixture venue"), {
+      headers: { "content-type": "text/html" },
+    });
+    Object.defineProperty(response, "url", { value: sourceUrl });
+    return response;
+  };
+
+  const preview = await collectReviewedVenue(db, 2027, { fetchImpl });
+  assert.deepEqual(await sitemapDates(), before);
+  await collectReviewedVenue(db, 2027, { fetchImpl, approval: preview.token, actor: "fixture" });
+  const { festivals } = await new DatabaseCatalogRepository(db).read();
+  assert.equal(festivals.find((item) => item.slug === slug)?.venue?.name, "Updated fixture venue");
+  const receipt = await db.catalogPublication.findFirstOrThrow({
+    where: { festivalSlug: slug, editionYear: 2027, fields: { has: "venue" } },
+  });
+  const home = receipt.createdAt.toISOString();
+  const published = await sitemapDates();
+  assert.deepEqual(published, { ...before, "/": home, "/en/": home, "/de/": home, "/ru/": home });
+
+  const repeat = await collectReviewedVenue(db, 2027, { fetchImpl });
+  await collectReviewedVenue(db, 2027, { fetchImpl, approval: repeat.token, actor: "fixture" });
+  assert.equal(await db.catalogPublication.count({ where: { festivalSlug: slug } }), 1);
+  assert.deepEqual(await sitemapDates(), published);
 });

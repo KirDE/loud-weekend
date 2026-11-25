@@ -351,11 +351,26 @@ model FestivalEdition {
   ticketOfferProposals TicketOfferProposalSnapshot[]
   groupTripOptions GroupTripOption[]
 
+  venue           EditionVenue?
   campingFacts    EditionCampingFact[]
   overview        EditionOverview?
 
   @@unique([festivalId, year])
   @@index([year, recordState])
+}
+
+model EditionVenue {
+  editionId     String          @id
+  editionYear   Int
+  countryCode   String          @db.Char(2)
+  organizerHost String
+  city          String
+  name          String
+  sourceUrl     String
+  checkedOn     DateTime        @db.Date
+  latitude      Float
+  longitude     Float
+  edition       FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
 }
 
 enum EditionCampingField {

@@ -3,6 +3,7 @@ import { isBarcelonaSource } from "./adapters/barcelona-banner.ts";
 import {
   observeTicketSupplement,
   ticketSupplementUrl,
+  ticketSupplementScope,
   TICKET_SUPPLEMENT,
 } from "./ticket-supplements.ts";
 import { extractRoskildeCandidate } from "./adapters/roskilde.ts";
@@ -299,11 +300,14 @@ export function extractFestivalCandidate(
   candidate.evidence = candidate.evidence.filter((evidence) => evidence.field !== "ticketStatus");
   if (ticket.warning) candidate.warnings.push(ticket.warning);
   if (ticket.status) {
+    const scope = ticketSupplementScope(source);
     candidate.ticketSupplement = {
       sourceUrl: source.url,
       ticketUrl: envelope.ticket.url,
       editionYear: source.editionYear,
+      ...(scope ? { scope } : {}),
     };
+    const previousTicketsUrl = candidate.ticketsUrl;
     candidate.ticketStatus = ticket.status;
     candidate.ticketsUrl = ticket.ticketsUrl ?? envelope.ticket.url;
     candidate.fieldEditionYears = {
@@ -319,7 +323,14 @@ export function extractFestivalCandidate(
     candidate.observedEditionYears = [
       ...new Set([...candidate.observedEditionYears, source.editionYear]),
     ];
-    candidate.evidence = candidate.evidence.filter((evidence) => evidence.field !== "ticketsUrl");
+    // Retain primary proof only when the adapter corroborates the same purchase destination.
+    const retainPrimaryTicketProof =
+      ticket.corroboratePrimaryPurchaseLink && previousTicketsUrl === candidate.ticketsUrl;
+    candidate.evidence = candidate.evidence.filter(
+      (evidence) =>
+        evidence.field !== "ticketsUrl" ||
+        (retainPrimaryTicketProof && evidence.sourceUrl === source.url),
+    );
     for (const field of ["ticketStatus", "ticketsUrl"] as const)
       candidate.evidence.push({
         field,

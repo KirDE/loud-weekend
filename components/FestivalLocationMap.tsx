@@ -15,6 +15,8 @@ const festivalMapLabels = {
     unavailable: "Map unavailable. Use the festival list below.",
     empty: "No coordinates for these festivals.",
     approximate: "Approximate location",
+    verified: "Organizer-confirmed venue",
+    source: "Organizer source",
     unknown: "Location not mapped",
     zoomIn: "Zoom in",
     zoomOut: "Zoom out",
@@ -31,6 +33,8 @@ const festivalMapLabels = {
     unavailable: "Karte nicht verfügbar. Nutze die Festivalliste unten.",
     empty: "Für diese Festivals fehlen Koordinaten.",
     approximate: "Ungefährer Standort",
+    verified: "Vom Veranstalter bestätigter Ort",
+    source: "Quelle des Veranstalters",
     unknown: "Kein Standort auf der Karte",
     zoomIn: "Vergrößern",
     zoomOut: "Verkleinern",
@@ -47,6 +51,8 @@ const festivalMapLabels = {
     unavailable: "Карта недоступна. Используйте список фестивалей ниже.",
     empty: "Координаты этих фестивалей неизвестны.",
     approximate: "Приблизительное местоположение",
+    verified: "Место подтверждено организатором",
+    source: "Источник организатора",
     unknown: "Место не отмечено на карте",
     zoomIn: "Увеличить масштаб",
     zoomOut: "Уменьшить масштаб",
@@ -83,7 +89,7 @@ function FestivalMapViewport({ festivals, t }: { festivals: Festival[]; t: MapLa
   const open = selection?.festivals === festivals ? selection : undefined;
   const { points, index, bySlug, bounds } = useMemo(() => {
     const points = festivals.flatMap((festival) => {
-      const coordinates = festivalMapPoint(festival);
+      const coordinates = festivalMapPoint(festival)?.coordinates;
       return coordinates
         ? [
             {
@@ -206,10 +212,11 @@ function FestivalMapViewport({ festivals, t }: { festivals: Festival[]; t: MapLa
             {map &&
               markers.map((marker) => {
                 const active = open?.id === marker.id;
-                const label =
-                  "slug" in marker
-                    ? `${bySlug.get(marker.slug)?.name} · ${t.approximate}`
-                    : t.cluster(marker.count);
+                const festival = "slug" in marker ? bySlug.get(marker.slug) : undefined;
+                const verified = festival && festivalMapPoint(festival)?.venue;
+                const label = festival
+                  ? `${festival.name} · ${verified ? t.verified : t.approximate}`
+                  : t.cluster("count" in marker ? marker.count : 1);
                 return (
                   <button
                     key={marker.id}
@@ -278,13 +285,25 @@ function FestivalMapViewport({ festivals, t }: { festivals: Festival[]; t: MapLa
                 <ul>
                   {open.slugs.map((slug) => {
                     const festival = bySlug.get(slug);
+                    if (!festival) return null;
+                    const venue = festivalMapPoint(festival)?.venue;
                     return (
-                      festival && (
-                        <li key={slug}>
-                          <Link href={`/festivals/${slug}/`}>{festival.name}</Link> ·{" "}
-                          {festival.city || festival.country} · {t.approximate}
-                        </li>
-                      )
+                      <li key={slug}>
+                        <Link href={`/festivals/${slug}/`}>{festival.name}</Link> ·{" "}
+                        {venue?.name || festival.city || festival.country}
+                        {" · "}
+                        {venue ? (
+                          <>
+                            {t.verified} (
+                            <a href={venue.source} rel="noreferrer" target="_blank">
+                              {t.source}
+                            </a>
+                            )
+                          </>
+                        ) : (
+                          t.approximate
+                        )}
+                      </li>
                     );
                   })}
                 </ul>
@@ -350,16 +369,23 @@ export function FestivalLocationMap({
               <li key={code}>
                 <strong>{group.name}</strong>
                 <ul>
-                  {group.festivals.map((festival) => (
-                    <li key={festival.slug}>
-                      <Link href={`/festivals/${festival.slug}/`}>
-                        {festival.name}
-                        {festival.city ? ` · ${festival.city}` : ""}
-                      </Link>
-                      {" · "}
-                      {festivalMapPoint(festival) ? t.approximate : t.unknown}
-                    </li>
-                  ))}
+                  {group.festivals.map((festival) => {
+                    const point = festivalMapPoint(festival);
+                    return (
+                      <li key={festival.slug}>
+                        <Link href={`/festivals/${festival.slug}/`}>
+                          {festival.name}
+                          {festival.city ? ` · ${festival.city}` : ""}
+                        </Link>
+                        {" · "}
+                        {point?.venue
+                          ? `${point.venue.name} · ${t.verified}`
+                          : point
+                            ? t.approximate
+                            : t.unknown}
+                      </li>
+                    );
+                  })}
                 </ul>
               </li>
             ))}
