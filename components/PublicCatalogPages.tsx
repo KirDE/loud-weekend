@@ -4,6 +4,7 @@ import Link from "next/link";
 import { editionRecordCompleteness } from "@/lib/edition-status";
 import { festivalDateInterval } from "@/lib/festival-dates";
 import { lineupPresentation } from "@/lib/festival-lineup";
+import { StageTimetable } from "./StageTimetable";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { FestivalEdition } from "@/lib/domain/edition";
@@ -362,6 +363,9 @@ export function FestivalEditionContent({
           )}
         </section>
       )}
+      {!paused && item.timetable?.length ? (
+        <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
+      ) : null}
       <FestivalArrival facts={arrivalFacts} />
       <section className="sourceNote">
         <strong>{t.provenance}</strong>

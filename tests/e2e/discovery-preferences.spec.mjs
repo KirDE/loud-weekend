@@ -303,3 +303,53 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
   const savedFilters = await page.request.get("/api/sync/saved-filters/");
   expect((await savedFilters.json()).document).toBeNull();
 });
+
+test("keeping this device during a sync conflict sends the newest local attendance", async ({
+  page,
+}) => {
+  const local = { attendance: { "synthetic-fest": "going" } };
+  await page.addInitScript(
+    ({ key, planner }) => {
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(planner));
+    },
+    { key: storageKey, planner: local },
+  );
+
+  const credentials = {
+    email: `discovery-keep-device-${randomUUID()}@example.test`,
+    password: "synthetic conflict test password",
+  };
+  expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
+  await page.goto("/en/planner/");
+  const attendance = page.locator(".planList select");
+  await expect(attendance).toHaveValue("going");
+  const sync = page.getByRole("button", { name: "Sync now", exact: true });
+  await sync.click();
+  await expect(page.getByText("Everything is synchronized.")).toBeVisible();
+
+  const plansUrl = "/api/sync/plans/";
+  const { document } = await (await page.request.get(plansUrl)).json();
+  expect(
+    (
+      await page.request.put(plansUrl, {
+        headers: { origin: new URL(page.url()).origin },
+        data: {
+          revision: document.revision,
+          payload: { attendance: { "synthetic-fest": "not-going" } },
+        },
+      })
+    ).status(),
+  ).toBe(200);
+
+  await sync.click();
+  const keepLocal = page.getByRole("button", { name: "Keep this device", exact: true });
+  await expect(keepLocal).toBeVisible();
+  await attendance.selectOption("maybe");
+  await keepLocal.click();
+  await expect(
+    page.getByText("Conflict resolved. Sync again to send other local changes."),
+  ).toBeVisible();
+  await expect(attendance).toHaveValue("maybe");
+  const saved = await (await page.request.get(plansUrl)).json();
+  expect(saved.document.payload.attendance).toEqual({ "synthetic-fest": "maybe" });
+});

@@ -93,13 +93,10 @@ export function inspectSitemap(xml, now = Date.now()) {
     }
     if (!alternates.size) continue;
     assert.equal(alternates.size, languages.length, `incomplete hreflang on ${path}`);
-    assert.equal(
-      new Set(alternates.values()).size,
-      languages.length,
-      `duplicate hreflang targets on ${path}`,
-    );
-    assert.ok([...alternates.values()].includes(path), `missing self-reference for ${path}`);
-    for (const target of alternates.values()) {
+    const barePath = path.replace(/^\/(?:en|de|ru)\//, "/");
+    for (const lang of languages) {
+      const target = lang === "x-default" ? barePath : `/${lang}${barePath}`;
+      assert.equal(alternates.get(lang), target, `incorrect hreflang ${lang} on ${path}`);
       assert.deepEqual(
         entries.get(target),
         alternates,
@@ -145,6 +142,8 @@ export async function checkIndexing(origin = site) {
     assert.ok(entries.has(path), `sample not listed: ${path}`);
     const html = await get(origin, path, ["text/html"], 12 * 1024 ** 2);
     const $ = load(html);
+    const lang = /^\/(en|de|ru)\//.exec(path)?.[1];
+    if (lang) assert.equal($("html").attr("lang"), lang, `document language mismatch on ${path}`);
     const canonical = $('link[rel="canonical"]');
     assert.equal(canonical.length, 1, `expected a single canonical on ${path}`);
     assert.equal(canonical.attr("href"), site + path, `canonical mismatch on ${path}`);

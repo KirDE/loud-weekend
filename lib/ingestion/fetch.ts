@@ -1,6 +1,7 @@
 import { alcatrazPrimaryUrl } from "./alcatraz-ticket-stock.ts";
 import { validateBarcelonaFetch } from "./adapters/barcelona-banner.ts";
 import { RFP_STOCK, reduceRfpStockDocument } from "./rfp-ticket-stock.ts";
+import { isPolandrockAdmissionSource } from "./adapters/polandrock-admission.ts";
 import {
   matchesTicketPrimaryUrl,
   ticketSupplementUrl,
@@ -163,6 +164,11 @@ async function fetchSourceWithoutTicketSupplement(
 
   let initial = await fetchWithRetry(source.fetchUrl ?? source.url);
   validateBarcelonaFetch(source, initial);
+  if (isPolandrockAdmissionSource(source)) {
+    if (initial.response.ok && initial.response.url && initial.response.url !== source.url)
+      throw new Error("Pol'and'Rock newsroom changed its official identity");
+    return initial;
+  }
   if (
     source.festivalSlug === "area53" &&
     (source.url !== "https://area53festival.at/de/" ||

@@ -99,7 +99,7 @@ function calendarDates(item: CalendarEvent) {
   };
 }
 
-function escapeIcs(value: string) {
+export function escapeIcs(value: string) {
   return value
     .replaceAll("\\", "\\\\")
     .replaceAll(";", "\\;")
