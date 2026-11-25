@@ -11,6 +11,8 @@ enum SyncKind {
   COLLECTIONS
   SAVED_FILTERS
   FESTIVAL_PLANS
+  SEASON_ATTENDANCE
+  TRIP_BUDGETS
 }
 
 enum NotificationChannel {
@@ -127,6 +129,7 @@ enum TicketStatus {
   NOT_ON_SALE
   SOLD_OUT
   SALES_ENDED
+  FREE
   UNAVAILABLE
   UNKNOWN
 }
@@ -183,6 +186,10 @@ model User {
   sessions                  Session[]
   documents                 SyncDocument[]
   shareLinks                ShareLink[]
+  ownedTrips                GroupTrip[]
+  tripAccess                GroupTripInvite[]
+  tripVotes                 GroupTripVote[]
+  tripComments              GroupTripComment[]
   spotify                   SpotifyConnection?
   notificationPreferences   NotificationPreference[]
   notificationSubscriptions NotificationSubscription[]
@@ -195,6 +202,16 @@ model User {
   submissionAuditEntries    FestivalSubmissionAudit[]
   emailVerificationTokens   EmailVerificationToken[]
   passkeys                  Passkey[]
+  googleIdentity            GoogleIdentity?
+  calendarSubscription      CalendarSubscription?
+}
+
+model CalendarSubscription {
+  userId    String   @id
+  keyDigest String   @unique
+  seasons   Int[]
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Passkey {
@@ -315,19 +332,62 @@ model FestivalEdition {
   recordState     EditionRecordState
   completeness    EditionCompleteness
   sourceUpdatedAt DateTime
+  finalLineupFingerprint String?
   snapshotAt      DateTime?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   festival        Festival               @relation(fields: [festivalId], references: [id], onDelete: Cascade)
   lineup          LineupEntry[]
   provenance      EditionProvenance[]
+  lineupDays      EditionLineupDayAllocation[]
+  arrivalFacts    EditionArrivalFact[]
   timetable       TimetablePerformance[]
   playlists       FestivalPlaylist[]
   playlistLinks   FestivalPlaylistLink[]
   sources         FestivalSource[]
+  groupTripOptions GroupTripOption[]
+
+  overview        EditionOverview?
 
   @@unique([festivalId, year])
   @@index([year, recordState])
+}
+
+model EditionOverview {
+  editionId     String          @id
+  city          String
+  countryCode   String
+  organizerHost String
+  checkedOn     DateTime        @db.Date
+  sourceUrls    String[]
+  summaryEn     String
+  summaryDe     String
+  summaryRu     String
+  edition       FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+}
+
+enum EditionArrivalKind {
+  venue
+  shuttle
+  railShuttle
+  camper
+}
+
+model EditionArrivalFact {
+  editionId           String
+  kind                EditionArrivalKind
+  editionYear         Int
+  countryCode         String             @db.Char(2)
+  organizerHost       String
+  descriptionEn       String
+  descriptionDe       String
+  descriptionRu       String
+  sourceUrl           String
+  supportingSourceUrl String?
+  checkedOn           DateTime           @db.Date
+  edition             FestivalEdition    @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, kind])
 }
 
 model Artist {
@@ -357,6 +417,7 @@ model Artist {
   links          ArtistLink[]
   provenance     ArtistProvenance[]
   appearances    LineupEntry[]
+  lineupDays     EditionLineupDayAllocation[]
   timetable      TimetablePerformance[]
 }
 
@@ -425,6 +486,22 @@ model EditionProvenance {
   @@index([editionId, field])
 }
 
+model EditionLineupDayAllocation {
+  editionId  String
+  artistId   String
+  dates      DateTime[]        @db.Date
+  status     LineupEntryStatus
+  startDate  DateTime          @db.Date
+  endDate    DateTime          @db.Date
+  sourceUrl  String
+  observedAt DateTime
+  edition    FestivalEdition   @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  artist     Artist            @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, artistId])
+  @@index([artistId])
+}
+
 model TimetablePerformance {
   id         String            @id @default(cuid())
   editionId  String
@@ -452,6 +529,7 @@ model FestivalPlaylist {
   artistCount Int?
   trackCount  Int?
   syncedAt    DateTime?
+  coverageEvidence Json?
   edition     FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
 
   @@unique([editionId, provider])
@@ -683,6 +761,7 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  googleAttempts GoogleOAuthAttempt[]
 
   @@index([userId])
   @@index([expiresAt])
@@ -913,4 +992,169 @@ model OperationalState {
   leaseOwner     String?
   leaseExpiresAt DateTime?
   updatedAt      DateTime @updatedAt
+}
+
+model GoogleOAuthAttempt {
+  stateHash    String   @id
+  browserHash  String
+  nonce        String
+  encryptedVerifier String
+  expiresAt    DateTime
+  sessionId    String?
+  session      Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([sessionId])
+}
+
+model GoogleIdentity {
+  subject   String   @id
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum GroupTripRole {
+  VIEWER
+  VOTER
+}
+
+enum GroupTripChoice {
+  GOING
+  MAYBE
+  NOT_GOING
+}
+
+enum GroupTripAuditAction {
+  CREATED
+  INVITED
+  JOINED
+  REVOKED
+}
+
+model GroupTrip {
+  id        String           @id @default(cuid())
+  ownerId   String
+  title     String
+  createdAt DateTime         @default(now())
+  owner     User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  options   GroupTripOption[]
+  invites   GroupTripInvite[]
+  audit     GroupTripAudit[]
+
+  @@index([ownerId])
+}
+
+model GroupTripOption {
+  tripId    String
+  editionId String
+  trip      GroupTrip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  edition   FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  votes     GroupTripVote[]
+  comments  GroupTripComment[]
+
+  @@id([tripId, editionId])
+  @@index([editionId])
+}
+
+model GroupTripInvite {
+  id          String        @id @default(cuid())
+  tripId      String
+  tokenHash   String        @unique
+  role        GroupTripRole
+  expiresAt   DateTime
+  claimedById String?
+  claimedAt   DateTime?
+  revokedAt   DateTime?
+  trip        GroupTrip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  claimedBy   User?         @relation(fields: [claimedById], references: [id], onDelete: SetNull)
+
+  @@index([tripId, claimedById])
+  @@index([claimedById])
+}
+
+model GroupTripVote {
+  tripId    String
+  editionId String
+  voterId   String
+  choice    GroupTripChoice
+  option    GroupTripOption @relation(fields: [tripId, editionId], references: [tripId, editionId], onDelete: Cascade)
+  voter     User            @relation(fields: [voterId], references: [id], onDelete: Cascade)
+
+  @@id([tripId, editionId, voterId])
+  @@index([voterId])
+}
+
+model GroupTripAudit {
+  id        String               @id @default(cuid())
+  tripId    String
+  action    GroupTripAuditAction
+  createdAt DateTime             @default(now())
+  trip      GroupTrip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, createdAt])
+}
+
+model GroupTripComment {
+  id        String          @id @default(cuid())
+  tripId    String
+  editionId String
+  authorId  String
+  body      String          @db.VarChar(500)
+  createdAt DateTime        @default(now())
+  option    GroupTripOption @relation(fields: [tripId, editionId], references: [tripId, editionId], onDelete: Cascade)
+  author    User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, editionId, createdAt])
+  @@index([authorId])
+}
+
+model GeographicOrigin {
+  id          String  @id
+  countryCode String
+  name        String
+  searchName  String
+  region      String?
+  postalCode  String?
+  postalKey   String?
+  latitude    Float
+  longitude   Float
+
+  @@index([searchName(ops: raw("text_pattern_ops"))], map: "GeographicOrigin_searchName_prefix_idx")
+  @@index([postalKey])
+}
+
+enum CorrectionKind {
+  DATE
+  LINEUP
+  TICKETS
+  IDENTITY
+}
+
+enum CorrectionStatus {
+  PENDING
+  ACCEPTED
+  DISMISSED
+}
+
+model CorrectionReport {
+  id           String           @id @default(cuid())
+  targetName   String
+  editionId    String?
+  editionYear  Int?
+  artistId     String?
+  kind         CorrectionKind
+  sourceUrl    String
+  notes        String?
+  fingerprint  String
+  reporterHash String
+  submittedAt  DateTime         @default(now())
+  status       CorrectionStatus @default(PENDING)
+  reviewedAt   DateTime?
+  reviewerId   String?
+
+  @@index([status, submittedAt])
+  @@index([reporterHash, submittedAt])
+  @@index([fingerprint, submittedAt])
+  @@index([submittedAt])
 }
