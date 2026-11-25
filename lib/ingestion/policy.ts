@@ -1,5 +1,10 @@
 import { editionDateProblem } from "../domain/edition-dates.ts";
-import { canonicalArtistNames, type AliasArtist } from "../catalog/artist-aliases.ts";
+import {
+  artistAliasIndex,
+  canonicalArtistNames,
+  type AliasArtist,
+} from "../catalog/artist-aliases.ts";
+import { artistOrthographyKey } from "../catalog/artist-orthography.ts";
 import { isDownloadAnnouncement } from "./adapters/download.ts";
 import { ROSKILDE_HOME, ROSKILDE_REVIEW } from "./adapters/roskilde.ts";
 import { ROADBURN_ARTIST_REVIEW } from "./adapters/roadburn.ts";
@@ -172,6 +177,36 @@ export function evaluateCandidate(
         ),
     ),
   );
+  const billingAdditions = changes.filter(
+    ({ kind }) => kind === "artist_added" || kind === "headliner_added",
+  );
+  if (billingAdditions.length) {
+    const lookup = artistAliasIndex(artists, { orthography: true });
+    const billingKey = (name: string) => {
+      const owners = lookup(name);
+      return owners.length === 1
+        ? `id:${owners[0].id}`
+        : `name:${artistOrthographyKey(name.normalize("NFC"))}`;
+    };
+    const billings = {
+      headliners: new Set(current.headliners.map(billingKey)),
+      lineup: new Set(current.lineup.map(billingKey)),
+    };
+    // Use the actual additions: a repeated headliner in an unranked
+    // announcement was already excluded by the diff, not reclassified.
+    for (const change of billingAdditions) {
+      const { kind, after } = change;
+      if (!after) continue;
+      const identity = billingKey(after);
+      const billing = kind === "headliner_added" ? "headliners" : "lineup";
+      const opposite = billing === "headliners" ? "lineup" : "headliners";
+      if (billings[opposite].has(identity) && !change.reviewRequired) {
+        change.reviewRequired = true;
+        change.reason = "Billing changes require reviewed reclassification";
+      }
+      billings[billing].add(identity);
+    }
+  }
   if (
     current.slug === "full-rewind" &&
     changes.some((change) => ["lineup", "headliners"].includes(change.field))

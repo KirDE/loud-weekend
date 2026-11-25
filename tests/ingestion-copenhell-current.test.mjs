@@ -322,3 +322,44 @@ test("ordinary admission sellout wording in any element contradicts a lingering 
     assert.equal(evaluateCandidate(current, c).publishable, false);
   }
 });
+
+test("current official edition/product Ticketmaster slug verifies ordinary stock without a brand query", async () => {
+  const data = clone();
+  const ticket = data.documents.find((d) => d.url.endsWith("/billetter/"));
+  ticket.html = await readFile(
+    new URL("./fixtures/official-markup/copenhell-tickets-slug-2027.html", import.meta.url),
+    "utf8",
+  );
+  for (const id of ["1010238744", "1010999999"]) {
+    const later = structuredClone(data);
+    later.documents.find((d) => d.url.endsWith("/billetter/")).html = ticket.html.replace(
+      "1010238744",
+      id,
+    );
+    const candidate = extract(later);
+    assert.equal(candidate.ticketStatus, "available");
+    assert.deepEqual(evaluateCandidate(current, candidate).changes, []);
+    assert.deepEqual(evaluateCandidate(current, candidate).reviewReasons, []);
+    assert(candidate.evidence.some((e) => e.field === "ticketStatus"));
+  }
+  for (const [from, to] of [
+    ["copenhell-2027", "copenhell-2026"],
+    ["copenhell-2027", "otherfest-2027"],
+    ["4-dagsbillet", "rip-upgrade"],
+    ["/1010238744", "/1010238744?brand=otherfestival"],
+    ["/1010238744", "/1010238744?brand=copenhelldk&amp;brand=otherfestival"],
+    ["/1010238744", "/1010238744?redirect=elsewhere"],
+    ["/1010238744", "/1010238744#other"],
+    ["www.ticketmaster.dk", "tickets.example.org"],
+    ["Køb nu</a>", "Køb nu</a><strong>Udsolgt</strong>"],
+  ]) {
+    const invalid = structuredClone(data);
+    invalid.documents.find((d) => d.url.endsWith("/billetter/")).html = ticket.html.replaceAll(
+      from,
+      to,
+    );
+    const candidate = extract(invalid);
+    assert.equal(candidate.ticketStatus, undefined, `${from} -> ${to}`);
+    assert(candidate.warnings.some((w) => w.includes("four-day ticket stock requires review")));
+  }
+});

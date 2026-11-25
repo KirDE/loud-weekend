@@ -148,20 +148,6 @@ export function diffFestival(current: Festival, candidate: FestivalCandidate): F
     announcement || candidate.artistListMode === "additive",
     ambiguous,
   );
-  // A differently spelled support entry must not silently retain obsolete
-  // headliner billing in an additive source whose policy uses literal names.
-  if (!snapshot)
-    for (const change of changes) {
-      if (
-        change.kind === "artist_added" &&
-        current.headliners.some(
-          (name) => artistOrthographyKey(name) === artistOrthographyKey(change.after!),
-        )
-      ) {
-        change.reviewRequired = true;
-        change.reason = "Billing changes require reviewed reclassification";
-      }
-    }
   // New Summer Punch artists require protected review, without provider work.
   // An unchanged additive replay must not generate another review.
   if (["summer-punch", "area53"].includes(candidate.festivalSlug))
