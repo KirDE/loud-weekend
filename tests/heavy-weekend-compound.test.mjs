@@ -1,3 +1,4 @@
+import { heavyStockResponse } from "./support/heavy-stock-fixture.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -94,6 +95,8 @@ test("live fetch hashes actual logo bytes; corruption retains review, exact asse
       maxAttempts: 1,
       fetchImpl: async (url) => {
         calls.push(url);
+        const stock = heavyStockResponse(url);
+        if (stock) return stock;
         if (url === source.url) return new Response(base.home);
         if (url === base.documents.find((d) => d.logo)?.logo.url)
           return new Response(corrupt ? "changed bytes" : logo);

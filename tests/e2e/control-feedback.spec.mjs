@@ -144,7 +144,9 @@ for (const locale of ["en", "de", "ru"]) {
       await page.setViewportSize({ width, height: 1000 });
       await page.locator(".siteFooter").scrollIntoViewIfNeeded();
       const metrics = await page.locator(".siteFooter").evaluate((footer) => {
-        const boxes = [...footer.children].map((el) => el.getBoundingClientRect());
+        const boxes = [...footer.children]
+          .filter((el) => !el.matches(".footerGuides"))
+          .map((el) => el.getBoundingClientRect());
         const picker = footer.querySelector(".languagePicker").getBoundingClientRect();
         return {
           left: picker.left,
