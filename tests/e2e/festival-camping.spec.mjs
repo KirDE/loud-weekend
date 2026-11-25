@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
+import { readCampingFacts } from "../../lib/catalog/camping-facts.ts";
+import { editionKey, readFreshnessEvidence } from "../../lib/catalog/freshness.ts";
 import { collectCampingCandidate } from "../../lib/ingestion/camping-collector.ts";
 import { campingSources, campingSourceUrl } from "../../lib/ingestion/adapters/camping-guidance.ts";
 import {
@@ -210,6 +212,64 @@ test("validated edition camping facts are accessible in every locale", async ({ 
         await context.close();
       }
     }
+
+    const edition = {
+      slug: wacken.slug,
+      editionYear: year,
+      city: wacken.city,
+      countryCode: wacken.countryCode,
+      officialUrl: `https://www.${wacken.organizerHost}/`,
+    };
+    const freshness = async () =>
+      (await readFreshnessEvidence(db, new Date())).publishedByEdition.get(
+        editionKey(wacken.slug, year),
+      );
+    const arrival = async () =>
+      (await readCampingFacts(db, edition)).find(({ field }) => field === "arrival")?.earliestDate;
+    const previousPublication = await freshness();
+    expect(previousPublication).toBeDefined();
+    expect(await arrival()).toBe("2027-07-26");
+
+    const updatedHtml = wacken.html.replace("Monday, July 26", "Tuesday, July 27");
+    const updateIssue = await stage(db, inserted[wackenIndex], wacken, updatedHtml);
+    expect(await arrival()).toBe("2027-07-26");
+    expect(await freshness()).toBe(previousPublication);
+    const update = approve(await claimAgentIssue(db, updateIssue.sourceId, updateIssue.issueId));
+    await expect(
+      resolveAgentIssue(db, {
+        ...update,
+        decision: {
+          ...update.decision,
+          camping: previews[wackenIndex].candidate.campingFingerprint,
+        },
+      }),
+    ).rejects.toThrow("invalid");
+    expect(await arrival()).toBe("2027-07-26");
+    expect(await freshness()).toBe(previousPublication);
+
+    // Abort the real transaction after the importer has written the new facts and receipt.
+    const rollback = new Error("Abort camping publication");
+    const rollbackDb = {
+      $transaction: (operation, options) =>
+        db.$transaction(async (tx) => {
+          const result = await operation(tx);
+          expect(result.campingPublished).toBe(true);
+          expect(result.publicationId).toBeTruthy();
+          throw rollback;
+        }, options),
+    };
+    await expect(resolveAgentIssue(rollbackDb, update)).rejects.toThrow(rollback);
+    expect(await arrival()).toBe("2027-07-26");
+    expect(await freshness()).toBe(previousPublication);
+
+    const updated = await resolveAgentIssue(db, update);
+    expect(updated.campingPublished).toBe(true);
+    expect(await arrival()).toBe("2027-07-27");
+    const updatedPublication = await freshness();
+    expect(updatedPublication > previousPublication).toBe(true);
+    expect(await resolveAgentIssue(db, update)).toEqual(updated);
+
+    expect(await freshness()).toBe(updatedPublication);
   } finally {
     if (inserted.length) {
       await db.festivalSource.deleteMany({ where: { festivalId: { in: inserted } } });
