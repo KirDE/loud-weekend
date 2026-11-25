@@ -248,10 +248,25 @@ export function extractJsonLdCandidate(
     ticketStatus: ticketStatus(selected.event.offers),
     timetable: timetable(selected.event.subEvent),
   };
-  if (selected.event.startDate != null && fields.startDate === undefined)
-    candidate.warnings.push("JSON-LD Event contains an invalid start date");
-  if (selected.event.endDate != null && fields.endDate === undefined)
-    candidate.warnings.push("JSON-LD Event contains an invalid end date");
+  const selectedId = selected.id;
+  const descriptions = (selectedId && dateDescriptions.get(selectedId)) || [selected.event];
+  // Alternate claims can block publication but cannot supply the chosen fields or evidence.
+  for (const [field, label] of [
+    ["startDate", "start date"],
+    ["endDate", "end date"],
+  ] as const) {
+    const days = new Set<string>();
+    let invalid = false;
+    for (const description of descriptions) {
+      const claim = description[field];
+      if (claim == null) continue;
+      const date = eventDate(claim);
+      if (date) days.add(date.day);
+      else invalid = true;
+    }
+    if (invalid) candidate.warnings.push(`JSON-LD Event contains an invalid ${label}`);
+    if (days.size > 1) candidate.warnings.push(`Conflicting JSON-LD festival ${field} claims`);
+  }
   const lineupQuality = validateGenericLineup(fields.lineup ?? []);
   fields.lineup = lineupQuality.names.length
     ? lineupQuality.names
@@ -287,19 +302,6 @@ export function extractJsonLdCandidate(
     }
   }
 
-  const selectedId = selected.id;
-  const descriptions = selectedId ? dateDescriptions.get(selectedId) : undefined;
-  if (descriptions && descriptions.length > 1) {
-    // Alternate claims can block publication but cannot supply the chosen fields or evidence.
-    for (const field of ["startDate", "endDate"] as const) {
-      const days = new Set<string>();
-      for (const description of descriptions) {
-        const date = eventDate(description[field]);
-        if (date) days.add(date.day);
-      }
-      if (days.size > 1) candidate.warnings.push(`Conflicting JSON-LD festival ${field} claims`);
-    }
-  }
   const reviewStatus =
     eventStatusRequiringReview(selected.event.eventStatus) ??
     (selectedId ? reviewStatuses.get(selectedId) : undefined);
