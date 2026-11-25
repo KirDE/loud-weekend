@@ -90,9 +90,15 @@ test("the HTTP smoke check distinguishes crawler noindex from image preview rest
         links,
         path === "/de/" ? robotsMeta : "",
       ].join("");
+      const navigation =
+        path === "/editions/2027/"
+          ? '<main class="directoryPage"><a href="/archive/">Festival archive</a></main>'
+          : "";
       response
         .writeHead(200, { "content-type": "text/html" })
-        .end(`<!doctype html><html lang="${lang}"><head>${head}</head></html>`);
+        .end(
+          `<!doctype html><html lang="${lang}"><head>${head}</head><body>${navigation}</body></html>`,
+        );
     } else {
       response.writeHead(404).end();
     }
