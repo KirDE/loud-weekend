@@ -1,3 +1,4 @@
+import { getPlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-readback";
 import { EditionHistory } from "@/components/EditionHistory";
 import { db } from "@/lib/db";
 import { readEditionHistory } from "@/lib/catalog/public-history";
@@ -49,6 +50,9 @@ export default async function LocalizedFestivalPage({
   });
   const item = festivals.find((festival) => festival.slug === slug);
   if (!item) notFound();
+  const failures = item.editionYear
+    ? await getPlaylistRefreshFailures(item.slug, item.editionYear)
+    : {};
   const overview = await readFestivalOverview(db, item);
   const history =
     item.editionYear === undefined ? [] : await readEditionHistory(db, item.slug, item.editionYear);
@@ -72,6 +76,7 @@ export default async function LocalizedFestivalPage({
           artists.map((artist) => [artist.name, artist.spotifyStats?.popularity ?? null]),
         )}
         playlist={playlists[item.slug]}
+        playlistRefreshFailures={failures}
       />
       <EditionHistory entries={history} officialUrl={item.officialUrl} />
     </>

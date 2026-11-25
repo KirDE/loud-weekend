@@ -1,5 +1,7 @@
 "use client";
 
+import type { PlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-readback";
+
 import { useState } from "react";
 import Link from "next/link";
 import { CorrectionReportForm } from "./CorrectionReportForm";
@@ -34,6 +36,7 @@ export function FestivalDetail({
   discoveryLineups,
   artistSlugs,
   playlist,
+  playlistRefreshFailures,
   overview,
   artistPopularity = {},
   arrivalFacts = [],
@@ -43,6 +46,7 @@ export function FestivalDetail({
   discoveryLineups?: DiscoveryLineups;
   artistSlugs: Readonly<Record<string, string>>;
   playlist?: PlaylistStatus;
+  playlistRefreshFailures?: PlaylistRefreshFailures;
   overview?: PublicFestivalOverview;
   arrivalFacts?: readonly PublicArrivalFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
@@ -149,12 +153,16 @@ export function FestivalDetail({
               coverage={
                 playlistUrl === playlist?.spotifyUrl ? playlist.coverage?.spotify : undefined
               }
+              failed={playlistRefreshFailures?.spotify}
             />
           </a>
         ) : (
           <div className="disabled">
             <small>{t("listen")}</small>
-            <strong>{t("playlistSoon")}</strong>
+            <strong>
+              {playlistRefreshFailures?.spotify ? t("spotifyPlaylist") : t("playlistSoon")}
+            </strong>
+            {playlistRefreshFailures?.spotify && <PlaylistCoverageLabel failed />}
           </div>
         )}
         {youtubePlaylistUrl ? (
@@ -167,9 +175,18 @@ export function FestivalDetail({
                   ? playlist.coverage?.youtubeMusic
                   : undefined
               }
+              failed={playlistRefreshFailures?.youtubeMusic}
             />
           </a>
-        ) : null}
+        ) : (
+          playlistRefreshFailures?.youtubeMusic && (
+            <div className="disabled">
+              <small>{t("listen")}</small>
+              <strong>{t("youtubeMusicPlaylist")}</strong>
+              <PlaylistCoverageLabel failed />
+            </div>
+          )
+        )}
         {setlistUrl ? (
           <a href={setlistUrl} target="_blank" rel="noreferrer">
             <small>{t("liveHistory")}</small>
