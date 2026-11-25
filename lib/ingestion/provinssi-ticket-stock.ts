@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { FestivalCandidate, FestivalSource } from "./types.ts";
-import type { TicketObservation } from "./ticket-supplements.ts";
+import { isProvinssiAnnouncement, PROVINSSI_HOME } from "./adapters/provinssi.ts";
+import type { TicketObservation, TicketPublicationPolicy } from "./ticket-supplements.ts";
 export const PROVINSSI_SALE = "f20f4130e7bd49b99eeb38ad7236ccd9";
 export const PROVINSSI_EVENT = "a406b7bdc0d74330bbb7a19e57766d96";
 export const PROVINSSI_PRODUCT = "5fb581dd9f104d0298c11bf2f38e5b11";
@@ -343,3 +344,110 @@ export function observeProvinssiStock(
       "exact ordinary category is_sold_out=false and single-ticket order allowed; no ticket selected/reserved",
   };
 }
+
+const same = (left: unknown, right: unknown) =>
+  JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+
+export const provinssiStockPublication: TicketPublicationPolicy = {
+  requiredFields: ["ticketStatus"],
+  validatePrimary({ result, requestedUrl, candidateSlug, stored, evidence, edition }) {
+    const observed = result.candidate;
+    const { startDate, endDate } = observed;
+    const provinssiStockDatesMatch =
+      typeof startDate === "string" &&
+      typeof endDate === "string" &&
+      observed.evidence.some(
+        (e) =>
+          e.field === "ticketStatus" &&
+          e.sourceUrl === PROVINSSI_STOCK &&
+          e.excerpt?.startsWith(provinssiStockDatePrefix(startDate, endDate)),
+      ) &&
+      (["startDate", "endDate"] as const).every((dateField) => {
+        const value = observed[dateField];
+        const resultingDate =
+          result.changes.find((change) => change.field === dateField)?.after ?? edition[dateField];
+        return (
+          typeof value === "string" &&
+          value.startsWith(`${edition.year}-`) &&
+          value === resultingDate &&
+          value === stored[dateField] &&
+          observed.evidence.some((e) => e.field === dateField && e.sourceUrl === PROVINSSI_HOME) &&
+          evidence.some(
+            (e) =>
+              e.field === dateField &&
+              e.sourceUrl === PROVINSSI_HOME &&
+              same(e.observedValue, value),
+          )
+        );
+      });
+    const verifiedAnnouncement =
+      candidateSlug === "provinssi" &&
+      requestedUrl === PROVINSSI_HOME &&
+      result.sourceUrl === PROVINSSI_HOME &&
+      isProvinssiAnnouncement(result.candidate, edition.year) &&
+      isProvinssiAnnouncement(stored, edition.year) &&
+      (!observed.ticketSupplement || provinssiStockDatesMatch) &&
+      result.changes.every(
+        ({ field, kind }) =>
+          (["ticketStatus", "ticketsUrl"].includes(field) &&
+            observed.ticketSupplement &&
+            stored.ticketSupplement) ||
+          (["startDate", "endDate", "city", "lineup", "ticketsUrl", "status"].includes(field) &&
+            (field !== "lineup" || kind === "artist_added") &&
+            evidence.some(
+              (e) =>
+                e.field === field &&
+                e.sourceUrl === PROVINSSI_HOME &&
+                same(
+                  e.observedValue,
+                  (result.candidate as unknown as Record<string, unknown>)[field],
+                ),
+            )),
+      ) &&
+      ["startDate", "endDate", "city", "lineup", "ticketsUrl", "status"].every((field) =>
+        same(
+          (stored as unknown as Record<string, unknown>)[field],
+          (result.candidate as unknown as Record<string, unknown>)[field],
+        ),
+      );
+    const verifiedStockOnly =
+      candidateSlug === "provinssi" &&
+      requestedUrl === PROVINSSI_HOME &&
+      result.sourceUrl === PROVINSSI_HOME &&
+      provinssiStockDatesMatch &&
+      observed.ticketSupplement &&
+      stored.ticketSupplement &&
+      result.changes.length > 0 &&
+      result.changes.every((c) => ["ticketStatus", "ticketsUrl"].includes(c.field)) &&
+      [observed, stored].every(
+        (c) =>
+          c.artistListMode === "additive" &&
+          c.lineupScope === "announcement" &&
+          c.headliners === undefined &&
+          c.status === "partial",
+      ) &&
+      ["startDate", "endDate", "city", "lineup", "status"].every(
+        (field) =>
+          same(
+            (stored as unknown as Record<string, unknown>)[field],
+            (observed as unknown as Record<string, unknown>)[field],
+          ) &&
+          observed.evidence.some((e) => e.field === field && e.sourceUrl === PROVINSSI_HOME) &&
+          evidence.some(
+            (e) =>
+              e.field === field &&
+              e.sourceUrl === PROVINSSI_HOME &&
+              same(e.observedValue, (observed as unknown as Record<string, unknown>)[field]),
+          ),
+      );
+    if (!verifiedAnnouncement && !verifiedStockOnly)
+      throw new Error(
+        "Provinssi publication requires matching persisted official addition evidence",
+      );
+    return {
+      deferPlaylistRefreshFor: verifiedAnnouncement ? "Provinssi" : undefined,
+      markPartial:
+        verifiedAnnouncement && result.changes.some((change) => change.kind === "artist_added"),
+    };
+  },
+};

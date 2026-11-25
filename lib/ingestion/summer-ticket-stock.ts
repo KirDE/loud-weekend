@@ -1,7 +1,7 @@
 import { load } from "cheerio";
 import { z } from "zod";
 import type { FestivalCandidate, FestivalSource } from "./types.ts";
-import type { TicketObservation } from "./ticket-supplements.ts";
+import type { TicketObservation, TicketPublicationPolicy } from "./ticket-supplements.ts";
 export const SUMMER_ORIGIN = "https://sklep.ebilet.pl";
 export const SUMMER_EVENT = "602356450160803841";
 export const SUMMER_EVENT_API = `${SUMMER_ORIGIN}/api/event/getevent/${SUMMER_EVENT}`;
@@ -341,3 +341,7 @@ export function observeSummerStock(
       "no ticket selected/reserved",
   };
 }
+
+export const summerStockPublication: TicketPublicationPolicy = {
+  requiredFields: ["ticketStatus", "ticketsUrl"],
+};

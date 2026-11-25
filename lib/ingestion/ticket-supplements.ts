@@ -4,6 +4,7 @@ import {
   PROVINSSI_PURCHASE,
   isProvinssiStockSource,
   observeProvinssiStock,
+  provinssiStockPublication,
 } from "./provinssi-ticket-stock.ts";
 import {
   SUMMER_STOCK,
@@ -11,6 +12,7 @@ import {
   SUMMER_PURCHASE,
   isSummerStockSource,
   observeSummerStock,
+  summerStockPublication,
 } from "./summer-ticket-stock.ts";
 import {
   extractSwedenRockCandidate,
@@ -20,7 +22,7 @@ import { renderedTicketText } from "./rendered-ticket-text.ts";
 import { RFP_STOCK, RFP_PURCHASE, observeRfpStock } from "./rfp-ticket-stock.ts";
 import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
-import type { FestivalSource, FestivalCandidate } from "./types.ts";
+import type { FestivalSource, FestivalCandidate, IngestionResult } from "./types.ts";
 import {
   VAINSTREAM_STOCK,
   isVainstreamStockSource,
@@ -43,6 +45,27 @@ export type TicketObservation = {
   warning?: string;
   ticketsUrl?: string;
 };
+
+export type TicketPublicationPolicy = {
+  requiredFields: readonly string[];
+  validatePrimary?: (input: {
+    result: IngestionResult;
+    requestedUrl: string;
+    candidateSlug: string;
+    stored: FestivalCandidate;
+    evidence: readonly { field: string; sourceUrl: string; observedValue: unknown }[];
+    edition: { year: number; startDate: string | null; endDate: string | null };
+  }) => { markPartial: boolean; deferPlaylistRefreshFor?: string };
+};
+
+const ticketPublicationPolicies = new Map<string, TicketPublicationPolicy>([
+  ["provinssi", provinssiStockPublication],
+  ["summer-punch", summerStockPublication],
+]);
+
+export function ticketPublicationPolicy(festivalSlug: string): TicketPublicationPolicy | undefined {
+  return ticketPublicationPolicies.get(festivalSlug);
+}
 
 /** A same-document response or a source adapter's reviewed canonical homepage. */
 export function matchesTicketPrimaryUrl(source: FestivalSource, finalUrl: string): boolean {
