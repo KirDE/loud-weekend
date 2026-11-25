@@ -28,6 +28,20 @@ const favoritesPayload = z.object({
 const plansPayload = z.object({
   attendance: z.record(z.string(), z.enum(["going", "maybe", "not-going"])).optional(),
 });
+const savedFiltersPayload = z.object({
+  savedFilters: z
+    .object({
+      query: z.string(),
+      country: z.string(),
+      announcedOnly: z.boolean(),
+      month: z.string(),
+      ticketsOnly: z.boolean(),
+      genre: z.string(),
+      origin: z.string(),
+      maxDistance: z.string(),
+    })
+    .partial(),
+});
 const labels = {
   en: {
     title: "Account sync",
@@ -218,11 +232,12 @@ export function AccountSyncPanel({
       throw new Error(t.failed);
     if (kind === "plans" && document && !plansPayload.safeParse(document.payload).success)
       throw new Error(t.failed);
-    if (kind === "saved-filters" && document) {
-      const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
-      if (!filters || typeof filters !== "object" || Array.isArray(filters))
-        throw new Error(t.failed);
-    }
+    if (
+      kind === "saved-filters" &&
+      document &&
+      !savedFiltersPayload.safeParse(document.payload).success
+    )
+      throw new Error(t.failed);
     return document;
   }
 
