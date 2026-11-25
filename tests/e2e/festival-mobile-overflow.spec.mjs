@@ -74,7 +74,7 @@ for (const width of [320, 375, 390]) {
     await page.goto("/en/festivals/synthetic-fest/");
 
     const recommendations = page.locator(".recommendations");
-    await expect(recommendations.getByRole("heading", { name: "Similar festivals" })).toBeVisible();
+    await expect(recommendations.getByRole("heading", { name: "Related festivals" })).toBeVisible();
     await expect(recommendations.getByRole("link")).toHaveCount(3);
 
     const geometry = await page.evaluate(() => {

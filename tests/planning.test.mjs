@@ -15,6 +15,7 @@ const festival = {
   officialUrl: "https://example.com/fest",
   status: "confirmed",
   editionYear: 2027,
+  updatedAt: "2026-11-22T15:35:17.298Z",
 };
 
 test("calendar export uses an exclusive end date and escaped text", () => {
@@ -23,7 +24,8 @@ test("calendar export uses an exclusive end date and escaped text", () => {
   assert.match(payload, /DTEND;VALUE=DATE:20270607/);
   assert.match(payload, /SUMMARY:Test\\, Rock\\; Fest/);
   assert.match(payload, /LOCATION:Köln\\, Germany/);
-  assert.match(payload, /UID:test-fest-2027@festival-radar/);
+  assert.match(payload, /UID:test-fest-2027@festival-radar\r\nDTSTAMP:20261122T153517Z\r\n/);
+  assert.equal(payload.match(/^DTSTAMP:/gm).length, 1);
 });
 
 test("calendar links provide distinct explicit Google, ICS and Apple flows", () => {
@@ -37,4 +39,36 @@ test("calendar links provide distinct explicit Google, ICS and Apple flows", () 
 
 test("undated festivals do not expose invalid calendar actions", () => {
   assert.equal(calendarUrls({ ...festival, startDate: undefined, endDate: undefined }), null);
+});
+
+test("calendar stamps normalize offsets and fall back when a source stamp is invalid", () => {
+  assert.match(
+    calendarFile([{ ...festival, calendarUpdatedAt: "2026-11-22T16:35:18+01:00" }]),
+    /DTSTAMP:20261122T153518Z\r\n/,
+  );
+  const generatedAt = new Date("2026-11-23T10:00:15.034Z");
+  assert.match(
+    calendarFile([{ ...festival, updatedAt: "not a date" }], generatedAt),
+    /DTSTAMP:20261123T100015Z\r\n/,
+  );
+});
+
+test("calendar links and files omit malformed or reversed ranges without dropping valid events", () => {
+  const invalid = [
+    { ...festival, slug: "bad-start", startDate: "2027-02-29" },
+    { ...festival, slug: "bad-end", endDate: "not a date" },
+    { ...festival, slug: "backwards", endDate: "2027-06-03" },
+    { ...festival, slug: "out-of-range", startDate: "9999-12-31", endDate: undefined },
+  ];
+  for (const item of invalid) assert.equal(calendarUrls(item), null);
+  const payload = calendarFile([...invalid, festival]);
+  assert.equal(payload.match(/^BEGIN:VEVENT\r$/gm).length, 1);
+  assert.match(payload, /UID:test-fest-2027@festival-radar/);
+});
+
+test("single-day calendar actions agree across a calendar year boundary", () => {
+  const item = { ...festival, startDate: "2027-12-31", endDate: undefined };
+  const google = new URL(calendarUrls(item).google);
+  assert.equal(google.searchParams.get("dates"), "20271231/20280101");
+  assert.match(calendarFile([item]), /DTEND;VALUE=DATE:20280101/);
 });
