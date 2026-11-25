@@ -1831,6 +1831,10 @@ main {
   gap: 10px;
 }
 
+.timetableStage li:where(:has(.timetableSlotTime time + time)) {
+  grid-template-columns: minmax(90px, 35%) minmax(0, 1fr) auto;
+}
+
 .timetableStage time {
   font-variant-numeric: tabular-nums;
   font-weight: 800;

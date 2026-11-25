@@ -1,5 +1,6 @@
 import { readApprovedTicketOffers } from "../ingestion/ticket-offer-proposal-store.ts";
 import type { PublicTicketOffers } from "../domain/ticket-offer-proposal.ts";
+import { timetableEntrySchema } from "../timetables.ts";
 import { cache } from "react";
 import { YOUTUBE_URL } from "./youtube-playlist-queue.ts";
 import { playlistCoverage } from "../playlist-coverage.ts";
@@ -217,16 +218,23 @@ export class DatabaseCatalogRepository implements CatalogRepository {
               const name =
                 (performance.artistId && rosterById.get(performance.artistId)) ||
                 (owners.length === 1 ? owners[0].name : performance.artistName);
-              return {
+              const entry: TimetableEntry = {
                 date: dateOnly(performance.date)!,
                 stage: performance.stage,
                 start: performance.start,
                 artist: name,
                 timeZone: performance.timeZone ?? "UTC",
+                sourcePerformanceId: performance.sourcePerformanceId ?? undefined,
                 status: performance.status === "CANCELLED" ? "cancelled" : "scheduled",
                 sourceUrl: performance.sourceUrl ?? row.festival.officialUrl,
                 observedAt: instant(performance.observedAt) ?? row.sourceUpdatedAt.toISOString(),
               };
+              const { startsAt, endsAt, timeZone, sourceUrl, observedAt } = performance;
+              if (!startsAt || !endsAt || !timeZone || !sourceUrl || !observedAt) return entry;
+              const window = { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
+              return timetableEntrySchema.safeParse({ ...entry, window }).success
+                ? { ...entry, window }
+                : entry;
             })
           : undefined,
         recordState: lower(row.recordState),
