@@ -1,4 +1,5 @@
 import type { AdminChange, Prisma } from "@prisma/client";
+import { CanonicalReviewConflict } from "./admin-review-conflict";
 import sharp from "sharp";
 import { validateLogo, type LogoMimeType } from "./logo-assets";
 
@@ -9,7 +10,7 @@ function hashValue(value: unknown) {
 }
 
 async function readFestival(tx: Prisma.TransactionClient, slug: string) {
-  return tx.festival.findUniqueOrThrow({
+  return tx.festival.findUnique({
     where: { slug },
     select: { id: true, logo: { select: { assetHash: true } } },
   });
@@ -33,6 +34,7 @@ export async function prepareLogoDraft(
     throw new Error("A logo draft must select one stored asset");
   const hash = hashValue(values.logoAssetHash);
   const festival = await readFestival(tx, slug);
+  if (!festival) throw new Error("Select an existing festival by its canonical slug");
   await readLogo(tx, hash);
   return {
     festivalId: festival.id,
@@ -47,12 +49,12 @@ export async function publishAdminLogoChange(tx: Prisma.TransactionClient, chang
   if (change.field !== "logoAssetHash" || evidence?.kind !== "logo-draft" || !evidence.festivalId)
     throw new Error("Resubmit this logo edit with the hash of a reviewed stored asset");
   const festival = await readFestival(tx, change.resourceKey);
-  if (festival.id !== evidence.festivalId)
-    throw new Error("The reviewed festival identity has changed");
+  if (festival?.id !== evidence.festivalId)
+    throw new CanonicalReviewConflict("The reviewed festival identity has changed");
   const assetHash = hashValue(change.afterValue);
   const current = festival.logo?.assetHash ?? null;
   if (current !== assetHash && current !== change.beforeValue)
-    throw new Error("The festival logo changed after review was queued");
+    throw new CanonicalReviewConflict("The festival logo changed after review was queued");
   const { image } = await readLogo(tx, assetHash);
   // A content hash and signature alone do not prove the image can be decoded.
   await sharp(image, { limitInputPixels: 4_194_304, failOn: "warning" }).raw().toBuffer();

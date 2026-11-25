@@ -1,3 +1,4 @@
+import { CanonicalReviewConflict } from "@/lib/catalog/admin-review-conflict";
 import {
   preparePlaylistDraft,
   publishAdminPlaylistChange,
@@ -9,6 +10,7 @@ import {
 } from "@/lib/catalog/admin-artist-publication";
 import { assertAdminArtistReviewAllowed } from "@/lib/catalog/admin-artist-review";
 import {
+  type AdminChange,
   AdminChangeStatus,
   AdminDraftStatus,
   AdminResourceKind,
@@ -347,6 +349,57 @@ async function finishReviewedDraft(tx: Prisma.TransactionClient, draftId: string
   await tx.adminDraft.update({ where: { id: draftId }, data: { status } });
 }
 
+async function recordReviewConflict(
+  tx: Prisma.TransactionClient,
+  change: AdminChange,
+  actor: { id: string; email: string },
+  currentRevision: number,
+  error: string,
+  reason?: "CANONICAL_STATE_CHANGED",
+) {
+  const { id, draftId, resourceKind, resourceKey, baseRevision } = change;
+  const status = AdminChangeStatus.CONFLICT;
+  const updated = await tx.adminChange.updateMany({
+    where: { id, status: AdminChangeStatus.PENDING },
+    data: { status, decidedById: actor.id, decidedAt: new Date() },
+  });
+  if (updated.count !== 1) throw new Error("Change was decided concurrently");
+  if (draftId) await finishReviewedDraft(tx, draftId);
+  await tx.adminAuditEntry.create({
+    data: {
+      actorId: actor.id,
+      actorLabel: actor.email,
+      action: "CHANGE_CONFLICT",
+      resourceKind,
+      resourceKey,
+      metadata: { changeId: id, baseRevision, currentRevision, ...(reason && { reason }) },
+    },
+  });
+  return { conflict: { status, error } };
+}
+
+async function publishReviewedResource(
+  tx: Prisma.TransactionClient,
+  change: AdminChange,
+  decision: "approve" | "reject",
+) {
+  const approve = decision === "approve";
+  return {
+    playlistPublication:
+      approve && change.resourceKind === AdminResourceKind.PLAYLIST
+        ? await publishAdminPlaylistChange(tx, change)
+        : null,
+    artistPublication:
+      approve && change.resourceKind === AdminResourceKind.ARTIST
+        ? await publishAdminArtistChange(tx, change)
+        : null,
+    logoPublication:
+      approve && change.resourceKind === AdminResourceKind.ASSET
+        ? await publishAdminLogoChange(tx, change)
+        : null,
+  };
+}
+
 export async function decideChange(
   id: string,
   decision: "approve" | "reject",
@@ -367,37 +420,29 @@ export async function decideChange(
       });
       const currentRevision = resource?.revision ?? 0;
       if (decision === "approve" && currentRevision !== change.baseRevision) {
-        const status = AdminChangeStatus.CONFLICT;
-        const updated = await tx.adminChange.updateMany({
-          where: { id, status: AdminChangeStatus.PENDING },
-          data: { status, decidedById: actor.id, decidedAt: new Date() },
-        });
-        if (updated.count !== 1) throw new Error("Change was decided concurrently");
-        if (change.draftId) await finishReviewedDraft(tx, change.draftId);
-        await tx.adminAuditEntry.create({
-          data: {
-            actorId: actor.id,
-            actorLabel: actor.email,
-            action: "CHANGE_CONFLICT",
-            resourceKind: change.resourceKind,
-            resourceKey: change.resourceKey,
-            metadata: { changeId: id, baseRevision: change.baseRevision, currentRevision },
-          },
-        });
-        return { conflict: { status, error: `Revision conflict: expected ${currentRevision}` } };
+        return recordReviewConflict(
+          tx,
+          change,
+          actor,
+          currentRevision,
+          `Revision conflict: expected ${currentRevision}`,
+        );
       }
-      const playlistPublication =
-        decision === "approve" && change.resourceKind === AdminResourceKind.PLAYLIST
-          ? await publishAdminPlaylistChange(tx, change)
-          : null;
-      const artistPublication =
-        decision === "approve" && change.resourceKind === AdminResourceKind.ARTIST
-          ? await publishAdminArtistChange(tx, change)
-          : null;
-      const logoPublication =
-        decision === "approve" && change.resourceKind === AdminResourceKind.ASSET
-          ? await publishAdminLogoChange(tx, change)
-          : null;
+
+      let publication: Awaited<ReturnType<typeof publishReviewedResource>>;
+      try {
+        publication = await publishReviewedResource(tx, change, decision);
+      } catch (cause) {
+        if (!(cause instanceof CanonicalReviewConflict)) throw cause;
+        return recordReviewConflict(
+          tx,
+          change,
+          actor,
+          currentRevision,
+          cause.message,
+          "CANONICAL_STATE_CHANGED",
+        );
+      }
       const status =
         decision === "approve" ? AdminChangeStatus.APPROVED : AdminChangeStatus.REJECTED;
       const updated = await tx.adminChange.updateMany({
@@ -492,9 +537,7 @@ export async function decideChange(
           metadata: json({
             changeId: change.id,
             field: change.field,
-            artistPublication,
-            logoPublication,
-            playlistPublication,
+            ...publication,
             catalogPublicationId: catalogPublication?.id ?? null,
             playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false,
           }),
@@ -504,9 +547,7 @@ export async function decideChange(
       return {
         decided: {
           ...decided,
-          artistPublication,
-          logoPublication,
-          playlistPublication,
+          ...publication,
           catalogPublicationId: catalogPublication?.id ?? null,
           playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false,
         },

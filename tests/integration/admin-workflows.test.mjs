@@ -503,12 +503,14 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   }
   const artistName = "Integration Headliner Revised";
   const officialSite = "https://artist.example.test/";
-  const artistResponse = await admin.json("/api/admin", "POST", {
-    resourceKind: "artist",
-    resourceKey: artistSlug,
-    baseRevision: 0,
-    values: { canonicalName: artistName, officialUrl: officialSite },
-  });
+  const queueArtist = () =>
+    admin.json("/api/admin", "POST", {
+      resourceKind: "artist",
+      resourceKey: artistSlug,
+      baseRevision: 0,
+      values: { canonicalName: artistName, officialUrl: officialSite },
+    });
+  const artistResponse = await queueArtist();
   assert.equal(artistResponse.status, 201);
   const artistDraft = await artistResponse.json();
   const artistChanges = await db.adminChange.findMany({
@@ -527,14 +529,50 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     where: { id: originalArtist.id },
     data: { name: "Integration Independent Edit" },
   });
-  assert.equal((await decideArtist(artistChanges[0].id)).status, 409);
+  async function assertCanonicalConflict(change) {
+    const response = await decideArtist(change.id);
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).status, "CONFLICT");
+    const stored = await db.adminChange.findUniqueOrThrow({ where: { id: change.id } });
+    assert.equal(stored.status, "CONFLICT");
+    assert.ok(stored.decidedById);
+    assert.ok(stored.decidedAt);
+    const audit = await db.adminAuditEntry.findMany({
+      where: { action: "CHANGE_CONFLICT", metadata: { path: ["changeId"], equals: change.id } },
+    });
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0].metadata.reason, "CANONICAL_STATE_CHANGED");
+  }
+  await assertCanonicalConflict(artistChanges[0]);
+  assert.equal(
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: artistDraft.id } })).status,
+    "QUEUED",
+  );
+  assert.equal((await decideArtist(artistChanges[1].id, "reject")).status, 200);
+  assert.equal(
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: artistDraft.id } })).status,
+    "CONFLICT",
+  );
+  assert.equal(
+    await db.adminResourceState.count({
+      where: { resourceKind: "ARTIST", resourceKey: artistSlug },
+    }),
+    0,
+  );
   assert.equal(
     (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
     "Integration Independent Edit",
   );
   await db.artist.update({ where: { id: originalArtist.id }, data: { name: originalArtist.name } });
 
-  for (const change of artistChanges) {
+  const resubmittedArtist = await queueArtist();
+  assert.equal(resubmittedArtist.status, 201);
+  const { id: resubmittedArtistId } = await resubmittedArtist.json();
+  const correctedArtistChanges = await db.adminChange.findMany({
+    where: { draftId: resubmittedArtistId },
+    orderBy: { field: "asc" },
+  });
+  for (const change of correctedArtistChanges) {
     const response = await decideArtist(change.id);
     assert.equal(response.status, 200);
     assert.equal((await response.json()).artistPublication, "published");
@@ -912,15 +950,12 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal((await (await decideArtist(noOpLogo.id)).json()).logoPublication, "unchanged");
   const staleLogo = await queueLogo(2);
   await db.festivalLogo.delete({ where: { festivalId: festivalRecord.id } });
-  assert.equal((await decideArtist(staleLogo.id)).status, 409);
+  await assertCanonicalConflict(staleLogo);
   assert.equal((await anonymous.json(logoPath)).status, 404);
   assert.equal(
-    (await db.adminChange.findUniqueOrThrow({ where: { id: staleLogo.id } })).status,
-    "PENDING",
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: staleLogo.draftId } })).status,
+    "CONFLICT",
   );
-
-  assert.equal((await decideArtist(staleLogo.id, "reject")).status, 200);
-  assert.equal((await anonymous.json(logoPath)).status, 404);
 
   const playlistEdition = await db.festivalEdition.findFirstOrThrow({
     where: { festivalId: festivalRecord.id, recordState: "CURRENT" },
@@ -997,13 +1032,19 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     where: { editionId_provider: bindingKey },
     data: { url: otherUrl },
   });
-  assert.equal((await decideArtist(stalePlaylist.id)).status, 409);
+  await assertCanonicalConflict(stalePlaylist);
   assert.ok((await festivalPage()).includes(otherUrl));
 
   assert.equal(
-    (await admin.json(`/api/admin/drafts/${stalePlaylist.draftId}`, "DELETE")).status,
-    200,
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: stalePlaylist.draftId } })).status,
+    "CONFLICT",
   );
+  assert.equal(
+    (await admin.json(`/api/admin/drafts/${stalePlaylist.draftId}`, "DELETE")).status,
+    409,
+  );
+  const withdrawn = await queuePlaylist(2, reviewedUrl);
+  assert.equal((await admin.json(`/api/admin/drafts/${withdrawn.draftId}`, "DELETE")).status, 200);
   const removal = await queuePlaylist(2, null);
   assert.equal((await (await decideArtist(removal.id)).json()).playlistPublication, "removed");
   assert.ok((await festivalPage()).includes(managedUrl));
