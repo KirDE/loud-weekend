@@ -783,7 +783,7 @@ TIME ZONE 'UTC')) FOR UPDATE
             reason: d.reason,
             facts: d.facts,
             evidence: d.evidence,
-            observedAt: now,
+            reviewedAt: now,
           });
         if (d.source && changedSource) {
           const s = await tx.festivalSource.findUniqueOrThrow({

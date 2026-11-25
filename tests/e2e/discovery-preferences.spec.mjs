@@ -191,6 +191,7 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
 });
 
 test("taking remote favorites leaves unrelated unsynced planner data on this device", async ({
+  baseURL,
   page,
 }) => {
   const local = {
@@ -213,29 +214,36 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
     password: "synthetic conflict test password",
   };
   expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
-  // Establish the empty favorites baseline before simulating the second device.
-  const baseline = page.waitForResponse(
-    (response) =>
-      response.request().method() === "GET" &&
-      new URL(response.url()).pathname === "/api/sync/favorites/",
-  );
+  const headers = { origin: new URL(baseURL).origin };
+  const favoritesPath = "/api/sync/favorites/";
+  const initial = await page.request.put(favoritesPath, {
+    headers,
+    data: { revision: 0, payload: { favoriteFestivals: [], favoriteArtists: [] } },
+  });
+  expect(initial.status()).toBe(201);
+  const { document: baseline } = await initial.json();
+  expect(baseline.revision).toBe(1);
+
   await page.goto("/en/planner/");
-  const favorites = await baseline;
-  expect(favorites.ok()).toBeTruthy();
-  expect((await favorites.json()).document).toBeNull();
+  // This button becomes enabled only after the React panel has loaded the account document.
+  await expect(
+    page.getByRole("button", { name: "Use account data on this device", exact: true }),
+  ).toBeEnabled();
 
-  // Another device creates favorites before this one tries to sync its local version.
   const remote = { favoriteFestivals: ["remote-festival"], favoriteArtists: [] };
-  expect(
-    (
-      await page.request.put("/api/sync/favorites/", {
-        headers: { origin: new URL(page.url()).origin },
-        data: { revision: 0, payload: remote },
-      })
-    ).status(),
-  ).toBe(201);
+  const updated = await page.request.put(favoritesPath, {
+    headers,
+    data: { revision: baseline.revision, payload: remote },
+  });
+  expect(updated.status()).toBe(200);
+  expect((await updated.json()).document.revision).toBe(baseline.revision + 1);
 
+  const conflict = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" && new URL(response.url()).pathname === favoritesPath,
+  );
   await page.getByRole("button", { name: "Sync now", exact: true }).click();
+  expect((await conflict).status()).toBe(409);
   await page.getByRole("button", { name: "Use other device", exact: true }).click();
   await expect(
     page.getByText("Conflict resolved. Sync again to send other local changes."),
