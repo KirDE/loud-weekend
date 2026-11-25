@@ -23,6 +23,16 @@ const plain = (html: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+/** The redesigned homepage links the current summary on this same-origin route. */
+export function swedenRockTicketSupplementUrl(source: FestivalSource): string | undefined {
+  if (
+    source.festivalSlug === "sweden-rock" &&
+    source.url === "https://swedenrock.com/" &&
+    source.strategies.includes("html_fallback")
+  )
+    return "https://swedenrock.com/biljetter";
+}
+
 /** Current ticket summary only: Blind Bird sell-outs and sponsor shops are not the festival sale. */
 export function extractSwedenRockCandidate(
   html: string,

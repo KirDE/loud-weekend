@@ -1,12 +1,31 @@
+import { CanonicalReviewConflict } from "@/lib/catalog/admin-review-conflict";
+import {
+  preparePlaylistDraft,
+  publishAdminPlaylistChange,
+} from "@/lib/catalog/admin-playlist-publication";
+import { prepareLogoDraft, publishAdminLogoChange } from "@/lib/catalog/admin-logo-publication";
+import {
+  prepareArtistDraft,
+  publishAdminArtistChange,
+} from "@/lib/catalog/admin-artist-publication";
 import { assertAdminArtistReviewAllowed } from "@/lib/catalog/admin-artist-review";
 import {
+  type AdminChange,
   AdminChangeStatus,
   AdminDraftStatus,
   AdminResourceKind,
   AdminRunStatus,
   Prisma,
 } from "@prisma/client";
-import { listConfiguredSources } from "@/lib/sources/repository";
+import { randomUUID } from "node:crypto";
+import { mapSource } from "@/lib/sources/repository";
+import {
+  claimDueSources,
+  completeSourceLease,
+  releaseOwnedSourceLease,
+} from "@/lib/ingestion/lease";
+import { evaluateCandidate } from "@/lib/ingestion/policy";
+import type { Festival } from "@/lib/domain/festival";
 import { fetchSource } from "@/lib/ingestion/fetch";
 import { db } from "@/lib/db";
 import { publishAdminFestivalChange } from "@/lib/catalog/publication";
@@ -103,6 +122,60 @@ export async function decideSubmission(
   );
 }
 
+async function draftChanges(
+  tx: Prisma.TransactionClient,
+  draft: { id: string; resourceKind: AdminResourceKind; resourceKey: string; baseRevision: number },
+  values: Record<string, unknown>,
+  before: Record<string, unknown>,
+) {
+  const { resourceKind, resourceKey, baseRevision } = draft;
+  const artistDraft =
+    resourceKind === AdminResourceKind.ARTIST
+      ? await prepareArtistDraft(tx, resourceKey, values)
+      : null;
+  const logoDraft =
+    resourceKind === AdminResourceKind.ASSET
+      ? await prepareLogoDraft(tx, resourceKey, values)
+      : null;
+  const playlistDraft =
+    resourceKind === AdminResourceKind.PLAYLIST
+      ? await preparePlaylistDraft(tx, resourceKey, values)
+      : null;
+  const changes =
+    artistDraft?.changes ??
+    logoDraft?.changes ??
+    playlistDraft?.changes ??
+    Object.entries(values).map(([field, afterValue]) => ({
+      field,
+      beforeValue: before[field] ?? null,
+      afterValue: afterValue ?? null,
+    }));
+  const sourceEvidence = {
+    kind: "operator-draft",
+    draftId: draft.id,
+    ...(artistDraft
+      ? { kind: "artist-draft", artistId: artistDraft.artistId }
+      : logoDraft
+        ? { kind: "logo-draft", festivalId: logoDraft.festivalId }
+        : playlistDraft
+          ? { kind: "playlist-draft", editionId: playlistDraft.editionId }
+          : {}),
+  };
+  await tx.adminChange.createMany({
+    data: changes.map(({ field, beforeValue, afterValue }) => ({
+      field,
+      resourceKind,
+      resourceKey,
+      baseRevision,
+      beforeValue: beforeValue === null ? Prisma.JsonNull : json(beforeValue),
+      afterValue: afterValue === null ? Prisma.JsonNull : json(afterValue),
+      sourceEvidence,
+      confidence: 100,
+      draftId: draft.id,
+    })),
+  });
+}
+
 export async function saveDraft(
   input: { resourceKind: string; resourceKey: string; baseRevision: number; values: unknown },
   actor: { id: string; email: string },
@@ -113,7 +186,8 @@ export async function saveDraft(
     !input.resourceKey ||
     !Number.isInteger(input.baseRevision) ||
     typeof input.values !== "object" ||
-    !input.values
+    !input.values ||
+    Array.isArray(input.values)
   )
     throw new Error("Invalid draft");
   return db.$transaction(
@@ -126,12 +200,19 @@ export async function saveDraft(
         throw new Error(`Revision conflict: expected ${currentRevision}`);
       const values = input.values as Record<string, unknown>;
       if (!Object.keys(values).length) throw new Error("Draft has no fields");
+      const latestDraft = await tx.adminDraft.findFirst({
+        where: { resourceKind, resourceKey: input.resourceKey },
+        orderBy: { revision: "desc" },
+        select: { revision: true },
+      });
+      // Pending and rejected drafts still occupy their draft revisions.
+      const draftRevision = Math.max(currentRevision, latestDraft?.revision ?? 0) + 1;
       const draft = await tx.adminDraft.create({
         data: {
           resourceKind,
           resourceKey: input.resourceKey,
           baseRevision: currentRevision,
-          revision: currentRevision + 1,
+          revision: draftRevision,
           status: AdminDraftStatus.QUEUED,
           values: json(values),
           validation: json({ valid: true, checkedAt: new Date().toISOString() }),
@@ -142,19 +223,7 @@ export async function saveDraft(
         resource?.values && typeof resource.values === "object" && !Array.isArray(resource.values)
           ? (resource.values as Record<string, unknown>)
           : {};
-      await tx.adminChange.createMany({
-        data: Object.entries(values).map(([field, afterValue]) => ({
-          resourceKind,
-          resourceKey: input.resourceKey,
-          field,
-          baseRevision: currentRevision,
-          beforeValue: json(before[field] ?? null),
-          afterValue: json(afterValue ?? null),
-          sourceEvidence: json({ kind: "operator-draft", draftId: draft.id }),
-          confidence: 100,
-          draftId: draft.id,
-        })),
-      });
+      await draftChanges(tx, draft, values, before);
       await tx.adminAuditEntry.create({
         data: {
           actorId: actor.id,
@@ -209,19 +278,7 @@ export async function updateDraft(
           ? (resource.values as Record<string, unknown>)
           : {};
       await tx.adminChange.deleteMany({ where: { draftId: id } });
-      await tx.adminChange.createMany({
-        data: Object.entries(values).map(([field, afterValue]) => ({
-          resourceKind: draft.resourceKind,
-          resourceKey: draft.resourceKey,
-          field,
-          baseRevision: draft.baseRevision,
-          beforeValue: json(before[field] ?? null),
-          afterValue: json(afterValue ?? null),
-          sourceEvidence: json({ kind: "operator-draft", draftId: id }),
-          confidence: 100,
-          draftId: id,
-        })),
-      });
+      await draftChanges(tx, draft, values, before);
       const updated = await tx.adminDraft.update({
         where: { id },
         data: {
@@ -275,6 +332,74 @@ export async function deleteDraft(id: string, actor: { id: string; email: string
   );
 }
 
+async function finishReviewedDraft(tx: Prisma.TransactionClient, draftId: string) {
+  const decisions = await tx.adminChange.findMany({
+    where: { draftId },
+    select: { status: true },
+    distinct: ["status"],
+  });
+  const statuses = new Set(decisions.map(({ status }) => status));
+  if (statuses.has(AdminChangeStatus.PENDING)) return;
+
+  let status: AdminDraftStatus;
+  if (statuses.has(AdminChangeStatus.CONFLICT)) status = AdminDraftStatus.CONFLICT;
+  else if (!statuses.has(AdminChangeStatus.APPROVED)) status = AdminDraftStatus.REJECTED;
+  else if (statuses.has(AdminChangeStatus.REJECTED)) status = AdminDraftStatus.PARTIALLY_APPLIED;
+  else status = AdminDraftStatus.APPLIED;
+  await tx.adminDraft.update({ where: { id: draftId }, data: { status } });
+}
+
+async function recordReviewConflict(
+  tx: Prisma.TransactionClient,
+  change: AdminChange,
+  actor: { id: string; email: string },
+  currentRevision: number,
+  error: string,
+  reason?: "CANONICAL_STATE_CHANGED",
+) {
+  const { id, draftId, resourceKind, resourceKey, baseRevision } = change;
+  const status = AdminChangeStatus.CONFLICT;
+  const updated = await tx.adminChange.updateMany({
+    where: { id, status: AdminChangeStatus.PENDING },
+    data: { status, decidedById: actor.id, decidedAt: new Date() },
+  });
+  if (updated.count !== 1) throw new Error("Change was decided concurrently");
+  if (draftId) await finishReviewedDraft(tx, draftId);
+  await tx.adminAuditEntry.create({
+    data: {
+      actorId: actor.id,
+      actorLabel: actor.email,
+      action: "CHANGE_CONFLICT",
+      resourceKind,
+      resourceKey,
+      metadata: { changeId: id, baseRevision, currentRevision, ...(reason && { reason }) },
+    },
+  });
+  return { conflict: { status, error } };
+}
+
+async function publishReviewedResource(
+  tx: Prisma.TransactionClient,
+  change: AdminChange,
+  decision: "approve" | "reject",
+) {
+  const approve = decision === "approve";
+  return {
+    playlistPublication:
+      approve && change.resourceKind === AdminResourceKind.PLAYLIST
+        ? await publishAdminPlaylistChange(tx, change)
+        : null,
+    artistPublication:
+      approve && change.resourceKind === AdminResourceKind.ARTIST
+        ? await publishAdminArtistChange(tx, change)
+        : null,
+    logoPublication:
+      approve && change.resourceKind === AdminResourceKind.ASSET
+        ? await publishAdminLogoChange(tx, change)
+        : null,
+  };
+}
+
 export async function decideChange(
   id: string,
   decision: "approve" | "reject",
@@ -295,11 +420,28 @@ export async function decideChange(
       });
       const currentRevision = resource?.revision ?? 0;
       if (decision === "approve" && currentRevision !== change.baseRevision) {
-        await tx.adminChange.update({
-          where: { id },
-          data: { status: AdminChangeStatus.CONFLICT },
-        });
-        throw new Error(`Revision conflict: expected ${currentRevision}`);
+        return recordReviewConflict(
+          tx,
+          change,
+          actor,
+          currentRevision,
+          `Revision conflict: expected ${currentRevision}`,
+        );
+      }
+
+      let publication: Awaited<ReturnType<typeof publishReviewedResource>>;
+      try {
+        publication = await publishReviewedResource(tx, change, decision);
+      } catch (cause) {
+        if (!(cause instanceof CanonicalReviewConflict)) throw cause;
+        return recordReviewConflict(
+          tx,
+          change,
+          actor,
+          currentRevision,
+          cause.message,
+          "CANONICAL_STATE_CHANGED",
+        );
       }
       const status =
         decision === "approve" ? AdminChangeStatus.APPROVED : AdminChangeStatus.REJECTED;
@@ -352,17 +494,35 @@ export async function decideChange(
             data: { baseRevision: currentRevision + 1 },
           });
       }
-      if (change.draftId) {
-        const pending = await tx.adminChange.count({
-          where: { draftId: change.draftId, status: AdminChangeStatus.PENDING, NOT: { id } },
+      const refresh = change.parserRunId
+        ? (change.sourceEvidence as { kind?: string; editionId?: string } | null)
+        : null;
+      // Proposals at the same revision and edition can share a review even if
+      // re-observed on different runs. Canonical publication still checks each before-value.
+      if (
+        decision === "approve" &&
+        refresh &&
+        refresh.kind === "scoped-refresh" &&
+        refresh.editionId
+      ) {
+        await tx.adminChange.updateMany({
+          where: {
+            resourceKind: change.resourceKind,
+            resourceKey: change.resourceKey,
+            status: AdminChangeStatus.PENDING,
+            baseRevision: currentRevision,
+            field: { not: change.field },
+            parserRunId: { not: null },
+            AND: [
+              { sourceEvidence: { path: ["kind"], equals: "scoped-refresh" } },
+              { sourceEvidence: { path: ["editionId"], equals: refresh.editionId } },
+            ],
+          },
+          data: { baseRevision: currentRevision + 1 },
         });
-        if (!pending)
-          await tx.adminDraft.update({
-            where: { id: change.draftId },
-            data: {
-              status: decision === "approve" ? AdminDraftStatus.APPLIED : AdminDraftStatus.REJECTED,
-            },
-          });
+      }
+      if (change.draftId) {
+        await finishReviewedDraft(tx, change.draftId);
       }
       await tx.adminAuditEntry.create({
         data: {
@@ -377,6 +537,7 @@ export async function decideChange(
           metadata: json({
             changeId: change.id,
             field: change.field,
+            ...publication,
             catalogPublicationId: catalogPublication?.id ?? null,
             playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false,
           }),
@@ -384,122 +545,295 @@ export async function decideChange(
       });
       const decided = await tx.adminChange.findUniqueOrThrow({ where: { id } });
       return {
-        ...decided,
-        catalogPublicationId: catalogPublication?.id ?? null,
-        playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false,
+        decided: {
+          ...decided,
+          ...publication,
+          catalogPublicationId: catalogPublication?.id ?? null,
+          playlistRefreshRequested: catalogPublication?.playlistRefreshRequested ?? false,
+        },
       };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
 }
 
-export async function refreshFestival(slug: string, actor: { id: string; email: string }) {
-  const sources = await listConfiguredSources(db, slug);
-  const festival = (await readCatalog()).festivals.find((item) => item.slug === slug);
-  if (sources.length !== 1 || !festival || !sources[0].enabled)
-    throw new Error("Festival source is not configured");
-  const [source] = sources;
-  const sourceUrl =
-    process.env.NODE_ENV !== "production" && process.env.ADMIN_TEST_SOURCE_URL
-      ? process.env.ADMIN_TEST_SOURCE_URL
-      : source.url;
-  const run = await db.adminParserRun.create({
-    data: {
-      festivalSlug: slug,
-      sourceId: sourceUrl,
-      adapter: source.strategies.join(","),
-      requestedById: actor.id,
-      log: json([{ at: new Date().toISOString(), message: "Fetch started" }]),
-    },
-  });
-  const started = Date.now();
-  try {
-    const { response } = await fetchSource(
-      sourceUrl === source.url
-        ? source
-        : { ...source, url: sourceUrl, fetchUrl: sourceUrl, followLinkPattern: undefined },
-    );
-    if (!response.ok) throw new Error(`Source returned HTTP ${response.status}`);
-    const candidate = extractFestivalCandidate(
-      await response.text(),
-      source,
-      new Date().toISOString(),
-    );
-    const fields = [
-      "startDate",
-      "endDate",
-      "city",
-      "headliners",
-      "lineup",
-      "ticketsUrl",
-      "status",
-    ] as const;
-    const changes = fields
-      .filter(
-        (field) =>
-          candidate[field] !== undefined &&
-          JSON.stringify(candidate[field]) !== JSON.stringify(festival[field]),
-      )
-      .map((field) => ({
-        resourceKind: AdminResourceKind.FESTIVAL,
-        resourceKey: slug,
-        field,
-        baseRevision: 0,
-        beforeValue: json(festival[field] ?? null),
-        afterValue: json(candidate[field] ?? null),
-        sourceEvidence: json(candidate.evidence.filter((item) => item.field === field)),
-        confidence: candidate.evidence.some((item) => item.field === field) ? 90 : 60,
-        parserRunId: run.id,
-      }));
-    assertAdminArtistReviewAllowed(
-      slug,
-      changes.map((change) => change.field),
-    );
-    if (changes.length) await db.adminChange.createMany({ data: changes });
-    const finishedAt = new Date();
-    const updated = await db.adminParserRun.update({
-      where: { id: run.id },
-      data: {
-        status: candidate.warnings.length ? AdminRunStatus.PARTIAL : AdminRunStatus.SUCCEEDED,
-        finishedAt,
-        durationMs: Date.now() - started,
-        extracted: candidate.evidence.length,
-        message: `${changes.length} change(s) queued`,
-        log: json([
-          { at: run.startedAt.toISOString(), message: "Fetch started" },
-          {
-            at: finishedAt.toISOString(),
-            message: "Parse completed",
-            warnings: candidate.warnings,
-            queued: changes.length,
-          },
-        ]),
-      },
-    });
-    await db.adminAuditEntry.create({
-      data: {
-        actorId: actor.id,
-        actorLabel: actor.email,
-        action: "FESTIVAL_REFRESHED",
-        resourceKind: AdminResourceKind.FESTIVAL,
-        resourceKey: slug,
-        evidence: json({ source: sourceUrl }),
-        metadata: json({ runId: run.id, queued: changes.length }),
-      },
-    });
-    return updated;
-  } catch (cause) {
-    const message = cause instanceof Error ? cause.message : "Refresh failed";
-    await db.adminParserRun.update({
-      where: { id: run.id },
-      data: {
-        status: AdminRunStatus.FAILED,
-        finishedAt: new Date(),
-        durationMs: Date.now() - started,
-        message,
-        log: json([{ at: new Date().toISOString(), message }]),
-      },
-    });
-    throw new Error(message);
+export class FestivalRefreshError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
   }
+}
+
+type RefreshActor = { id: string; email: string };
+
+async function refreshSource(
+  refreshId: string,
+  sourceId: string,
+  editionId: string,
+  festival: Festival,
+  actor: RefreshActor,
+  aliases: Awaited<ReturnType<typeof readAliases>>,
+) {
+  const owner = randomUUID();
+  const [claim] = await claimDueSources(db, {
+    owner,
+    now: new Date(),
+    limit: 1,
+    ttlMs: 30 * 60_000,
+    manualSource: { sourceId, editionId },
+  });
+  if (!claim) return { status: "skipped" as const };
+
+  const lease = { ...claim, owner };
+  let runId: string | undefined;
+  let httpStatus: number | undefined;
+  let stage: "pre_attempt_error" | "fetch_error" | "parser_error" | "post_attempt_error" =
+    "pre_attempt_error";
+  try {
+    // The selected configuration may have changed between the query and claim.
+    const row = await db.festivalSource.findUniqueOrThrow({
+      where: { id: sourceId },
+      include: { edition: { select: { festivalId: true, year: true } } },
+    });
+    if (row.updatedAt.getTime() !== claim.updatedAt.getTime() || row.editionId !== editionId)
+      throw new Error("Source changed during refresh");
+    const active = mapSource(row);
+    const run = await db.adminParserRun.create({
+      data: {
+        festivalSlug: festival.slug,
+        sourceId: active.id,
+        adapter: active.strategies.join(","),
+        requestedById: actor.id,
+        log: json([{ at: new Date().toISOString(), message: "Fetch started" }]),
+      },
+    });
+    runId = run.id;
+    stage = "fetch_error";
+    const { response } = await fetchSource(active);
+    if (!response.ok) {
+      httpStatus = response.status;
+      throw new Error("Source HTTP failure");
+    }
+    const html = await response.text();
+    stage = "parser_error";
+    const candidate = extractFestivalCandidate(html, active, new Date().toISOString());
+    const result = evaluateCandidate(festival, candidate, aliases);
+    if (!candidate.evidence.length)
+      throw new Error("Official source provided no supported evidence");
+    if (candidate.observedEditionYears.some((year) => year !== active.editionYear))
+      throw new Error("Official source returned another edition");
+    const reviewReasons = [...result.reviewReasons];
+    const fields = {
+      startDate: "Start date",
+      endDate: "End date",
+      city: "City",
+      headliners: "Headliners",
+      lineup: "Lineup",
+      ticketsUrl: "Ticket URL",
+      ticketStatus: "Ticket availability",
+      status: "Status",
+    } as const;
+    const proposals = (Object.keys(fields) as (keyof typeof fields)[]).flatMap((field) => {
+      const differences = result.changes.filter((item) => item.field === field);
+      const evidence = candidate.evidence.filter((item) => item.field === field);
+      if (!differences.length || !evidence.length) return [];
+      const observedYears = candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
+      if (!observedYears.includes(active.editionYear)) {
+        reviewReasons.push(`${fields[field]} could not be verified for the selected edition.`);
+        return [];
+      }
+      const afterValue =
+        field === "lineup" || field === "headliners"
+          ? [
+              ...festival[field].filter(
+                (name) => !differences.some((diff) => diff.before === name),
+              ),
+              ...differences.flatMap((diff) => (diff.after === undefined ? [] : [diff.after])),
+            ]
+          : differences[0].after;
+      if (afterValue === undefined) return [];
+      return [
+        {
+          field,
+          beforeValue: festival[field] === undefined ? Prisma.JsonNull : json(festival[field]),
+          afterValue: json(afterValue),
+          confidence: 90,
+          sourceEvidence: json({
+            kind: "scoped-refresh",
+            refreshId,
+            editionId,
+            editionYear: active.editionYear,
+            evidence,
+          }),
+        },
+      ];
+    });
+    assertAdminArtistReviewAllowed(
+      festival.slug,
+      proposals.map(({ field }) => field),
+    );
+    stage = "post_attempt_error";
+    const saved = await db.$transaction(
+      async (tx) => {
+        const finishedAt = new Date();
+        const bound = await tx.festivalEdition.findFirst({
+          where: { id: editionId, year: active.editionYear, recordState: "CURRENT" },
+          select: { id: true },
+        });
+        if (
+          !bound ||
+          !(await completeSourceLease(tx, { ...lease, now: finishedAt, outcome: "success" }))
+        )
+          throw new Error("Source or edition changed before recording the refresh");
+        const resourceKind = AdminResourceKind.FESTIVAL;
+        const resourceKey = festival.slug;
+        const resource = await tx.adminResourceState.findUnique({
+          where: { resourceKind_resourceKey: { resourceKind, resourceKey } },
+        });
+        const baseRevision = resource?.revision ?? 0;
+        let queued = 0;
+        for (const proposal of proposals) {
+          const duplicate = await tx.adminChange.findFirst({
+            where: {
+              resourceKind,
+              resourceKey,
+              field: proposal.field,
+              baseRevision,
+              status: "PENDING",
+              beforeValue: { equals: proposal.beforeValue },
+              afterValue: { equals: proposal.afterValue },
+              parserRunId: { not: null },
+              AND: [
+                { sourceEvidence: { path: ["kind"], equals: "scoped-refresh" } },
+                { sourceEvidence: { path: ["editionId"], equals: editionId } },
+              ],
+            },
+          });
+          if (duplicate) continue;
+          await tx.adminChange.create({
+            data: { ...proposal, resourceKind, resourceKey, baseRevision, parserRunId: run.id },
+          });
+          queued++;
+        }
+        const updated = await tx.adminParserRun.update({
+          where: { id: run.id },
+          data: {
+            status: reviewReasons.length ? AdminRunStatus.PARTIAL : AdminRunStatus.SUCCEEDED,
+            finishedAt,
+            durationMs: finishedAt.getTime() - run.startedAt.getTime(),
+            extracted: candidate.evidence.length,
+            message: `${queued} change(s) queued`,
+            log: json([
+              { at: run.startedAt.toISOString(), message: "Fetch started" },
+              {
+                at: finishedAt.toISOString(),
+                message: "Parse completed",
+                reviewReasons,
+                queued,
+              },
+            ]),
+          },
+        });
+        await tx.adminAuditEntry.create({
+          data: {
+            actorId: actor.id,
+            actorLabel: actor.email,
+            action: "FESTIVAL_REFRESHED",
+            resourceKind,
+            resourceKey,
+            metadata: json({
+              runId: run.id,
+              sourceId: active.id,
+              editionYear: active.editionYear,
+              queued,
+            }),
+          },
+        });
+        return { id: updated.id, queued, result: updated.status };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    return { status: "checked" as const, ...saved };
+  } catch {
+    if (runId) {
+      const message = httpStatus === undefined ? stage : `Source returned HTTP ${httpStatus}`;
+      await db.adminParserRun.update({
+        where: { id: runId },
+        data: {
+          status: AdminRunStatus.FAILED,
+          finishedAt: new Date(),
+          message,
+          log: json([{ at: new Date().toISOString(), message }]),
+        },
+      });
+    }
+    await completeSourceLease(db, { ...lease, now: new Date(), outcome: stage });
+    return { status: "failed" as const, id: runId };
+  } finally {
+    await releaseOwnedSourceLease(db, lease);
+  }
+}
+
+function readAliases() {
+  return db.artist.findMany({ select: { id: true, slug: true, name: true, aliases: true } });
+}
+
+export async function refreshFestival(slug: string, actor: RefreshActor, editionYear?: number) {
+  const editions = await db.festivalEdition.findMany({
+    where: { festival: { slug }, year: editionYear, recordState: "CURRENT" },
+    select: { id: true, year: true },
+  });
+  if (editions.length !== 1)
+    throw new FestivalRefreshError("Select one current festival edition.", 404);
+  const [edition] = editions;
+  const sources = await db.festivalSource.findMany({
+    where: {
+      festivalSlug: slug,
+      enabled: true,
+      editionId: edition.id,
+      editionYear: edition.year,
+      configurationBackfilledAt: { not: null },
+    },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+  if (!sources.length)
+    throw new FestivalRefreshError("No enabled sources are configured for this edition.", 409);
+  const [catalog, aliases] = await Promise.all([readCatalog(), readAliases()]);
+  const festival = catalog.festivals.find(
+    (item) => item.slug === slug && item.editionYear === edition.year,
+  );
+  if (!festival)
+    throw new FestivalRefreshError("The festival edition changed during refresh.", 409);
+  const refreshId = randomUUID();
+  const results = [];
+  for (const { id } of sources)
+    results.push(await refreshSource(refreshId, id, edition.id, festival, actor, aliases));
+  const checked = results.filter((result) => result.status === "checked");
+  const failed = results.filter((result) => result.status === "failed");
+  const skipped = results.length - checked.length - failed.length;
+  if (!checked.length && !failed.length)
+    throw new FestivalRefreshError("All sources are busy or waiting for their next retry.", 409);
+  if (!checked.length)
+    throw new FestivalRefreshError(
+      "All attempted sources failed. See parser runs for details.",
+      502,
+    );
+  const queued = checked.reduce((total, result) => total + result.queued, 0);
+  const status =
+    failed.length || skipped || checked.some((result) => result.result === "PARTIAL")
+      ? "PARTIAL"
+      : "SUCCEEDED";
+  return {
+    id: checked[0].id,
+    status,
+    editionYear: edition.year,
+    checked: checked.length,
+    failed: failed.length,
+    skipped,
+    queued,
+    message: `${queued} change(s) queued · ${checked.length} checked · ${failed.length} failed · ${skipped} skipped`,
+  };
 }

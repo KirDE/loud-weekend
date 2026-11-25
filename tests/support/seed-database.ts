@@ -42,7 +42,13 @@ try {
     festivals: fixtures,
     artists: [
       artist,
-      { ...artist, name: "Second Artist", slug: "second-artist", recentSetlists: [] },
+      {
+        ...artist,
+        name: "Second Artist",
+        slug: "second-artist",
+        aliases: ["Fixture Stage Name"],
+        recentSetlists: [],
+      },
     ],
     editions: fixtures.map((row) => ({
       ...row,
