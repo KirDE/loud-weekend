@@ -258,20 +258,24 @@ export function extractJsonLdCandidate(
     endDate: eventDate(endDate),
   }));
   // Alternate claims can block publication but cannot supply the chosen fields or evidence.
-  const [agreedStart, agreedEnd] = (
+  const [latestStart, earliestEnd] = (
     [
       ["startDate", "start date"],
       ["endDate", "end date"],
     ] as const
   ).map(([field, label]) => {
     const days = new Set<string>();
-    const instants = new Set<number>();
+    let instant: number | undefined;
     let invalid = false;
     for (const [index, dates] of claimedDates.entries()) {
       const date = dates[field];
       if (date) {
         days.add(date.day);
-        if (date.instant !== undefined) instants.add(date.instant);
+        if (date.instant !== undefined) {
+          // Compare the latest start with the earliest end without pairing every description.
+          const extreme = field === "startDate" ? Math.max : Math.min;
+          instant = instant === undefined ? date.instant : extreme(instant, date.instant);
+        }
       } else if (descriptions[index][field] != null) {
         invalid = true;
       }
@@ -279,12 +283,11 @@ export function extractJsonLdCandidate(
     if (invalid) candidate.warnings.push(`JSON-LD Event contains an invalid ${label}`);
     if (days.size > 1) candidate.warnings.push(`Conflicting JSON-LD festival ${field} claims`);
     const day = days.size === 1 ? days.values().next().value : undefined;
-    const instant = instants.size === 1 ? instants.values().next().value : undefined;
     return day ? { day, instant } : undefined;
   });
   if (
     matches.length === events.length &&
-    (isReversed(agreedStart, agreedEnd) ||
+    (isReversed(latestStart, earliestEnd) ||
       claimedDates.some(({ startDate, endDate }) => isReversed(startDate, endDate)))
   ) {
     candidate.warnings.push(reversedDateWarning);

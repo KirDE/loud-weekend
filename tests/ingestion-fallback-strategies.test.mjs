@@ -445,3 +445,38 @@ test("ordered or unbound split JSON-LD dates do not hold ticket updates", () => 
     assert.equal(evaluateCandidate(current, candidate).publishable, true);
   }
 });
+
+test("multiple offset-qualified claims cannot mask a reversed split JSON-LD interval", () => {
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const id = "#festival-2027";
+  const event = { "@type": "MusicEvent", "@id": id, startDate: current.startDate };
+  for (const [starts, ends, reversed] of [
+    [["18:00:00Z", "21:00:00+02:00"], ["18:30:00Z"], true],
+    [["18:30:00Z"], ["18:00:00Z", "21:00:00+02:00"], true],
+    [["18:00:00Z", "21:00:00+02:00"], ["19:00:00Z", "20:00:00Z"], false],
+  ]) {
+    const page =
+      script(event) +
+      script([
+        ...starts.map((time) => ({ "@id": id, startDate: `2027-07-28T${time}` })),
+        ...ends.map((time) => ({ "@id": id, endDate: `2027-07-28T${time}` })),
+      ]);
+    const candidate = extract(page + ticket);
+    const result = evaluateCandidate(current, candidate);
+    assert.equal(candidate.startDate, current.startDate);
+    assert.equal(candidate.endDate, undefined);
+    assert.equal(
+      candidate.evidence.find((item) => item.field === "startDate").excerpt,
+      JSON.stringify(event),
+    );
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, !reversed);
+    assert.deepEqual(
+      result.reviewReasons,
+      reversed ? ["JSON-LD Event end date precedes its start date"] : [],
+    );
+  }
+});
