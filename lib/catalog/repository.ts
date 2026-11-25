@@ -1,3 +1,4 @@
+import { publicFestivalVenue } from "./festival-venues.ts";
 import {
   readApprovedTicketOffers,
   type ApprovedTicketOffersReader,
@@ -55,6 +56,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       this.client.festivalEdition.findMany({
         include: {
           festival: true,
+          venue: true,
           sources: { where: { enabled: true }, select: { deprecatedAt: true } },
           lineup: {
             include: { artist: true },
@@ -218,6 +220,12 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           row.festival.latitude === null || row.festival.longitude === null
             ? undefined
             : { latitude: row.festival.latitude, longitude: row.festival.longitude },
+        venue: publicFestivalVenue(row.venue, {
+          editionYear: row.year,
+          city: row.festival.city ?? undefined,
+          countryCode: row.festival.countryCode,
+          officialUrl: row.festival.officialUrl,
+        }),
         timetable: row.timetable.length
           ? row.timetable.map((performance): TimetableEntry => {
               const owners = performance.artistId ? [] : aliases!(performance.artistName);

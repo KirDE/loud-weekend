@@ -505,7 +505,7 @@ async function applyFestivalChanges(
   };
 }
 
-async function createPublication(
+export async function createPublication(
   db: Database,
   input: {
     source: CatalogPublicationSource;

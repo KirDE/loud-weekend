@@ -4,6 +4,7 @@ import { editionKey } from "./freshness";
 
 type SitemapPublication = {
   festival: string | null;
+  homeVenue: string | null;
   directory: string | null;
   edition: string | null;
   listing: string | null;
@@ -29,6 +30,7 @@ export async function readSitemapPublications(
         'ticketsUrl', 'lineup', 'headliners', 'finalLineup', 'lineupDays', 'timetable', 'recordState',
         'arrival', 'overview', 'camping'
       ]) AS festival,
+      MAX("createdAt") FILTER (WHERE 'venue' = ANY(fields)) AS "homeVenue",
       MAX("createdAt") FILTER (WHERE fields && ARRAY[
         'city', 'country', 'countryCode', 'genres', 'startDate', 'endDate', 'status',
         'ticketStatus', 'ticketsUrl', 'lineup', 'headliners', 'finalLineup', 'recordState'
