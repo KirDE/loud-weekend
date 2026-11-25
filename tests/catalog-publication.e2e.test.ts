@@ -2949,6 +2949,10 @@ test("PolandRock admission publishes with durable proof and rejects drift or sta
   });
   const current = async () =>
     (await readCatalog({ database: db })).festivals.find((f) => f.slug === "polandrock")!;
+  const aliasArtists = await db.artist.findMany({
+    select: { id: true, slug: true, name: true, aliases: true },
+  });
+  assert.ok(aliasArtists.length > 0);
   const make = async () => {
     const calls: string[] = [];
     const response = await fetchSource(
@@ -2967,7 +2971,7 @@ test("PolandRock admission publishes with durable proof and rejects drift or sta
       { ...source, strategies: [...source.strategies] },
       new Date().toISOString(),
     );
-    const r = evaluateCandidate(await current(), c);
+    const r = evaluateCandidate(await current(), c, aliasArtists);
     assert.deepEqual(r.reviewReasons, []);
     return r;
   };
