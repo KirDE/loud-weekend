@@ -120,6 +120,7 @@ def discover_plan(source, search=None):
                 raise RuntimeError("youtube_discovery_failed")
             return candidate
 
+    eligible_artists = {query.get("lineup_artist") or query["artist"] for query in queries}
     ids, artists = [], set()
     for query in queries:
         candidate = search(query)
@@ -144,6 +145,7 @@ def discover_plan(source, search=None):
         "videoIds": ids,
         "artists": len(artists),
         "sourceTracks": len(queries),
+        "eligibleArtists": len(eligible_artists),
     }
     validate_plan(plan)
     return plan

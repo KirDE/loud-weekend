@@ -452,7 +452,7 @@ test("provider playlist coverage reads the current edition and independent measu
   assert.equal(playlist.spotifyUrl, undefined);
   assert.equal(playlist.youtubeMusicUrl, youtubeUrl);
   assert.deepEqual(playlist.coverage?.youtubeMusic, {
-    matchedArtists: 8,
+    reportedArtists: 8,
     tracks: 14,
     recordedAt: firstSync.toISOString(),
   });
@@ -472,6 +472,21 @@ test("provider playlist coverage reads the current edition and independent measu
   assert.equal(playlist.spotifyUrl, currentSpotifyUrl);
   // The legacy Spotify count includes artists with no usable tracks.
   assert.equal(playlist.coverage?.spotify, undefined);
+  await db.festivalPlaylist.update({
+    where: { id: currentSpotify.id },
+    data: {
+      coverageEvidence: {
+        recordedAt: secondSync.toISOString(),
+        matchedArtists: 100,
+        eligibleArtists: 110,
+      },
+    },
+  });
+  playlist = await get();
+  assert.deepEqual(playlist.coverage?.spotify?.verified, {
+    matchedArtists: 100,
+    eligibleArtists: 110,
+  });
   await db.festivalPlaylist.update({ where: { id: currentSpotify.id }, data: { syncedAt: null } });
   playlist = await get();
   assert.equal(playlist.spotifyUrl, currentSpotifyUrl);

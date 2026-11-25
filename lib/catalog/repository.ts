@@ -299,6 +299,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         ({ provider, url }) => provider === "youtube_music" && YOUTUBE_URL.test(url),
       );
       if (!spotify && !youtube) continue;
+      const spotifyCoverage = playlistCoverage(spotify);
       playlists[row.festival.slug] = {
         spotifyUrl: spotify?.url,
         youtubeMusicUrl: youtube?.url,
@@ -310,7 +311,10 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         updatedAt:
           instant(spotify?.syncedAt ?? youtube?.syncedAt ?? null) ??
           row.sourceUpdatedAt.toISOString(),
-        coverage: { youtubeMusic: playlistCoverage(youtube) },
+        coverage: {
+          spotify: spotifyCoverage?.verified ? spotifyCoverage : undefined,
+          youtubeMusic: playlistCoverage(youtube),
+        },
       };
     }
     const freshness = {
