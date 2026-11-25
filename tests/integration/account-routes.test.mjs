@@ -85,8 +85,17 @@ async function startApp(configured) {
       DATABASE_URL: databaseUrl,
       AUTH_SECRET: authSecret,
       APP_URL: appUrl,
+      GOOGLE_OIDC_ENABLED: String(configured),
       ...(configured
         ? {
+            NODE_OPTIONS: [
+              process.env.NODE_OPTIONS,
+              "--import=./tests/support/mock-google-oidc.mjs",
+            ]
+              .filter(Boolean)
+              .join(" "),
+            GOOGLE_OIDC_CLIENT_ID: "integration-google-client",
+            GOOGLE_OIDC_CLIENT_SECRET: "integration-google-secret",
             SPOTIFY_CLIENT_ID: "integration-client",
             SPOTIFY_CLIENT_SECRET: "integration-secret",
             SPOTIFY_ACCOUNTS_URL: mockUrl,
@@ -248,6 +257,11 @@ test.after(async () => {
 
 test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () => {
   const anonymous = new Client();
+  const googleDisabled = await anonymous.json("/api/auth/google/status/");
+  assert.equal(googleDisabled.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual(await googleDisabled.json(), { available: false });
+  assert.equal((await anonymous.json("/api/auth/google/start/?mode=login", "POST")).status, 404);
+  assert.equal((await anonymous.json("/api/auth/google/callback/")).status, 404);
   assert.equal((await anonymous.json("/api/auth/me")).status, 401);
   assert.equal((await anonymous.json("/api/sync/favorites")).status, 401);
   assert.equal((await anonymous.json("/api/share", "POST", { documentId: "x" })).status, 401);
@@ -417,6 +431,54 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
     (await second.json("/api/share", "POST", { documentId: createdBody.document.id })).status,
     404,
   );
+
+  const budgets = {
+    "synthetic-fest:2027": {
+      currency: "EUR",
+      people: 1,
+      days: 4,
+      nights: 1,
+      ticket: 25000,
+      travel: 10000,
+      lodging: 12000,
+      food: 3500,
+    },
+  };
+  const budgetWrite = await anonymous.json("/api/sync/budgets", "PUT", {
+    payload: budgets,
+    revision: 0,
+  });
+  assert.equal(budgetWrite.status, 201);
+  const budgetDoc = (await budgetWrite.json()).document;
+  assert.deepEqual(
+    (await (await anonymous.json("/api/sync/budgets")).json()).document.payload,
+    budgets,
+  );
+  assert.equal((await (await second.json("/api/sync/budgets")).json()).document, null);
+  assert.equal((await new Client().json("/api/sync/budgets")).status, 401);
+  assert.equal(
+    (await anonymous.json("/api/sync/budgets", "PUT", { payload: budgets, revision: 0 })).status,
+    409,
+  );
+  assert.equal(
+    (
+      await anonymous.json("/api/sync/budgets", "PUT", {
+        payload: { "synthetic-fest:2027": { ...budgets["synthetic-fest:2027"], ticket: -1 } },
+        revision: 1,
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await anonymous.json("/api/share", "POST", { documentId: budgetDoc.id })).status,
+    404,
+  );
+  await db.shareLink.create({
+    data: { userId: firstUser.id, documentId: budgetDoc.id, slug: "synthetic-budget-legacy-link" },
+  });
+  assert.equal((await new Client().json("/api/share/synthetic-budget-legacy-link")).status, 404);
+  const privatePage = await new Client().request("/share/synthetic-budget-legacy-link/");
+  assert.doesNotMatch(await privatePage.text(), /61000|25000|synthetic-fest:2027/);
 
   const share = await anonymous.json("/api/share", "POST", {
     documentId: createdBody.document.id,
@@ -795,4 +857,212 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
       await db.artist.deleteMany({ where: { id: { in: created } } });
     }
   }
+});
+
+test("Google callbacks create or explicitly link an account without replacing its saved plan", async () => {
+  await stopApp();
+  await startApp(true);
+  const owner = new Client();
+  const email = "google-existing@example.test";
+  const registration = await owner.json("/api/auth/register", "POST", {
+    email,
+    password: "integration-only password",
+  });
+  assert.equal(registration.status, 201);
+  const { user: originalUser } = await registration.json();
+  const plan = { festivals: ["wacken"] };
+  assert.equal(
+    (await owner.json("/api/sync/favorites", "PUT", { payload: plan, revision: 0 })).status,
+    201,
+  );
+
+  const guest = new Client();
+  assert.deepEqual(await (await guest.json("/api/auth/google/status/")).json(), {
+    available: true,
+  });
+  assert.equal(
+    (
+      await guest.request("/api/auth/google/start/?mode=login", {
+        method: "POST",
+        headers: { origin: "https://untrusted.example" },
+      })
+    ).status,
+    403,
+  );
+  assert.equal((await guest.json("/api/auth/google/start/?mode=link", "POST")).status, 403);
+
+  async function start(client, mode, identity) {
+    const response = await client.json(`/api/auth/google/start/?mode=${mode}`, "POST");
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get("cache-control"), "private, no-store");
+    assert.match(
+      response.headers.getSetCookie()[0],
+      /Path=\/api\/auth\/google\/callback\/.*HttpOnly.*SameSite=Lax/i,
+    );
+    const url = new URL(response.headers.get("location"));
+    assert.equal(url.origin, "https://accounts.google.com");
+    assert.equal(url.searchParams.get("scope"), "openid email");
+    const code = JSON.stringify({
+      ...identity,
+      nonce: url.searchParams.get("nonce"),
+      challenge: url.searchParams.get("code_challenge"),
+    });
+    return `/api/auth/google/callback/?${new URLSearchParams({ state: url.searchParams.get("state"), code })}`;
+  }
+
+  async function finish(client, path, status) {
+    const response = await client.json(path);
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get("location"), `${appUrl}/planner/?google=${status}`);
+    assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+  }
+
+  const existing = { email, subject: "google-fixture-existing" };
+  const collision = await start(guest, "login", existing);
+  await finish(new Client(), collision, "failed");
+  await finish(guest, collision, "conflict");
+  assert.equal((await guest.json("/api/auth/me")).status, 401);
+
+  await finish(owner, await start(owner, "link", existing), "connected");
+  assert.equal((await (await owner.json("/api/auth/me")).json()).user.id, originalUser.id);
+  assert.equal((await owner.json("/api/auth/logout", "POST")).status, 204);
+  assert.equal((await owner.json("/api/auth/me")).status, 401);
+
+  const callback = await start(guest, "login", existing);
+  const attemptCookie = guest.cookies.get("festival_radar_google_attempt");
+  await finish(guest, callback, "connected");
+  const linkedUser = (await (await guest.json("/api/auth/me")).json()).user;
+  assert.equal(linkedUser.id, originalUser.id);
+  assert.deepEqual((await (await guest.json("/api/sync/favorites")).json()).document.payload, plan);
+  const replay = new Client();
+  replay.cookies.set("festival_radar_google_attempt", attemptCookie);
+  await finish(replay, callback, "failed");
+  assert.equal((await replay.json("/api/auth/me")).status, 401);
+
+  const newcomer = new Client();
+  const newEmail = "google-new@example.test";
+  await finish(
+    newcomer,
+    await start(newcomer, "login", { email: newEmail, subject: "google-fixture-new" }),
+    "connected",
+  );
+  const newUser = (await (await newcomer.json("/api/auth/me")).json()).user;
+  assert.equal(newUser.email, newEmail);
+  assert.equal(newUser.emailVerified, false);
+});
+
+test("account export is a private download scoped to the current session", async () => {
+  const client = new Client();
+  const path = "/api/auth/export";
+  const denied = await client.json(path, "POST");
+  assert.equal(denied.status, 401);
+  assert.match(denied.headers.get("cache-control"), /no-store/);
+  const registration = await client.json("/api/auth/register", "POST", {
+    email: "synthetic-export@example.test",
+    password: "synthetic disposable password",
+  });
+  assert.equal(registration.status, 201);
+  const { user } = await registration.json();
+  const other = await db.user.create({ data: { email: "other-export@example.test" } });
+  const saved = await db.syncDocument.create({
+    data: { userId: user.id, kind: "FAVORITES", payload: { favoriteArtists: ["Synthetic Band"] } },
+  });
+  await db.syncDocument.create({
+    data: { userId: other.id, kind: "FAVORITES", payload: { privateMarker: "OTHER_ACCOUNT_ONLY" } },
+  });
+  await db.shareLink.create({
+    data: { userId: user.id, documentId: saved.id, slug: "EXCLUDED_SHARE_SLUG" },
+  });
+  await db.spotifyConnection.create({
+    data: {
+      userId: user.id,
+      spotifyUserId: "synthetic-spotify-user",
+      encryptedRefreshToken: "EXCLUDED_PROVIDER_TOKEN",
+    },
+  });
+  await db.notificationPreference.create({
+    data: { userId: user.id, eventType: "ARTIST_ADDED", channel: "WEB_PUSH" },
+  });
+  await db.notificationSubscription.create({
+    data: {
+      userId: user.id,
+      channel: "WEB_PUSH",
+      endpoint: "EXCLUDED_PUSH_ENDPOINT",
+      metadata: { key: "EXCLUDED_PUSH_SECRET" },
+    },
+  });
+  const event = await db.notificationEvent.create({
+    data: {
+      dedupeKey: "synthetic-export",
+      festivalId: "synthetic-fest",
+      type: "ARTIST_ADDED",
+      title: "Added",
+      message: "Synthetic announcement",
+      occurredAt: new Date(),
+    },
+  });
+  await db.notificationDelivery.create({
+    data: {
+      userId: user.id,
+      eventId: event.id,
+      channel: "WEB_PUSH",
+      frequency: "IMMEDIATE",
+      status: "FAILED",
+      lastError: "EXCLUDED_PROVIDER_ERROR",
+      claimToken: "EXCLUDED_CLAIM_TOKEN",
+    },
+  });
+  await db.passkey.create({
+    data: {
+      userId: user.id,
+      id: "EXCLUDED_PASSKEY_ID",
+      userHandle: "EXCLUDED_USER_HANDLE",
+      publicKey: Buffer.from("EXCLUDED_PUBLIC_KEY"),
+      transports: ["internal"],
+      deviceType: "singleDevice",
+    },
+  });
+  await db.emailVerificationToken.create({
+    data: {
+      userId: user.id,
+      tokenHash: "EXCLUDED_VERIFICATION_HASH",
+      expiresAt: new Date(Date.now() + 60_000),
+    },
+  });
+  const crossSite = await client.request(path, {
+    method: "POST",
+    headers: { origin: "https://untrusted.example.test" },
+  });
+  assert.equal(crossSite.status, 403);
+  assert.match(crossSite.headers.get("cache-control"), /no-store/);
+
+  const response = await client.json(path + "?userId=" + other.id, "POST");
+  assert.equal(response.status, 200);
+  assert.equal(
+    response.headers.get("content-disposition"),
+    'attachment; filename="loud-weekend-account-data.json"',
+  );
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  const raw = await response.text();
+  const { version, account } = JSON.parse(raw);
+  assert.equal(version, 1);
+  assert.equal(account.id, user.id);
+  assert.equal(account.email, user.email);
+  assert.deepEqual(
+    account.documents.map(({ kind, payload }) => [kind, payload]),
+    [["FAVORITES", saved.payload]],
+  );
+  assert.equal(account.spotify.spotifyUserId, "synthetic-spotify-user");
+  assert.equal(account.passkeys[0].deviceType, "singleDevice");
+  assert.equal(account.shareLinks[0].document.kind, "FAVORITES");
+  assert.equal(account.notificationPreferences[0].eventType, "ARTIST_ADDED");
+  assert.equal(account.notificationSubscriptions[0].channel, "WEB_PUSH");
+  assert.equal(account.notificationDeliveries[0].status, "FAILED");
+  assert.doesNotMatch(
+    raw,
+    /EXCLUDED_|OTHER_ACCOUNT_ONLY|other-export|passwordHash|tokenHash|publicKey/,
+  );
+  assert.equal((await client.json("/api/auth/logout", "POST")).status, 204);
+  assert.equal((await client.json(path, "POST")).status, 401);
 });
