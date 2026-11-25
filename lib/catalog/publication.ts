@@ -489,7 +489,18 @@ async function applyFestivalChanges(
     }
     if (changed) changedFields.push(change.field);
   }
-  return { edition, changedFields: [...new Set(changedFields)] };
+  return {
+    edition,
+    resultingDates: {
+      startDate: proposed.has("startDate")
+        ? isoDate(dateOnly(proposed.get("startDate")))
+        : isoDate(edition.startDate),
+      endDate: proposed.has("endDate")
+        ? isoDate(dateOnly(proposed.get("endDate")))
+        : isoDate(edition.endDate),
+    },
+    changedFields: [...new Set(changedFields)],
+  };
 }
 
 async function createPublication(
@@ -1090,8 +1101,7 @@ export async function publishIngestionResult(
         evidence: candidate.evidence,
         edition: {
           year: applied.edition.year,
-          startDate: isoDate(applied.edition.startDate),
-          endDate: isoDate(applied.edition.endDate),
+          ...applied.resultingDates,
         },
       });
       if (

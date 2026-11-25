@@ -29,6 +29,7 @@ export function ticketProducerPublication(input: {
   refusalPattern?: RegExp;
   exerciseAnnouncementAddition?: boolean;
   rescheduleRefusalPattern?: RegExp;
+  exerciseMissingStartDate?: boolean;
 }) {
   test(
     `${input.slug}` +
@@ -270,6 +271,28 @@ export function ticketProducerPublication(input: {
           candidate.ticketStatus === "low" ? "sold_out" : "low",
         );
         assert.equal((await read()).ticketsUrl, undefined);
+        if (input.exerciseMissingStartDate) {
+          await db.festivalEdition.update({
+            where: { id: edition.id },
+            data: { startDate: null, ticketStatus: "UNKNOWN" },
+          });
+          const missingStart = evaluateCandidate(await read(), candidate);
+          assert.equal(missingStart.publishable, true, JSON.stringify(missingStart.reviewReasons));
+          assert.ok(missingStart.changes.some(({ field }) => field === "startDate"));
+          assert.ok(missingStart.changes.some(({ field }) => field === "ticketStatus"));
+          const restoredAttempt = await persist(missingStart);
+          assert.ok(
+            await publishIngestionResult(db, {
+              attemptId: restoredAttempt.id,
+              result: missingStart,
+              sourceCommit,
+            }),
+          );
+          const restored = await read();
+          assert.equal(restored.startDate, candidate.startDate);
+          assert.equal(restored.endDate, candidate.endDate);
+          assert.equal(restored.ticketStatus, candidate.ticketStatus);
+        }
         assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
         assert.equal(await db.festivalPlaylist.count(), bindings);
       } finally {
