@@ -8,6 +8,13 @@ import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
 import {
+  HEAVY_STOCK,
+  HEAVY_PURCHASE,
+  fetchHeavyStockDocument,
+  isHeavyStockSource,
+  observeHeavyStock,
+} from "./heavy-ticket-stock.ts";
+import {
   VAINSTREAM_STOCK,
   isVainstreamStockSource,
   observeVainstreamStock,
@@ -29,6 +36,20 @@ export type TicketObservation = {
   warning?: string;
   ticketsUrl?: string;
 };
+
+type TicketAcquisition = (transport: {
+  fetchWithRetry: (url: string, headers: Record<string, string>) => Promise<Response>;
+  fetchOnce: (url: string, init: RequestInit) => Promise<Response>;
+  readText: (response: Response) => Promise<string>;
+}) => Promise<{ response: Response } | { html: string }>;
+
+const ticketAcquisitions = new Map<string, TicketAcquisition>([
+  [HEAVY_STOCK, fetchHeavyStockDocument],
+]);
+
+export function ticketSupplementAcquisition(url: string): TicketAcquisition | undefined {
+  return ticketAcquisitions.get(url);
+}
 
 /** A same-document response or a source adapter's reviewed canonical homepage. */
 export function matchesTicketPrimaryUrl(source: FestivalSource, finalUrl: string): boolean {
@@ -64,6 +85,7 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
     url.hash
   )
     return;
+  if (isHeavyStockSource(source)) return HEAVY_STOCK;
   if (isVainstreamStockSource(source)) return VAINSTREAM_STOCK;
   if (isAlcatrazStockSource(source)) return ALCATRAZ_STOCK;
   if (
@@ -121,6 +143,7 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
 export function ticketSupplementPurchaseUrl(source: FestivalSource): string | undefined {
   const stockUrl = ticketSupplementUrl(source);
   if (!stockUrl) return;
+  if (stockUrl === HEAVY_STOCK) return HEAVY_PURCHASE;
   if (stockUrl === ALCATRAZ_STOCK) return ALCATRAZ_PURCHASE;
   if (stockUrl === RFP_STOCK) return RFP_PURCHASE;
   return source.festivalSlug === "full-rewind"
@@ -236,6 +259,7 @@ export function observeTicketSupplement(
       return fail("invalid public weekend product JSON");
     }
   }
+  if (url === HEAVY_STOCK) return observeHeavyStock(html, dates);
   if (url === ALCATRAZ_STOCK) return observeAlcatrazStock(html, source.editionYear, dates);
   if (remainingTicketUrl(source)) return observeRemainingTicket(html, source, dates);
   if (url === VAINSTREAM_STOCK) return observeVainstreamStock(html, dates);
