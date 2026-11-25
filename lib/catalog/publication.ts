@@ -1,3 +1,4 @@
+import { publishCampingObservation, type CampingObservation } from "./camping-import.ts";
 import {
   publishOverviewObservation,
   type OverviewObservation,
@@ -1338,6 +1339,22 @@ export async function publishAdminFestivalChange(
     actorLabel: input.actorLabel,
     fields: applied.changedFields,
     evidence: { adminChangeId: input.change.id, sourceEvidence: input.change.sourceEvidence },
+  });
+}
+
+export async function publishAgentCampingResolution(
+  db: Prisma.TransactionClient,
+  input: { sourceId: string; camping: CampingObservation; evidence: unknown },
+) {
+  if (!(await publishCampingObservation(db, input.camping))) return null;
+  return createPublication(db, {
+    source: CatalogPublicationSource.INGESTION,
+    sourceId: input.sourceId,
+    festivalSlug: input.camping.festivalSlug,
+    editionYear: input.camping.editionYear,
+    actorLabel: "OpenClaw import-conflict agent",
+    fields: ["camping"],
+    evidence: input.evidence,
   });
 }
 
