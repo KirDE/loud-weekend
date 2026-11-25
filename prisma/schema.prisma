@@ -58,6 +58,7 @@ enum AdminDraftStatus {
   APPLIED
   REJECTED
   CONFLICT
+  PARTIALLY_APPLIED
 }
 
 enum AdminChangeStatus {

@@ -330,21 +330,21 @@ export async function deleteDraft(id: string, actor: { id: string; email: string
   );
 }
 
-async function finishReviewedDraft(
-  tx: Prisma.TransactionClient,
-  draftId: string,
-  status: AdminDraftStatus,
-) {
-  const unresolved = await tx.adminChange.findMany({
-    where: { draftId, status: { in: [AdminChangeStatus.PENDING, AdminChangeStatus.CONFLICT] } },
+async function finishReviewedDraft(tx: Prisma.TransactionClient, draftId: string) {
+  const decisions = await tx.adminChange.findMany({
+    where: { draftId },
     select: { status: true },
     distinct: ["status"],
   });
-  if (unresolved.some((change) => change.status === AdminChangeStatus.PENDING)) return;
-  await tx.adminDraft.update({
-    where: { id: draftId },
-    data: { status: unresolved.length ? AdminDraftStatus.CONFLICT : status },
-  });
+  const statuses = new Set(decisions.map(({ status }) => status));
+  if (statuses.has(AdminChangeStatus.PENDING)) return;
+
+  let status: AdminDraftStatus;
+  if (statuses.has(AdminChangeStatus.CONFLICT)) status = AdminDraftStatus.CONFLICT;
+  else if (!statuses.has(AdminChangeStatus.APPROVED)) status = AdminDraftStatus.REJECTED;
+  else if (statuses.has(AdminChangeStatus.REJECTED)) status = AdminDraftStatus.PARTIALLY_APPLIED;
+  else status = AdminDraftStatus.APPLIED;
+  await tx.adminDraft.update({ where: { id: draftId }, data: { status } });
 }
 
 export async function decideChange(
@@ -373,8 +373,7 @@ export async function decideChange(
           data: { status, decidedById: actor.id, decidedAt: new Date() },
         });
         if (updated.count !== 1) throw new Error("Change was decided concurrently");
-        if (change.draftId)
-          await finishReviewedDraft(tx, change.draftId, AdminDraftStatus.CONFLICT);
+        if (change.draftId) await finishReviewedDraft(tx, change.draftId);
         await tx.adminAuditEntry.create({
           data: {
             actorId: actor.id,
@@ -478,11 +477,7 @@ export async function decideChange(
         });
       }
       if (change.draftId) {
-        await finishReviewedDraft(
-          tx,
-          change.draftId,
-          decision === "approve" ? AdminDraftStatus.APPLIED : AdminDraftStatus.REJECTED,
-        );
+        await finishReviewedDraft(tx, change.draftId);
       }
       await tx.adminAuditEntry.create({
         data: {
