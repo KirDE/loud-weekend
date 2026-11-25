@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ticketPresentation, hasAvailableTickets } from "../lib/tickets.ts";
 import { festivalMusicEvent } from "../lib/seo.ts";
 import { factsSchema } from "../lib/ingestion/agent-contract.ts";
+import { FestivalComparisonTicket } from "../components/FestivalComparison.tsx";
 import { FestivalDetail } from "../components/FestivalDetail.tsx";
 import { LanguageProvider, translate } from "../components/LanguageProvider.tsx";
 import { LocalPlannerProvider } from "../components/LocalPlanner.tsx";
@@ -74,4 +75,73 @@ test("missing links and legacy unavailable never invent sold-out or actionable o
     );
   }
   assert.equal(factsSchema.safeParse({ ticketStatus: "maybe_sold_out" }).success, false);
+});
+
+test("unticketed admission is explicit across ingestion, EN/DE/RU, filters and SEO", () => {
+  for (const ticketsUrl of [undefined, "https://festival.example.test/camping"]) {
+    const item = { ...festival, ticketStatus: "free", ticketsUrl };
+    assert.equal(factsSchema.parse({ ticketStatus: "free" }).ticketStatus, "free");
+    assert.deepEqual(ticketPresentation(item), {
+      status: "free",
+      href: item.officialUrl,
+      label: "ticketsFree",
+    });
+    assert.equal(hasAvailableTickets(item), false); // The filter is paid ticket inventory, not admission.
+    assert.equal(festivalMusicEvent(item).isAccessibleForFree, true);
+    assert.equal(festivalMusicEvent(item).offers, undefined);
+    for (const language of ["en", "de", "ru"]) {
+      const html = renderToStaticMarkup(
+        h(
+          LanguageProvider,
+          { initialLanguage: language },
+          h(
+            LocalPlannerProvider,
+            null,
+            h(FestivalDetail, { item, festivals: [item], artistSlugs: {} }),
+          ),
+        ),
+      );
+      assert.ok(html.includes('data-ticket-status="free"'));
+      assert.ok(html.includes(translate(language, "ticketsFree")));
+      assert.ok(!html.includes(translate(language, "officialTickets")));
+      assert.ok(!html.includes(translate(language, "ticketsInfo")));
+      assert.ok(!html.includes("https://festival.example.test/camping"));
+    }
+  }
+  assert.equal(festivalMusicEvent(festival).isAccessibleForFree, undefined);
+});
+
+// Render the very same ticket cell used by mixed-festival comparisons, including
+// ancillary links and missing official URLs (never fall back to a paid extras URL).
+test("comparison ticket cells preserve free and paid semantics in EN/DE/RU", () => {
+  for (const language of ["en", "de", "ru"]) {
+    for (const [status, label] of [["free", "ticketsFree"], ...cases]) {
+      for (const ticketsUrl of [undefined, "https://festival.example.test/camping"]) {
+        for (const officialUrl of [undefined, "https://festival.example.test/"]) {
+          const item = { ...festival, ticketStatus: status, ticketsUrl, officialUrl };
+          const html = renderToStaticMarkup(
+            h(
+              LanguageProvider,
+              { initialLanguage: language },
+              h(FestivalComparisonTicket, { item }),
+            ),
+          );
+          const expectedLabel = status === "available" && !ticketsUrl ? "ticketsUnknown" : label;
+          assert.ok(html.includes(translate(language, expectedLabel).replaceAll("&", "&amp;")));
+          if (status === "free") {
+            assert.ok(!html.includes("https://festival.example.test/camping"));
+            assert.ok(!html.includes(translate(language, "officialTickets")));
+            assert.equal(
+              html.includes('<a href="https://festival.example.test/"'),
+              Boolean(officialUrl),
+            );
+          } else
+            assert.equal(
+              html.includes('<a href="https://festival.example.test/camping"'),
+              Boolean(ticketsUrl),
+            );
+        }
+      }
+    }
+  }
 });

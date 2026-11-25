@@ -42,7 +42,7 @@ const expected = {
     edition: "Festivalausgaben 2027",
     detail: "Line-up-Status",
     status: "vollständiger Datensatz",
-    empty: "Offizielle Termine und Line-up noch offen",
+    empty: "Katalogeintrag noch offen",
     share: "Geteilter Plan",
     attendance: "Dabei",
     country: "Festivals in Deutschland",
@@ -54,7 +54,7 @@ const expected = {
     edition: "Выпуски фестивалей 2027 года",
     detail: "Состояние лайнапа",
     status: "полная запись",
-    empty: "Официальные даты и лайнап уточняются",
+    empty: "Запись каталога уточняется",
     share: "Общий план",
     attendance: "Пойду",
     country: "Фестивали в стране: Германия",
@@ -65,23 +65,27 @@ const expected = {
 for (const language of ["de", "ru"] as const) {
   test("public archive, edition, share, country and month pages render in " + language, () => {
     const t = expected[language];
-    const archive = render(language, <ArchiveContent archived={[archived]} future={[tracking]} />);
+    const archive = render(
+      language,
+      <ArchiveContent archived={[archived]} future={[tracking]} years={[2028, 2027, 2026]} />,
+    );
     assert.ok(archive.includes(t.archive) && archive.includes(t.future));
     assert.ok(
       !archive.includes("Archived and future records") && !archive.includes("Open edition"),
     );
-    assert.ok(
-      archive.includes('href="/editions/2027"') || archive.includes('href="/editions/2027/"'),
-    );
+    assert.match(archive, new RegExp(`href="/${language}/editions/2027/?"`));
 
-    const year = render(language, <EditionYearContent year={2027} items={[current]} />);
+    const year = render(
+      language,
+      <EditionYearContent year={2027} items={[current]} years={[2028, 2027, 2026]} hasArchive />,
+    );
     assert.ok(year.includes(t.edition) && !year.includes("provenance-aware"));
     const detail = render(language, <FestivalEditionContent item={current} />);
     assert.ok(detail.includes(t.detail) && detail.includes(t.status));
     assert.ok(!detail.includes("Lineup status") && !detail.includes("complete record"));
     const unannounced = render(language, <FestivalEditionContent item={tracking} />);
     assert.ok(unannounced.includes(t.empty));
-    assert.ok(!unannounced.includes("Official dates and lineup TBA"));
+    assert.ok(!unannounced.includes("Catalogue record pending"));
 
     const share = render(
       language,
