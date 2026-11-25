@@ -10,6 +10,8 @@ import {
   readApprovedEditionLifecycle as publicRead,
 } from "../lib/ingestion/edition-lifecycle-proposal-store.ts";
 import { DatabaseCatalogRepository } from "../lib/catalog/repository.ts";
+import { readSocialPreview } from "../lib/catalog/social-preview.ts";
+import { formatFestivalDateRange } from "../lib/festival-dates.ts";
 import { readOfflineCatalog, serveOfflineCatalog } from "../lib/catalog/offline.ts";
 import { readPublishedOfflineTrip } from "../lib/catalog/offline-trip.ts";
 import { issueCalendarKey, readCalendarFeed } from "../lib/calendar-subscription.ts";
@@ -740,8 +742,37 @@ test(
         startDate: new Date("2026-08-25"),
       },
     });
+    const evidence = await db.editionProvenance.createManyAndReturn({
+      data: [editionId, archive.id].flatMap((id) =>
+        ["dates", "headliners"].map((field) => ({
+          editionId: id,
+          field,
+          url,
+          checkedAt: new Date(time),
+          note: "Synthetic proof",
+        })),
+      ),
+    });
     const before = await db.festivalEdition.findMany();
     try {
+      await db.lineupEntry.create({
+        data: { editionId: archive.id, artistId, billing: "HEADLINER", position: 0 },
+      });
+      for (const [language, copy] of [
+        ["en", "Edition on hiatus"],
+        ["de", "Festivalausgabe pausiert"],
+        ["ru", "Фестиваль на паузе"],
+      ] as const) {
+        const current = await readSocialPreview("festivals", slug, language, 2027);
+        assert.equal(current?.detail, `2027 · ${copy}`);
+        assert.equal(current?.headliners, undefined);
+        const previous = await readSocialPreview("festivals", slug, language, 2026);
+        assert.equal(
+          previous?.detail,
+          formatFestivalDateRange({ startDate: "2026-08-25" }, language, ""),
+        );
+        assert.deepEqual(previous?.headliners, ["Lifecycle Synthetic Artist"]);
+      }
       const result = await new DatabaseCatalogRepository(db).read();
       const f = result.festivals.find((f) => f.slug === slug)!;
       assert.deepEqual(f.editionLifecycle, await publicRead(db, editionId));
@@ -776,6 +807,9 @@ test(
       }
       assert.deepEqual(await db.festivalEdition.findMany(), before);
     } finally {
+      await db.editionProvenance.deleteMany({
+        where: { id: { in: evidence.map(({ id }) => id) } },
+      });
       await db.festivalEdition.delete({ where: { id: archive.id } });
     }
   },

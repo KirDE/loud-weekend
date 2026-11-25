@@ -4,9 +4,24 @@ import type { Language } from "./language-preference.ts";
 import { SITE_ORIGIN } from "./seo.ts";
 
 const copy = {
-  en: { festivals: "Festival", artists: "Artist", unknown: "Dates not confirmed" },
-  de: { festivals: "Festival", artists: "Künstler", unknown: "Termine nicht bestätigt" },
-  ru: { festivals: "Фестиваль", artists: "Артист", unknown: "Даты не подтверждены" },
+  en: {
+    festivals: "Festival",
+    artists: "Artist",
+    unknown: "Dates not confirmed",
+    hiatus: "Edition on hiatus",
+  },
+  de: {
+    festivals: "Festival",
+    artists: "Künstler",
+    unknown: "Termine nicht bestätigt",
+    hiatus: "Festivalausgabe pausiert",
+  },
+  ru: {
+    festivals: "Фестиваль",
+    artists: "Артист",
+    unknown: "Даты не подтверждены",
+    hiatus: "Фестиваль на паузе",
+  },
 } satisfies Record<Language, Record<string, string>>;
 
 export type PreviewKind = "festivals" | "artists";
@@ -55,6 +70,10 @@ export function festivalPreviewDate(
 ) {
   const formatted = dates && formatFestivalDateRange(dates, language, "");
   return formatted || `${year} · ${copy[language].unknown}`;
+}
+
+export function festivalPreviewHiatus(year: number, language: Language) {
+  return `${year} · ${copy[language].hiatus}`;
 }
 
 /** Keep stored billing intact in metadata; bound only its visual representation. */
