@@ -32,6 +32,45 @@ const ticket =
 const extract = (html, overrides = {}) =>
   extractFestivalCandidate(html, { ...source, ...overrides }, fetchedAt);
 
+test("conflicting HTML festival date metadata holds otherwise safe ticket updates", () => {
+  for (const [role, currentDate, competingDate] of [
+    ["start", current.startDate, "2027-07-29"],
+    ["end", current.endDate, "2027-08-01"],
+  ]) {
+    for (const dates of [
+      [currentDate, competingDate],
+      [competingDate, currentDate],
+    ]) {
+      const [first, second] = dates;
+      const html =
+        `<meta property="event:${role}_time" content="${first}">` +
+        `<meta name="festival:${role}_date" content="${second}">` +
+        ticket;
+      const candidate = extract(html);
+      const result = evaluateCandidate(current, candidate);
+      const field = `${role}Date`;
+      assert.equal(candidate[field], first);
+      assert.ok(
+        candidate.evidence.find((evidence) => evidence.field === field).excerpt.includes(first),
+      );
+      assert.ok(result.changes.some((change) => change.field === "ticketsUrl"));
+      assert.equal(result.publishable, false);
+      assert.ok(result.reviewReasons.includes(`Conflicting HTML festival ${role} date metadata`));
+    }
+  }
+});
+
+test("equivalent HTML festival date metadata does not block ticket updates", () => {
+  const html =
+    '<meta property="event:start_time" content="2027-07-28T23:00:00-04:00">' +
+    '<meta name="festival:start_date" content="2027-07-28">' +
+    ticket;
+  const candidate = extract(html);
+  assert.equal(candidate.startDate, current.startDate);
+  assert.deepEqual(candidate.warnings, []);
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
+});
+
 test("Wacken's real ticket correction publishes through fallback without optional JSON-LD", () => {
   const candidate = extract(ticket);
   assert.equal(
@@ -110,6 +149,41 @@ test("fallback evidence never silences event cancellation or wrong-edition warni
   }
 });
 
+for (const [status, eventStatus] of [
+  ["EventCancelled", { "@id": "https://schema.org/EventCancelled" }],
+  ["EventPostponed", ["https://schema.org/EventScheduled", "https://schema.org/EventPostponed"]],
+  ["EventRescheduled", "https://schema.org/EventRescheduled"],
+  ["EventMovedOnline", { "@id": "https://schema.org/EventMovedOnline" }],
+]) {
+  test(`${status} holds otherwise publishable ticket changes for review`, () => {
+    const event = { "@type": "MusicEvent", startDate: current.startDate, eventStatus };
+    const candidate = extract(
+      `<script type="application/ld+json">${JSON.stringify(event)}</script>${ticket}`,
+    );
+    const result = evaluateCandidate(current, candidate);
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [
+      `Official event status requires review: https://schema.org/${status}`,
+    ]);
+  });
+}
+
+test("scheduled JSON-LD events do not hold verified ticket changes", () => {
+  const event = {
+    "@type": "MusicEvent",
+    startDate: current.startDate,
+    eventStatus: { "@id": "https://schema.org/EventScheduled" },
+  };
+  const candidate = extract(
+    `<script type="application/ld+json">${JSON.stringify(event)}</script>${ticket}`,
+  );
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
+});
+
 test("fallback evidence never silences ambiguous JSON-LD events or invalid lineup", () => {
   const event = { "@type": "MusicEvent", startDate: "2027-07-28" };
   const ambiguous = extract(
@@ -134,4 +208,43 @@ test("JSON-LD-only strategy still reports its own absent format", () => {
   assert.deepEqual(extract(ticket, { strategies: ["json_ld_event"] }).warnings, [
     "No JSON-LD Event was found",
   ]);
+});
+
+test("conflicting date claims require review even when the selected date is unchanged", () => {
+  const event = {
+    "@type": "MusicEvent",
+    startDate: current.startDate,
+    endDate: current.endDate,
+  };
+  const structured = `<script type="application/ld+json">${JSON.stringify(event)}</script>`;
+  for (const [field, property, conflictingDate] of [
+    ["startDate", "event:start_time", "2027-07-29"],
+    ["endDate", "event:end_time", "2027-08-01"],
+  ]) {
+    const html = `${structured}<meta property="${property}" content="${conflictingDate}">${ticket}`;
+    const candidate = extract(html);
+    assert.equal(candidate[field], current[field]);
+    const result = evaluateCandidate(current, candidate);
+    assert.deepEqual(
+      result.changes.map((change) => change.field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [
+      `Conflicting extraction claims for ${field}: ${current[field]} versus ${conflictingDate}`,
+    ]);
+  }
+});
+
+test("equivalent date claims and independently supplied missing dates still combine", () => {
+  const html = `
+    <script type="application/ld+json">{"@type":"MusicEvent","startDate":"2027-07-28"}</script>
+    <meta property="event:start_time" content="2027-07-28T12:00:00+02:00">
+    <meta property="event:end_time" content="2027-07-31">
+    ${ticket}
+  `;
+  const candidate = extract(html);
+  assert.equal(candidate.startDate, current.startDate);
+  assert.equal(candidate.endDate, current.endDate);
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
 });
