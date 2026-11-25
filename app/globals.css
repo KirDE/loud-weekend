@@ -1196,6 +1196,12 @@ main {
   font-weight: 700;
 }
 
+.moreFestivalResults {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
 .festivalGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1825,6 +1831,10 @@ main {
   gap: 10px;
 }
 
+.timetableStage li:where(:has(.timetableSlotTime time + time)) {
+  grid-template-columns: minmax(90px, 35%) minmax(0, 1fr) auto;
+}
+
 .timetableStage time {
   font-variant-numeric: tabular-nums;
   font-weight: 800;
@@ -2045,6 +2055,25 @@ main {
   gap: 24px;
   padding: 22px 0;
   border-top: 1px solid var(--line);
+}
+
+.seasonEditionRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.seasonAttendance {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.seasonAttendance select {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0 8px;
 }
 
 .textLink {
@@ -3551,6 +3580,49 @@ summary:focus-visible {
   max-width: 28rem;
 }
 
+.groupTrips {
+  overflow-wrap: anywhere;
+}
+
+.groupTrips fieldset {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+}
+
+.groupTrips form {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  margin: 24px 0;
+}
+
+.groupTrips :where(label) {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.groupTrips :where(input),
+.groupTrips :where(textarea),
+.groupTrips :where(select),
+.groupTrips :where(button) {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 6px 10px;
+}
+
+.groupTripOptions {
+  padding-left: 20px;
+}
+
+.groupTripComment {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .dataQualityCount {
   display: flex;
   flex-wrap: wrap;
@@ -3764,6 +3836,42 @@ summary:focus-visible {
   display: flex;
   justify-content: flex-end;
   margin-block: 12px 0;
+}
+
+.favoriteArtistsPage .plannerHero > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.favoriteArtistsPage input[type="search"] {
+  width: min(100%, 28rem);
+  padding: 10px;
+  border: 1px solid var(--line);
+  color: inherit;
+}
+
+.favoriteArtistList article {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.favoriteArtistsPage .favoriteArtistList article > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.favoriteArtistList h3 {
+  margin: 0;
+}
+
+.favoriteArtistsPage .favoriteArtistList li span,
+.favoriteArtistsPage .favoriteArtistList article > div > span {
+  display: block;
+  color: var(--muted);
 }
 
 .artistMatchSummary {

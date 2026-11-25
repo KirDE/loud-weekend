@@ -1,8 +1,9 @@
 "use client";
 
+import { sendProductEvent } from "@/lib/product-events";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CatalogFreshness } from "@/lib/domain/freshness";
 import { formatFreshnessDate } from "@/lib/freshness-date";
 import type { Festival } from "@/lib/domain/festival";
@@ -60,6 +61,8 @@ import {
   type DiscoveryPreferences,
 } from "@/lib/discovery-preferences";
 
+const RESULT_BATCH_SIZE = 48;
+
 const emptyArtistSelection: string[] = [];
 
 export function FestivalExplorer({
@@ -75,7 +78,7 @@ export function FestivalExplorer({
   matchingArtists?: readonly DiscoveryArtist[];
   suggestionArtists?: readonly SuggestionArtist[];
 }) {
-  const { locale, t } = useLanguage();
+  const { language, locale, t } = useLanguage();
   const planner = useLocalPlanner();
   const filtersReady = planner.ready;
   const queryParams = useSearchParams();
@@ -88,9 +91,13 @@ export function FestivalExplorer({
   // Leaving a shared URL discards its temporary edits. Browser history
   // restores the URL's own snapshot, not edits that were never in that URL.
   if (draft && draft.key !== linkKey) setDraft(undefined);
-  const activeFilters = shared
-    ? { ...shared.filters, ...(draft?.key === linkKey ? draft.patch : {}) }
-    : planner.savedFilters;
+  const activeFilters = useMemo(
+    () =>
+      shared
+        ? { ...shared.filters, ...(draft?.key === linkKey ? draft.patch : {}) }
+        : planner.savedFilters,
+    [shared, draft, linkKey, planner.savedFilters],
+  );
   const {
     query,
     country,
@@ -129,6 +136,14 @@ export function FestivalExplorer({
     }));
   };
   const searchRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const nextFocusIndex = useRef<number | null>(null);
+  const [expanded, setExpanded] = useState<{ results: Festival[]; limit: number }>();
+  const showMore = {
+    en: "Show more festivals",
+    de: "Mehr Festivals anzeigen",
+    ru: "Показать ещё фестивали",
+  }[language];
   const [selected, setSelected] = useState<string[]>([]);
   const [comparisonStatus, setComparisonStatus] = useState("");
   const displayNames = useMemo(() => new Intl.DisplayNames([locale], { type: "region" }), [locale]);
@@ -233,8 +248,23 @@ export function FestivalExplorer({
     favoriteKeys,
     discoveryLineups,
   ]);
+  const cardLimit = expanded?.results === visible ? expanded.limit : RESULT_BATCH_SIZE;
+  const shownCount = Math.min(cardLimit, visible.length);
+  const moreCount = Math.min(RESULT_BATCH_SIZE, visible.length - shownCount);
+  useEffect(() => {
+    if (nextFocusIndex.current === null) return;
+    gridRef.current?.children[nextFocusIndex.current]
+      ?.querySelector<HTMLAnchorElement>("a")
+      ?.focus();
+    nextFocusIndex.current = null;
+  }, [cardLimit]);
+  const revealNextResults = () => {
+    nextFocusIndex.current = shownCount;
+    setExpanded({ results: visible, limit: shownCount + moreCount });
+  };
   const compared = festivals.filter((item) => selected.includes(item.slug));
-  const toggleSelected = (item: Festival) =>
+  const toggleSelected = (item: Festival) => {
+    if (!selected.includes(item.slug) && selected.length < 3) sendProductEvent("COMPARE", language);
     setSelected((current) => {
       if (current.includes(item.slug)) {
         const next = current.filter((value) => value !== item.slug);
@@ -249,6 +279,8 @@ export function FestivalExplorer({
       setComparisonStatus(t("comparisonSelected", { festival: item.name, count: next.length }));
       return next;
     });
+  };
+
   const clearLinkedDates = () => {
     const url = new URL(window.location.href);
     removeDateQuery(url);
@@ -281,11 +313,15 @@ export function FestivalExplorer({
           artists={suggestionArtists}
           inputRef={searchRef}
           onChange={(query) => updateFilters({ query })}
+          onSubmit={() => sendProductEvent("SEARCH_SUBMIT", language)}
         />
         <select
           aria-label={t("countries")}
           value={country}
-          onChange={(event) => updateFilters({ country: event.target.value })}
+          onChange={(event) => {
+            updateFilters({ country: event.target.value });
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           <option value="all">{t("allCountries")}</option>
           {countries.map((value) => (
@@ -297,7 +333,10 @@ export function FestivalExplorer({
         <select
           aria-label={t("filterMonth")}
           value={month}
-          onChange={(event) => updateFilters({ month: event.target.value })}
+          onChange={(event) => {
+            updateFilters({ month: event.target.value });
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           <option value="all">{t("allMonths")}</option>
           {months.map((value) => (
@@ -311,7 +350,10 @@ export function FestivalExplorer({
         <select
           aria-label={t("filterGenre")}
           value={genre}
-          onChange={(event) => updateFilters({ genre: event.target.value })}
+          onChange={(event) => {
+            updateFilters({ genre: event.target.value });
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           <option value="all">{t("allGenres")}</option>
           {genres.map((value) => (
@@ -324,11 +366,13 @@ export function FestivalExplorer({
           aria-label={t("filterOrigin")}
           value={customOrigin ? "custom" : origin}
           onChange={(event) => {
-            if (event.target.value !== "custom")
+            if (event.target.value !== "custom") {
               updateFilters({
                 origin: event.target.value as DiscoveryPreferences["origin"],
                 customOrigin: undefined,
               });
+              sendProductEvent("FILTER_USED", language);
+            }
           }}
         >
           {customOrigin && (
@@ -343,7 +387,10 @@ export function FestivalExplorer({
         <select
           aria-label={t("filterDistance")}
           value={maxDistance}
-          onChange={(event) => updateFilters({ maxDistance: event.target.value })}
+          onChange={(event) => {
+            updateFilters({ maxDistance: event.target.value });
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           <option value="all">{t("anyDistance")}</option>
           {discoveryDistances.map((value) => (
@@ -381,7 +428,10 @@ export function FestivalExplorer({
             <input
               type="checkbox"
               checked={announcedOnly}
-              onChange={(event) => updateFilters({ announcedOnly: event.target.checked })}
+              onChange={(event) => {
+                updateFilters({ announcedOnly: event.target.checked });
+                sendProductEvent("FILTER_USED", language);
+              }}
             />
             <span />
             {t("onlyAnnouncedActs")}
@@ -390,7 +440,10 @@ export function FestivalExplorer({
             <input
               type="checkbox"
               checked={ticketsOnly}
-              onChange={(event) => updateFilters({ ticketsOnly: event.target.checked })}
+              onChange={(event) => {
+                updateFilters({ ticketsOnly: event.target.checked });
+                sendProductEvent("FILTER_USED", language);
+              }}
             />
             <span aria-hidden="true" />
             {t("officialTicketsOnly")}
@@ -448,6 +501,7 @@ export function FestivalExplorer({
       </div>
       <div className="resultMeta">
         <span>
+          {shownCount < visible.length && `${shownCount} / `}
           {visible.length} {t("festivals")}
         </span>
         {freshness && (
@@ -477,8 +531,8 @@ export function FestivalExplorer({
       {withoutRoster > 0 && (
         <p className="compareHint">{t("artistMatchesUnknown", { count: withoutRoster })}</p>
       )}
-      <div className="festivalGrid">
-        {visible.map((item) => {
+      <div className="festivalGrid" ref={gridRef}>
+        {visible.slice(0, shownCount).map((item) => {
           const isSelected = selected.includes(item.slug);
           const previewArtists = lineupPreviewArtists(item);
           const artistCount = announcedArtists(item).length;
@@ -538,6 +592,13 @@ export function FestivalExplorer({
           );
         })}
       </div>
+      {moreCount > 0 && (
+        <div className="moreFestivalResults">
+          <button type="button" className="outlineButton" onClick={revealNextResults}>
+            {showMore} ({moreCount})
+          </button>
+        </div>
+      )}
       {!visible.length && (
         <div className="empty">
           <strong>{t("noMatches")}</strong>
