@@ -227,6 +227,7 @@ export function AccountMenu() {
       if (!response.ok) throw new Error(t.failed);
       setUser(null);
       setMode("login");
+      window.dispatchEvent(new CustomEvent("loud-weekend-signed-out"));
       setOpen(false);
       window.dispatchEvent(new CustomEvent("loud-weekend-signed-out"));
     } catch {

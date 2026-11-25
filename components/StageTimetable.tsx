@@ -7,6 +7,7 @@ import {
   runningOrderCalendar,
 } from "@/lib/timetable-plan";
 import { useTimetablePlan } from "./useTimetablePlan";
+import { RunningOrderAccount } from "./RunningOrderAccount";
 import type { TimetableEntry } from "@/lib/domain/festival";
 import { useLanguage, type Language } from "./LanguageProvider";
 import {
@@ -97,7 +98,7 @@ const filters = {
 const plannerCopy = {
   en: {
     title: "My running order",
-    local: "Saved on this device only.",
+    local: "This is the selection on this device.",
     add: "Save",
     remove: "Remove",
     toggle: "Save to running order",
@@ -112,7 +113,7 @@ const plannerCopy = {
   },
   de: {
     title: "Mein Bühnenplan",
-    local: "Nur auf diesem Gerät gespeichert.",
+    local: "Dies ist die Auswahl auf diesem Gerät.",
     add: "Speichern",
     remove: "Entfernen",
     toggle: "Im Bühnenplan speichern",
@@ -127,7 +128,7 @@ const plannerCopy = {
   },
   ru: {
     title: "Моё расписание",
-    local: "Хранится только на этом устройстве.",
+    local: "Это выбор на этом устройстве.",
     add: "Сохранить",
     remove: "Убрать",
     toggle: "Сохранить в расписание",
@@ -298,6 +299,15 @@ export function StageTimetable({
             {planner.clear}
           </button>
         </section>
+      )}
+      {slug && year && entries.some((entry) => entry.sourcePerformanceId) && (
+        <RunningOrderAccount
+          key={`${slug}:${year}`}
+          slug={slug}
+          year={year}
+          selected={plan.selected}
+          replace={plan.replace}
+        />
       )}
       {!matches.length && <p role="status">{labels.empty}</p>}
       {days.map((day) => (

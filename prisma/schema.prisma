@@ -185,6 +185,7 @@ model User {
   emailVerifiedAt           DateTime?
   sessions                  Session[]
   documents                 SyncDocument[]
+  runningOrders             RunningOrder[]
   shareLinks                ShareLink[]
   ownedTrips                GroupTrip[]
   tripAccess                GroupTripInvite[]
@@ -343,6 +344,7 @@ model FestivalEdition {
   lineupDays      EditionLineupDayAllocation[]
   arrivalFacts    EditionArrivalFact[]
   timetable       TimetablePerformance[]
+  runningOrders   RunningOrder[]
   playlists       FestivalPlaylist[]
   playlistLinks   FestivalPlaylistLink[]
   sources         FestivalSource[]
@@ -828,6 +830,18 @@ model SyncDocument {
   shareLink ShareLink?
 
   @@unique([userId, kind])
+}
+
+model RunningOrder {
+  userId         String
+  editionId      String
+  performanceIds String[]
+  revision       Int             @default(1)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  edition        FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, editionId])
+  @@index([editionId])
 }
 
 model ShareLink {
