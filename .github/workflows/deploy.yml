@@ -68,6 +68,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           APP_URL: ${{ secrets.APP_URL }}
+          GOOGLE_OIDC_ENABLED: ${{ vars.GOOGLE_OIDC_ENABLED || 'false' }}
+          GOOGLE_OIDC_CLIENT_ID: ${{ secrets.GOOGLE_OIDC_CLIENT_ID }}
+          GOOGLE_OIDC_CLIENT_SECRET: ${{ secrets.GOOGLE_OIDC_CLIENT_SECRET }}
           ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
           INTERNAL_API_SECRET: ${{ secrets.INTERNAL_API_SECRET }}
           IMPORT_AGENT_SECRET: ${{ secrets.IMPORT_AGENT_SECRET }}
@@ -96,6 +99,13 @@ jobs:
             printf 'DATABASE_URL=%q\n' "$DATABASE_URL"
             printf 'AUTH_SECRET=%q\n' "$AUTH_SECRET"
             printf 'APP_URL=%q\n' "$APP_URL"
+            printf 'GOOGLE_OIDC_ENABLED=%q\n' "$GOOGLE_OIDC_ENABLED"
+            if [[ "$GOOGLE_OIDC_ENABLED" == true ]]; then
+              test -z "$GOOGLE_OIDC_CLIENT_ID" || \
+                printf 'GOOGLE_OIDC_CLIENT_ID=%q\n' "$GOOGLE_OIDC_CLIENT_ID"
+              test -z "$GOOGLE_OIDC_CLIENT_SECRET" || \
+                printf 'GOOGLE_OIDC_CLIENT_SECRET=%q\n' "$GOOGLE_OIDC_CLIENT_SECRET"
+            fi
             printf 'ADMIN_EMAILS=%q\n' "$ADMIN_EMAILS"
             printf 'INTERNAL_API_SECRET=%q\n' "$INTERNAL_API_SECRET"
             test -z "$IMPORT_AGENT_SECRET" || printf 'IMPORT_AGENT_SECRET=%q\n' "$IMPORT_AGENT_SECRET"
