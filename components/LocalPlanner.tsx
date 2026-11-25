@@ -52,7 +52,7 @@ const Context = createContext<
       setSavedFilters: (value: DiscoveryPreferences) => void;
       updateSavedFilters: (patch: Partial<DiscoveryPreferences>) => void;
       replace: (value: PlannerState) => void;
-      replaceFields: (value: Partial<PlannerState>) => void;
+      replaceFields: (value: Partial<PlannerState>, expected: PlannerState) => void;
       merge: (value: Partial<PlannerState>) => void;
       clear: () => void;
     })
@@ -161,8 +161,13 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           savedFilters: readDiscoveryPreferences(next.savedFilters),
           seasonAttendance: next.seasonAttendance ?? current.seasonAttendance,
         })),
-      replaceFields: (fields: Partial<PlannerState>) =>
-        setState((current) => ({ ...current, ...fields })),
+      replaceFields: (fields: Partial<PlannerState>, expected: PlannerState) =>
+        setState((current) => {
+          // The selected account document may have been loading while the device was edited.
+          const keys = Object.keys(fields) as (keyof PlannerState)[];
+          if (keys.some((key) => !Object.is(current[key], expected[key]))) return current;
+          return { ...current, ...fields };
+        }),
       merge: (next: Partial<PlannerState>) =>
         setState((current) => {
           const tripBudgets = { ...next.tripBudgets, ...current.tripBudgets };
