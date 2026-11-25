@@ -30,6 +30,18 @@ for (const [slug, before, after, date] of [
   });
 }
 
+test("Graspop adopts updated application dates and withholds missing or foreign evidence", () => {
+  const page = fixture("graspop");
+  const parse = (html) => parseCampingGuidance(html, "graspop", 2027);
+  const changed = parse(page.replace("31 May", "30 May"));
+  assert.match(changed[0].description.en, /30 May 2027/);
+  assert.match(changed[2].description.en, /River Stage and Hall/);
+  assert.equal(parse(page.replace("31 May", "32 May")), undefined);
+  assert.equal(parse(page.replace("16 June 2027", "16 June 2028")), undefined);
+  assert.equal(parse(page.replace("THE INTER CAMPSITE", "A DIFFERENT CAMPSITE")), undefined);
+  assert.equal(parse(page.replaceAll("<details", "<details hidden")), undefined);
+});
+
 test("alcatraz: both camping endpoints must be valid and ordered", () => {
   const page = fixture("alcatraz");
   for (const ending of ["Monday 2/8", "Sunday 9/8", "Monday 32/8", "Monday 9/13"]) {

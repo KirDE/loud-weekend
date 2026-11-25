@@ -1,16 +1,27 @@
 import { load } from "cheerio";
 
 export const campingSources = {
-  alcatraz: { city: "Kortrijk", countryCode: "BE", organizerHost: "alcatraz.be" },
-  "wacken-open-air": { city: "Wacken", countryCode: "DE", organizerHost: "wacken.com" },
+  alcatraz: {
+    city: "Kortrijk",
+    countryCode: "BE",
+    organizerHost: "alcatraz.be",
+  },
+  "wacken-open-air": {
+    city: "Wacken",
+    countryCode: "DE",
+    organizerHost: "wacken.com",
+  },
+  graspop: { city: "Dessel", countryCode: "BE", organizerHost: "graspop.be" },
 } as const;
 export type CampingSlug = keyof typeof campingSources;
 
+const graspopAccessibilityUrl = "https://www.graspop.be/en/info/accessibility";
 const alcatrazCampingUrl = "https://alcatraz.be/en/camping";
 const wackenCampingPrefix = "https://www.wacken.com/en/news-details/woa-camping-";
 
 export const campingSourceFilters = [
   { requestedUrl: alcatrazCampingUrl },
+  { requestedUrl: graspopAccessibilityUrl },
   {
     requestedUrl: {
       startsWith: wackenCampingPrefix,
@@ -20,6 +31,7 @@ export const campingSourceFilters = [
 ];
 
 export function campingSourceUrl(slug: CampingSlug, year: number) {
+  if (slug === "graspop") return graspopAccessibilityUrl;
   return slug === "alcatraz"
     ? alcatrazCampingUrl
     : `${wackenCampingPrefix}${year}-all-info-regarding-the-pre-sale/`;
@@ -28,6 +40,7 @@ export function campingSourceUrl(slug: CampingSlug, year: number) {
 export function isCampingSourceUrl(slug: string, url: string) {
   if (!Object.hasOwn(campingSources, slug)) return false;
   if (slug === "alcatraz") return url === alcatrazCampingUrl;
+  if (slug === "graspop") return url === graspopAccessibilityUrl;
   const year = url.match(/-camping-(20\d{2})-all-info-regarding-the-pre-sale\/$/)?.[1];
   return !!year && campingSourceUrl(slug as CampingSlug, Number(year)) === url;
 }
@@ -118,6 +131,7 @@ export function parseCampingGuidance(html: string, slug: CampingSlug, year: numb
     if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? ""))
       $(element).remove();
   });
+  if (slug === "graspop") return parseGraspopAccessibility($, year);
   if (slug === "alcatraz") {
     if (
       plain($("title").text()) !== `Camping | Alcatraz ${year}` ||
@@ -250,5 +264,97 @@ export function parseCampingGuidance(html: string, slug: CampingSlug, year: numb
     { field: "camping", description: copy.included },
     { field: "arrival", earliestDate },
     { field: "accessibility", description: copy.accessibility },
+  ] as const;
+}
+
+function parseGraspopAccessibility($: ReturnType<typeof load>, year: number) {
+  const section = (title: string) =>
+    $("details.faq-item").filter((_, el) => plain($(el).children("summary").text()) === title);
+  const campsite = section("THE INTER CAMPSITE");
+  const arena = section("IN THE FESTIVAL ARENA");
+  if (plain($("h1").text()) !== "Accessibility" || campsite.length !== 1 || arena.length !== 1)
+    return;
+  const text = plain(campsite.text());
+  const opening =
+    /The Inter camping is open for combi ticket holders from \d{1,2} pm on (\w+) (\d{1,2}) (\w+) (20\d{2})\./g;
+  const dates = [...text.matchAll(opening)];
+  if (dates.length !== 1 || Number(dates[0][4]) !== year) return;
+  const [, weekday, day, month] = dates[0];
+  if (!observedDate(year, months.indexOf(month) + 1, Number(day), weekday)) return;
+  const application = singleMatch(
+    $("p")
+      .map((_, el) => plain($(el).text()))
+      .get(),
+    /contact Inter as soon as possible \(and by (\d{1,2}) (\w+) (20\d{2}) at the latest\)\./,
+  );
+  if (!application || Number(application[3]) !== year) return;
+  const deadline = new Date(Date.UTC(year, months.indexOf(application[2]), Number(application[1])));
+  if (
+    deadline.getUTCFullYear() !== year ||
+    months[deadline.getUTCMonth()] !== application[2] ||
+    deadline.getUTCDate() !== Number(application[1])
+  )
+    return;
+  if (
+    !text.includes("It is part of campsite Inferno.") ||
+    !text.includes(
+      "Access to the Inter campsite requires a valid festival wristband and camping wristband.",
+    ) ||
+    !text.includes("This dedicated zone includes accessible showers, washbasins and toilets.")
+  )
+    return;
+  const viewing = singleMatch(
+    arena
+      .find("p")
+      .map((_, el) => plain($(el).text()))
+      .get(),
+    new RegExp(
+      String.raw`(?:^|[.!?]\s*)The main stages, the ([\p{L} .'-]{1,50}) and the ([\p{L} .'-]{1,50}) ` +
+        String.raw`have raised platforms for wheelchair users and persons with a disability\. One carer ` +
+        String.raw`can join them on the platform\.`,
+      "u",
+    ),
+  );
+  if (!viewing) return;
+  const shown = (locale: string) =>
+    new Intl.DateTimeFormat(locale, {
+      dateStyle: "long",
+      timeZone: "UTC",
+    }).format(deadline);
+  return [
+    {
+      field: "accessibility",
+      description: {
+        en:
+          `Apply to Inter by ${shown("en-GB")}. ` +
+          "The Inferno accessibility campsite requires festival and camping wristbands.",
+        de:
+          `Antrag bei Inter bis ${shown("de-DE")}. ` +
+          "Für den barrierefreien Inferno-Bereich sind Festival- und Campingarmbänder nötig.",
+        ru:
+          `Подайте заявку в Inter до ${shown("ru-RU")}. ` +
+          "Для доступной зоны Inferno нужны фестивальный и кемпинговый браслеты.",
+      },
+    },
+    {
+      field: "facilities",
+      description: {
+        en: "The Inter campsite has accessible showers, washbasins and toilets.",
+        de: "Der Inter-Campingplatz hat barrierefreie Duschen, Waschbecken und Toiletten.",
+        ru: "В кемпинге Inter есть доступные душевые, умывальники и туалеты.",
+      },
+    },
+    {
+      field: "viewing",
+      description: {
+        en: `The main stages, ${viewing[1]} and ${viewing[2]} have raised platforms. One carer may join.`,
+        de:
+          `An den Hauptbühnen, ${viewing[1]} und ${viewing[2]} gibt es erhöhte Plattformen. ` +
+          "Eine Begleitperson darf mit.",
+        ru:
+          `У главных сцен, ${viewing[1]} и ${viewing[2]} есть приподнятые площадки. ` +
+          "Разрешён один сопровождающий.",
+      },
+    },
   ] as const;
 }
