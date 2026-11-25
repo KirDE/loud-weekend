@@ -10,6 +10,7 @@ import type { FestivalSource, FestivalCandidate } from "./types.ts";
 import {
   HEAVY_STOCK,
   HEAVY_PURCHASE,
+  fetchHeavyStockDocument,
   isHeavyStockSource,
   observeHeavyStock,
 } from "./heavy-ticket-stock.ts";
@@ -35,6 +36,20 @@ export type TicketObservation = {
   warning?: string;
   ticketsUrl?: string;
 };
+
+type TicketAcquisition = (transport: {
+  fetchWithRetry: (url: string, headers: Record<string, string>) => Promise<Response>;
+  fetchOnce: (url: string, init: RequestInit) => Promise<Response>;
+  readText: (response: Response) => Promise<string>;
+}) => Promise<{ response: Response } | { html: string }>;
+
+const ticketAcquisitions = new Map<string, TicketAcquisition>([
+  [HEAVY_STOCK, fetchHeavyStockDocument],
+]);
+
+export function ticketSupplementAcquisition(url: string): TicketAcquisition | undefined {
+  return ticketAcquisitions.get(url);
+}
 
 /** A same-document response or a source adapter's reviewed canonical homepage. */
 export function matchesTicketPrimaryUrl(source: FestivalSource, finalUrl: string): boolean {

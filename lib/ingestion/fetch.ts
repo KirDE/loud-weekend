@@ -1,9 +1,9 @@
-import { HEAVY_STOCK, fetchHeavyStockDocument } from "./heavy-ticket-stock.ts";
 import { alcatrazPrimaryUrl } from "./alcatraz-ticket-stock.ts";
 import { validateBarcelonaFetch } from "./adapters/barcelona-banner.ts";
 import { RFP_STOCK, reduceRfpStockDocument } from "./rfp-ticket-stock.ts";
 import {
   matchesTicketPrimaryUrl,
+  ticketSupplementAcquisition,
   ticketSupplementUrl,
   TICKET_SUPPLEMENT,
 } from "./ticket-supplements.ts";
@@ -1138,9 +1138,10 @@ export async function fetchSource(
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
     // source overrides or authorization headers on a public ticket destination.
-    if (ticketUrl === HEAVY_STOCK) {
-      const ticket = await fetchHeavyStockDocument({
-        fetchMetadata: async (url, headers) => {
+    const acquireTicket = ticketSupplementAcquisition(ticketUrl);
+    if (acquireTicket) {
+      const ticket = await acquireTicket({
+        fetchWithRetry: async (url, headers) => {
           const result = await fetchSourceWithoutTicketSupplement(
             {
               ...source,
@@ -1155,7 +1156,7 @@ export async function fetchSource(
           attempts += result.attempts;
           return result.response;
         },
-        fetchRender: (url, init) => {
+        fetchOnce: (url, init) => {
           attempts += 1;
           return (options.fetchImpl ?? fetch)(url, init);
         },

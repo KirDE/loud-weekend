@@ -321,15 +321,15 @@ export function observeHeavyStock(
 // Only the initial public document is returned. Issued tokens and hidden form
 // state are excluded from the normalized source envelope.
 export async function fetchHeavyStockDocument({
-  fetchMetadata,
-  fetchRender,
+  fetchWithRetry,
+  fetchOnce,
   readText,
 }: {
-  fetchMetadata: (url: string, headers: Record<string, string>) => Promise<Response>;
-  fetchRender: (url: string, init: RequestInit) => Promise<Response>;
+  fetchWithRetry: (url: string, headers: Record<string, string>) => Promise<Response>;
+  fetchOnce: (url: string, init: RequestInit) => Promise<Response>;
   readText: (response: Response) => Promise<string>;
 }): Promise<{ response: Response } | { html: string }> {
-  const meta = await fetchMetadata(HEAVY_WIDGET_API, {
+  const meta = await fetchWithRetry(HEAVY_WIDGET_API, {
     accept: "application/json",
     "accept-language": "en-GB",
   });
@@ -341,7 +341,7 @@ export async function fetchHeavyStockDocument({
   const action = heavyRenderAction(JSON.parse(await readText(meta)));
   // One read-only document-render POST, no blind retry. Never forward the
   // primary's authorization/cookies or follow a token-bearing redirect.
-  const render = await fetchRender(HEAVY_STOCK, {
+  const render = await fetchOnce(HEAVY_STOCK, {
     method: "POST",
     redirect: "error",
     signal: AbortSignal.timeout(20_000),
