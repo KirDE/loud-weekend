@@ -8,7 +8,9 @@ canonical URLs in supported public route classes, non-future modification
 dates, and reciprocal EN/DE/RU
 alternatives. It checks Googlebot and Bingbot access to every URL in the
 sitemap against the fetched robots.txt rules, but requests HTML only for a
-bounded sample. A redirect, error document or incomplete response is a
+bounded sample. The HTML request uses Next.js's non-streaming metadata mode
+and checks that canonical and hreflang links are in the document head. A
+redirect, error document or incomplete response is a
 failed check, not evidence that indexing is healthy. Update the checker when
 intentionally adding a new sitemap route class.
 
