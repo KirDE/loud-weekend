@@ -46,6 +46,7 @@
     "test:persistence-db": "node --import tsx --test tests/catalog-persistence.e2e.test.ts",
     "pretest:persistence-db": "node scripts/prepare-test-db.mjs",
     "artists:add-alias": "node scripts/add-artist-aliases.mjs",
+    "lineup-days:import": "node scripts/import-lineup-days.mjs",
     "lint": "npm run lint:js && npm run lint:css && npm run lint:format && npm run lint:lines",
     "lint:js": "oxlint --deny-warnings",
     "lint:css": "stylelint \"**/*.css\" --max-warnings 0",

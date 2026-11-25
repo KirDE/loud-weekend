@@ -7,6 +7,7 @@ import Link from "next/link";
 import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
+import { LineupByDay } from "./LineupByDay";
 import type { PublicFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { FestivalOverview } from "./FestivalOverview";
 import { OfflineTripDownload } from "./OfflineTrip";
@@ -35,6 +36,7 @@ export function FestivalDetail({
   festivals,
   discoveryLineups,
   artistSlugs,
+  lineupDayArtistSlugs = [],
   playlist,
   playlistRefreshFailures,
   overview,
@@ -45,6 +47,7 @@ export function FestivalDetail({
   festivals: Festival[];
   discoveryLineups?: DiscoveryLineups;
   artistSlugs: Readonly<Record<string, string>>;
+  lineupDayArtistSlugs?: readonly string[];
   playlist?: PlaylistStatus;
   playlistRefreshFailures?: PlaylistRefreshFailures;
   overview?: PublicFestivalOverview;
@@ -259,6 +262,13 @@ export function FestivalDetail({
               ))}
             </div>
           </>
+        )}
+        {item.lineupDays && (
+          <LineupByDay
+            key={`${item.slug}:${item.editionYear}`}
+            appearances={item.lineupDays}
+            publicArtistSlugs={lineupDayArtistSlugs}
+          />
         )}
       </section>
       <PlanningTools

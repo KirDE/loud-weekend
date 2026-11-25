@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { readEditionHistory } from "@/lib/catalog/public-history";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { lineupDayProfileSlugs } from "@/lib/festival-lineup";
 import type { Language } from "@/components/LanguageProvider";
 import { FestivalDetail } from "@/components/FestivalDetail";
 import { supportedLanguages } from "@/lib/catalog/public";
@@ -72,6 +73,7 @@ export default async function LocalizedFestivalPage({
         festivals={festivals}
         discoveryLineups={discoveryLineups}
         artistSlugs={artistSlugs}
+        lineupDayArtistSlugs={lineupDayProfileSlugs(item.lineupDays, artists)}
         artistPopularity={Object.fromEntries(
           artists.map((artist) => [artist.name, artist.spotifyStats?.popularity ?? null]),
         )}
