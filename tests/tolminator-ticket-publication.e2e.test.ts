@@ -212,7 +212,8 @@ test("Tolminator publishes durable proof, rejects stale updates and preserves of
     assert.equal(fetched, false);
     assert.equal(await db.ingestionRun.count(), count);
     await db.festivalEdition.update({ where: { id: edition.id }, data: { year: 2027 } });
-    const rejectedScope = /Tolminator|Ingestion publication scope does not match/;
+    const rejectedScope =
+      /Stock publication requires matching persisted ticket-only proof|Ingestion publication scope does not match/;
     // Both the general persisted-scope fence and the product proof must fail atomically.
     for (const mutate of [
       (v: IngestionResult) => {
