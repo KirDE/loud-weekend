@@ -84,6 +84,14 @@ test("explicit sync restores an estimate on another device; sharing sends only a
   const key = "synthetic-fest:2027";
   const estimate = { currency: "EUR", people: 1, nights: 1, days: 1, ticket: 25000 };
   const documents = {};
+  const kinds = {
+    favorites: "FAVORITES",
+    collections: "COLLECTIONS",
+    "saved-filters": "SAVED_FILTERS",
+    plans: "FESTIVAL_PLANS",
+    "season-attendance": "SEASON_ATTENDANCE",
+    budgets: "TRIP_BUDGETS",
+  };
   const writes = [];
   await page.addInitScript(
     ({ key, estimate }) => {
@@ -105,6 +113,8 @@ test("explicit sync restores an estimate on another device; sharing sends only a
       const { payload, revision } = route.request().postDataJSON();
       documents[kind] = {
         id: kind,
+        kind: kinds[kind],
+        userId: "fixture",
         payload,
         revision: revision + 1,
         updatedAt: new Date().toISOString(),
@@ -142,6 +152,8 @@ test("accepting an unrelated remote revision never drops unsynced estimates", as
   const estimate = { currency: "EUR", people: 1, nights: 1, days: 1, ticket: 72500 };
   const favoriteDoc = {
     id: "favorites",
+    kind: "FAVORITES",
+    userId: "fixture",
     revision: 2,
     updatedAt: "2026-11-22T00:00:00.000Z",
     payload: { favoriteFestivals: ["synthetic-west"], favoriteArtists: [] },
