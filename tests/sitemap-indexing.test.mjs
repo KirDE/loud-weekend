@@ -99,9 +99,15 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
         metadata(links, wrapAlternates),
         path === "/de/" ? robotsMeta : "",
       ].join("");
+      const navigation =
+        path === "/editions/2027/"
+          ? '<main class="directoryPage"><a href="/archive/">Festival archive</a></main>'
+          : "";
       response
         .writeHead(200, { "content-type": "text/html" })
-        .end(`<!doctype html><html lang="${lang}"><head>${head}</head></html>`);
+        .end(
+          `<!doctype html><html lang="${lang}"><head>${head}</head><body>${navigation}</body></html>`,
+        );
     } else {
       response.writeHead(404).end();
     }

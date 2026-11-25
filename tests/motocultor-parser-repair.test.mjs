@@ -11,6 +11,11 @@ const source = parserSource("motocultor", {
   url: "https://www.motocultor-festival.com/actualites/",
 });
 const at = "2026-10-10T09:41:03.674Z";
+const ticketHome = await readFile(
+  new URL("./fixtures/ticket-status/motocultor-regular-pass.html", import.meta.url),
+  "utf8",
+);
+const htmlHeaders = { "content-type": "text/html" };
 const html = await readFile(
   new URL("./fixtures/official-markup/motocultor-announcement.html", import.meta.url),
   "utf8",
@@ -153,10 +158,12 @@ test("actual discovery fetches official article; 403 stays a source failure", as
     maxAttempts: 1,
     fetchImpl: async (url) => {
       seen.push(url);
-      return new Response(seen.length === 1 ? news : html, { status: 200 });
+      return new Response(seen.length === 1 ? news : seen.length === 2 ? html : ticketHome, {
+        headers: htmlHeaders,
+      });
     },
   });
-  assert.equal(seen.length, 2);
+  assert.equal(seen.length, 3);
   assert.match(seen[1], /les-premiers-noms-de-ledition-2027/);
   assert.equal(parse(await result.response.text()).lineup.length, 19);
   const denied = await fetchSource(source, {
@@ -221,7 +228,8 @@ test(
       fetchImpl: async (url) => {
         seen.push(url);
         return new Response(
-          seen.length === 1 ? "<h1>Motocultor</h1>" : seen.length === 2 ? astroNews : astroNew,
+          ["<h1>Motocultor</h1>", astroNews, astroNew, ticketHome][seen.length - 1],
+          { headers: htmlHeaders },
         );
       },
     });
@@ -229,25 +237,22 @@ test(
       home.url,
       source.url,
       "https://www.motocultor-festival.com/actualites/nouveaux-noms/",
+      home.url,
     ]);
     const c = parse(await r.response.text());
     assert.deepEqual(c.lineup, added);
     assert.deepEqual(c.warnings, []);
     assert.equal(c.lineupScope, "announcement");
-    const result = evaluateCandidate(current, c);
+    const stockCurrent = { ...current, ticketStatus: "available", ticketsUrl: home.url };
+    const result = evaluateCandidate(stockCurrent, c);
     assert.equal(result.changes.length, 17);
     assert.ok(result.changes.every((x) => x.kind === "artist_added"));
     assert.deepEqual(result.reviewReasons, []);
-    for (const field of [
-      "headliners",
-      "startDate",
-      "endDate",
-      "city",
-      "ticketsUrl",
-      "ticketStatus",
-    ])
+    for (const field of ["headliners", "startDate", "endDate", "city"])
       assert.equal(c[field], undefined);
-    const alreadyUpdated = { ...current, lineup: [...current.lineup, ...added] };
+    assert.equal(c.ticketStatus, "available");
+    assert.equal(c.ticketsUrl, home.url);
+    const alreadyUpdated = { ...stockCurrent, lineup: [...current.lineup, ...added] };
     assert.deepEqual(evaluateCandidate(alreadyUpdated, c).changes, []);
   },
 );

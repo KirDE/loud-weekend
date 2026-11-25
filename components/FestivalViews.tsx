@@ -9,6 +9,7 @@ import {
   monthIndex,
 } from "@/lib/festival-dates";
 import { calendarFile } from "@/lib/planning";
+import { FestivalLocationMap } from "./FestivalLocationMap";
 import { useLanguage, type Language } from "./LanguageProvider";
 
 const labels: Record<
@@ -25,9 +26,6 @@ const labels: Record<
     area: string;
     map: string;
     mapHelp: string;
-    mapLabel: string;
-    europe: string;
-    marker: (country: string, count: number) => string;
   }
 > = {
   en: {
@@ -54,10 +52,7 @@ const labels: Record<
     download: "Download full festival calendar",
     area: "EUROPE-WIDE",
     map: "Festival map",
-    mapHelp: "Markers group festivals by country. Open a marker to choose a festival.",
-    mapLabel: "Map of Europe with festival markers",
-    europe: "EUROPE",
-    marker: (country, count) => `${country}: ${count} festivals`,
+    mapHelp: "Open a marker to see festivals at that location.",
   },
   de: {
     months: [
@@ -83,11 +78,7 @@ const labels: Record<
     download: "Vollständigen Festivalkalender herunterladen",
     area: "EUROPAWEIT",
     map: "Festivalkarte",
-    mapHelp:
-      "Die Markierungen gruppieren Festivals nach Ländern. Öffne eine Markierung, um ein Festival auszuwählen.",
-    mapLabel: "Europakarte mit Festival-Markierungen",
-    europe: "EUROPA",
-    marker: (country, count) => `${country}: ${count} Festivals`,
+    mapHelp: "Öffne eine Markierung, um die Festivals an diesem Standort zu sehen.",
   },
   ru: {
     months: [
@@ -113,32 +104,9 @@ const labels: Record<
     download: "Скачать полный календарь фестивалей",
     area: "ПО ВСЕЙ ЕВРОПЕ",
     map: "Карта фестивалей",
-    mapHelp: "Метки объединяют фестивали по странам. Откройте метку, чтобы выбрать фестиваль.",
-    mapLabel: "Карта Европы с метками фестивалей",
-    europe: "ЕВРОПА",
-    marker: (country, count) => `${country}: фестивалей — ${count}`,
+    mapHelp: "Откройте метку, чтобы увидеть фестивали в этом месте.",
   },
 };
-const POINTS: Record<string, [number, number]> = {
-  AT: [57, 61],
-  BE: [42, 45],
-  CH: [48, 64],
-  CZ: [60, 49],
-  DE: [51, 47],
-  DK: [52, 31],
-  ES: [29, 75],
-  FI: [72, 16],
-  FR: [39, 61],
-  GB: [29, 40],
-  IT: [55, 75],
-  NL: [44, 39],
-  NO: [48, 15],
-  PL: [68, 45],
-  RO: [76, 64],
-  SE: [58, 17],
-  SI: [70, 74],
-};
-
 export function FestivalViews({ festivals }: { festivals: Festival[] }) {
   const { language, locale } = useLanguage();
   const t = labels[language];
@@ -170,7 +138,7 @@ export function FestivalViews({ festivals }: { festivals: Festival[] }) {
             <button onClick={() => setSelectedMonth((value) => value - 1)} aria-label={t.previous}>
               ←
             </button>
-            <strong>
+            <strong role="status" aria-live="polite" aria-atomic="true">
               {t.months[month]} {year}
             </strong>
             <button onClick={() => setSelectedMonth((value) => value + 1)} aria-label={t.next}>
@@ -214,34 +182,7 @@ export function FestivalViews({ festivals }: { festivals: Festival[] }) {
           </div>
           <p>{t.mapHelp}</p>
         </div>
-        <div className="europeMap" role="img" aria-label={t.mapLabel}>
-          <div className="mapLand" aria-hidden="true">
-            {t.europe}
-          </div>
-          {Object.entries(POINTS).map(([code, [left, top]]) => {
-            const items = festivals.filter((f) => f.countryCode === code && f.city);
-            return items.length ? (
-              <details
-                className="mapMarker"
-                style={{ left: `${left}%`, top: `${top}%` }}
-                key={code}
-              >
-                <summary aria-label={t.marker(items[0].country, items.length)}>
-                  {items.length}
-                  <span>{code}</span>
-                </summary>
-                <div>
-                  {items.map((f) => (
-                    <Link href={`/festivals/${f.slug}/`} key={f.slug}>
-                      <strong>{f.name}</strong>
-                      <small>{f.city}</small>
-                    </Link>
-                  ))}
-                </div>
-              </details>
-            ) : null;
-          })}
-        </div>
+        <FestivalLocationMap festivals={festivals} />
       </section>
     </>
   );

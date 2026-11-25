@@ -8,18 +8,18 @@ export type ReviewChange = {
   detected: string;
   source: string;
   confidence: number;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "conflict";
   conflict?: boolean;
 };
 
 export type ParserRun = {
   festival: string;
   source: string;
-  status: "healthy" | "warning" | "failed";
+  status: "healthy" | "warning" | "failed" | "running";
   lastRun: string;
   durationMs: number;
   extracted: number;
-  message: string;
+  message: string | null;
   log: unknown;
 };
 

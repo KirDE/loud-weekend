@@ -4,10 +4,23 @@ import { test } from "node:test";
 import {
   announcedArtists,
   hasAnnouncedLineup,
+  lineupDayProfileSlugs,
   lineupPreviewArtists,
 } from "../lib/festival-lineup.ts";
 
 const lineupOnly = { headliners: [], lineup: ["VNV Nation", "The Sisters of Mercy"] };
+
+test("day allocations only link to profiles for their exact canonical slugs", () => {
+  const sameName = "Synthetic Twin Act";
+  const appearances = [
+    { artist: sameName, artistSlug: "twin-east", dates: [], cancelled: false },
+    { artist: sameName, artistSlug: "twin-west", dates: [], cancelled: true },
+  ];
+  assert.deepEqual(lineupDayProfileSlugs(appearances, [{ name: sameName, slug: "twin-east" }]), [
+    "twin-east",
+  ]);
+  assert.deepEqual(lineupDayProfileSlugs(appearances, [{ name: sameName, slug: "other" }]), []);
+});
 
 test("lineup-only festivals count as announced and preview their published acts", () => {
   assert.equal(hasAnnouncedLineup(lineupOnly), true);
