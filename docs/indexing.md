@@ -4,11 +4,13 @@
 database. After an approved release, run `node scripts/check-indexing.mjs`
 from an installed checkout to check the public site without credentials. It
 checks the default robots group and sitemap reference, XML structure, unique
-canonical URLs, non-future modification dates, and reciprocal EN/DE/RU
+canonical URLs in supported public route classes, non-future modification
+dates, and reciprocal EN/DE/RU
 alternatives. It checks Googlebot and Bingbot access to every URL in the
 sitemap against the fetched robots.txt rules, but requests HTML only for a
 bounded sample. A redirect, error document or incomplete response is a
-failed check, not evidence that indexing is healthy.
+failed check, not evidence that indexing is healthy. Update the checker when
+intentionally adding a new sitemap route class.
 
 `lastmod` comes from published changes to fields shown on the corresponding
 page, or the persisted edition snapshot shown on an edition dossier. Directory

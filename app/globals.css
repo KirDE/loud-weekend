@@ -3597,6 +3597,24 @@ summary:focus-visible {
   max-width: 28rem;
 }
 
+.ticketOfferSection {
+  margin-block: 2rem;
+}
+
+.ticketOfferGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+}
+
+.ticketOfferGrid article {
+  border: 1px solid currentcolor;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .groupTrips {
   overflow-wrap: anywhere;
 }

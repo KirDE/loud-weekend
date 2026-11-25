@@ -291,6 +291,7 @@ test("repository projects serializable Spotify stats and suppresses a stale or u
     freshness: {},
   });
   const row = {
+    id: "synthetic-edition",
     festival: {
       slug: "synthetic-fest",
       name: "Synthetic Fest",
@@ -326,6 +327,7 @@ test("repository projects serializable Spotify stats and suppresses a stale or u
   const repository = new DatabaseCatalogRepository({
     artist: { findMany: async () => [f.artist] },
     festivalEdition: { findMany: async () => [row] },
+    ticketOfferProposalSnapshot: { findMany: async () => [] },
   });
   let snapshot = await repository.read();
   assert.equal(snapshot.artists[0].spotifyStats.followers, 123);
