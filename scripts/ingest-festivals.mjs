@@ -1,3 +1,4 @@
+import { isCampingSourceUrl } from "../lib/ingestion/adapters/camping-guidance.ts";
 import { organizerReviewCollector } from "../lib/ingestion/organizer-collector.ts";
 import { drainImportEvents } from "../lib/ingestion/import-events.ts";
 import { sendImportEvent, transportConfigured } from "../lib/ingestion/import-event-transport.mjs";
@@ -243,7 +244,10 @@ const summary = {
 };
 
 for (const source of selected) {
-  const healthUrl = isIndependentTicketUrl(source.url) ? source.url : undefined;
+  const healthUrl =
+    isIndependentTicketUrl(source.url) || isCampingSourceUrl(source.festivalSlug, source.url)
+      ? source.url
+      : undefined;
   let leaseCompleted = false;
   let publicationCommitted = false;
   let failureOutcome = "pre_attempt_error";
