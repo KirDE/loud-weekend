@@ -56,6 +56,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const directoryDate = latestDate([publication?.directory ?? undefined, nameDate]);
     const appearanceDate = latestDate([publication?.appearance ?? undefined, nameDate]);
     homeDates.push(lastModified);
+    if (festival.venue) homeDates.push(publication?.homeVenue ?? undefined);
     addLocalized(`/festivals/${slug}/`, lastModified);
     for (const name of [...headliners, ...lineup]) {
       appearanceDates.set(name, latestDate([appearanceDates.get(name), appearanceDate]));
