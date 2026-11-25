@@ -61,7 +61,7 @@ function result(artist: string, overrides: Partial<IngestionResult> = {}): Inges
   };
 }
 
-async function persist(value: IngestionResult) {
+async function persist(value: IngestionResult, endedAt = new Date(value.fetchedAt)) {
   const run = await createIngestionRun(db, {
     trigger: "TEST",
     sourceCommit: suffix,
@@ -74,8 +74,8 @@ async function persist(value: IngestionResult) {
     finalUrl: value.sourceUrl,
     httpStatus: 200,
     durationMs: 1,
-    startedAt: new Date(value.fetchedAt),
-    endedAt: new Date(value.fetchedAt),
+    startedAt: endedAt,
+    endedAt,
     result: value,
   });
 }
@@ -258,6 +258,39 @@ test("publication cannot replace the timestamp of a persisted observation", asyn
       .reviewState,
     "PENDING",
   );
+});
+
+test("publication rejects persisted observation times outside completed history", async () => {
+  const artist = `Impossible observation ${suffix}`;
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+  });
+  const publications = await db.catalogPublication.count();
+  const jobs = await db.catalogPlaylistRefresh.count();
+  const now = Date.now();
+  const timestampPairs = [
+    { fetchedAt: new Date(now - 30_000), endedAt: new Date(now - 60_000) },
+    { fetchedAt: new Date(now + 60_000), endedAt: new Date(now + 60_000) },
+  ];
+  for (const { fetchedAt, endedAt } of timestampPairs) {
+    const value = result(artist);
+    value.fetchedAt = value.candidate.fetchedAt = fetchedAt.toISOString();
+    for (const evidence of value.candidate.evidence) evidence.observedAt = value.fetchedAt;
+    const attempt = await persist(value, endedAt);
+    await assert.rejects(
+      publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
+      /observation time is later than the completed attempt or current time/,
+    );
+    const saved = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    assert.equal(saved.reviewState, "PENDING");
+  }
+  assert.equal(await db.catalogPublication.count(), publications);
+  assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
+  assert.equal(await db.artist.count({ where: { name: artist } }), 0);
+  const unchanged = await db.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } });
+  assert.deepEqual(unchanged.sourceUpdatedAt, edition.sourceUpdatedAt);
 });
 
 test("a delayed ticket observation does not backdate the edition", async () => {
@@ -2105,6 +2138,67 @@ test("Provinssi provenance drift rolls back catalogue, completeness and provider
   }
 });
 
+test("a scoped refresh approval rejects invalid calendar dates and reversed ranges", async () => {
+  const rollback = new Error("rollback scoped date fixture");
+  await assert.rejects(
+    db.$transaction(async (tx) => {
+      const edition = await tx.festivalEdition.findFirstOrThrow({
+        where: { festival: { slug: "synthetic-fest" }, recordState: "CURRENT" },
+      });
+      const run = await tx.adminParserRun.create({
+        data: {
+          festivalSlug: "synthetic-fest",
+          sourceId: "https://festival.example.test/",
+          adapter: "fixture",
+          status: "SUCCEEDED",
+          startedAt: new Date("2026-01-01T10:00:00Z"),
+          finishedAt: new Date("2026-01-01T10:01:00Z"),
+          log: [],
+        },
+      });
+      const change = {
+        id: randomUUID(),
+        resourceKey: "synthetic-fest",
+        field: "startDate",
+        beforeValue: edition.startDate!.toISOString().slice(0, 10),
+        afterValue: "2027-06-13",
+        sourceEvidence: {
+          kind: "scoped-refresh",
+          editionId: edition.id,
+          editionYear: edition.year,
+        },
+        parserRunId: run.id,
+      };
+      const approve = (afterValue: string) =>
+        publishAdminFestivalChange(tx, {
+          change: { ...change, afterValue },
+          actorLabel: "synthetic-date-review",
+        });
+      await assert.rejects(approve("2027-06-31"), /Festival dates must be valid calendar dates/);
+      await assert.rejects(
+        approve(change.afterValue),
+        /Festival end date cannot precede the start date/,
+      );
+      assert.equal(
+        await tx.catalogPublication.count({ where: { sourceId: `admin:${change.id}` } }),
+        0,
+      );
+      assert.deepEqual(
+        await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } }),
+        edition,
+      );
+
+      // A one-day interval remains valid.
+      await approve("2027-06-12");
+      const current = await tx.festivalEdition.findUniqueOrThrow({ where: { id: edition.id } });
+      assert.equal(current.startDate?.toISOString().slice(0, 10), "2027-06-12");
+      assert.equal(current.endDate?.toISOString().slice(0, 10), "2027-06-12");
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
+});
+
 test("free admission survives ingestion/replay and stale rollback without ticket offers", async () => {
   const { ticketPresentation, hasAvailableTickets } = await import("../lib/tickets.ts");
   const { festivalMusicEvent } = await import("../lib/seo.ts");
@@ -2263,23 +2357,25 @@ test("explicit ticket states survive reviewed publication and canonical public r
   }
 });
 
-for (const slug of ["wacken-open-air", "download", "rock-am-ring", "rock-im-park"]) {
+for (const slug of ["wacken-open-air", "download", "rock-am-ring", "rock-im-park", "motocultor"]) {
   test(`${slug}: fetch → producer → durable ticket evidence → canonical readback and replay`, async () => {
     const { fetchSource } = await import("../lib/ingestion/fetch.ts");
     const { TICKET_SUPPLEMENT, ticketSupplementUrl } =
       await import("../lib/ingestion/ticket-supplements.ts");
     const source = parserSource(slug, {
-      url:
-        slug === "download"
-          ? "https://downloadfestival.co.uk/"
-          : slug === "wacken-open-air"
-            ? "https://www.wacken.com/"
-            : `https://www.${slug}.com/`,
+      url: {
+        download: "https://downloadfestival.co.uk/",
+        motocultor: "https://www.motocultor-festival.com/",
+        "wacken-open-air": "https://www.wacken.com/",
+        "rock-am-ring": "https://www.rock-am-ring.com/",
+        "rock-im-park": "https://www.rock-im-park.com/",
+      }[slug]!,
       strategies: ["html_fallback"],
     });
     const ticketUrl = ticketSupplementUrl(source)!;
     const fixtureBySlug: Record<string, string> = {
       download: "download-regular-admission",
+      motocultor: "motocultor-regular-pass",
       "wacken-open-air": "wacken-standard-pass",
     };
     const fixtureName = fixtureBySlug[slug] ?? `${slug}-regular-admission`;
@@ -2900,6 +2996,175 @@ test("I-Days direct ticketsUrl-only publication validates durable proof and atom
       assert.equal(after.ticketStatus, "available");
       assert.equal(
         (await db.ingestionCandidate.findUniqueOrThrow({ where: { id: stored.id } })).reviewState,
+        "PENDING",
+      );
+    }
+  }
+});
+
+test("PolandRock admission publishes with durable proof and rejects drift or stale writes", async () => {
+  const { POLANDROCK_NEWSROOM } = await import("../lib/ingestion/adapters/polandrock-admission.ts");
+  const source = {
+    festivalSlug: "polandrock",
+    url: POLANDROCK_NEWSROOM,
+    strategies: ["html_fallback"] as const,
+    editionYear: 2027,
+    refreshPolicy: "daily" as const,
+    enabled: true,
+  };
+  const html = await readFile(
+    new URL("./fixtures/official-markup/polandrock-admission.html", import.meta.url),
+    "utf8",
+  );
+  const festival = await db.festival.upsert({
+    where: { slug: "polandrock" },
+    create: {
+      slug: "polandrock",
+      name: "Synthetic PolandRock",
+      country: "Testland",
+      countryCode: "PL",
+      officialUrl: "https://polandrockfestival.pl/",
+      genres: [],
+    },
+    update: {},
+  });
+  const edition = await db.festivalEdition.upsert({
+    where: { festivalId_year: { festivalId: festival.id, year: 2027 } },
+    create: {
+      festivalId: festival.id,
+      year: 2027,
+      status: "PARTIAL",
+      completeness: "PARTIAL",
+      recordState: "CURRENT",
+      ticketStatus: "UNKNOWN",
+      startDate: new Date("2027-07-29"),
+      endDate: new Date("2027-07-31"),
+      sourceUpdatedAt: new Date(),
+    },
+    update: { ticketStatus: "UNKNOWN" },
+  });
+  const current = async () =>
+    (await readCatalog({ database: db })).festivals.find((f) => f.slug === "polandrock")!;
+  const aliasArtists = await db.artist.findMany({
+    select: { id: true, slug: true, name: true, aliases: true },
+  });
+  assert.ok(aliasArtists.length > 0);
+  const make = async () => {
+    const calls: string[] = [];
+    const response = await fetchSource(
+      { ...source, strategies: [...source.strategies] },
+      {
+        maxAttempts: 1,
+        fetchImpl: async (u) => {
+          calls.push(String(u));
+          return new Response(html);
+        },
+      },
+    );
+    assert.deepEqual(calls, [source.url]);
+    const c = extractFestivalCandidate(
+      await response.response.text(),
+      { ...source, strategies: [...source.strategies] },
+      new Date().toISOString(),
+    );
+    const r = evaluateCandidate(await current(), c, aliasArtists);
+    assert.deepEqual(r.reviewReasons, []);
+    return r;
+  };
+  const counts = () =>
+    Promise.all([
+      db.catalogPublication.count(),
+      db.catalogPlaylistRefresh.count(),
+      db.festivalPlaylist.count(),
+    ]);
+  for (const drift of [
+    "none",
+    "missing",
+    "source",
+    "time",
+    "value",
+    "normalized-year",
+    "stripped-source",
+    "stripped-slug",
+    "redirected",
+    "stale",
+  ]) {
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: { ticketStatus: "UNKNOWN" },
+    });
+    const value = await make(),
+      attempt = await persist(value);
+    const saved = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    const where = { candidateId: saved.id, field: "ticketStatus" };
+    if (drift === "missing") await db.ingestionEvidence.deleteMany({ where });
+    if (drift === "source")
+      await db.ingestionEvidence.updateMany({
+        where,
+        data: { sourceUrl: "https://foreign.test/" },
+      });
+    if (drift === "time")
+      await db.ingestionEvidence.updateMany({
+        where,
+        data: { observedAt: new Date("2020-01-01") },
+      });
+    if (drift === "value")
+      await db.ingestionEvidence.updateMany({ where, data: { observedValue: "available" } });
+    if (drift === "normalized-year")
+      await db.ingestionCandidate.update({
+        where: { id: saved.id },
+        data: { normalized: { ...(saved.normalized as any), observedEditionYears: [2026] } },
+      });
+    if (drift === "stripped-source") {
+      value.sourceUrl = "https://polandrockfestival.pl/";
+      value.candidate.sourceUrl = value.sourceUrl;
+    }
+    if (drift === "stripped-slug") {
+      value.festivalSlug = "synthetic-fest";
+      value.candidate.festivalSlug = "synthetic-fest";
+    }
+    if (drift === "redirected")
+      await db.ingestionAttempt.update({
+        where: { id: attempt.id },
+        data: { finalUrl: "https://foreign.test/" },
+      });
+    if (drift === "stale")
+      await db.festivalEdition.update({
+        where: { id: edition.id },
+        data: { ticketStatus: "SOLD_OUT" },
+      });
+    const before = await counts();
+    if (drift === "none") {
+      const pub = await publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: value,
+        sourceCommit: suffix,
+      });
+      assert(pub);
+      assert.equal((await current()).ticketStatus, "free");
+      assert.deepEqual((await make()).changes, []);
+      assert.equal(
+        (
+          await publishIngestionResult(db, {
+            attemptId: attempt.id,
+            result: value,
+            sourceCommit: suffix,
+          })
+        )?.id,
+        pub.id,
+      );
+      assert.deepEqual(await counts(), [before[0] + 1, before[1], before[2]]);
+    } else {
+      await assert.rejects(
+        publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
+        /Free admission publication|Stale ticketStatus|Ingestion publication scope does not match/,
+      );
+      assert.deepEqual(await counts(), before);
+      assert.equal((await current()).ticketStatus, drift === "stale" ? "sold_out" : "unknown");
+      assert.equal(
+        (await db.ingestionCandidate.findUniqueOrThrow({ where: { id: saved.id } })).reviewState,
         "PENDING",
       );
     }

@@ -69,6 +69,7 @@ function snapshot(planner: PlannerState): PlannerState {
     favoriteFestivals: planner.favoriteFestivals,
     favoriteArtists: planner.favoriteArtists,
     attendance: planner.attendance,
+    seasonAttendance: planner.seasonAttendance,
     tripBudgets: planner.tripBudgets,
     playlistFestivals: planner.playlistFestivals,
     playlistExcludedArtists: planner.playlistExcludedArtists,

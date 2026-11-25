@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: '.node-version'
+          node-version-file: ".node-version"
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run lint
@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: '.node-version'
+          node-version-file: ".node-version"
           cache: npm
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -87,6 +87,10 @@ jobs:
         env:
           TEST_DB_TIMEZONE: Europe/Berlin
       - run: printf "ALTER DATABASE festival_integration SET TimeZone TO 'UTC';" | npx prisma db execute --stdin
+      - run: >-
+          node --import tsx --test tests/google-attempt.e2e.test.ts tests/google-accounts.e2e.test.ts
+        env:
+          AUTH_SECRET: google-integration-test-only-not-for-runtime
       - run: npm run test:integration
       - run: npm run test:admin:integration
       - run: npx prisma migrate reset --force
@@ -143,7 +147,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: '.node-version'
+          node-version-file: ".node-version"
       - name: Run full browser suite in the prebuilt Playwright image
         env:
           PLAYWRIGHT_IMAGE_NAME: mcr.microsoft.com/playwright:v1.65.1-noble

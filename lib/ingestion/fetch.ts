@@ -1,6 +1,7 @@
 import { alcatrazPrimaryUrl } from "./alcatraz-ticket-stock.ts";
 import { validateBarcelonaFetch } from "./adapters/barcelona-banner.ts";
 import { RFP_STOCK, reduceRfpStockDocument } from "./rfp-ticket-stock.ts";
+import { isPolandrockAdmissionSource } from "./adapters/polandrock-admission.ts";
 import {
   matchesTicketPrimaryUrl,
   ticketSupplementUrl,
@@ -93,7 +94,7 @@ import {
   GRASPOP_DOCUMENTS,
 } from "./adapters/graspop.ts";
 
-export type FetchAttempt = { response: Response; attempts: number };
+export type FetchAttempt = { response: Response; attempts: number; verifiedPrimaryUrl?: string };
 export type FetchOptions = {
   fetchImpl?: typeof fetch;
   sleep?: (milliseconds: number) => Promise<void>;
@@ -163,6 +164,11 @@ async function fetchSourceWithoutTicketSupplement(
 
   let initial = await fetchWithRetry(source.fetchUrl ?? source.url);
   validateBarcelonaFetch(source, initial);
+  if (isPolandrockAdmissionSource(source)) {
+    if (initial.response.ok && initial.response.url && initial.response.url !== source.url)
+      throw new Error("Pol'and'Rock newsroom changed its official identity");
+    return initial;
+  }
   if (
     source.festivalSlug === "area53" &&
     (source.url !== "https://area53festival.at/de/" ||
@@ -646,7 +652,16 @@ async function fetchSourceWithoutTicketSupplement(
           attempts: initial.attempts,
         });
       const linked = await fetchWithRetry(linkedUrl);
-      return { response: linked.response, attempts: initial.attempts + linked.attempts };
+      if (linked.response.ok && linked.response.url && linked.response.url !== linkedUrl)
+        throw Object.assign(
+          new Error("Motocultor announcement changed its discovered official identity"),
+          { attempts: initial.attempts + linked.attempts },
+        );
+      return {
+        response: linked.response,
+        attempts: initial.attempts + linked.attempts,
+        verifiedPrimaryUrl: linkedUrl,
+      };
     }
   }
 
@@ -1112,6 +1127,7 @@ export async function fetchSource(
   try {
     if (
       !matchesTicketPrimaryUrl(source, primary.response.url) &&
+      primary.response.url !== primary.verifiedPrimaryUrl &&
       !(source.festivalSlug === "alcatraz" && alcatrazPrimaryUrl(source.url, primary.response.url))
     )
       throw new Error("Official ticket primary source changed identity");

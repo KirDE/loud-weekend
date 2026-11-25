@@ -1,87 +1,107 @@
 import { hasArchiveRecords } from "@/lib/catalog/browse";
-import { availableFestivalMonths } from "@/lib/festival-dates";
 import type { MetadataRoute } from "next";
 import { supportedLanguages } from "@/lib/catalog/public";
-import { publicSeasonEditions, seasonYears } from "@/lib/catalog/seasons";
-import { getCatalog } from "@/lib/catalog/repository";
-import { SITE_ORIGIN } from "@/lib/seo";
+import { DatabaseCatalogRepository } from "@/lib/catalog/repository";
+import { editionKey, latestDate } from "@/lib/catalog/freshness";
+import { readSitemapPublications } from "@/lib/catalog/sitemap-publications";
+import { guideTopics } from "@/lib/festival-guides";
+import { festivalOverlapsMonth } from "@/lib/festival-dates";
+import { localizedAlternates, SITE_ORIGIN } from "@/lib/seo";
+import { publicSeasonEditions } from "@/lib/catalog/seasons";
 
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const { festivals, artists, editions, freshness } = await getCatalog({ includeFreshness: true });
+  const { db } = await import("@/lib/db");
+  const now = new Date();
+  const [{ festivals, artists, editions }, publications] = await db.$transaction(
+    async (tx) => {
+      const catalog = await new DatabaseCatalogRepository(tx).read();
+      return [catalog, await readSitemapPublications(tx, now)] as const;
+    },
+    { isolationLevel: "RepeatableRead" },
+  );
+  const entries = new Map<string, MetadataRoute.Sitemap[number]>();
+  const sharedNames = new Map<string, string | undefined>();
+  for (const { slug, sharedName } of publications.values()) {
+    sharedNames.set(slug, latestDate([sharedNames.get(slug), sharedName ?? undefined]));
+  }
+
+  const add = (path: string, lastModified?: string, languages?: Record<string, string>) => {
+    const url = SITE_ORIGIN + path;
+    entries.set(url, {
+      url,
+      ...(lastModified && { lastModified }),
+      ...(languages && { alternates: { languages } }),
+    });
+  };
+  const addLocalized = (path: string, lastModified?: string) => {
+    const paths = localizedAlternates(path);
+    const languages = Object.fromEntries(
+      Object.entries(paths).map(([lang, href]) => [lang, SITE_ORIGIN + href]),
+    );
+    for (const href of Object.values(paths)) add(href, lastModified, languages);
+  };
+
+  const homeDates: (string | undefined)[] = [];
+  const appearanceDates = new Map<string, string | undefined>();
+  const countries = new Map<string, string | undefined>();
+  const months = new Map<number, string | undefined>();
+  for (const festival of festivals) {
+    const { slug, editionYear, countryCode, lineup, headliners } = festival;
+    const publication =
+      editionYear === undefined ? undefined : publications.get(editionKey(slug, editionYear));
+    const nameDate = sharedNames.get(slug);
+    const lastModified = latestDate([publication?.festival ?? undefined, nameDate]);
+    const directoryDate = latestDate([publication?.directory ?? undefined, nameDate]);
+    const appearanceDate = latestDate([publication?.appearance ?? undefined, nameDate]);
+    homeDates.push(lastModified);
+    addLocalized(`/festivals/${slug}/`, lastModified);
+    for (const name of [...headliners, ...lineup]) {
+      appearanceDates.set(name, latestDate([appearanceDates.get(name), appearanceDate]));
+    }
+    if (/^[A-Z]{2}$/.test(countryCode)) {
+      countries.set(countryCode, latestDate([countries.get(countryCode), directoryDate]));
+    }
+    for (let month = 1; month <= 12; month += 1) {
+      if (festivalOverlapsMonth(festival, month))
+        months.set(month, latestDate([months.get(month), directoryDate]));
+    }
+  }
+
+  addLocalized("/", latestDate(homeDates));
+  for (const { name, slug } of artists)
+    addLocalized(`/artists/${slug}/`, appearanceDates.get(name));
+  for (const [code, date] of countries) add(`/countries/${code.toLowerCase()}/`, date);
+  for (const [month, date] of months) add(`/months/${String(month).padStart(2, "0")}/`, date);
+
+  const years = new Map<number, string | undefined>();
+  const archiveDates: (string | undefined)[] = [];
+  for (const { slug, editionYear, snapshotAt } of editions) {
+    const publication = publications.get(editionKey(slug, editionYear));
+    const nameDate = sharedNames.get(slug);
+    const validSnapshot =
+      snapshotAt && Date.parse(snapshotAt) <= now.getTime() ? snapshotAt : undefined;
+    add(
+      `/festivals/${slug}/${editionYear}/`,
+      latestDate([publication?.edition ?? undefined, nameDate, validSnapshot]),
+    );
+  }
   const publicEditions = publicSeasonEditions(editions);
-  const editionYears = seasonYears(publicEditions);
-  const countries = [...new Set(festivals.map((item) => item.countryCode.toLowerCase()))];
-  const months = availableFestivalMonths(festivals).map((month) => String(month).padStart(2, "0"));
-  return [
-    {
-      url: `${SITE_ORIGIN}/`,
-      lastModified: freshness.lastPublishedAt,
-      changeFrequency: "daily",
-      priority: 1,
-    },
-    ...festivals.map(({ slug, freshness }) => ({
-      url: `${SITE_ORIGIN}/festivals/${slug}/`,
-      lastModified: freshness?.lastPublishedAt,
-      changeFrequency: "daily" as const,
-      priority: 0.8,
-    })),
-    ...artists.map(({ slug }) => ({
-      url: `${SITE_ORIGIN}/artists/${slug}/`,
-      changeFrequency: "weekly" as const,
-      priority: 0.6,
-    })),
-    ...countries.map((code) => ({
-      url: `${SITE_ORIGIN}/countries/${code}/`,
-      changeFrequency: "weekly" as const,
-      priority: 0.7,
-    })),
-    ...months.map((month) => ({
-      url: `${SITE_ORIGIN}/months/${month}/`,
-      changeFrequency: "weekly" as const,
-      priority: 0.7,
-    })),
-    ...supportedLanguages.map((lang) => ({
-      url: `${SITE_ORIGIN}/${lang}/`,
-      lastModified: freshness.lastPublishedAt,
-      changeFrequency: "weekly" as const,
-      priority: 0.8,
-    })),
-    ...editionYears.flatMap((year) =>
-      ["", "/en", "/de", "/ru"].map((prefix) => ({
-        url: `${SITE_ORIGIN}${prefix}/editions/${year}/`,
-        changeFrequency: "monthly" as const,
-        priority: 0.6,
-      })),
-    ),
-    ...editions.map(({ slug, editionYear, snapshotAt }) => ({
-      url: `${SITE_ORIGIN}/festivals/${slug}/${editionYear}/`,
-      lastModified: snapshotAt,
-      changeFrequency: editionYear < 2027 ? ("yearly" as const) : ("weekly" as const),
-      priority: 0.6,
-    })),
-    {
-      url: `${SITE_ORIGIN}/browse/`,
-      changeFrequency: "weekly",
-      priority: 0.6,
-    },
-    ...(hasArchiveRecords(publicEditions)
-      ? [
-          {
-            url: `${SITE_ORIGIN}/archive/`,
-            changeFrequency: "monthly" as const,
-            priority: 0.5,
-          },
-        ]
-      : []),
-    {
-      url: `${SITE_ORIGIN}/submit/`,
-      changeFrequency: "monthly",
-      priority: 0.4,
-    },
-    ...supportedLanguages.flatMap((lang) =>
-      ["about", "faq"].map((page) => ({ url: `${SITE_ORIGIN}/${lang}/${page}/` })),
-    ),
-  ];
+  for (const { slug, editionYear, recordState } of publicEditions) {
+    const publication = publications.get(editionKey(slug, editionYear));
+    const listingDate = latestDate([publication?.listing ?? undefined, sharedNames.get(slug)]);
+    years.set(editionYear, latestDate([years.get(editionYear), listingDate]));
+    if (recordState === "archived" || recordState === "tracking") archiveDates.push(listingDate);
+  }
+  for (const [year, date] of years) addLocalized(`/editions/${year}/`, date);
+  add("/browse/");
+  if (hasArchiveRecords(publicEditions)) add("/archive/", latestDate(archiveDates));
+  add("/submit/");
+  for (const topic of guideTopics) addLocalized(`/guides/${topic}/`);
+  for (const language of supportedLanguages) {
+    add(`/${language}/about/`);
+    add(`/${language}/faq/`);
+  }
+  return [...entries.values()];
 }

@@ -37,26 +37,33 @@ export function useTimetablePlan(slug?: string, year?: number) {
     useSyncExternalStore(subscribe, snapshot, () => empty),
   );
 
-  function update(action: (ids: string[]) => string[]) {
-    if (!key) return false;
+  function update(action: (ids: string[]) => string[], expected?: string[]) {
+    if (!key) return "failed";
     try {
-      const next = action(parsePerformanceSelections(read(key)));
+      const current = parsePerformanceSelections(localStorage.getItem(key) ?? empty);
+      if (
+        expected &&
+        (current.length !== expected.length || current.some((id, i) => id !== expected[i]))
+      ) {
+        return "deviceChanged";
+      }
+      const next = action(current);
       if (next.length) localStorage.setItem(key, JSON.stringify(next));
       else localStorage.removeItem(key);
       setStorageFailed(false);
       window.dispatchEvent(new Event(timetablePlanChanged));
-      return true;
+      return "updated";
     } catch {
       setStorageFailed(true);
-      return false;
+      return "failed";
     }
   }
 
   return {
     selected,
     storageFailed,
-    toggle: (id: string) => update((ids) => togglePerformanceSelection(ids, id)),
-    clear: () => update(() => []),
-    replace: (ids: string[]) => update(() => ids),
+    toggle: (id: string) => update((ids) => togglePerformanceSelection(ids, id)) === "updated",
+    clear: () => update(() => []) === "updated",
+    replace: (ids: string[], expected: string[]) => update(() => ids, expected),
   };
 }
