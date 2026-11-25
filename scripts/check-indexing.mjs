@@ -8,8 +8,10 @@ const namespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
 const languages = ["x-default", "en", "de", "ru"];
 const crawlers = ["Googlebot", "Bingbot"];
 const fixedPaths = ["/", "/en/", "/de/", "/ru/", "/submit/"];
-const editionDirectory = /^\/editions\/\d{4}\/$/;
+const editionDirectory = /^\/(?:(?:en|de|ru)\/)?editions\/\d{4}\/$/;
 const routeClasses = [
+  /^\/browse\/$/,
+  /^\/(?:en|de|ru)\/(?:about|faq)\/$/,
   /^\/festivals\/[^/]+\/$/,
   /^\/artists\/[^/]+\/$/,
   /^\/festivals\/[^/]+\/\d{4}\/$/,
@@ -111,7 +113,7 @@ export function inspectSitemap(xml, now = Date.now()) {
     entries.set(path, alternates);
   }
   for (const [path, alternates] of entries) {
-    if (localizedDetail.test(path)) {
+    if (localizedDetail.test(path) || editionDirectory.test(path)) {
       assert.equal(alternates.size, languages.length, `missing detail hreflang on ${path}`);
     }
     if (!alternates.size) continue;
