@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import type { Festival } from "../domain/festival";
 import { editionKey } from "./freshness";
 
 type SitemapPublication = {
@@ -59,5 +60,40 @@ export async function readSitemapPublications(
         ) as SitemapPublication),
       },
     ]),
+  );
+}
+
+// Match the already validated, rendered tier projection inside the same read
+// transaction. The approval time, not the source observation, changes the page.
+export async function readSitemapTicketOfferApprovals(
+  db: Pick<Prisma.TransactionClient, "ticketOfferProposalSnapshot">,
+  festivals: readonly Festival[],
+  now: Date,
+) {
+  const rendered = festivals.flatMap(({ slug, ticketOffers }) =>
+    ticketOffers
+      ? [
+          {
+            edition: { year: ticketOffers.editionYear, festival: { slug } },
+            sourceUrl: ticketOffers.sourceUrl,
+            observedAt: new Date(ticketOffers.observedAt),
+          },
+        ]
+      : [],
+  );
+  if (rendered.length === 0) return new Map<string, string>();
+  const rows = await db.ticketOfferProposalSnapshot.findMany({
+    where: { OR: rendered, decision: { is: { decision: "approve", createdAt: { lte: now } } } },
+    select: {
+      edition: { select: { year: true, festival: { select: { slug: true } } } },
+      decision: { select: { createdAt: true } },
+    },
+  });
+  return new Map(
+    rows.flatMap(({ edition, decision }) =>
+      decision
+        ? [[editionKey(edition.festival.slug, edition.year), decision.createdAt.toISOString()]]
+        : [],
+    ),
   );
 }

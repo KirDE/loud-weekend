@@ -8,6 +8,7 @@ import Link from "next/link";
 import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
+import { FestivalTicketOffers } from "./FestivalTicketOffers";
 import { LineupByDay } from "./LineupByDay";
 import type { PublicFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { FestivalOverview } from "./FestivalOverview";
@@ -208,6 +209,7 @@ export function FestivalDetail({
           </div>
         )}
       </div>
+      {item.ticketOffers && <FestivalTicketOffers value={item.ticketOffers} locale={language} />}
       <FestivalOverview overview={overview} />
       {item.editionYear && (
         <OfflineTripDownload

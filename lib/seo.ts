@@ -55,7 +55,7 @@ export function festivalMusicEvent(item: Festival, language?: string) {
     url: `${SITE_ORIGIN}${language ? `/${language}` : ""}/festivals/${item.slug}/`,
     sameAs: item.officialUrl,
     ...(item.ticketStatus === "free" ? { isAccessibleForFree: true } : {}),
-    ...(item.ticketsUrl && availability
+    ...(!item.ticketOffers && item.ticketsUrl && availability
       ? { offers: { "@type": "Offer", url: item.ticketsUrl, availability } }
       : {}),
   };

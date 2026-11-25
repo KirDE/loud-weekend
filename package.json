@@ -14,6 +14,7 @@
     "ingestion:review-queue": "node scripts/export-ingestion-review-queue.mjs",
     "test:ingestion-review-queue": "node --test tests/ingestion-review-queue.test.mjs",
     "ingest": "node scripts/ingest-festivals.mjs",
+    "tickets:collect-hellfest": "node --import tsx scripts/collect-hellfest-offers.mjs",
     "timetables:import": "node scripts/import-timetable.mjs",
     "venues:import": "node scripts/import-venue.mjs",
     "enrich:artists": "node scripts/enrich-artists.mjs",
