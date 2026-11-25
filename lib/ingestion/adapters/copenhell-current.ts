@@ -295,10 +295,17 @@ export function extractCopenhellCurrent(
               !u.username &&
               !u.password &&
               !u.hash &&
-              /^\/event\/[0-9]+$/.test(u.pathname) &&
+              // Numeric legacy links require the explicit brand; the current
+              // official slug independently binds both edition and product.
+              (/^\/event\/[0-9]+$/.test(u.pathname)
+                ? u.searchParams.getAll("brand").length === 1 &&
+                  u.searchParams.get("brand") === "copenhelldk"
+                : new RegExp(`^/event/copenhell-${year}-4-dagsbillet-billetter/[0-9]+$`).test(
+                    u.pathname,
+                  )) &&
               [...u.searchParams.keys()].every((key) => ["language", "brand"].includes(key)) &&
-              u.searchParams.getAll("brand").length === 1 &&
-              u.searchParams.get("brand") === "copenhelldk" &&
+              u.searchParams.getAll("brand").length <= 1 &&
+              (!u.searchParams.has("brand") || u.searchParams.get("brand") === "copenhelldk") &&
               u.searchParams.getAll("language").length <= 1
             );
           } catch {
