@@ -339,3 +339,30 @@ test("separate descriptions of a named event cannot hide its side-event link", (
   );
   assert.equal(unbound.ticketsUrl, "https://tickets.example/fest");
 });
+
+test("split subEvent links scope blank nodes to their own script", () => {
+  const show = {
+    "@type": "MusicEvent",
+    "@id": "_:show",
+    startDate: "2027-07-02",
+    offers: { availability: "InStock" },
+  };
+  const parent = {
+    "@type": "MusicEvent",
+    "@id": "#edition",
+    startDate: "2026-07-01",
+    offers: { availability: "SoldOut" },
+  };
+  const relation = { "@id": "#edition", subEvent: { "@id": "_:show" } };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const extract = (html) => extractJsonLdCandidate(html, source, "2026-08-28T21:00:00Z");
+
+  const separateScripts = extract(script([parent, relation]) + script(show));
+  assert.equal(separateScripts.startDate, "2027-07-02");
+  assert.equal(separateScripts.ticketStatus, "available");
+  assert.deepEqual(separateScripts.warnings, []);
+
+  const sharedScript = extract(script([parent, relation, show]));
+  assert.equal(sharedScript.startDate, "2026-07-01");
+  assert.equal(sharedScript.ticketStatus, "sold_out");
+});
