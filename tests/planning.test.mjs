@@ -52,3 +52,23 @@ test("calendar stamps normalize offsets and fall back when a source stamp is inv
     /DTSTAMP:20261123T100015Z\r\n/,
   );
 });
+
+test("calendar links and files omit malformed or reversed ranges without dropping valid events", () => {
+  const invalid = [
+    { ...festival, slug: "bad-start", startDate: "2027-02-29" },
+    { ...festival, slug: "bad-end", endDate: "not a date" },
+    { ...festival, slug: "backwards", endDate: "2027-06-03" },
+    { ...festival, slug: "out-of-range", startDate: "9999-12-31", endDate: undefined },
+  ];
+  for (const item of invalid) assert.equal(calendarUrls(item), null);
+  const payload = calendarFile([...invalid, festival]);
+  assert.equal(payload.match(/^BEGIN:VEVENT\r$/gm).length, 1);
+  assert.match(payload, /UID:test-fest-2027@festival-radar/);
+});
+
+test("single-day calendar actions agree across a calendar year boundary", () => {
+  const item = { ...festival, startDate: "2027-12-31", endDate: undefined };
+  const google = new URL(calendarUrls(item).google);
+  assert.equal(google.searchParams.get("dates"), "20271231/20280101");
+  assert.match(calendarFile([item]), /DTEND;VALUE=DATE:20280101/);
+});

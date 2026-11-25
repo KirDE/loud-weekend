@@ -235,3 +235,41 @@ test("only chronological offset-qualified event timestamps prove the edition", (
     assert.equal(valid.ticketStatus, "sold_out");
   }
 });
+
+const sideShow = {
+  "@type": "MusicEvent",
+  name: "Official afterparty",
+  startDate: "2027-07-02",
+  superEvent: { "@id": "https://festival.example/#edition" },
+  offers: { url: "https://tickets.example/afterparty", availability: "InStock" },
+  performer: { name: "Side Stage Act" },
+};
+
+test("a same-year child event cannot prove festival tickets or lineup", () => {
+  const html = `<script type="application/ld+json">${JSON.stringify(sideShow)}</script>`;
+  const candidate = extractJsonLdCandidate(html, source, "2026-08-28T21:00:00.000Z");
+  assert.deepEqual(candidate.observedEditionYears, []);
+  assert.deepEqual(candidate.evidence, []);
+  assert.equal(candidate.ticketsUrl, undefined);
+  assert.equal(candidate.ticketStatus, undefined);
+  assert.equal(candidate.lineup, undefined);
+});
+
+test("a child event listed first does not displace or invalidate its parent edition", () => {
+  const edition = {
+    "@id": "https://festival.example/#edition",
+    "@type": "MusicEvent",
+    name: "Example Fest",
+    startDate: "2027-07-01",
+    offers: { url: "https://tickets.example/fest", availability: "SoldOut" },
+  };
+  const graph = { "@graph": [sideShow, edition] };
+  const html = `<script type="application/ld+json">${JSON.stringify(graph)}</script>`;
+  const candidate = extractJsonLdCandidate(html, source, "2026-08-28T21:00:00.000Z");
+  assert.deepEqual(candidate.observedEditionYears, [2027]);
+  assert.equal(candidate.startDate, "2027-07-01");
+  assert.equal(candidate.ticketsUrl, "https://tickets.example/fest");
+  assert.equal(candidate.ticketStatus, "sold_out");
+  assert.equal(candidate.lineup, undefined);
+  assert.deepEqual(candidate.warnings, []);
+});
