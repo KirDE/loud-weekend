@@ -2053,6 +2053,25 @@ main {
   border-top: 1px solid var(--line);
 }
 
+.seasonEditionRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.seasonAttendance {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.seasonAttendance select {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0 8px;
+}
+
 .textLink {
   font-weight: 800;
   text-decoration: underline;

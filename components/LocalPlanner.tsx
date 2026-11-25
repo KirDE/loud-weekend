@@ -1,7 +1,13 @@
 "use client";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
-import { parsePlannerState, serializePlannerState } from "@/lib/planner-storage";
+import {
+  legacyPlannerYear,
+  parsePlannerState,
+  serializePlannerState,
+  type Attendance,
+} from "@/lib/planner-storage";
+export type { Attendance };
 import { type TripBudget, type TripBudgets, maxTripBudgets } from "@/lib/trip-budget";
 import {
   defaultDiscoveryPreferences,
@@ -9,11 +15,11 @@ import {
   type DiscoveryPreferences,
 } from "@/lib/discovery-preferences";
 import { readPlaylistExclusions } from "@/lib/playlist-selection";
-export type Attendance = "going" | "maybe" | "not-going";
 export type PlannerState = {
   favoriteFestivals: string[];
   favoriteArtists: string[];
   attendance: Record<string, Attendance>;
+  seasonAttendance?: Record<string, Attendance>;
   tripBudgets: TripBudgets;
   playlistFestivals: string[];
   playlistExcludedArtists?: string[];
@@ -34,6 +40,8 @@ const Context = createContext<
       toggleArtist: (v: string, legacyValues: readonly string[]) => void;
       setTripBudget: (key: string, value?: TripBudget) => boolean;
       setAttendance: (v: string, a?: Attendance) => void;
+      editionAttendance: (slug: string, year: number) => Attendance | undefined;
+      setEditionAttendance: (slug: string, year: number, attendance?: Attendance) => void;
       setPlaylistExclusions: (value: string[]) => void;
       togglePlaylistArtist: (slug: string) => void;
       togglePlaylistFestival: (v: string) => void;
@@ -95,6 +103,20 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           else delete attendance[v];
           return { ...s, attendance };
         }),
+      editionAttendance: (slug: string, year: number) =>
+        year === legacyPlannerYear
+          ? state.attendance[slug]
+          : state.seasonAttendance?.[`${year}:${slug}`],
+      setEditionAttendance: (slug: string, year: number, attendance?: Attendance) =>
+        setState((current) => {
+          // The original planner already stores the 2027 plan; keep one copy.
+          const field = year === legacyPlannerYear ? "attendance" : "seasonAttendance";
+          const key = year === legacyPlannerYear ? slug : `${year}:${slug}`;
+          const selections = { ...current[field] };
+          if (attendance) selections[key] = attendance;
+          else delete selections[key];
+          return { ...current, [field]: selections };
+        }),
       setTripBudget: (key: string, estimate?: TripBudget) => {
         if (
           estimate &&
@@ -129,11 +151,12 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
       updateSavedFilters: (patch: Partial<DiscoveryPreferences>) =>
         setState((s) => ({ ...s, savedFilters: { ...s.savedFilters, ...patch } })),
       replace: (next: PlannerState) =>
-        setState({
+        setState((current) => ({
           ...emptyPlannerState,
           ...next,
           savedFilters: readDiscoveryPreferences(next.savedFilters),
-        }),
+          seasonAttendance: current.seasonAttendance,
+        })),
       replaceFields: (fields: Partial<PlannerState>) =>
         setState((current) => ({ ...current, ...fields })),
       merge: (next: Partial<PlannerState>) =>
@@ -147,6 +170,9 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
               new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])]),
             ),
             attendance: { ...next.attendance, ...current.attendance },
+            seasonAttendance: next.seasonAttendance
+              ? { ...next.seasonAttendance, ...current.seasonAttendance }
+              : current.seasonAttendance,
             tripBudgets:
               Object.keys(tripBudgets).length <= maxTripBudgets ? tripBudgets : current.tripBudgets,
             playlistFestivals: Array.from(
