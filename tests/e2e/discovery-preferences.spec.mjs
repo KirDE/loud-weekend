@@ -11,6 +11,11 @@ const legacyFilters = {
 };
 const activeFilters = {
   ...legacyFilters,
+  dateFrom: "",
+  dateTo: "",
+  weekendOnly: false,
+  maxDays: "all",
+  sort: "date",
   ticketsOnly: true,
   genre: "doom metal",
   origin: "cologne",
@@ -235,6 +240,7 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
 });
 
 test("taking remote favorites leaves unrelated unsynced planner data on this device", async ({
+  baseURL,
   page,
 }) => {
   const local = {
@@ -242,6 +248,7 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
     favoriteArtists: ["local-artist"],
     attendance: { "local-festival": "going" },
     playlistFestivals: ["local-playlist"],
+    playlistExcludedArtists: ["local-excluded-artist"],
     savedFilters: activeFilters,
   };
   await page.addInitScript(
@@ -256,19 +263,29 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
     password: "synthetic conflict test password",
   };
   expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
-  await page.goto("/en/planner/");
-  await expect(page.getByRole("button", { name: "Sync now", exact: true })).toBeEnabled();
+  const headers = { origin: new URL(baseURL).origin };
+  const favoritesPath = "/api/sync/favorites/";
+  const initial = await page.request.put(favoritesPath, {
+    headers,
+    data: { revision: 0, payload: { favoriteFestivals: [], favoriteArtists: [] } },
+  });
+  expect(initial.status()).toBe(201);
+  const { document: baseline } = await initial.json();
+  expect(baseline.revision).toBe(1);
 
-  // Another device creates favorites before this one tries to sync its local version.
+  await page.goto("/en/planner/");
+  // This button becomes enabled only after the React panel has loaded the account document.
+  await expect(
+    page.getByRole("button", { name: "Use account data on this device", exact: true }),
+  ).toBeEnabled();
+
   const remote = { favoriteFestivals: ["remote-festival"], favoriteArtists: [] };
-  expect(
-    (
-      await page.request.put("/api/sync/favorites/", {
-        headers: { origin: new URL(page.url()).origin },
-        data: { revision: 0, payload: remote },
-      })
-    ).status(),
-  ).toBe(201);
+  const updated = await page.request.put(favoritesPath, {
+    headers,
+    data: { revision: baseline.revision, payload: remote },
+  });
+  expect(updated.status()).toBe(200);
+  expect((await updated.json()).document.revision).toBe(baseline.revision + 1);
 
   const favoritesRoute = "**/api/sync/favorites*";
   const { document } = await (await page.request.get("/api/sync/favorites/")).json();
@@ -284,7 +301,12 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
   await expect(page.getByRole("button", { name: "Use other device", exact: true })).toHaveCount(0);
   await page.unroute(favoritesRoute);
 
+  const conflict = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" && new URL(response.url()).pathname === favoritesPath,
+  );
   await page.getByRole("button", { name: "Sync now", exact: true }).click();
+  expect((await conflict).status()).toBe(409);
   const useRemote = page.getByRole("button", { name: "Use other device", exact: true });
   await expect(useRemote).toBeVisible();
 

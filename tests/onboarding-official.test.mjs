@@ -106,7 +106,7 @@ test("artist listing transport rejects identity redirects and fetch overrides", 
     refreshPolicy: "weekly",
   };
   const response = (url) => {
-    const r = new Response("official");
+    const r = new Response("official", { headers: { "content-type": "text/html" } });
     Object.defineProperty(r, "url", { value: url });
     return r;
   };
@@ -121,8 +121,19 @@ test("artist listing transport rejects identity redirects and fetch overrides", 
     ),
     /identity/,
   );
+  const stock = "https://www.vainstream-shop.de/2027-tickets/10636/regular-festivalticket?c=2423";
+  const calls = [];
   assert.equal(
-    (await fetchSource(s, { fetchImpl: async () => response(s.url) })).response.status,
+    (
+      await fetchSource(s, {
+        fetchImpl: async (target) => {
+          calls.push(String(target));
+          assert.ok([s.url, stock].includes(String(target)));
+          return response(String(target));
+        },
+      })
+    ).response.status,
     200,
   );
+  assert.deepEqual(calls, [s.url, stock]);
 });
