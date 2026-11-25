@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cache } from "react";
 import { localizedAlternates } from "./seo";
+import { socialPreviewMetadata } from "./social-preview";
 import { getCatalog } from "./catalog/repository";
 import type { Festival } from "./domain/festival";
 import type { Language } from "./language-preference";
@@ -47,11 +48,13 @@ export function artistMetadata(
   const description = names.length
     ? `${artist.name} · ${t.appearances}: ${new Intl.ListFormat(locale).format(names)}.`
     : `${artist.name} · ${t.fallback}`;
+  const canonical = language ? `/${language}${path}` : path;
   return {
+    ...socialPreviewMetadata({ kind: "artists", ...artist }, canonical, locale),
     title: artist.name,
     description,
     alternates: {
-      canonical: language ? `/${language}${path}` : path,
+      canonical,
       languages: localizedAlternates(path),
     },
   };

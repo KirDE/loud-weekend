@@ -933,6 +933,13 @@ main {
   font-size: 13px;
 }
 
+.footerGuides {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
 .languagePicker {
   display: flex;
   align-items: center;
@@ -1833,6 +1840,16 @@ main {
 
 .timetableStage li:where(:has(.timetableSlotTime time + time)) {
   grid-template-columns: minmax(90px, 35%) minmax(0, 1fr) auto;
+}
+
+.timetablePlan {
+  padding-block: 12px;
+  overflow-wrap: anywhere;
+}
+
+.timetableStage .timetablePlanToggle {
+  grid-column: 2 / -1;
+  justify-self: start;
 }
 
 .timetableStage time {

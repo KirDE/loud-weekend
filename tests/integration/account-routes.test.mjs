@@ -144,10 +144,12 @@ test.before(async () => {
   await db.shareLink.deleteMany();
   await db.syncDocument.deleteMany();
   await db.session.deleteMany();
-  // Earlier DB suites retain append-only audits and their synthetic actors.
-  // This account suite owns only these two unaudited registration identities.
+  // This suite owns only these registration identities; preserve shared audit actors.
   await db.user.deleteMany({
-    where: { email: { in: ["first@example.com", "second@example.com"] } },
+    where: {
+      email: { in: ["first@example.com", "second@example.com"] },
+      adminAuditEntries: { none: {} },
+    },
   });
 
   mock = http
