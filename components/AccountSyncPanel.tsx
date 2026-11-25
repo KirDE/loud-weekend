@@ -394,7 +394,7 @@ export function AccountSyncPanel({
           "season-attendance": { seasonAttendance: state.seasonAttendance },
           budgets: { tripBudgets: state.tripBudgets },
         };
-        planner.replaceFields(fields[kind]);
+        planner.replaceFields(fields[kind], planner);
         setDocs((current) => ({ ...current, [kind]: latest }));
       }
       setConflict(null);
