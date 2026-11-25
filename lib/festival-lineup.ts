@@ -2,6 +2,15 @@ import type { Festival } from "@/lib/domain/festival";
 
 export type LineupSort = "official" | "alphabetical" | "chronological" | "popularity";
 
+export function lineupDayProfileSlugs(
+  appearances: Festival["lineupDays"],
+  publicArtists: readonly { slug: string }[],
+): string[] {
+  if (!appearances?.length) return [];
+  const available = new Set(publicArtists.map(({ slug }) => slug));
+  return appearances.map(({ artistSlug }) => artistSlug).filter((slug) => available.has(slug));
+}
+
 export function sortFestivalLineup(
   item: Pick<Festival, "lineup" | "timetable">,
   sort: LineupSort,
@@ -56,7 +65,7 @@ export function sortFestivalLineup(
     .map(({ name }) => name);
 }
 
-type FestivalLineup = Pick<Festival, "headliners" | "lineup">;
+type FestivalLineup = { headliners: readonly string[]; lineup: readonly string[] };
 
 export function announcedArtists(item: FestivalLineup) {
   return [...item.headliners, ...item.lineup];
@@ -64,6 +73,14 @@ export function announcedArtists(item: FestivalLineup) {
 
 export function hasAnnouncedLineup(item: FestivalLineup) {
   return item.headliners.length + item.lineup.length > 0;
+}
+
+// Published acts are evidence of announcements, not of a final roster.
+export function lineupPresentation(item: FestivalLineup & Pick<Festival, "finalLineup">) {
+  if (!hasAnnouncedLineup(item)) return { tone: "tba", label: "noCurrentActs" } as const;
+  return item.finalLineup
+    ? ({ tone: "confirmed", label: "finalLineup" } as const)
+    : ({ tone: "partial", label: "actsAnnounced" } as const);
 }
 
 export function lineupPreviewArtists(item: FestivalLineup) {

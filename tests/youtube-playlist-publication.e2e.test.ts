@@ -79,6 +79,8 @@ test(
         videoIds: ["00000000001", "00000000002"],
         artists: 1,
         sourceTracks: 2,
+        eligibleArtists: 2,
+        unmatchedReasons: { duplicateTrack: 1 },
       };
       const attempt = async (offset: number, unknown?: string) => {
         // Keep failed fixtures out of the bounded worker scan during this test.
@@ -217,7 +219,14 @@ TIME ZONE 'UTC') + interval '1 day' WHERE "festivalSlug" = ${slug} AND status = 
       assert.equal(bindings.length, 2);
       assert.equal(bindings.find((item) => item.provider === "youtube_music")?.url, youtubeUrl);
       assert.ok(bindings.find((item) => item.provider === "youtube_music")?.syncedAt);
-      assert.equal(bindings.find((item) => item.provider === "youtube_music")?.trackCount, 2);
+      const binding = bindings.find((item) => item.provider === "youtube_music");
+      assert.equal(binding?.trackCount, 2);
+      assert.deepEqual(binding?.coverageEvidence, {
+        matchedArtists: 1,
+        eligibleArtists: 2,
+        unmatchedReasons: { duplicateTrack: 1 },
+        recordedAt: binding?.syncedAt?.toISOString(),
+      });
       assert.equal(bindings.find((item) => item.provider === "spotify")?.syncedAt, null);
       const remote = JSON.parse(await readFile(path.join(directory, "remote.json"), "utf8"));
       assert.equal(

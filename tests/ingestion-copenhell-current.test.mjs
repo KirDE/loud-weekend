@@ -83,7 +83,9 @@ test("real 8/9 October correction: 40 acts, explicit three headliners, partial b
   );
   assert.ok(c.evidence.some((e) => e.field === "lineup" && e.sourceUrl.endsWith("/program/")));
   assert.ok(
-    c.evidence.some((e) => e.field === "ticketStatus" && e.sourceUrl.includes("billetsalget")),
+    c.evidence.some(
+      (e) => e.field === "ticketStatus" && e.sourceUrl === "https://copenhell.dk/billetter/",
+    ),
   );
   assert.deepEqual(evaluateCandidate(current, c).changes, []);
   assert.deepEqual(evaluateCandidate(current, c).reviewReasons, []);
@@ -253,4 +255,111 @@ test("newly linked headliner announcement is parsed by explicit prose, not a fro
     ).includes(later.url),
   );
   assert.ok(evaluateCandidate(current, c).reviewReasons.includes(COPENHELL_REVIEW));
+});
+
+test("ordinary four-day availability is independent of sold-out upgrades, accessories and old footer copy", () => {
+  const data = clone(),
+    ticket = data.documents.find((d) => d.url.endsWith("/billetter/"));
+  ticket.html = ticket.html
+    .replace("R.I.P. tilgængelig", "R.I.P. udsolgt")
+    .replace(
+      "</main>",
+      '<section id="parking"><span>Udsolgt</span></section><footer>2026 Sold Out</footer></main>',
+    );
+  assert.equal(extract(data).ticketStatus, "available");
+  assert.deepEqual(evaluateCandidate(current, extract(data)).changes, []);
+});
+test("hidden, duplicate and disabled ordinary admission controls never establish stock", () => {
+  for (const change of [
+    (h) => h.replace('id="4-dagsbillet"', 'hidden id="4-dagsbillet"'),
+    (h) => h.replace('id="4-dagsbillet"', 'style="display:none" id="4-dagsbillet"'),
+    (h) =>
+      h.replace(
+        'href="https://www.ticketmaster.dk/',
+        'aria-disabled="true" href="https://www.ticketmaster.dk/',
+      ),
+    (h) =>
+      h.replace('href="https://www.ticketmaster.dk/', 'href="https://user@www.ticketmaster.dk/'),
+    (h) =>
+      h.replace('href="https://www.ticketmaster.dk/', 'href="https://www.ticketmaster.dk:8443/'),
+    (h) => h.replace("brand=copenhelldk", "brand=otherfestival"),
+    (h) => h.replace("brand=copenhelldk", "brand=copenhelldk&amp;brand=otherfestival"),
+    (h) => h.replace("23. - 24. - 25. - 26. juni", "22. - 23. - 24. - 25. juni"),
+    (h) => h.replace("Køb nu</a>", "Køb nu</a><span>Udsolgt</span>"),
+    (h) => h.replace("</main>", h + "</main>"),
+  ]) {
+    const data = clone(),
+      ticket = data.documents.find((d) => d.url.endsWith("/billetter/"));
+    ticket.html = change(ticket.html);
+    const c = extract(data);
+    assert.equal(c.ticketStatus, undefined);
+    assert(c.warnings.some((w) => w.includes("four-day ticket stock requires review")));
+    const r = evaluateCandidate(current, c);
+    assert.equal(r.publishable, false);
+    assert(!r.changes.some((change) => change.field === "ticketStatus"));
+  }
+  const data = clone();
+  data.documents.push({ ...data.documents.find((d) => d.url.endsWith("/billetter/")) });
+  assert.equal(extract(data).ticketStatus, undefined);
+});
+
+test("ordinary admission sellout wording in any element contradicts a lingering purchase link", () => {
+  for (const notice of [
+    "<div>Udsolgt</div>",
+    "<div>All ordinary tickets sold <strong>out</strong> now</div>",
+    "<div>Ud<strong>solgt</strong> nu</div>",
+    "<div><span>Ud</span><strong>solgt</strong></div>",
+    "<span>4-dagsbilletter er udsolgt</span>",
+    "<p>All ordinary four-day tickets sold out</p>",
+    "<strong>Alle 4-dagsbilletter er udsolgte</strong>",
+  ]) {
+    const data = clone(),
+      ticket = data.documents.find((d) => d.url.endsWith("/billetter/"));
+    ticket.html = ticket.html.replace("Køb nu</a>", "Køb nu</a>" + notice);
+    const c = extract(data);
+    assert.equal(c.ticketStatus, undefined);
+    assert(c.warnings.some((w) => w.includes("four-day ticket stock requires review")));
+    assert.equal(evaluateCandidate(current, c).publishable, false);
+  }
+});
+
+test("current official edition/product Ticketmaster slug verifies ordinary stock without a brand query", async () => {
+  const data = clone();
+  const ticket = data.documents.find((d) => d.url.endsWith("/billetter/"));
+  ticket.html = await readFile(
+    new URL("./fixtures/official-markup/copenhell-tickets-slug-2027.html", import.meta.url),
+    "utf8",
+  );
+  for (const id of ["1010238744", "1010999999"]) {
+    const later = structuredClone(data);
+    later.documents.find((d) => d.url.endsWith("/billetter/")).html = ticket.html.replace(
+      "1010238744",
+      id,
+    );
+    const candidate = extract(later);
+    assert.equal(candidate.ticketStatus, "available");
+    assert.deepEqual(evaluateCandidate(current, candidate).changes, []);
+    assert.deepEqual(evaluateCandidate(current, candidate).reviewReasons, []);
+    assert(candidate.evidence.some((e) => e.field === "ticketStatus"));
+  }
+  for (const [from, to] of [
+    ["copenhell-2027", "copenhell-2026"],
+    ["copenhell-2027", "otherfest-2027"],
+    ["4-dagsbillet", "rip-upgrade"],
+    ["/1010238744", "/1010238744?brand=otherfestival"],
+    ["/1010238744", "/1010238744?brand=copenhelldk&amp;brand=otherfestival"],
+    ["/1010238744", "/1010238744?redirect=elsewhere"],
+    ["/1010238744", "/1010238744#other"],
+    ["www.ticketmaster.dk", "tickets.example.org"],
+    ["Køb nu</a>", "Køb nu</a><strong>Udsolgt</strong>"],
+  ]) {
+    const invalid = structuredClone(data);
+    invalid.documents.find((d) => d.url.endsWith("/billetter/")).html = ticket.html.replaceAll(
+      from,
+      to,
+    );
+    const candidate = extract(invalid);
+    assert.equal(candidate.ticketStatus, undefined, `${from} -> ${to}`);
+    assert(candidate.warnings.some((w) => w.includes("four-day ticket stock requires review")));
+  }
 });

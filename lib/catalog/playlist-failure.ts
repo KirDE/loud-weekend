@@ -40,6 +40,15 @@ const diagnostic = new RegExp(
     ")$",
 );
 
+export function isPlaylistRefreshFailure(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    diagnostic.test(value) &&
+    !value.endsWith("reason=spotify_discovery_checkpoint") &&
+    !value.endsWith("reason=spotify_plan_superseded")
+  );
+}
+
 /** Closed vocabulary: provider messages, URLs, bodies and secrets stay private. */
 export function playlistFailure(stage: PlaylistStage, error: unknown): string {
   const failure = error as {
