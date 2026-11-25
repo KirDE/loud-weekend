@@ -68,6 +68,24 @@ try {
       `${lang} submission link should not add a locale prefix`,
     );
 
+    const qualityTitles = {
+      en: "Catalogue data quality",
+      de: "Datenqualität des Katalogs",
+      ru: "Качество данных каталога",
+    };
+    assert.ok(html.includes(`href="/${lang}/data-quality/"`), "home must link to data quality");
+    const quality = await fetch(`${origin}/${lang}/data-quality/`);
+    assert.equal(quality.status, 200);
+    const qualityHtml = await quality.text();
+    assert.ok(qualityHtml.includes(`<h1>${qualityTitles[lang]}</h1>`));
+    assert.ok(
+      qualityHtml.includes(`rel="canonical" href="https://loudweekend.eu/${lang}/data-quality/"`),
+    );
+    assert.ok(
+      qualityHtml.includes("<dd>4<!-- --> / <!-- -->4</dd>"),
+      "seeded coverage must match four current records",
+    );
+
     const submission = await fetch(`${origin}/${lang}/submit/`);
     assert.equal(submission.status, 200);
     assert.match(await submission.text(), new RegExp(`<html lang="${lang}"`));
