@@ -190,6 +190,8 @@ function FestivalMapViewport({ festivals, t }: { festivals: Festival[]; t: MapLa
   if (!points.length) return <p role="status">{t.empty}</p>;
   return (
     <div
+      role="group"
+      aria-label={t.mapLabel}
       onKeyDown={(event) => {
         if (event.key === "Escape" && open) {
           event.preventDefault();
@@ -324,9 +326,10 @@ export function FestivalLocationMap({
   const { language, locale } = useLanguage();
   const t = festivalMapLabels[language];
   const [enabled, setEnabled] = useState(!optIn);
-  const mapGroup = useRef<HTMLDivElement>(null);
+  const activationTarget = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (optIn && enabled) mapGroup.current?.focus();
+    if (optIn && enabled) activationTarget.current?.focus();
   }, [optIn, enabled]);
   const groups = useMemo(() => {
     const names = new Intl.DisplayNames([locale], { type: "region", fallback: "none" });
@@ -344,19 +347,15 @@ export function FestivalLocationMap({
   }, [festivals, locale]);
 
   return (
-    <div
-      className="festivalLocationMap"
-      ref={mapGroup}
-      role={enabled ? "group" : undefined}
-      aria-label={enabled ? t.mapLabel : undefined}
-      tabIndex={optIn && enabled ? -1 : undefined}
-    >
+    <div className="festivalLocationMap">
       {enabled ? (
-        festivals.some(festivalMapPoint) ? (
-          <FestivalMapViewport festivals={festivals} t={t} />
-        ) : (
-          <p role="status">{t.empty}</p>
-        )
+        <div ref={activationTarget} role="region" aria-label={t.mapLabel} tabIndex={-1}>
+          {festivals.some(festivalMapPoint) ? (
+            <FestivalMapViewport festivals={festivals} t={t} />
+          ) : (
+            <p role="status">{t.empty}</p>
+          )}
+        </div>
       ) : (
         <button type="button" className="outlineButton" onClick={() => setEnabled(true)}>
           {t.show}

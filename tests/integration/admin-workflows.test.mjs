@@ -503,12 +503,14 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   }
   const artistName = "Integration Headliner Revised";
   const officialSite = "https://artist.example.test/";
-  const artistResponse = await admin.json("/api/admin", "POST", {
-    resourceKind: "artist",
-    resourceKey: artistSlug,
-    baseRevision: 0,
-    values: { canonicalName: artistName, officialUrl: officialSite },
-  });
+  const queueArtist = () =>
+    admin.json("/api/admin", "POST", {
+      resourceKind: "artist",
+      resourceKey: artistSlug,
+      baseRevision: 0,
+      values: { canonicalName: artistName, officialUrl: officialSite },
+    });
+  const artistResponse = await queueArtist();
   assert.equal(artistResponse.status, 201);
   const artistDraft = await artistResponse.json();
   const artistChanges = await db.adminChange.findMany({
@@ -527,14 +529,158 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     where: { id: originalArtist.id },
     data: { name: "Integration Independent Edit" },
   });
-  assert.equal((await decideArtist(artistChanges[0].id)).status, 409);
+  async function assertCanonicalConflict(change) {
+    const response = await decideArtist(change.id);
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).status, "CONFLICT");
+    const stored = await db.adminChange.findUniqueOrThrow({ where: { id: change.id } });
+    assert.equal(stored.status, "CONFLICT");
+    assert.ok(stored.decidedById);
+    assert.ok(stored.decidedAt);
+    const audit = await db.adminAuditEntry.findMany({
+      where: { action: "CHANGE_CONFLICT", metadata: { path: ["changeId"], equals: change.id } },
+    });
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0].metadata.reason, "CANONICAL_STATE_CHANGED");
+  }
+  await assertCanonicalConflict(artistChanges[0]);
+  assert.equal(
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: artistDraft.id } })).status,
+    "QUEUED",
+  );
+  assert.equal((await decideArtist(artistChanges[1].id, "reject")).status, 200);
+  assert.equal(
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: artistDraft.id } })).status,
+    "CONFLICT",
+  );
+  assert.equal(
+    await db.adminResourceState.count({
+      where: { resourceKind: "ARTIST", resourceKey: artistSlug },
+    }),
+    0,
+  );
   assert.equal(
     (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
     "Integration Independent Edit",
   );
   await db.artist.update({ where: { id: originalArtist.id }, data: { name: originalArtist.name } });
 
-  for (const change of artistChanges) {
+  // Claiming the proposed name as another artist's alias while review is
+  // pending must produce a durable conflict without renaming either artist.
+  const nameClaimResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist",
+    resourceKey: artistSlug,
+    baseRevision: 0,
+    values: { canonicalName: artistName },
+  });
+  assert.equal(nameClaimResponse.status, 201);
+  const nameClaimDraft = await nameClaimResponse.json();
+  const nameClaim = await db.adminChange.findFirstOrThrow({
+    where: { draftId: nameClaimDraft.id },
+  });
+  const otherArtist = await db.artist.upsert({
+    where: { slug: "integration-artist-name-claim" },
+    create: {
+      slug: "integration-artist-name-claim",
+      name: "Integration Alias Holder",
+      identityState: "UNRESOLVED",
+      aliases: [artistName],
+      genres: [],
+      topTracks: [],
+      recentSetlists: [],
+      freshness: {},
+    },
+    update: { aliases: [artistName] },
+  });
+  try {
+    await assertCanonicalConflict(nameClaim);
+    assert.equal(
+      (await db.adminDraft.findUniqueOrThrow({ where: { id: nameClaimDraft.id } })).status,
+      "CONFLICT",
+    );
+    assert.equal(
+      await db.adminResourceState.count({
+        where: { resourceKind: "ARTIST", resourceKey: artistSlug },
+      }),
+      0,
+    );
+    assert.equal(
+      (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
+      originalArtist.name,
+    );
+    assert.deepEqual(
+      (await db.artist.findUniqueOrThrow({ where: { id: otherArtist.id } })).aliases,
+      [artistName],
+    );
+    const alreadyClaimed = await admin.json("/api/admin", "POST", {
+      resourceKind: "artist",
+      resourceKey: artistSlug,
+      baseRevision: 0,
+      values: { canonicalName: artistName },
+    });
+    assert.equal(alreadyClaimed.status, 409);
+    assert.equal(
+      (await alreadyClaimed.json()).error,
+      "The name belongs to another artist identity",
+    );
+  } finally {
+    await db.artist.delete({ where: { id: otherArtist.id } });
+  }
+
+  const linkClaimResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist",
+    resourceKey: artistSlug,
+    baseRevision: 0,
+    values: { officialUrl: officialSite },
+  });
+  assert.equal(linkClaimResponse.status, 201);
+  const linkClaimDraft = await linkClaimResponse.json();
+  const linkClaim = await db.adminChange.findFirstOrThrow({
+    where: { draftId: linkClaimDraft.id },
+  });
+  const providerLink = await db.artistLink.create({
+    data: {
+      artistId: originalArtist.id,
+      label: "Provider profile",
+      source: "provider",
+      url: officialSite,
+      verified: true,
+    },
+  });
+  try {
+    await assertCanonicalConflict(linkClaim);
+    assert.equal(
+      (await db.adminDraft.findUniqueOrThrow({ where: { id: linkClaimDraft.id } })).status,
+      "CONFLICT",
+    );
+    assert.deepEqual(await db.artistLink.findMany({ where: { artistId: originalArtist.id } }), [
+      providerLink,
+    ]);
+    assert.equal(await db.artistProvenance.count({ where: { artistId: originalArtist.id } }), 0);
+    assert.equal(
+      await db.adminResourceState.count({
+        where: { resourceKind: "ARTIST", resourceKey: artistSlug },
+      }),
+      0,
+    );
+    const alreadyClaimed = await queueArtist();
+    assert.equal(alreadyClaimed.status, 409);
+    assert.equal(
+      (await alreadyClaimed.json()).error,
+      "This URL already belongs to a different artist link",
+    );
+  } finally {
+    await db.artistLink.delete({ where: { id: providerLink.id } });
+  }
+
+  const resubmittedArtist = await queueArtist();
+  assert.equal(resubmittedArtist.status, 201);
+  const { id: resubmittedArtistId } = await resubmittedArtist.json();
+  const correctedArtistChanges = await db.adminChange.findMany({
+    where: { draftId: resubmittedArtistId },
+    orderBy: { field: "asc" },
+  });
+  for (const change of correctedArtistChanges) {
     const response = await decideArtist(change.id);
     assert.equal(response.status, 200);
     assert.equal((await response.json()).artistPublication, "published");
@@ -749,7 +895,15 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   const correction = await correctionResponse.json();
   assert.ok(correction.revision > rejectedDraft.revision);
   assert.equal(correction.baseRevision, rejectedDraft.baseRevision);
-  const competingResponse = await submitArtistCorrection("Integration Competing Correction");
+  const competingResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist",
+    resourceKey: artistSlug,
+    baseRevision: correction.baseRevision,
+    values: {
+      canonicalName: "Integration Competing Correction",
+      officialUrl: "https://competing.example.test/",
+    },
+  });
   assert.equal(competingResponse.status, 201);
   const competing = await competingResponse.json();
   assert.ok(competing.revision > correction.revision);
@@ -757,9 +911,44 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   const correctedName = await db.adminChange.findFirstOrThrow({
     where: { draftId: correction.id },
   });
-  const competingName = await db.adminChange.findFirstOrThrow({ where: { draftId: competing.id } });
+  const competingName = await db.adminChange.findFirstOrThrow({
+    where: { draftId: competing.id, field: "canonicalName" },
+  });
   assert.equal((await decideArtist(correctedName.id)).status, 200);
+  const staleDecision = await decideArtist(competingName.id);
+  assert.equal(staleDecision.status, 409);
+  assert.equal((await staleDecision.json()).status, "CONFLICT");
+  const conflictedChange = await db.adminChange.findUniqueOrThrow({
+    where: { id: competingName.id },
+  });
+  assert.equal(conflictedChange.status, "CONFLICT");
+  assert.ok(conflictedChange.decidedById);
+  assert.ok(conflictedChange.decidedAt);
+  assert.equal(
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: competing.id } })).status,
+    "QUEUED",
+  );
+  const competingUrl = await db.adminChange.findFirstOrThrow({
+    where: { draftId: competing.id, field: "officialUrl" },
+  });
+  assert.equal((await decideArtist(competingUrl.id, "reject")).status, 200);
+  assert.equal(
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: competing.id } })).status,
+    "CONFLICT",
+  );
   assert.equal((await decideArtist(competingName.id)).status, 409);
+  const conflictAudit = await db.adminAuditEntry.findMany({
+    where: {
+      action: "CHANGE_CONFLICT",
+      metadata: { path: ["changeId"], equals: competingName.id },
+    },
+  });
+  assert.equal(conflictAudit.length, 1);
+  assert.deepEqual(conflictAudit[0].metadata, {
+    changeId: competingName.id,
+    baseRevision: correction.baseRevision,
+    currentRevision: correction.baseRevision + 1,
+  });
   assert.equal(
     (await db.adminDraft.findUniqueOrThrow({ where: { id: rejectedDraft.id } })).status,
     "REJECTED",
@@ -768,6 +957,48 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     (await db.artist.findUniqueOrThrow({ where: { slug: artistSlug } })).name,
     "Integration Reviewer Correction",
   );
+
+  for (const approveFirst of [true, false]) {
+    const approvedName = approveFirst ? "Integration Approved First" : "Integration Rejected First";
+    const { revision } = await db.adminResourceState.findUniqueOrThrow({
+      where: { resourceKind_resourceKey: { resourceKind: "ARTIST", resourceKey: artistSlug } },
+      select: { revision: true },
+    });
+    const mixedResponse = await admin.json("/api/admin", "POST", {
+      resourceKind: "artist",
+      resourceKey: artistSlug,
+      baseRevision: revision,
+      values: { canonicalName: approvedName, officialUrl: "https://rejected.example.test/" },
+    });
+    assert.equal(mixedResponse.status, 201, await mixedResponse.clone().text());
+    const mixedDraft = await mixedResponse.json();
+    const name = await db.adminChange.findFirstOrThrow({
+      where: { draftId: mixedDraft.id, field: "canonicalName" },
+    });
+    const url = await db.adminChange.findFirstOrThrow({
+      where: { draftId: mixedDraft.id, field: "officialUrl" },
+    });
+    const approve = () => decideArtist(name.id);
+    const reject = () => decideArtist(url.id, "reject");
+    const [first, second] = approveFirst ? [approve, reject] : [reject, approve];
+    assert.equal((await first()).status, 200);
+    assert.equal(
+      (await db.adminDraft.findUniqueOrThrow({ where: { id: mixedDraft.id } })).status,
+      "QUEUED",
+    );
+    assert.equal((await second()).status, 200);
+    assert.equal(
+      (await db.adminDraft.findUniqueOrThrow({ where: { id: mixedDraft.id } })).status,
+      "PARTIALLY_APPLIED",
+    );
+    const published = await db.artist.findUniqueOrThrow({
+      where: { id: originalArtist.id },
+      include: { links: true },
+    });
+    assert.equal(published.name, approvedName);
+    assert.equal(published.links.find(({ id }) => id === officialLinkId)?.url, officialSite);
+    assert.ok(!published.links.some(({ url }) => url === "https://rejected.example.test/"));
+  }
 
   const logoBytes = await sharp({
     create: { width: 2, height: 2, channels: 3, background: "#c05040" },
@@ -831,15 +1062,12 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
   assert.equal((await (await decideArtist(noOpLogo.id)).json()).logoPublication, "unchanged");
   const staleLogo = await queueLogo(2);
   await db.festivalLogo.delete({ where: { festivalId: festivalRecord.id } });
-  assert.equal((await decideArtist(staleLogo.id)).status, 409);
+  await assertCanonicalConflict(staleLogo);
   assert.equal((await anonymous.json(logoPath)).status, 404);
   assert.equal(
-    (await db.adminChange.findUniqueOrThrow({ where: { id: staleLogo.id } })).status,
-    "PENDING",
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: staleLogo.draftId } })).status,
+    "CONFLICT",
   );
-
-  assert.equal((await decideArtist(staleLogo.id, "reject")).status, 200);
-  assert.equal((await anonymous.json(logoPath)).status, 404);
 
   const playlistEdition = await db.festivalEdition.findFirstOrThrow({
     where: { festivalId: festivalRecord.id, recordState: "CURRENT" },
@@ -916,13 +1144,19 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     where: { editionId_provider: bindingKey },
     data: { url: otherUrl },
   });
-  assert.equal((await decideArtist(stalePlaylist.id)).status, 409);
+  await assertCanonicalConflict(stalePlaylist);
   assert.ok((await festivalPage()).includes(otherUrl));
 
   assert.equal(
-    (await admin.json(`/api/admin/drafts/${stalePlaylist.draftId}`, "DELETE")).status,
-    200,
+    (await db.adminDraft.findUniqueOrThrow({ where: { id: stalePlaylist.draftId } })).status,
+    "CONFLICT",
   );
+  assert.equal(
+    (await admin.json(`/api/admin/drafts/${stalePlaylist.draftId}`, "DELETE")).status,
+    409,
+  );
+  const withdrawn = await queuePlaylist(2, reviewedUrl);
+  assert.equal((await admin.json(`/api/admin/drafts/${withdrawn.draftId}`, "DELETE")).status, 200);
   const removal = await queuePlaylist(2, null);
   assert.equal((await (await decideArtist(removal.id)).json()).playlistPublication, "removed");
   assert.ok((await festivalPage()).includes(managedUrl));

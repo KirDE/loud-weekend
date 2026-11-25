@@ -40,12 +40,20 @@ test("the discovery map follows the card filters and uses no third-party map req
   const countryFilter = page.locator("select").filter({ has: page.locator('option[value="AT"]') });
   await countryFilter.selectOption("AT");
   await page.getByRole("button", { name: "Show festival map" }).press("Enter");
+  await expect(
+    page.getByRole("region", { name: "Map of Europe with festival locations" }),
+  ).toBeFocused();
   const map = page.getByRole("group", { name: "Map of Europe with festival locations" });
-  await expect(map).toBeFocused();
   const marker = map.getByRole("button", { name: /Synthetic Alpine.*Approximate location/ });
   await expect(marker).toBeVisible();
   await expect(page.locator(".festivalGrid article")).toHaveCount(1);
   await marker.click();
+  await expect(map.getByRole("link", { name: "Synthetic Alpine" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(marker).toBeFocused();
+  await expect(marker).toHaveAttribute("aria-expanded", "false");
+  await expect(map.getByRole("link", { name: "Synthetic Alpine" })).toBeHidden();
+  await marker.press("Enter");
   await expect(map.getByRole("link", { name: "Synthetic Alpine" })).toBeFocused();
 
   await countryFilter.selectOption("ES");
@@ -65,10 +73,17 @@ test("a failed WebGL initialization leaves the list and its links available", as
       return type.includes("webgl") ? null : getContext.call(this, type, ...args);
     };
   });
-  await page.goto("/planner/");
+  await page.goto("/");
+  await page.getByRole("button", { name: "Show festival map" }).press("Enter");
   await expect(page.getByText("Map unavailable. Use the festival list below.")).toBeVisible({
     timeout: 15_000,
   });
-  await page.getByText("Festivals by country (list)", { exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Map of Europe with festival locations" }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  const list = page.getByText("Festivals by country (list)", { exact: true });
+  await expect(list).toBeFocused();
+  await list.press("Enter");
   await expect(page.locator(".mapTextList").getByRole("link")).toHaveCount(4);
 });

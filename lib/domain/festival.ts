@@ -5,6 +5,8 @@ export type TimetableEntry = {
   date: string;
   stage: string;
   start: string;
+  sourcePerformanceId?: string;
+  window?: { startsAt: string; endsAt: string };
   artist: string;
   timeZone: string;
   status: "scheduled" | "cancelled";
@@ -18,6 +20,15 @@ export type FestivalVenue = {
   checkedOn: string;
   latitude: number;
   longitude: number;
+};
+
+export type LineupDayAppearance = {
+  artist: string;
+  artistSlug: string;
+  dates: string[];
+  cancelled: boolean;
+  sourceUrl?: string;
+  observedAt?: string;
 };
 
 export type Festival = {
@@ -56,10 +67,22 @@ export type Festival = {
   coordinates?: { latitude: number; longitude: number };
   venue?: FestivalVenue;
   timetable?: TimetableEntry[];
+  lineupDays?: LineupDayAppearance[];
+};
+
+export type PlaylistUnmatchedReasons = {
+  noEligibleTrack?: number;
+  duplicateTrack?: number;
+  lookupIncomplete?: number;
 };
 
 export type PlaylistCoverage = {
-  matchedArtists: number;
+  reportedArtists: number;
+  verified?: {
+    matchedArtists: number;
+    eligibleArtists: number;
+    unmatchedReasons?: PlaylistUnmatchedReasons;
+  };
   tracks: number;
   recordedAt: string;
 };

@@ -84,6 +84,7 @@ test("feed follows synced plans and published dates but never another account", 
   const edition = await db.festivalEdition.findFirstOrThrow({
     where: { year: 2027, festival: { slug: "synthetic-fest" } },
   });
+  const festival = await db.festival.findUniqueOrThrow({ where: { id: edition.festivalId } });
   const otherEdition = await db.festivalEdition.create({
     data: {
       festivalId: edition.festivalId,
@@ -161,6 +162,32 @@ test("feed follows synced plans and published dates but never another account", 
     expect(shifted).toContain(uid);
     expect(shifted).toContain("DTSTART;VALUE=DATE:20271030");
     expect(shifted).toContain("DTEND;VALUE=DATE:20271101");
+    const locationUpdatedAt = new Date(Date.now() + 2000);
+    await db.festival.update({
+      where: { id: festival.id },
+      data: {
+        city: "Updated Calendar City",
+        updatedAt: locationUpdatedAt,
+      },
+    });
+    const relocated = await (await request.get(url)).text();
+    expect(relocated).toContain(uid);
+    expect(relocated).toContain("LOCATION:Updated Calendar City");
+    expect(relocated).toContain(
+      `DTSTAMP:${locationUpdatedAt.toISOString().replace(/[-:]|\.\d{3}/g, "")}`,
+    );
+    expect(await (await request.get(url)).text()).toBe(relocated);
+
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: {
+        endDate: new Date("2027-10-29T00:00:00Z"),
+      },
+    });
+    const invalidRange = await request.get(url);
+    expect(invalidRange.status()).toBe(200);
+    expect(await invalidRange.text()).not.toContain("VEVENT");
+
     expect((await putPlan({ "synthetic-fest": "not-going" }, 1)).status()).toBe(200);
     expect(await (await request.get(url)).text()).not.toContain("VEVENT");
     await db.user.delete({ where: { id: user.id } });
@@ -175,6 +202,10 @@ test("feed follows synced plans and published dates but never another account", 
       },
     });
     await db.festivalEdition.delete({ where: { id: otherEdition.id } });
+    await db.festival.update({
+      where: { id: festival.id },
+      data: { city: festival.city, updatedAt: festival.updatedAt },
+    });
     await db.$disconnect();
   }
 });
