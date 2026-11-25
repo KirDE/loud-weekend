@@ -1,9 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import {
+  assessPerformanceSelections,
+  orderPerformanceSelections,
+  runningOrderCalendar,
+} from "@/lib/timetable-plan";
+import { useTimetablePlan } from "./useTimetablePlan";
 import type { TimetableEntry } from "@/lib/domain/festival";
 import { useLanguage, type Language } from "./LanguageProvider";
-import { findTimetableConflicts, groupTimetable } from "@/lib/timetables";
+import {
+  findTimetableConflicts,
+  groupTimetable,
+  isRepeatedTimetableTime,
+  timetableLocalDateTime,
+} from "@/lib/timetables";
 
 const copy: Record<
   Language,
@@ -83,12 +94,81 @@ const filters = {
   },
 };
 
-export function StageTimetable({ entries }: { entries?: TimetableEntry[] }) {
+const plannerCopy = {
+  en: {
+    title: "My running order",
+    local: "Saved on this device only.",
+    add: "Save",
+    remove: "Remove",
+    toggle: "Save to running order",
+    clear: "Clear running order",
+    conflict: "Verified overlap",
+    incomplete:
+      "Some saved performances have no verified end time. Overlap could not be checked for those.",
+    download: "Download running order (.ics)",
+    calendarHint:
+      "Calendar files include only scheduled sets with verified times and do not update automatically.",
+    storageFailed: "This browser could not save the running order.",
+  },
+  de: {
+    title: "Mein Bühnenplan",
+    local: "Nur auf diesem Gerät gespeichert.",
+    add: "Speichern",
+    remove: "Entfernen",
+    toggle: "Im Bühnenplan speichern",
+    clear: "Bühnenplan leeren",
+    conflict: "Bestätigte Überschneidung",
+    incomplete:
+      "Für einige gespeicherte Auftritte fehlt eine bestätigte Endzeit. Für diese ist keine Prüfung möglich.",
+    download: "Bühnenplan herunterladen (.ics)",
+    calendarHint:
+      "Die Kalenderdatei enthält nur Auftritte mit bestätigten Zeiten und wird nicht automatisch aktualisiert.",
+    storageFailed: "Dieser Browser konnte den Bühnenplan nicht speichern.",
+  },
+  ru: {
+    title: "Моё расписание",
+    local: "Хранится только на этом устройстве.",
+    add: "Сохранить",
+    remove: "Убрать",
+    toggle: "Сохранить в расписание",
+    clear: "Очистить расписание",
+    conflict: "Подтверждённое пересечение",
+    incomplete:
+      "Для выступлений без подтверждённого времени окончания нельзя проверить пересечение.",
+    download: "Скачать расписание (.ics)",
+    calendarHint:
+      "В файл входят только запланированные выступления с подтверждённым временем. Файл не обновляется автоматически.",
+    storageFailed: "Браузер не смог сохранить расписание.",
+  },
+};
+
+function performanceTimes({ window, timeZone }: TimetableEntry) {
+  if (!window) return { start: null, end: null, showOffsets: false };
+  const start = timetableLocalDateTime(window.startsAt, timeZone);
+  const end = timetableLocalDateTime(window.endsAt, timeZone);
+  const showOffsets =
+    start.offset !== end.offset ||
+    isRepeatedTimetableTime(window.startsAt, timeZone, start) ||
+    isRepeatedTimetableTime(window.endsAt, timeZone, end);
+  return { start, end, showOffsets };
+}
+
+export function StageTimetable({
+  entries,
+  slug,
+  year,
+}: {
+  entries?: readonly TimetableEntry[];
+  slug?: string;
+  year?: number;
+}) {
   const { language, locale } = useLanguage();
   const [selectedDay, setDate] = useState("");
   const [selectedStage, setStage] = useState("");
   const t = copy[language];
   const labels = filters[language];
+  const planner = plannerCopy[language];
+  const plan = useTimetablePlan(slug, year);
   if (!entries?.length)
     return (
       <div className="timetable timetableEmpty">
@@ -96,6 +176,13 @@ export function StageTimetable({ entries }: { entries?: TimetableEntry[] }) {
         <span>{t.empty}</span>
       </div>
     );
+  const selected = orderPerformanceSelections(
+    entries.filter(
+      (entry) => entry.sourcePerformanceId && plan.selected.includes(entry.sourcePerformanceId),
+    ),
+  );
+  const { conflicts: overlaps, incomplete } = assessPerformanceSelections(selected);
+  const calendar = slug && year ? runningOrderCalendar(selected, slug, year) : null;
   const dates = [...new Set(entries.map(({ date }) => date))].sort();
   const stages = [...new Set(entries.map(({ stage }) => stage))].sort((a, b) =>
     a.localeCompare(b, locale),
@@ -162,6 +249,56 @@ export function StageTimetable({ entries }: { entries?: TimetableEntry[] }) {
           </select>
         </label>
       </div>
+      {plan.storageFailed && <p role="alert">{planner.storageFailed}</p>}
+      {plan.selected.length > 0 && (
+        <section className="timetablePlan" aria-label={planner.title}>
+          <h3>{planner.title}</h3>
+          <p>{planner.local}</p>
+          {selected.length > 0 && (
+            <ul>
+              {selected.map((entry) => {
+                const { start, showOffsets } = performanceTimes(entry);
+                return (
+                  <li key={entry.sourcePerformanceId}>
+                    {entry.artist} · {entry.stage} · {dayLabel(entry.date)}{" "}
+                    <time dateTime={entry.window?.startsAt ?? `${entry.date}T${entry.start}`}>
+                      {entry.start}
+                      {showOffsets && ` ${start?.offset}`}
+                    </time>
+                    {entry.status === "cancelled" && ` · ${t.cancelled}`}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {overlaps.length > 0 && (
+            <div role="status">
+              {overlaps.map(([left, right]) => (
+                <p key={`${left.sourcePerformanceId}|${right.sourcePerformanceId}`}>
+                  {planner.conflict}: {left.artist} / {right.artist}
+                </p>
+              ))}
+            </div>
+          )}
+          {incomplete && <p>{planner.incomplete}</p>}
+          {calendar && (
+            <>
+              <p>
+                <a
+                  download={`${slug}-${year}-running-order.ics`}
+                  href={`data:text/calendar;charset=utf-8,${encodeURIComponent(calendar)}`}
+                >
+                  {planner.download}
+                </a>
+              </p>
+              <p>{planner.calendarHint}</p>
+            </>
+          )}
+          <button type="button" onClick={plan.clear}>
+            {planner.clear}
+          </button>
+        </section>
+      )}
       {!matches.length && <p role="status">{labels.empty}</p>}
       {days.map((day) => (
         <section className="timetableDay" key={day.date}>
@@ -173,16 +310,51 @@ export function StageTimetable({ entries }: { entries?: TimetableEntry[] }) {
               <div className="timetableStage" key={stage.stage}>
                 <h4>{stage.stage}</h4>
                 <ol>
-                  {stage.entries.map((entry) => (
-                    <li
-                      className={entry.status === "cancelled" ? "cancelled" : undefined}
-                      key={`${entry.start}-${entry.artist}`}
-                    >
-                      <time dateTime={`${entry.date}T${entry.start}`}>{entry.start}</time>
-                      <span>{entry.artist}</span>
-                      {entry.status === "cancelled" && <em>{t.cancelled}</em>}
-                    </li>
-                  ))}
+                  {stage.entries.map((entry) => {
+                    const { start, end, showOffsets } = performanceTimes(entry);
+                    const id = slug && year ? entry.sourcePerformanceId : undefined;
+                    const saved = id ? plan.selected.includes(id) : false;
+                    return (
+                      <li
+                        className={entry.status === "cancelled" ? "cancelled" : undefined}
+                        key={
+                          entry.sourcePerformanceId
+                            ? `official:${entry.sourcePerformanceId}`
+                            : `local:${entry.start}-${entry.artist}`
+                        }
+                      >
+                        <span className="timetableSlotTime">
+                          <time dateTime={entry.window?.startsAt ?? `${entry.date}T${entry.start}`}>
+                            {entry.start}
+                            {showOffsets && ` ${start?.offset}`}
+                          </time>
+                          {end && entry.window && (
+                            <>
+                              –
+                              <time dateTime={entry.window.endsAt}>
+                                {end.time}
+                                {showOffsets && ` ${end.offset}`}
+                                {end.date !== entry.date && ` (${dayLabel(end.date)})`}
+                              </time>
+                            </>
+                          )}
+                        </span>
+                        <span>{entry.artist}</span>
+                        {entry.status === "cancelled" && <em>{t.cancelled}</em>}
+                        {id && (saved || entry.status === "scheduled") && (
+                          <button
+                            className="timetablePlanToggle"
+                            type="button"
+                            aria-pressed={saved}
+                            aria-label={`${planner.toggle}: ${entry.artist}`}
+                            onClick={() => plan.toggle(id)}
+                          >
+                            {saved ? planner.remove : planner.add}
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ol>
               </div>
             ))}

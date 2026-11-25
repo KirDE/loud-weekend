@@ -1,11 +1,13 @@
 "use client";
 
+import { sendProductEvent } from "@/lib/product-events";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CatalogFreshness } from "@/lib/domain/freshness";
 import { formatFreshnessDate } from "@/lib/freshness-date";
 import type { Festival } from "@/lib/domain/festival";
+import { FestivalLocationMap } from "./FestivalLocationMap";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import {
@@ -262,7 +264,8 @@ export function FestivalExplorer({
     setExpanded({ results: visible, limit: shownCount + moreCount });
   };
   const compared = festivals.filter((item) => selected.includes(item.slug));
-  const toggleSelected = (item: Festival) =>
+  const toggleSelected = (item: Festival) => {
+    if (!selected.includes(item.slug) && selected.length < 3) sendProductEvent("COMPARE", language);
     setSelected((current) => {
       if (current.includes(item.slug)) {
         const next = current.filter((value) => value !== item.slug);
@@ -277,6 +280,8 @@ export function FestivalExplorer({
       setComparisonStatus(t("comparisonSelected", { festival: item.name, count: next.length }));
       return next;
     });
+  };
+
   const clearLinkedDates = () => {
     const url = new URL(window.location.href);
     removeDateQuery(url);
@@ -309,11 +314,15 @@ export function FestivalExplorer({
           artists={suggestionArtists}
           inputRef={searchRef}
           onChange={(query) => updateFilters({ query })}
+          onSubmit={() => sendProductEvent("SEARCH_SUBMIT", language)}
         />
         <select
           aria-label={t("countries")}
           value={country}
-          onChange={(event) => updateFilters({ country: event.target.value })}
+          onChange={(event) => {
+            updateFilters({ country: event.target.value });
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           <option value="all">{t("allCountries")}</option>
           {countries.map((value) => (
@@ -325,7 +334,10 @@ export function FestivalExplorer({
         <select
           aria-label={t("filterMonth")}
           value={month}
-          onChange={(event) => updateFilters({ month: event.target.value })}
+          onChange={(event) => {
+            updateFilters({ month: event.target.value });
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           <option value="all">{t("allMonths")}</option>
           {months.map((value) => (
@@ -339,7 +351,10 @@ export function FestivalExplorer({
         <select
           aria-label={t("filterGenre")}
           value={genre}
-          onChange={(event) => updateFilters({ genre: event.target.value })}
+          onChange={(event) => {
+            updateFilters({ genre: event.target.value });
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           <option value="all">{t("allGenres")}</option>
           {genres.map((value) => (
@@ -352,11 +367,13 @@ export function FestivalExplorer({
           aria-label={t("filterOrigin")}
           value={customOrigin ? "custom" : origin}
           onChange={(event) => {
-            if (event.target.value !== "custom")
+            if (event.target.value !== "custom") {
               updateFilters({
                 origin: event.target.value as DiscoveryPreferences["origin"],
                 customOrigin: undefined,
               });
+              sendProductEvent("FILTER_USED", language);
+            }
           }}
         >
           {customOrigin && (
@@ -371,7 +388,10 @@ export function FestivalExplorer({
         <select
           aria-label={t("filterDistance")}
           value={maxDistance}
-          onChange={(event) => updateFilters({ maxDistance: event.target.value })}
+          onChange={(event) => {
+            updateFilters({ maxDistance: event.target.value });
+            sendProductEvent("FILTER_USED", language);
+          }}
         >
           <option value="all">{t("anyDistance")}</option>
           {discoveryDistances.map((value) => (
@@ -409,7 +429,10 @@ export function FestivalExplorer({
             <input
               type="checkbox"
               checked={announcedOnly}
-              onChange={(event) => updateFilters({ announcedOnly: event.target.checked })}
+              onChange={(event) => {
+                updateFilters({ announcedOnly: event.target.checked });
+                sendProductEvent("FILTER_USED", language);
+              }}
             />
             <span />
             {t("onlyAnnouncedActs")}
@@ -418,7 +441,10 @@ export function FestivalExplorer({
             <input
               type="checkbox"
               checked={ticketsOnly}
-              onChange={(event) => updateFilters({ ticketsOnly: event.target.checked })}
+              onChange={(event) => {
+                updateFilters({ ticketsOnly: event.target.checked });
+                sendProductEvent("FILTER_USED", language);
+              }}
             />
             <span aria-hidden="true" />
             {t("officialTicketsOnly")}
@@ -503,6 +529,7 @@ export function FestivalExplorer({
           </span>
         )}
       </div>
+      <FestivalLocationMap festivals={visible} optIn />
       {withoutRoster > 0 && (
         <p className="compareHint">{t("artistMatchesUnknown", { count: withoutRoster })}</p>
       )}

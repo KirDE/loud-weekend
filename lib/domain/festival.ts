@@ -5,6 +5,8 @@ export type TimetableEntry = {
   date: string;
   stage: string;
   start: string;
+  sourcePerformanceId?: string;
+  window?: { startsAt: string; endsAt: string };
   artist: string;
   timeZone: string;
   status: "scheduled" | "cancelled";

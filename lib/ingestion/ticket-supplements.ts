@@ -1,5 +1,6 @@
 import {
   PROVINSSI_STOCK,
+  fetchProvinssiStock,
   PROVINSSI_SCOPE,
   PROVINSSI_PURCHASE,
   isProvinssiStockSource,
@@ -8,6 +9,7 @@ import {
 } from "./provinssi-ticket-stock.ts";
 import {
   SUMMER_STOCK,
+  fetchSummerStock,
   SUMMER_SCOPE,
   SUMMER_PURCHASE,
   isSummerStockSource,
@@ -23,6 +25,13 @@ import { RFP_STOCK, RFP_PURCHASE, observeRfpStock } from "./rfp-ticket-stock.ts"
 import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate, IngestionResult } from "./types.ts";
+import {
+  HEAVY_STOCK,
+  HEAVY_PURCHASE,
+  fetchHeavyStockDocument,
+  isHeavyStockSource,
+  observeHeavyStock,
+} from "./heavy-ticket-stock.ts";
 import {
   VAINSTREAM_STOCK,
   isVainstreamStockSource,
@@ -67,6 +76,22 @@ export function ticketPublicationPolicy(festivalSlug: string): TicketPublication
   return ticketPublicationPolicies.get(festivalSlug);
 }
 
+type TicketAcquisition = (transport: {
+  fetchWithRetry: (url: string, headers: Record<string, string>) => Promise<Response>;
+  fetchOnce: typeof fetch;
+  readText: (response: Response) => Promise<string>;
+}) => Promise<{ response: Response } | { html: string }>;
+
+const ticketAcquisitions = new Map<string, TicketAcquisition>([
+  [HEAVY_STOCK, fetchHeavyStockDocument],
+  [PROVINSSI_STOCK, ({ fetchOnce }) => fetchProvinssiStock(fetchOnce)],
+  [SUMMER_STOCK, ({ fetchOnce }) => fetchSummerStock(fetchOnce)],
+]);
+
+export function ticketSupplementAcquisition(url: string): TicketAcquisition | undefined {
+  return ticketAcquisitions.get(url);
+}
+
 /** A same-document response or a source adapter's reviewed canonical homepage. */
 export function matchesTicketPrimaryUrl(source: FestivalSource, finalUrl: string): boolean {
   return (
@@ -103,6 +128,7 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
     return;
   if (isProvinssiStockSource(source)) return PROVINSSI_STOCK;
   if (isSummerStockSource(source)) return SUMMER_STOCK;
+  if (isHeavyStockSource(source)) return HEAVY_STOCK;
   if (isVainstreamStockSource(source)) return VAINSTREAM_STOCK;
   if (isAlcatrazStockSource(source)) return ALCATRAZ_STOCK;
   if (
@@ -162,6 +188,7 @@ export function ticketSupplementPurchaseUrl(source: FestivalSource): string | un
   if (!stockUrl) return;
   if (stockUrl === PROVINSSI_STOCK) return PROVINSSI_PURCHASE;
   if (stockUrl === SUMMER_STOCK) return SUMMER_PURCHASE;
+  if (stockUrl === HEAVY_STOCK) return HEAVY_PURCHASE;
   if (stockUrl === ALCATRAZ_STOCK) return ALCATRAZ_PURCHASE;
   if (stockUrl === RFP_STOCK) return RFP_PURCHASE;
   return source.festivalSlug === "full-rewind"
@@ -287,6 +314,7 @@ export function observeTicketSupplement(
       return fail("invalid public weekend product JSON");
     }
   }
+  if (url === HEAVY_STOCK) return observeHeavyStock(html, dates);
   if (url === ALCATRAZ_STOCK) return observeAlcatrazStock(html, source.editionYear, dates);
   if (remainingTicketUrl(source)) return observeRemainingTicket(html, source, dates);
   if (url === VAINSTREAM_STOCK) return observeVainstreamStock(html, dates);

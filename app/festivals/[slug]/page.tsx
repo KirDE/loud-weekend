@@ -6,10 +6,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { lineupDayProfileSlugs } from "@/lib/festival-lineup";
 import { FestivalDetail } from "@/components/FestivalDetail";
+import { socialPreviewMetadata } from "@/lib/social-preview";
 import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
 import { getCatalog } from "@/lib/catalog/repository";
-import { canonicalPath, festivalMusicEvent } from "@/lib/seo";
+import { canonicalPath, festivalMusicEvent, localizedAlternates } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 export const dynamicParams = true;
@@ -22,13 +23,18 @@ export async function generateMetadata({
   const { festivals } = await getCatalog();
   const requestedSlug = (await params).slug;
   const festival = festivals.find(({ slug }) => slug === requestedSlug);
-  return festival
-    ? {
-        title: festival.name,
-        description: `${festival.name} 2027: dates, lineup, tickets, playlist and setlists.`,
-        alternates: { canonical: canonicalPath(`/festivals/${festival.slug}`) },
-      }
-    : {};
+  if (!festival) return {};
+  const canonical = canonicalPath(`/festivals/${festival.slug}`);
+  return {
+    ...(festival.editionYear &&
+      socialPreviewMetadata(
+        { kind: "festivals", name: festival.name, slug: festival.slug, year: festival.editionYear },
+        canonical,
+      )),
+    title: festival.name,
+    description: `${festival.name}: dates, lineup, tickets, playlist and setlists.`,
+    alternates: { canonical, languages: localizedAlternates(canonical) },
+  };
 }
 
 export default async function FestivalPage({ params }: { params: Promise<{ slug: string }> }) {

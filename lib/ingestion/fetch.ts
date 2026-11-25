@@ -1,10 +1,10 @@
-import { PROVINSSI_STOCK, fetchProvinssiStock } from "./provinssi-ticket-stock.ts";
-import { SUMMER_STOCK, fetchSummerStock } from "./summer-ticket-stock.ts";
 import { alcatrazPrimaryUrl } from "./alcatraz-ticket-stock.ts";
 import { validateBarcelonaFetch } from "./adapters/barcelona-banner.ts";
 import { RFP_STOCK, reduceRfpStockDocument } from "./rfp-ticket-stock.ts";
+import { isPolandrockAdmissionSource } from "./adapters/polandrock-admission.ts";
 import {
   matchesTicketPrimaryUrl,
+  ticketSupplementAcquisition,
   ticketSupplementUrl,
   TICKET_SUPPLEMENT,
 } from "./ticket-supplements.ts";
@@ -165,6 +165,11 @@ async function fetchSourceWithoutTicketSupplement(
 
   let initial = await fetchWithRetry(source.fetchUrl ?? source.url);
   validateBarcelonaFetch(source, initial);
+  if (isPolandrockAdmissionSource(source)) {
+    if (initial.response.ok && initial.response.url && initial.response.url !== source.url)
+      throw new Error("Pol'and'Rock newsroom changed its official identity");
+    return initial;
+  }
   if (
     source.festivalSlug === "area53" &&
     (source.url !== "https://area53festival.at/de/" ||
@@ -1112,6 +1117,15 @@ async function boundedTicketText(response: Response): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+function ticketSupplementResponse(url: string, body: string, ticketUrl: string, html: string) {
+  const response = new Response(
+    JSON.stringify({ kind: TICKET_SUPPLEMENT, body, ticket: { url: ticketUrl, html } }),
+    { headers: { "content-type": "application/json" } },
+  );
+  Object.defineProperty(response, "url", { value: url });
+  return response;
+}
+
 export async function fetchSource(
   source: FestivalSource,
   options: FetchOptions = {},
@@ -1130,21 +1144,35 @@ export async function fetchSource(
     const body = await boundedTicketText(primary.response);
     // Reuse the normal bounded-retry transport, without recursive supplements,
     // source overrides or authorization headers on a public ticket destination.
-    if (ticketUrl === PROVINSSI_STOCK || ticketUrl === SUMMER_STOCK) {
-      const stock = await (ticketUrl === PROVINSSI_STOCK
-        ? fetchProvinssiStock(options.fetchImpl)
-        : fetchSummerStock(options.fetchImpl));
-      attempts += stock.attempts;
-      const response = new Response(
-        JSON.stringify({
-          kind: TICKET_SUPPLEMENT,
-          body,
-          ticket: { url: ticketUrl, html: stock.html },
-        }),
-        { headers: { "content-type": "application/json" } },
-      );
-      Object.defineProperty(response, "url", { value: source.url });
-      return { response, attempts };
+    const acquireTicket = ticketSupplementAcquisition(ticketUrl);
+    if (acquireTicket) {
+      const ticket = await acquireTicket({
+        fetchWithRetry: async (url, headers) => {
+          const result = await fetchSourceWithoutTicketSupplement(
+            {
+              ...source,
+              url,
+              headers,
+              fetchUrl: undefined,
+              followLinkPattern: undefined,
+              strategies: ["html_fallback"],
+            },
+            options,
+          );
+          attempts += result.attempts;
+          return result.response;
+        },
+        fetchOnce: (url, init) => {
+          attempts += 1;
+          return (options.fetchImpl ?? fetch)(url, init);
+        },
+        readText: boundedTicketText,
+      });
+      if ("response" in ticket) return { response: ticket.response, attempts };
+      return {
+        response: ticketSupplementResponse(source.url, body, ticketUrl, ticket.html),
+        attempts,
+      };
     }
     const ticket = await fetchSourceWithoutTicketSupplement(
       {
@@ -1176,12 +1204,7 @@ export async function fetchSource(
       );
     const rawTicket = await boundedTicketText(ticket.response);
     const html = ticketUrl === RFP_STOCK ? reduceRfpStockDocument(rawTicket) : rawTicket;
-    const response = new Response(
-      JSON.stringify({ kind: TICKET_SUPPLEMENT, body, ticket: { url: ticketUrl, html } }),
-      { headers: { "content-type": "application/json" } },
-    );
-    Object.defineProperty(response, "url", { value: source.url });
-    return { response, attempts };
+    return { response: ticketSupplementResponse(source.url, body, ticketUrl, html), attempts };
   } catch (error) {
     const failure = error instanceof Error ? error : new Error(String(error));
     throw Object.assign(failure, {
