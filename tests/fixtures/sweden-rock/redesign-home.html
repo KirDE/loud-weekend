@@ -1,0 +1,36 @@
+<!-- Reduced official capture 2026-11-24: https://swedenrock.com/ -->
+<a href="https://swedenrock.com/biljetter">Biljetter</a>
+<div class="container relative space-y-2 text-center md:space-y-6">
+                                            <ul class="pointer-events-auto flex flex-wrap justify-center gap-4 md:gap-x-8">
+                                                            <li data-appear="fadeInUp">
+                                    <a href="https://swedenrock.com/line-up" target="_blank" class="btn btn--solid-yellow" title="Line-up 2027"><span>Line-up 2027</span></a>
+                                </li>
+                                                    </ul>
+                    
+                                            <h1 class="text-gradient-ice pointer-events-auto font-serif text-6xl !leading-tight xl:text-7xl 2xl:text-9xl" data-appear="fadeInUp">
+                            9-12 June 2027
+                        </h1>
+                    
+                                            <div class="pointer-events-auto" x-data="countdown(JSON.parse('{\u0022date\u0022:\u00222027-06-09 12:00:00\u0022,\u0022message\u0022:\u0022\u0022}'))" x-cloak="">
+    <div class="flex items-center justify-center divide-x divide-ice" x-show="!message || days || hours || minutes || seconds">
+        <div class="px-2 md:px-4" data-appear="fadeInUp">
+            <span class="font-display text-3xl tabular-nums md:text-4xl" x-text="days"></span>
+            <span class="text-xs">dgr</span>
+        </div>
+        <div class="px-2 md:px-4" data-appear="fadeInUp">
+            <span class="font-display text-3xl tabular-nums md:text-4xl" x-text="hours"></span>
+            <span class="text-xs">tim</span>
+        </div>
+        <div class="px-2 md:px-4" data-appear="fadeInUp">
+            <span class="font-display text-3xl tabular-nums md:text-4xl" x-text="minutes"></span>
+            <span class="text-xs">min</span>
+        </div>
+        <div class="px-2 md:px-4" data-appear="fadeInUp">
+            <span class="font-display text-3xl tabular-nums md:text-4xl" x-text="seconds"></span>
+            <span class="text-xs">s</span>
+        </div>
+    </div>
+
+    <div x-else-show="message" x-text="message"></div>
+</div>
+                                    </div>
