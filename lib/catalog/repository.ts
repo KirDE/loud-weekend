@@ -1,4 +1,7 @@
-import { readApprovedTicketOffers } from "../ingestion/ticket-offer-proposal-store.ts";
+import {
+  readApprovedTicketOffers,
+  type ApprovedTicketOffersReader,
+} from "../ingestion/ticket-offer-proposal-store.ts";
 import type { PublicTicketOffers } from "../domain/ticket-offer-proposal.ts";
 import { timetableEntrySchema } from "../timetables.ts";
 import { cache } from "react";
@@ -33,10 +36,13 @@ const dateOnly = (value: Date | null) => value?.toISOString().slice(0, 10);
 const instant = (value: Date | null) => value?.toISOString();
 const lower = <T extends string>(value: T) => value.toLocaleLowerCase() as Lowercase<T>;
 
-export class DatabaseCatalogRepository implements CatalogRepository {
-  private readonly client: PrismaClient;
+type CatalogReader = ApprovedTicketOffersReader &
+  Pick<PrismaClient, "festivalEdition" | "artist" | "catalogPublication" | "$queryRaw">;
 
-  constructor(client: PrismaClient) {
+export class DatabaseCatalogRepository implements CatalogRepository {
+  private readonly client: CatalogReader;
+
+  constructor(client: CatalogReader) {
     this.client = client;
   }
 

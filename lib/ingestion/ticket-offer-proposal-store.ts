@@ -249,8 +249,13 @@ export async function readApprovedHellfestOffers(db: PrismaClient, editionId: st
   return row ? projectApprovedOffer(row) : null;
 }
 
+export type ApprovedTicketOffersReader = Pick<PrismaClient, "ticketOfferProposalSnapshot">;
+
 /** Load the latest approved proposal only for the requested current editions. */
-export async function readApprovedTicketOffers(db: PrismaClient, editionIds: string[]) {
+export async function readApprovedTicketOffers(
+  db: ApprovedTicketOffersReader,
+  editionIds: string[],
+) {
   if (!editionIds.length) return [];
   const rows = await db.ticketOfferProposalSnapshot.findMany({
     where: {
