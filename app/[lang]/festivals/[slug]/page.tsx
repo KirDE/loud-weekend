@@ -9,6 +9,7 @@ import type { Language } from "@/components/LanguageProvider";
 import { FestivalDetail } from "@/components/FestivalDetail";
 import { supportedLanguages } from "@/lib/catalog/public";
 import { readCampingFacts } from "@/lib/catalog/camping-facts";
+import { socialPreviewMetadata } from "@/lib/social-preview";
 import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
 import { getCatalog } from "@/lib/catalog/repository";
@@ -26,10 +27,17 @@ export async function generateMetadata({
   const { festivals } = await getCatalog();
   const festival = festivals.find((item) => item.slug === slug);
   if (!festival || !supportedLanguages.includes(lang as Language)) return {};
+  const canonical = `/${lang}/festivals/${festival.slug}/`;
   return {
+    ...(festival.editionYear &&
+      socialPreviewMetadata(
+        { kind: "festivals", name: festival.name, slug: festival.slug, year: festival.editionYear },
+        canonical,
+        lang as Language,
+      )),
     title: festival.name,
     alternates: {
-      canonical: `/${lang}/festivals/${festival.slug}/`,
+      canonical,
       languages: localizedAlternates(`/festivals/${festival.slug}/`),
     },
   };

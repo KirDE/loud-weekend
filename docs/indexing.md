@@ -3,10 +3,12 @@
 `npm run test:routes` runs a production-build smoke test against the seeded
 database. After an approved release, run `node scripts/check-indexing.mjs`
 from an installed checkout to check the public site without credentials. It
-checks the robots sitemap reference, XML structure, unique canonical URLs,
-non-future modification dates, reciprocal EN/DE/RU alternatives, and a bounded
-sample of canonical HTML responses. A redirect, error document or incomplete
-response is a failed check, not evidence that indexing is healthy.
+checks the default robots group and sitemap reference, XML structure, unique
+canonical URLs, non-future modification dates, and reciprocal EN/DE/RU
+alternatives. It checks Googlebot and Bingbot access to every URL in the
+sitemap against the fetched robots.txt rules, but requests HTML only for a
+bounded sample. A redirect, error document or incomplete response is a
+failed check, not evidence that indexing is healthy.
 
 `lastmod` comes from published changes to fields shown on the corresponding
 page, or the persisted edition snapshot shown on an edition dossier. Directory
