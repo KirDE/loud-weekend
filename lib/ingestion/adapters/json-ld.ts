@@ -70,7 +70,12 @@ function eventRecords(html: string, sourceUrl: string) {
         }
         const types = Array.isArray(record["@type"]) ? record["@type"] : [record["@type"]];
         if (
-          types.some((type) => typeof type === "string" && type.toLowerCase().endsWith("event"))
+          types.some(
+            (type) =>
+              typeof type === "string" &&
+              (type.toLowerCase().endsWith("event") ||
+                /^(?:https?:\/\/schema\.org\/)?Festival$/i.test(type)),
+          )
         ) {
           events.push({ record, scriptIndex });
         } else if (record.superEvent != null || record.subEvent != null) {

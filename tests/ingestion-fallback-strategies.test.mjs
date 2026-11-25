@@ -172,6 +172,64 @@ for (const [status, eventStatus] of [
   });
 }
 
+test("Schema.org Festival cancellation holds ticket changes for editorial review", () => {
+  const cancelled = "https://schema.org/EventCancelled";
+  for (const type of [
+    "Festival",
+    "https://schema.org/Festival",
+    ["Thing", "http://schema.org/Festival"],
+  ]) {
+    const event = { "@type": type, startDate: current.startDate, eventStatus: cancelled };
+    const candidate = extract(
+      `<script type="application/ld+json">${JSON.stringify(event)}</script>${ticket}`,
+    );
+    const result = evaluateCandidate(current, candidate);
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [`Official event status requires review: ${cancelled}`]);
+    assert.equal(
+      candidate.evidence.find(({ field }) => field === "startDate").excerpt,
+      JSON.stringify(event),
+    );
+  }
+});
+
+test("Schema.org Festival records still require current-edition and relationship proof", () => {
+  const festival = {
+    "@type": "Festival",
+    "@id": "#festival",
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/festival-tickets/" },
+  };
+  const archive = {
+    ...festival,
+    "@id": "#previous",
+    startDate: "2026-07-29",
+    offers: { url: "https://www.wacken.com/previous-tickets/" },
+  };
+  const sideEvent = {
+    "@type": "MusicEvent",
+    "@id": "#afterparty",
+    superEvent: { "@id": festival["@id"] },
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/afterparty-tickets/" },
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+
+  const candidate = extract(script([archive, sideEvent, festival]));
+  assert.equal(candidate.ticketsUrl, festival.offers.url);
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  assert.equal(evaluateCandidate(current, extract(script(archive) + ticket)).publishable, false);
+
+  for (const type of ["OtherFestival", "https://other.example/Festival"]) {
+    const unrelated = { ...archive, "@type": type };
+    assert.equal(evaluateCandidate(current, extract(script(unrelated) + ticket)).publishable, true);
+  }
+});
+
 test("a separate JSON-LD record for the selected event can put ticket changes on hold", () => {
   const event = {
     "@id": "#festival-2027",
