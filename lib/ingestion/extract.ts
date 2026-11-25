@@ -1,3 +1,4 @@
+import { extractPolandrockAdmission } from "./adapters/polandrock-admission.ts";
 import { isBarcelonaSource } from "./adapters/barcelona-banner.ts";
 import {
   observeTicketSupplement,
@@ -65,6 +66,8 @@ function extractConfiguredCandidate(
   source: FestivalSource,
   fetchedAt: string,
 ): FestivalCandidate {
+  const admission = extractPolandrockAdmission(html, source, fetchedAt);
+  if (admission) return admission;
   const barcelona = source.festivalSlug === "barcelona-rock-fest";
   if (barcelona && !isBarcelonaSource(source)) {
     return {
