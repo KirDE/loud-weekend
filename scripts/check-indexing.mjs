@@ -146,12 +146,13 @@ export async function checkIndexing(origin = site) {
   // Check all members of a representative localized cluster plus the canonical
   // path for each catalogue route class; do not crawl the entire site.
   const examples = [...entries.keys()].sort();
-  const sample = new Set(["/", "/en/", "/de/", "/ru/", "/submit/", "/archive/"]);
+  const sample = new Set(["/", "/en/", "/de/", "/ru/", "/submit/"]);
+  const editionDirectory = /^\/editions\/\d+\/$/;
   for (const type of [
     /^\/festivals\/[^/]+\/$/,
     /^\/artists\/[^/]+\/$/,
     /^\/festivals\/[^/]+\/\d+\/$/,
-    /^\/editions\/\d+\/$/,
+    editionDirectory,
     /^\/countries\/[a-z]{2}\/$/,
     /^\/months\/\d{2}\/$/,
   ]) {
@@ -185,6 +186,20 @@ export async function checkIndexing(origin = site) {
       const link = $(`link[rel="alternate"][hreflang="${lang}"]`);
       assert.equal(link.length, 1, `missing/duplicate ${lang} alternate on ${path}`);
       assert.equal(link.attr("href"), site + target, `alternate mismatch on ${path}`);
+    }
+    if (editionDirectory.test(path)) {
+      // The year directory links to the archive only when there are archive records.
+      const catalogueLink = $(".directoryPage > a").attr("href");
+      assert.ok(
+        catalogueLink === "/archive/" || catalogueLink === "/browse/",
+        `missing catalogue navigation on ${path}`,
+      );
+      assert.equal(
+        entries.has("/archive/"),
+        catalogueLink === "/archive/",
+        `archive sitemap listing disagrees with ${path}`,
+      );
+      if (catalogueLink === "/archive/") sample.add("/archive/");
     }
   }
   return { entries: entries.size, sampled: sample.size };

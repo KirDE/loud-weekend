@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import { calendarUrls, similarFestivals } from "@/lib/planning";
 import { StageTimetable } from "./StageTimetable";
 import { useLanguage, type Language } from "./LanguageProvider";
@@ -15,7 +16,6 @@ const copy: Record<
     apple: string;
     pending: string;
     map: string;
-    similar: string;
     shared: (count: number) => string;
   }
 > = {
@@ -26,7 +26,6 @@ const copy: Record<
     apple: "Add to Apple Calendar",
     pending: "Calendar export unlocks when dates are announced.",
     map: "Open European map ↗",
-    similar: "Similar festivals",
     shared: (count) => `${count} shared act${count === 1 ? "" : "s"}`,
   },
   de: {
@@ -36,7 +35,6 @@ const copy: Record<
     apple: "Zu Apple Kalender hinzufügen",
     pending: "Der Kalenderexport ist verfügbar, sobald die Termine bekannt sind.",
     map: "Europakarte öffnen ↗",
-    similar: "Ähnliche Festivals",
     shared: (count) => `${count} gemeinsame Künstler`,
   },
   ru: {
@@ -46,19 +44,65 @@ const copy: Record<
     apple: "Добавить в Apple Calendar",
     pending: "Экспорт в календарь появится после объявления дат.",
     map: "Открыть карту Европы ↗",
-    similar: "Похожие фестивали",
     shared: (count) => `Общих артистов: ${count}`,
   },
 };
 
-export function PlanningTools({ item, festivals }: { item: Festival; festivals: Festival[] }) {
-  const { language } = useLanguage();
+const relatedCopy = {
+  en: {
+    title: "Related festivals",
+    favorite: "Favorite acts",
+    genres: "Shared genres",
+    overlap: "Dates overlap",
+    nearby: "Days between festivals",
+    straightLine: "Straight-line distance",
+  },
+  de: {
+    title: "Verwandte Festivals",
+    favorite: "Lieblingskünstler",
+    genres: "Gemeinsame Genres",
+    overlap: "Termine überschneiden sich",
+    nearby: "Tage zwischen den Festivals",
+    straightLine: "Luftlinie",
+  },
+  ru: {
+    title: "Связанные фестивали",
+    favorite: "Избранные исполнители",
+    genres: "Общие жанры",
+    overlap: "Даты пересекаются",
+    nearby: "Дней между фестивалями",
+    straightLine: "Расстояние по прямой",
+  },
+};
+
+export function PlanningTools({
+  item,
+  festivals,
+  discoveryLineups,
+  favorites,
+}: {
+  item: Festival;
+  festivals: Festival[];
+  discoveryLineups?: DiscoveryLineups;
+  favorites?: readonly string[];
+}) {
+  const { language, locale } = useLanguage();
   const t = copy[language];
+  const reasons = relatedCopy[language];
+  const numbers = new Intl.NumberFormat(locale);
+  const kilometers = new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: "kilometer",
+    unitDisplay: "short",
+  });
   const calendar = calendarUrls(item);
-  const map =
-    "https://www.openstreetmap.org/search?query=" +
-    `${encodeURIComponent([item.city, item.country].filter(Boolean).join(", "))}`;
-  const similar = similarFestivals(item, festivals);
+  const location = [item.city, item.country].filter(Boolean).join(", ");
+  const map = `https://www.openstreetmap.org/search?query=${encodeURIComponent(location)}`;
+  const similar = similarFestivals(item, festivals, {
+    lineups: discoveryLineups,
+    favorites,
+    locale,
+  });
   return (
     <section className="planningSection">
       <div className="sectionHeading">
@@ -90,11 +134,29 @@ export function PlanningTools({ item, festivals }: { item: Festival; festivals: 
       <StageTimetable entries={item.timetable} />
       {similar.length > 0 && (
         <div className="recommendations">
-          <h3>{t.similar}</h3>
-          {similar.map(({ festival, shared }) => (
-            <Link href={`/festivals/${festival.slug}/`} key={festival.slug}>
+          <h3>{reasons.title}</h3>
+          {similar.map(({ festival, shared, favoriteCount, sharedGenres, gapDays, distance }) => (
+            <Link href={`/${language}/festivals/${festival.slug}/`} key={festival.slug}>
               <strong>{festival.name}</strong>
-              <span>{t.shared(shared)}</span>
+              <span>
+                {[
+                  shared > 0 ? t.shared(shared) : null,
+                  favoriteCount > 0
+                    ? `${reasons.favorite}: ${numbers.format(favoriteCount)}`
+                    : null,
+                  sharedGenres.length ? `${reasons.genres}: ${sharedGenres.join(", ")}` : null,
+                  gapDays === 0
+                    ? reasons.overlap
+                    : gapDays !== null
+                      ? `${reasons.nearby}: ${numbers.format(gapDays)}`
+                      : null,
+                  distance !== null
+                    ? `${reasons.straightLine}: ${kilometers.format(distance)}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
             </Link>
           ))}
         </div>

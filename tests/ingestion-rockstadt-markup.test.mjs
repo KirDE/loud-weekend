@@ -427,3 +427,116 @@ test("corrected checks are quiet, preserve later lineup and billing, while new n
   assert.equal(wrongEdition.publishable, false);
   assert.ok(wrongEdition.reviewReasons.length);
 });
+
+test("hidden, ARIA-disabled and restricted admission cannot reopen ordinary ticket availability", () => {
+  for (const [before, after] of [
+    ['class="order-form-widget can-book"', 'hidden class="order-form-widget can-book"'],
+    [
+      'class="order-form-widget can-book"',
+      'aria-disabled="true" class="order-form-widget can-book"',
+    ],
+    [
+      'class="order-form-widget can-book"',
+      'style="display:none" class="order-form-widget can-book"',
+    ],
+    ['data-is-order-form="true"', 'aria-disabled="true" data-is-order-form="true"'],
+    ['data-is-order-form-submit="true"', 'aria-disabled="true" data-is-order-form-submit="true"'],
+    ['data-is-ticket-nr="1"', 'hidden data-is-ticket-nr="1"'],
+    [
+      'data-tariff-name="Abonament - Acces General"',
+      'data-tariff-name="TEENS Full Access - restricted age"',
+    ],
+    ['data-max-nr-tickets="20"', 'data-max-nr-tickets="Infinity"'],
+    ['data-max-nr-tickets="20"', 'data-max-nr-tickets="0.5"'],
+  ]) {
+    const c = extract(fixture.replace(before, after));
+    assert.equal(c.ticketStatus, undefined);
+    assert.deepEqual(c.lineup, artists);
+    assert(c.warnings.some((w) => w.includes("ordinary admission inventory requires review")));
+    const saved = { ...current, lineup: artists, ticketStatus: "available", ticketsUrl: url };
+    assert.equal(evaluateCandidate(saved, c).publishable, false);
+    assert(!evaluateCandidate(saved, c).changes.some((change) => change.field === "ticketStatus"));
+  }
+});
+test("a matching quantity outside the ordinary tariff cannot supply inventory proof", () => {
+  const original = fixture.match(/<input data-tariff-id="351669"[^>]*>/)[0];
+  const h = fixture.replace(original, "").replace("</form>", original + "</form>");
+  const c = extract(h);
+  assert.equal(c.ticketStatus, undefined);
+  assert(c.warnings.some((w) => w.includes("inventory requires review")));
+});
+
+test("a visibly disabled checkout button cannot establish Rockstadt stock", () => {
+  const page = fixture.replace(
+    'data-is-order-form-submit="true"',
+    'data-is-order-form-submit="true" class="disabled"',
+  );
+  const candidate = extract(page);
+  assert.equal(candidate.ticketStatus, undefined);
+  assert.deepEqual(candidate.lineup, artists);
+  assert.ok(candidate.warnings.some((warning) => warning.includes("inventory requires review")));
+});
+
+// The live first-wave label is an album anniversary performance, not a new band.
+const anniversaryLabel = "Venom -Black Metal (45th anniversary)";
+function performanceArticle(label, artist = "Venom") {
+  return fixture
+    .replace(announcement, announcement.replace("Venom", label))
+    .replace(
+      '<div id="details"',
+      `<h3 class="event-artist-heading"><a class="event-artist-link">${artist}</a></h3>` +
+        '<div id="details"',
+    );
+}
+
+test("corroborated album anniversary labels retain the existing artist identity", () => {
+  for (const label of [anniversaryLabel, "Venom – Black Metal (50th anniversary)"]) {
+    const candidate = extract(performanceArticle(label));
+    assert.deepEqual(candidate.lineup, artists);
+    const result = evaluateCandidate({ ...current, lineup: artists }, candidate);
+    assert.deepEqual(
+      result.changes.filter(({ kind }) => kind === "artist_added"),
+      [],
+    );
+  }
+});
+
+test("anniversary normalization requires a matching article artist and explicit album suffix", () => {
+  for (const [label, card] of [
+    [anniversaryLabel, "Other Band"],
+    ["Venom -Black Metal", "Venom"],
+    ["Venom Inc.", "Venom"],
+    ["Venom featuring Guest", "Venom"],
+    ["Venom - Guest Band (20th anniversary)", "Venom"],
+    ["Guest Band - Black Metal (20th anniversary)", "Guest Band"],
+  ]) {
+    const candidate = extract(performanceArticle(label, card));
+    assert.ok(candidate.lineup.includes(label));
+  }
+  const later = performanceArticle(anniversaryLabel).replace(
+    "Towards the Sinister</strong>",
+    "Towards the Sinister, New Band</strong>",
+  );
+  assert.ok(extract(later).lineup.includes("New Band"));
+});
+
+test("hidden and duplicate artist cards cannot corroborate a performance label", () => {
+  for (const attribute of ["hidden", 'aria-hidden="true"', 'style="display:none"']) {
+    const hidden = performanceArticle(anniversaryLabel).replace(
+      '<h3 class="event-artist-heading">',
+      `<h3 ${attribute} class="event-artist-heading">`,
+    );
+    assert.ok(extract(hidden).lineup.includes(anniversaryLabel));
+  }
+  const doubled = performanceArticle(anniversaryLabel).replace(
+    '<h3 class="event-artist-heading">',
+    '<h3 class="event-artist-heading"><a class="event-artist-link">Venom</a></h3>' +
+      '<h3 class="event-artist-heading">',
+  );
+  assert.ok(extract(doubled).lineup.includes(anniversaryLabel));
+  const duplicate = performanceArticle(anniversaryLabel).replace(
+    "Towards the Sinister</strong>",
+    "Towards the Sinister, Venom</strong>",
+  );
+  noEvidence(duplicate);
+});

@@ -5,11 +5,22 @@ export type TimetableEntry = {
   date: string;
   stage: string;
   start: string;
+  sourcePerformanceId?: string;
+  window?: { startsAt: string; endsAt: string };
   artist: string;
   timeZone: string;
   status: "scheduled" | "cancelled";
   sourceUrl: string;
   observedAt: string;
+};
+
+export type LineupDayAppearance = {
+  artist: string;
+  artistSlug: string;
+  dates: string[];
+  cancelled: boolean;
+  sourceUrl?: string;
+  observedAt?: string;
 };
 
 export type Festival = {
@@ -23,9 +34,11 @@ export type Festival = {
   dateLabel?: string;
   headliners: string[];
   lineup: string[];
+  finalLineup?: true;
   officialUrl: string;
   ticketsUrl?: string;
   playlistUrl?: string;
+  reviewedPlaylistLinks?: { spotify?: string; youtube_music?: string };
   freshness?: EditionFreshness;
   sourceDeprecated?: boolean;
   sourceDeprecatedAt?: string;
@@ -33,18 +46,44 @@ export type Festival = {
   editionYear?: number;
   completeness?: "complete" | "partial" | "tba";
   ticketStatus:
-    "available" | "low" | "not_on_sale" | "sold_out" | "sales_ended" | "unavailable" | "unknown";
+    | "available"
+    | "low"
+    | "not_on_sale"
+    | "sold_out"
+    | "sales_ended"
+    | "free"
+    | "unavailable"
+    | "unknown";
   updatedAt: string;
   genres: string[];
   coordinates?: { latitude: number; longitude: number };
   timetable?: TimetableEntry[];
+  lineupDays?: LineupDayAppearance[];
+};
+
+export type PlaylistUnmatchedReasons = {
+  noEligibleTrack?: number;
+  duplicateTrack?: number;
+  lookupIncomplete?: number;
+};
+
+export type PlaylistCoverage = {
+  reportedArtists: number;
+  verified?: {
+    matchedArtists: number;
+    eligibleArtists: number;
+    unmatchedReasons?: PlaylistUnmatchedReasons;
+  };
+  tracks: number;
+  recordedAt: string;
 };
 
 export type PlaylistStatus = {
-  spotifyUrl: string;
+  spotifyUrl?: string;
   youtubeMusicUrl?: string;
   youtubeMusicArtists?: number;
   youtubeMusicTracks?: number;
+  coverage?: { spotify?: PlaylistCoverage; youtubeMusic?: PlaylistCoverage };
   artists: number;
   tracks: number;
   updatedAt: string;

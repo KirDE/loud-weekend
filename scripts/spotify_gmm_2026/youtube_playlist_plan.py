@@ -120,7 +120,8 @@ def discover_plan(source, search=None):
                 raise RuntimeError("youtube_discovery_failed")
             return candidate
 
-    ids, artists = [], set()
+    eligible_artists = {query.get("lineup_artist") or query["artist"] for query in queries}
+    ids, artists, duplicate_artists = [], set(), set()
     for query in queries:
         candidate = search(query)
         if not candidate:
@@ -128,10 +129,22 @@ def discover_plan(source, search=None):
         video = candidate.get("videoId")
         if not isinstance(video, str) or not VIDEO_ID.fullmatch(video):
             raise ValueError("Invalid discovered video")
+        artist = query.get("lineup_artist") or query["artist"]
         if video in ids:
+            duplicate_artists.add(artist)
             continue
         ids.append(video)
-        artists.add(query.get("lineup_artist") or query["artist"])
+        artists.add(artist)
+    unmatched = eligible_artists - artists
+    duplicates = len(unmatched & duplicate_artists)
+    unmatched_reasons = {
+        reason: count
+        for reason, count in (
+            ("duplicateTrack", duplicates),
+            ("noEligibleTrack", len(unmatched) - duplicates),
+        )
+        if count
+    }
     plan = {
         "slug": source["slug"],
         "editionYear": source["editionYear"],
@@ -144,7 +157,10 @@ def discover_plan(source, search=None):
         "videoIds": ids,
         "artists": len(artists),
         "sourceTracks": len(queries),
+        "eligibleArtists": len(eligible_artists),
     }
+    if unmatched_reasons:
+        plan['unmatchedReasons'] = unmatched_reasons
     validate_plan(plan)
     return plan
 

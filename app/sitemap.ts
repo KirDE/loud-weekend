@@ -1,9 +1,12 @@
+import { hasArchiveRecords } from "@/lib/catalog/browse";
 import type { MetadataRoute } from "next";
+import { supportedLanguages } from "@/lib/catalog/public";
 import { DatabaseCatalogRepository } from "@/lib/catalog/repository";
 import { editionKey, latestDate } from "@/lib/catalog/freshness";
 import { readSitemapPublications } from "@/lib/catalog/sitemap-publications";
 import { festivalOverlapsMonth } from "@/lib/festival-dates";
 import { localizedAlternates, SITE_ORIGIN } from "@/lib/seo";
+import { publicSeasonEditions } from "@/lib/catalog/seasons";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +76,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const years = new Map<number, string | undefined>();
   const archiveDates: (string | undefined)[] = [];
-  for (const { slug, editionYear, snapshotAt, recordState } of editions) {
+  for (const { slug, editionYear, snapshotAt } of editions) {
     const publication = publications.get(editionKey(slug, editionYear));
     const nameDate = sharedNames.get(slug);
     const validSnapshot =
@@ -82,12 +85,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       `/festivals/${slug}/${editionYear}/`,
       latestDate([publication?.edition ?? undefined, nameDate, validSnapshot]),
     );
-    const listingDate = latestDate([publication?.listing ?? undefined, nameDate]);
+  }
+  const publicEditions = publicSeasonEditions(editions);
+  for (const { slug, editionYear, recordState } of publicEditions) {
+    const publication = publications.get(editionKey(slug, editionYear));
+    const listingDate = latestDate([publication?.listing ?? undefined, sharedNames.get(slug)]);
     years.set(editionYear, latestDate([years.get(editionYear), listingDate]));
     if (recordState === "archived" || recordState === "tracking") archiveDates.push(listingDate);
   }
-  for (const [year, date] of years) add(`/editions/${year}/`, date);
-  add("/archive/", latestDate(archiveDates));
+  for (const [year, date] of years) addLocalized(`/editions/${year}/`, date);
+  add("/browse/");
+  if (hasArchiveRecords(publicEditions)) add("/archive/", latestDate(archiveDates));
   add("/submit/");
+  for (const language of supportedLanguages) {
+    add(`/${language}/about/`);
+    add(`/${language}/faq/`);
+  }
   return [...entries.values()];
 }
