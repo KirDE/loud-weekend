@@ -3164,6 +3164,7 @@ test("Roskilde actual collector→durable proof→publication/public read/replay
       await assert.rejects(
         publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
         {
+          future: /Ingestion observation time is later than the completed attempt or current time/,
           stale: /Stale/,
           requested: /Ingestion publication scope does not match/,
           "source-strip": /Ingestion publication scope does not match/,
