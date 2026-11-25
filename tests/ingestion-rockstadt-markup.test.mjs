@@ -507,6 +507,8 @@ test("anniversary normalization requires a matching article artist and explicit 
     ["Venom -Black Metal", "Venom"],
     ["Venom Inc.", "Venom"],
     ["Venom featuring Guest", "Venom"],
+    ["Venom - Guest Band (20th anniversary)", "Venom"],
+    ["Guest Band - Black Metal (20th anniversary)", "Guest Band"],
   ]) {
     const candidate = extract(performanceArticle(label, card));
     assert.ok(candidate.lineup.includes(label));

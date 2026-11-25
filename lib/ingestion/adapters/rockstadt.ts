@@ -176,13 +176,16 @@ export function rockstadt(html: string, source: FestivalSource) {
       $(element).remove();
   });
   // The article can append album-anniversary performance copy to a band name.
-  // Strip only that explicit suffix, corroborated by an artist card in this
-  // edition's article. Do not split compound billing or infer names from JSON-LD.
+  // The Rockstadt announcement identifies Black Metal as a Venom album performance.
+  // Require that verified artist/album pair and one visible artist card; an
+  // anniversary suffix alone does not establish that the billing is for one act.
   const cardNames = $(".event-artist-heading .event-artist-link")
     .toArray()
     .map((element) => text($(element).text()));
   names = names.map((name) => {
-    const performance = name.match(/^(.+?)\s+[-–—]\s*.+?\s+\(\d+(?:st|nd|rd|th) anniversary\)$/i);
+    const performance = name.match(
+      /^(Venom)\s+[-–—]\s*Black Metal\s+\(\d+(?:st|nd|rd|th) anniversary\)$/i,
+    );
     if (!performance) return name;
     const matches = cardNames.filter(
       (card) => card.toLocaleLowerCase() === performance[1].toLocaleLowerCase(),
