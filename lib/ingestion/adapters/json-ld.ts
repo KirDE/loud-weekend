@@ -40,6 +40,7 @@ function eventRecords(html: string, sourceUrl: string) {
   const events: ScriptRecord[] = [];
   const splitRelations: ScriptRecord[] = [];
   const reviewStatuses = new Map<string, string>();
+  const dateDescriptions = new Map<string, JsonLd[]>();
   const $ = load(html);
   $("template").remove();
   for (const [scriptIndex, element] of $("script[type]").toArray().entries()) {
@@ -50,11 +51,16 @@ function eventRecords(html: string, sourceUrl: string) {
     try {
       const parsed = JSON.parse(source);
       for (const record of records(parsed)) {
-        if (record.eventStatus != null) {
-          const id = eventId(record, sourceUrl);
+        const id = eventId(record, sourceUrl);
+        // A named node can have separate descriptions. Do not join blank nodes across scripts.
+        if (id && !id.startsWith("_:")) {
           const status = eventStatusRequiringReview(record.eventStatus);
-          // A named node can have separate descriptions. Do not join blank nodes across scripts.
-          if (id && !id.startsWith("_:") && status) reviewStatuses.set(id, status);
+          if (status) reviewStatuses.set(id, status);
+          if (record.startDate != null || record.endDate != null) {
+            const descriptions = dateDescriptions.get(id);
+            if (descriptions) descriptions.push(record);
+            else dateDescriptions.set(id, [record]);
+          }
         }
         const types = Array.isArray(record["@type"]) ? record["@type"] : [record["@type"]];
         if (
@@ -92,6 +98,7 @@ function eventRecords(html: string, sourceUrl: string) {
       })
       .map(({ record }) => ({ event: record, excerpt: JSON.stringify(record).slice(0, 500) })),
     reviewStatuses,
+    dateDescriptions,
   };
 }
 
@@ -201,7 +208,7 @@ export function extractJsonLdCandidate(
   source: FestivalSource,
   fetchedAt: string,
 ): FestivalCandidate {
-  const { events: parsedEvents, reviewStatuses } = eventRecords(html, source.url);
+  const { events: parsedEvents, reviewStatuses, dateDescriptions } = eventRecords(html, source.url);
   const events = parsedEvents.map((record) => ({
     ...record,
     startDate: eventDate(record.event.startDate),
@@ -286,6 +293,18 @@ export function extractJsonLdCandidate(
   }
 
   const selectedId = eventId(selected.event, source.url);
+  const descriptions = selectedId ? dateDescriptions.get(selectedId) : undefined;
+  if (descriptions && descriptions.length > 1) {
+    // Alternate claims can block publication but cannot supply the chosen fields or evidence.
+    for (const field of ["startDate", "endDate"] as const) {
+      const days = new Set<string>();
+      for (const description of descriptions) {
+        const date = eventDate(description[field]);
+        if (date) days.add(date.day);
+      }
+      if (days.size > 1) candidate.warnings.push(`Conflicting JSON-LD festival ${field} claims`);
+    }
+  }
   const reviewStatus =
     eventStatusRequiringReview(selected.event.eventStatus) ??
     (selectedId ? reviewStatuses.get(selectedId) : undefined);

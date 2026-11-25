@@ -285,3 +285,51 @@ test("equivalent date claims and independently supplied missing dates still comb
   assert.equal(candidate.endDate, current.endDate);
   assert.equal(evaluateCandidate(current, candidate).publishable, true);
 });
+
+test("conflicting dates on the same named JSON-LD event hold unrelated ticket changes", () => {
+  const event = {
+    "@type": "MusicEvent",
+    "@id": "#festival-2027",
+    startDate: current.startDate,
+    endDate: current.endDate,
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  for (const [field, competingDate] of [
+    ["startDate", "2027-07-29"],
+    ["endDate", "2027-08-01"],
+  ]) {
+    const other = { "@id": new URL(event["@id"], source.url).href, [field]: competingDate };
+    for (const page of [script({ "@graph": [event, other] }), script(other) + script(event)]) {
+      const candidate = extract(page + ticket);
+      const result = evaluateCandidate(current, candidate);
+      assert.equal(candidate[field], event[field]);
+      assert.equal(
+        candidate.evidence.find((item) => item.field === field).excerpt,
+        JSON.stringify(event),
+      );
+      assert.deepEqual(
+        result.changes.map((change) => change.field),
+        ["ticketsUrl"],
+      );
+      assert.equal(result.publishable, false);
+      assert.deepEqual(result.reviewReasons, [`Conflicting JSON-LD festival ${field} claims`]);
+    }
+  }
+});
+
+test("equivalent or unbound JSON-LD dates do not hold verified tickets", () => {
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  for (const [eventId, otherId, otherDay] of [
+    ["#festival-2027", "#festival-2027", "2027-07-28T23:30:00-04:00"],
+    ["#festival-2027", "#afterparty", "2027-07-29"],
+    ["_:festival", "_:festival", "2027-07-29"],
+    [undefined, undefined, "2027-07-29"],
+  ]) {
+    const page =
+      script({ "@type": "MusicEvent", "@id": eventId, startDate: current.startDate }) +
+      script({ "@id": otherId, startDate: otherDay });
+    const candidate = extract(page + ticket);
+    assert.deepEqual(candidate.warnings, []);
+    assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  }
+});
