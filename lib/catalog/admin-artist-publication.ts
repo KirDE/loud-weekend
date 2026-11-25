@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AdminChange, Prisma } from "@prisma/client";
+import { CanonicalReviewConflict } from "./admin-review-conflict";
 import { artistAliasIndex } from "./artist-aliases";
 
 const officialSite = { label: "Official site", source: "official" } as const;
@@ -27,15 +28,13 @@ function urlValue(value: unknown) {
 }
 
 async function readArtist(tx: Prisma.TransactionClient, slug: string) {
-  const artist = await tx.artist.findUnique({
+  return tx.artist.findUnique({
     where: { slug },
     include: { links: { orderBy: { position: "asc" } } },
   });
-  if (!artist) throw new Error("Select an existing artist by its canonical slug");
-  return artist;
 }
 
-type Artist = Awaited<ReturnType<typeof readArtist>>;
+type Artist = NonNullable<Awaited<ReturnType<typeof readArtist>>>;
 
 function readSite(artist: Artist) {
   const rows = artist.links.filter(
@@ -45,6 +44,12 @@ function readSite(artist: Artist) {
     throw new Error("Multiple official artist sites require separate reconciliation");
   return rows[0];
 }
+
+function hasConflictingLink(artist: Artist, url: string, officialLinkId?: string) {
+  return artist.links.some((link) => link.url === url && link.id !== officialLinkId);
+}
+
+const conflictingLinkMessage = "This URL already belongs to a different artist link";
 
 const socialHost =
   /^(?:www\.)?(?:instagram\.com|facebook\.com|tiktok\.com|x\.com|twitter\.com|youtube\.com)$/;
@@ -156,12 +161,17 @@ function reviewSocialLink(artist: Artist, value: unknown) {
   return { candidate, site, proof: { ...proof, sourceUrl, observedAt } };
 }
 
-async function assertUniqueName(tx: Prisma.TransactionClient, artist: Artist, name: string) {
+async function nameBelongsToAnotherArtist(
+  tx: Prisma.TransactionClient,
+  artist: Artist,
+  name: string,
+) {
   const identities = await tx.artist.findMany({
     select: { id: true, slug: true, name: true, aliases: true },
   });
-  if (artistAliasIndex(identities, { orthography: true })(name).some(({ id }) => id !== artist.id))
-    throw new Error("The name belongs to another artist identity");
+  return artistAliasIndex(identities, { orthography: true })(name).some(
+    ({ id }) => id !== artist.id,
+  );
 }
 
 export async function prepareArtistDraft(
@@ -170,22 +180,24 @@ export async function prepareArtistDraft(
   values: Record<string, unknown>,
 ) {
   const artist = await readArtist(tx, slug);
+  if (!artist) throw new Error("Select an existing artist by its canonical slug");
   const changes = [];
   for (const [field, value] of Object.entries(values)) {
     switch (field) {
       case "canonicalName": {
         const name = nameValue(value);
-        if (name !== artist.name) await assertUniqueName(tx, artist, name);
+        if (name !== artist.name && (await nameBelongsToAnotherArtist(tx, artist, name)))
+          throw new Error("The name belongs to another artist identity");
         changes.push({ field, beforeValue: artist.name, afterValue: name });
         break;
       }
-      case "officialUrl":
-        changes.push({
-          field,
-          beforeValue: readSite(artist)?.url ?? null,
-          afterValue: urlValue(value),
-        });
+      case "officialUrl": {
+        const existing = readSite(artist);
+        const url = urlValue(value);
+        if (hasConflictingLink(artist, url, existing?.id)) throw new Error(conflictingLinkMessage);
+        changes.push({ field, beforeValue: existing?.url ?? null, afterValue: url });
         break;
+      }
       case "biography": {
         const { before, proof } = await reviewBiography(tx, artist, value);
         changes.push({ field, beforeValue: before, afterValue: proof });
@@ -217,15 +229,21 @@ export async function publishAdminArtistChange(tx: Prisma.TransactionClient, cha
   if (evidence?.kind !== "artist-draft" || typeof evidence.artistId !== "string")
     throw new Error("Resubmit this artist edit using the canonical artist editor");
   const artist = await readArtist(tx, change.resourceKey);
-  if (artist.id !== evidence.artistId) throw new Error("The reviewed artist identity has changed");
+  if (artist?.id !== evidence.artistId)
+    throw new CanonicalReviewConflict("The reviewed artist identity has changed");
 
   switch (change.field) {
     case "canonicalName": {
       const name = nameValue(change.afterValue);
       if (artist.name === name) return "unchanged";
       if (artist.name !== change.beforeValue)
-        throw new Error("The canonical artist name changed after review was queued");
-      await assertUniqueName(tx, artist, name);
+        throw new CanonicalReviewConflict(
+          "The canonical artist name changed after review was queued",
+        );
+      if (await nameBelongsToAnotherArtist(tx, artist, name))
+        throw new CanonicalReviewConflict(
+          "The reviewed name now belongs to another artist identity",
+        );
       const aliases = artist.aliases.includes(artist.name)
         ? artist.aliases
         : [...artist.aliases, artist.name];
@@ -237,10 +255,12 @@ export async function publishAdminArtistChange(tx: Prisma.TransactionClient, cha
       const existing = readSite(artist);
       if (existing?.url === url && existing.verified) return "unchanged";
       if ((existing?.url ?? null) !== change.beforeValue)
-        throw new Error("The official artist site changed after review was queued");
+        throw new CanonicalReviewConflict(
+          "The official artist site changed after review was queued",
+        );
       // A reviewed official site must not overwrite an independent provider link.
-      if (artist.links.some((link) => link.url === url && link.id !== existing?.id))
-        throw new Error("This URL already belongs to a different artist link");
+      if (hasConflictingLink(artist, url, existing?.id))
+        throw new CanonicalReviewConflict(conflictingLinkMessage);
       if (existing) {
         await tx.artistLink.update({ where: { id: existing.id }, data: { url, verified: true } });
       } else {

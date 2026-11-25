@@ -1,5 +1,6 @@
 "use client";
 
+import { sendProductEvent } from "@/lib/product-events";
 import { favoriteArtistLabels, type FavoriteArtistIdentity } from "@/lib/favorite-artist";
 import Link from "next/link";
 import { useState } from "react";
@@ -69,7 +70,7 @@ const plannerLabels: Record<Language, PlannerLabels> = {
     selection: "SELECTION PLAYLIST",
     build: "Build your lineup",
     artists: (count) => `${count} ${count === 1 ? "artist" : "artists"}`,
-    favorites: "FAVORITE ARTISTS",
+    favorites: "My artists",
     attendance: "Attendance for",
     creating: "Creating…",
     createPlaylist: "Create private Spotify playlist",
@@ -107,7 +108,7 @@ const plannerLabels: Record<Language, PlannerLabels> = {
     selection: "PLAYLIST-AUSWAHL",
     build: "Stelle dein Line-up zusammen",
     artists: (count) => `${count} Künstler`,
-    favorites: "LIEBLINGSKÜNSTLER",
+    favorites: "Meine Künstler",
     attendance: "Teilnahme an",
     creating: "Wird erstellt…",
     createPlaylist: "Private Spotify-Playlist erstellen",
@@ -145,7 +146,7 @@ const plannerLabels: Record<Language, PlannerLabels> = {
     selection: "ПЛЕЙЛИСТ ПО ВЫБОРУ",
     build: "Соберите свой лайнап",
     artists: (count) => `${count} артистов`,
-    favorites: "ЛЮБИМЫЕ АРТИСТЫ",
+    favorites: "Мои артисты",
     attendance: "Посещение",
     creating: "Создание…",
     createPlaylist: "Создать приватный плейлист Spotify",
@@ -284,6 +285,7 @@ export function PlannerPage({
     .filter((f) => festivalDateInterval(f))
     .sort((a, b) => a.startDate!.localeCompare(b.startDate!));
   async function createPlaylist() {
+    sendProductEvent("PLAYLIST_START", language);
     setPlaylist({ status: "creating", message: t.creating });
     try {
       const response = await fetch("/api/spotify/selection-playlist", {
@@ -310,6 +312,7 @@ export function PlannerPage({
         return;
       }
       if (!response.ok || !result.playlistUrl) throw new Error(t.playlistFailed);
+      sendProductEvent("PLAYLIST_SUCCESS", language);
       setPlaylist({
         status: "created",
         url: result.playlistUrl,
@@ -327,6 +330,9 @@ export function PlannerPage({
           <div className="eyebrow">{t.eyebrow}</div>
           <h1>{t.title}</h1>
           <p>{t.intro}</p>
+          <Link className="textLink" href="/group-trips/">
+            {{ en: "Group trips", de: "Gruppenreisen", ru: "Групповые поездки" }[language]}
+          </Link>
         </div>
         <PlannerReset
           disabled={syncBusy || playlist.status === "creating"}
@@ -507,16 +513,18 @@ export function PlannerPage({
               </div>
             )}
           </section>
-          {!!p.favoriteArtists.length && (
-            <section className="plannerSection">
-              <div className="eyebrow">{t.favorites}</div>
+          <section className="plannerSection">
+            <Link className="outlineButton" href={`/${language}/planner/artists/`}>
+              {t.favorites}
+            </Link>
+            {!!p.favoriteArtists.length && (
               <div className="artistChips">
                 {favoriteArtistLabels(p.favoriteArtists, catalogueArtists).map(([key, name]) => (
                   <span key={key}>{name}</span>
                 ))}
               </div>
-            </section>
-          )}
+            )}
+          </section>
         </>
       )}
     </div>

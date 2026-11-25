@@ -1,4 +1,5 @@
 import { publicFestivalVenue } from "./festival-venues.ts";
+import { timetableEntrySchema } from "../timetables.ts";
 import { cache } from "react";
 import { YOUTUBE_URL } from "./youtube-playlist-queue.ts";
 import { playlistCoverage } from "../playlist-coverage.ts";
@@ -31,10 +32,15 @@ const dateOnly = (value: Date | null) => value?.toISOString().slice(0, 10);
 const instant = (value: Date | null) => value?.toISOString();
 const lower = <T extends string>(value: T) => value.toLocaleLowerCase() as Lowercase<T>;
 
-export class DatabaseCatalogRepository implements CatalogRepository {
-  private readonly client: PrismaClient;
+type CatalogReader = Pick<
+  PrismaClient,
+  "festivalEdition" | "artist" | "catalogPublication" | "$queryRaw"
+>;
 
-  constructor(client: PrismaClient) {
+export class DatabaseCatalogRepository implements CatalogRepository {
+  private readonly client: CatalogReader;
+
+  constructor(client: CatalogReader) {
     this.client = client;
   }
 
@@ -54,6 +60,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
             orderBy: [{ billing: "asc" }, { position: "asc" }],
           },
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
+          lineupDays: { include: { artist: { select: { name: true, slug: true } } } },
           timetable: {
             // Legacy display defaults are not evidence for data-quality coverage.
             ...(requireTimetableEvidence && {
@@ -100,10 +107,45 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           .filter(({ checkedAt }) => checkedAt <= now)
           .map(({ checkedAt }) => checkedAt.toISOString()),
       );
+      const allocations = new Map(
+        row.lineupDays
+          .filter(
+            (allocation) =>
+              dateOnly(allocation.startDate) === dateOnly(row.startDate) &&
+              dateOnly(allocation.endDate) === dateOnly(row.endDate),
+          )
+          .map((allocation) => [allocation.artistId, allocation]),
+      );
+      const lineupDays = row.lineup
+        .filter(({ artistId, status }) => status === "ANNOUNCED" || allocations.has(artistId))
+        .map(({ artist, status }) => {
+          const allocation = allocations.get(artist.id);
+          return {
+            artist: artist.name,
+            artistSlug: artist.slug,
+            dates: allocation?.dates.map((date) => dateOnly(date)!) ?? [],
+            cancelled: status === "CANCELLED" || allocation?.status === "CANCELLED",
+            sourceUrl: allocation?.sourceUrl,
+            observedAt: allocation?.observedAt.toISOString(),
+          };
+        });
+      const rosterIds = new Set(row.lineup.map(({ artistId }) => artistId));
+      for (const allocation of allocations.values()) {
+        if (allocation.status !== "CANCELLED" || rosterIds.has(allocation.artistId)) continue;
+        lineupDays.push({
+          artist: allocation.artist.name,
+          artistSlug: allocation.artist.slug,
+          dates: allocation.dates.map((date) => dateOnly(date)!),
+          cancelled: true,
+          sourceUrl: allocation.sourceUrl,
+          observedAt: allocation.observedAt.toISOString(),
+        });
+      }
       const roster = announced.map(({ artist }) => artist);
       const aliases = row.timetable.length ? artistAliasIndex(roster) : undefined;
       const rosterById = new Map(roster.map((artist) => [artist.id, artist.name]));
       return {
+        lineupDays: lineupDays.some(({ sourceUrl }) => sourceUrl) ? lineupDays : undefined,
         ...(freshnessEvidence && {
           freshness: {
             lastSuccessfulSourceCheckAt,
@@ -167,16 +209,23 @@ export class DatabaseCatalogRepository implements CatalogRepository {
               const name =
                 (performance.artistId && rosterById.get(performance.artistId)) ||
                 (owners.length === 1 ? owners[0].name : performance.artistName);
-              return {
+              const entry: TimetableEntry = {
                 date: dateOnly(performance.date)!,
                 stage: performance.stage,
                 start: performance.start,
                 artist: name,
                 timeZone: performance.timeZone ?? "UTC",
+                sourcePerformanceId: performance.sourcePerformanceId ?? undefined,
                 status: performance.status === "CANCELLED" ? "cancelled" : "scheduled",
                 sourceUrl: performance.sourceUrl ?? row.festival.officialUrl,
                 observedAt: instant(performance.observedAt) ?? row.sourceUpdatedAt.toISOString(),
               };
+              const { startsAt, endsAt, timeZone, sourceUrl, observedAt } = performance;
+              if (!startsAt || !endsAt || !timeZone || !sourceUrl || !observedAt) return entry;
+              const window = { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
+              return timetableEntrySchema.safeParse({ ...entry, window }).success
+                ? { ...entry, window }
+                : entry;
             })
           : undefined,
         recordState: lower(row.recordState),
@@ -271,6 +320,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         ({ provider, url }) => provider === "youtube_music" && YOUTUBE_URL.test(url),
       );
       if (!spotify && !youtube) continue;
+      const spotifyCoverage = playlistCoverage(spotify);
       playlists[row.festival.slug] = {
         spotifyUrl: spotify?.url,
         youtubeMusicUrl: youtube?.url,
@@ -282,7 +332,10 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         updatedAt:
           instant(spotify?.syncedAt ?? youtube?.syncedAt ?? null) ??
           row.sourceUpdatedAt.toISOString(),
-        coverage: { youtubeMusic: playlistCoverage(youtube) },
+        coverage: {
+          spotify: spotifyCoverage?.verified ? spotifyCoverage : undefined,
+          youtubeMusic: playlistCoverage(youtube),
+        },
       };
     }
     const freshness = {
@@ -308,7 +361,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           ],
         ]),
     );
-    const visibleSlugs = new Set(Object.values(artistSlugsByFestival).flat());
+    const visibleSlugs = new Set(artists.map((artist) => artist.slug));
     const discoveryLineups = {
       artistSlugsByFestival,
       artistNamesBySlug: Object.fromEntries(

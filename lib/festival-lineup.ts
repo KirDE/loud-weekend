@@ -2,6 +2,15 @@ import type { Festival } from "@/lib/domain/festival";
 
 export type LineupSort = "official" | "alphabetical" | "chronological" | "popularity";
 
+export function lineupDayProfileSlugs(
+  appearances: Festival["lineupDays"],
+  publicArtists: readonly { slug: string }[],
+): string[] {
+  if (!appearances?.length) return [];
+  const available = new Set(publicArtists.map(({ slug }) => slug));
+  return appearances.map(({ artistSlug }) => artistSlug).filter((slug) => available.has(slug));
+}
+
 export function sortFestivalLineup(
   item: Pick<Festival, "lineup" | "timetable">,
   sort: LineupSort,

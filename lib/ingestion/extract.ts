@@ -31,6 +31,12 @@ const missingFormatWarnings = new Set([
   "HTML fallback did not find explicitly marked festival fields",
 ]);
 
+// Only a verified supplemental ticket status can replace a missing homepage summary.
+const supplementalFormatWarnings = new Set([
+  ...missingFormatWarnings,
+  "Sweden Rock current ticket summary was not found",
+]);
+
 const supportedFields: Exclude<FieldEvidence["field"], "timetable">[] = [
   "startDate",
   "endDate",
@@ -203,8 +209,17 @@ function extractConfiguredCandidate(
     if (candidate.artistListMode) merged.artistListMode = candidate.artistListMode;
     const suppliedFields = new Set<FieldEvidence["field"]>();
     for (const field of supportedFields) {
-      if (merged[field] !== undefined || candidate[field] === undefined) continue;
-      Object.assign(merged, { [field]: candidate[field] });
+      const value = candidate[field];
+      if (value === undefined) continue;
+      const selectedValue = merged[field];
+      if (selectedValue !== undefined) {
+        if ((field === "startDate" || field === "endDate") && selectedValue !== value)
+          merged.warnings.push(
+            `Conflicting extraction claims for ${field}: ${selectedValue} versus ${value}`,
+          );
+        continue;
+      }
+      Object.assign(merged, { [field]: value });
       suppliedFields.add(field);
       (merged.fieldEditionYears ??= {})[field] =
         candidate.fieldEditionYears?.[field] ?? candidate.observedEditionYears;
@@ -312,7 +327,7 @@ export function extractFestivalCandidate(
     // Supplemental evidence makes optional homepage formats unnecessary, but
     // semantic, edition, source-identity and artist/provider warnings still gate.
     candidate.warnings = candidate.warnings.filter(
-      (warning) => !missingFormatWarnings.has(warning),
+      (warning) => !supplementalFormatWarnings.has(warning),
     );
   }
   return candidate;
