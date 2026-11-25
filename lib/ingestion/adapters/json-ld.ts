@@ -25,8 +25,9 @@ function eventId(record: JsonLd, sourceUrl: string): string | undefined {
   }
 }
 
-function eventRecords(html: string, sourceUrl: string): { event: JsonLd; excerpt: string }[] {
+function eventRecords(html: string, sourceUrl: string) {
   const events: JsonLd[] = [];
+  const reviewStatuses = new Map<string, string>();
   const $ = load(html);
   $("template").remove();
   for (const element of $("script[type]").toArray()) {
@@ -37,6 +38,12 @@ function eventRecords(html: string, sourceUrl: string): { event: JsonLd; excerpt
     try {
       const parsed = JSON.parse(source);
       for (const record of records(parsed)) {
+        if (record.eventStatus != null) {
+          const id = eventId(record, sourceUrl);
+          const status = eventStatusRequiringReview(record.eventStatus);
+          // A named node can have separate descriptions. Do not join blank nodes across scripts.
+          if (id && !id.startsWith("_:") && status) reviewStatuses.set(id, status);
+        }
         const types = Array.isArray(record["@type"]) ? record["@type"] : [record["@type"]];
         if (
           types.some((type) => typeof type === "string" && type.toLowerCase().endsWith("event"))
@@ -57,12 +64,15 @@ function eventRecords(html: string, sourceUrl: string): { event: JsonLd; excerpt
       if (childId && childId !== parentId) childIds.add(childId);
     }
   }
-  return events
-    .filter((event) => {
-      const id = eventId(event, sourceUrl);
-      return event.superEvent == null && (!id || !childIds.has(id));
-    })
-    .map((event) => ({ event, excerpt: JSON.stringify(event).slice(0, 500) }));
+  return {
+    events: events
+      .filter((event) => {
+        const id = eventId(event, sourceUrl);
+        return event.superEvent == null && (!id || !childIds.has(id));
+      })
+      .map((event) => ({ event, excerpt: JSON.stringify(event).slice(0, 500) })),
+    reviewStatuses,
+  };
 }
 
 function text(value: unknown): string | undefined {
@@ -70,6 +80,13 @@ function text(value: unknown): string | undefined {
   if (value && typeof value === "object" && typeof (value as JsonLd).name === "string")
     return ((value as JsonLd).name as string).trim() || undefined;
   return undefined;
+}
+
+function eventStatusRequiringReview(value: unknown): string | undefined {
+  const statuses = Array.isArray(value) ? value : [value];
+  return statuses
+    .map((status) => text((status as JsonLd | null | undefined)?.["@id"]) ?? text(status))
+    .find((status) => status && /cancelled|postponed|rescheduled|movedonline/i.test(status));
 }
 
 function eventDate(value: unknown): { day: string; instant?: number } | undefined {
@@ -164,7 +181,8 @@ export function extractJsonLdCandidate(
   source: FestivalSource,
   fetchedAt: string,
 ): FestivalCandidate {
-  const events = eventRecords(html, source.url).map((record) => ({
+  const { events: parsedEvents, reviewStatuses } = eventRecords(html, source.url);
+  const events = parsedEvents.map((record) => ({
     ...record,
     startDate: eventDate(record.event.startDate),
     endDate: eventDate(record.event.endDate),
@@ -247,11 +265,10 @@ export function extractJsonLdCandidate(
     }
   }
 
-  const eventStatus = selected.event.eventStatus;
-  const statuses = Array.isArray(eventStatus) ? eventStatus : [eventStatus];
-  const reviewStatus = statuses
-    .map((status) => text((status as JsonLd | null | undefined)?.["@id"]) ?? text(status))
-    .find((status) => status && /cancelled|postponed|rescheduled|movedonline/i.test(status));
+  const selectedId = eventId(selected.event, source.url);
+  const reviewStatus =
+    eventStatusRequiringReview(selected.event.eventStatus) ??
+    (selectedId ? reviewStatuses.get(selectedId) : undefined);
   if (reviewStatus)
     candidate.warnings.push(`Official event status requires review: ${reviewStatus}`);
   if (matching.length > 1)
