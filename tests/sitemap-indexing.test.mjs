@@ -53,7 +53,12 @@ test("rejects a reciprocal cluster that points to a different festival in anothe
 });
 
 test("the HTTP smoke check validates crawl access and indexing directives", async (t) => {
-  const clusterPaths = ["/", "/festivals/synthetic/", "/artists/synthetic/"];
+  const clusterPaths = [
+    "/",
+    "/festivals/synthetic/",
+    "/festivals/unsampled/",
+    "/artists/synthetic/",
+  ];
   const otherPaths = [
     "/submit/",
     "/archive/",
@@ -108,7 +113,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
   await once(server, "listening");
   const origin = `http://127.0.0.1:${server.address().port}`;
   await t.test("allows pages that only suppress the image preview", async () => {
-    assert.deepEqual(await checkIndexing(origin), { entries: 18, sampled: 18 });
+    assert.deepEqual(await checkIndexing(origin), { entries: 22, sampled: 18 });
   });
   await t.test("rejects crawler access regressions for sampled public routes", async () => {
     for (const [rules, expected] of [
@@ -120,6 +125,17 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
       await assert.rejects(checkIndexing(origin), expected);
     }
     robotsBody = openRobots;
+  });
+  await t.test("rejects robots restrictions on sitemap URLs outside the HTTP sample", async () => {
+    robotsBody = `User-agent: *\nDisallow: /de/festivals/unsampled/\nSitemap: ${site}/sitemap.xml\n`;
+    try {
+      await assert.rejects(
+        checkIndexing(origin),
+        /robots\.txt blocks Googlebot on \/de\/festivals\/unsampled\//,
+      );
+    } finally {
+      robotsBody = openRobots;
+    }
   });
   await t.test(
     "does not accept a sitemap declaration without the expected default crawler group",
@@ -141,7 +157,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
       `Sitemap: ${site}/sitemap.xml`,
       "",
     ].join("\n");
-    assert.deepEqual(await checkIndexing(origin), { entries: 18, sampled: 18 });
+    assert.deepEqual(await checkIndexing(origin), { entries: 22, sampled: 18 });
     robotsBody = openRobots;
   });
   await t.test("allows response headers that only suppress image previews", async () => {
@@ -150,7 +166,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
       "Googlebot: MAX-IMAGE-PREVIEW:none, nofollow",
     ]) {
       robotsHeader = header;
-      assert.deepEqual(await checkIndexing(origin), { entries: 18, sampled: 18 });
+      assert.deepEqual(await checkIndexing(origin), { entries: 22, sampled: 18 });
     }
   });
   await t.test("rejects bare and crawler-scoped HTTP indexing blocks", async () => {
