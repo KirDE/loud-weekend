@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSelectionPlaylist, deduplicateArtists } from "../lib/selection-playlist.ts";
+import {
+  createSelectionPlaylist,
+  deduplicateArtists,
+  SelectionPlaylistRateLimit,
+  SelectionPlaylistWriteUnconfirmed,
+} from "../lib/selection-playlist.ts";
 import { matchSelectionArtists } from "../lib/catalog/selection-artists.ts";
 import { parsePlannerState, serializePlannerState } from "../lib/planner-storage.ts";
 
@@ -233,4 +238,56 @@ test("reviewed original identities bypass vague tribute-name hints but not expli
     await assert.rejects(run([artist(name, "G")], m), /could not resolve/);
     assert.equal(writes(m).length, 0);
   }
+});
+
+test("preview and deep modes add only eligible unique tracks in artist rounds", async () => {
+  const primary = Array.from({ length: 9 }, (_, index) =>
+    track(String(index), `Original song ${index}`, [["G", "Ghost"]], { popularity: 90 - index }),
+  );
+  const second = track("q", "Original song 1 - Remastered", [["J", "Gojira"]]);
+  for (const [depth, expected] of [
+    ["quick", 2],
+    ["preview", 5],
+    ["deep", 9],
+  ]) {
+    const m = mock({
+      [id("G")]: [...primary, track("s", "Karaoke cover", [["X", "Ghost Tribute"]])],
+      [id("J")]: [second],
+    });
+    const result = await run([artist("Ghost", "G"), artist("Gojira", "J")], m, { depth });
+    const uris = JSON.parse(writes(m).at(-1).init.body).uris;
+    assert.equal(result.trackCount, expected);
+    assert.deepEqual(result.unresolved, []);
+    assert.equal(uris[0], primary[0].uri);
+    assert.equal(uris[1], second.uri);
+    assert.ok(!uris.includes(primary[1].uri));
+    assert.equal(new Set(uris).size, uris.length);
+  }
+});
+
+test("Spotify quota before creation is distinct from an uncertain track write", async () => {
+  const a = artist("Ghost", "G");
+  const readQuota = {
+    calls: [],
+    request: async (url, init) => {
+      readQuota.calls.push({ url, init });
+      return new Response(null, { status: 429 });
+    },
+  };
+  await assert.rejects(run([a], readQuota, { depth: "deep" }), {
+    constructor: SelectionPlaylistRateLimit,
+  });
+  assert.equal(writes(readQuota).length, 0);
+  const select = mock({ [id("G")]: [track("a", "Studio song", [["G", "Ghost"]])] });
+  const request = async (url, init) => {
+    if (/\/playlists\/[^/]+\/tracks/.test(url)) {
+      select.calls.push({ url, init });
+      return new Response(null, { status: 429 });
+    }
+    return select.request(url, init);
+  };
+  await assert.rejects(run([a], { request }, { depth: "preview" }), {
+    constructor: SelectionPlaylistWriteUnconfirmed,
+  });
+  assert.equal(writes(select).length, 2);
 });

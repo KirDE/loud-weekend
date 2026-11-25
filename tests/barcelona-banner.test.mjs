@@ -151,3 +151,257 @@ test("live English banner postposes now and preserves verified catalogue facts",
     assert.equal(parse(live.replace("tickets on sale now", notice)).ticketStatus, undefined);
   }
 });
+
+test("hidden payloads and footer banners cannot prove current stock or conflict with the visible edition", () => {
+  for (const before of [
+    "<script>",
+    "<template>",
+    "<div hidden>",
+    '<div aria-hidden="true">',
+    '<div style="display:none">',
+    "<footer>",
+  ]) {
+    const close = before.startsWith("<script")
+      ? "</script>"
+      : before.startsWith("<template")
+        ? "</template>"
+        : before.startsWith("<footer")
+          ? "</footer>"
+          : "</div>";
+    assert.equal(parse(before + html + close).ticketStatus, undefined);
+    assert.equal(
+      parse(
+        html +
+          before +
+          '<h2 class="par-2">9 - 10 julio 2026</h2><h2 class="par-3">Tickets sold out</h2>' +
+          close,
+      ).ticketStatus,
+      "available",
+    );
+  }
+});
+
+test("an enabled official ticket control must corroborate the current onsale banner", () => {
+  for (const document of [
+    html.replace('/tickets"', 'https://www.barcelonarockfest.com.evil.example/tickets"'),
+    html.replace('/tickets"', 'https://user@www.barcelonarockfest.com/tickets"'),
+    html.replace('/tickets"', '/tickets?year=2026"'),
+    html.replace('/tickets"', '/tickets#archive"'),
+    html.replace("<a href=", '<a aria-disabled="true" href='),
+    html.replace("<a href=", "<a disabled href="),
+    html.replace("<a href=", "<a hidden href="),
+    html.replace("<a href=", '<div aria-disabled="true"><a href=') + "</div>",
+    html.replace('class="nav-ticket-text">TICKETS', 'class="nav-ticket-text">Camping'),
+  ])
+    assert.equal(parse(document).ticketStatus, undefined);
+});
+
+test("source identity excludes archive routes, userinfo, ports and query overrides", () => {
+  for (const url of [
+    "https://www.barcelonarockfest.com/archive",
+    "https://user@www.barcelonarockfest.com/",
+    "https://www.barcelonarockfest.com:8443/",
+    "https://www.barcelonarockfest.com/?year=2026",
+  ]) {
+    assert.equal(parse(html, { ...source, url }).ticketStatus, undefined);
+  }
+});
+
+test("generic JSON-LD never restores unavailable Barcelona stock or unrelated ticket URLs", () => {
+  const ld =
+    '<script type="application/ld+json">' +
+    JSON.stringify({
+      "@type": "Event",
+      name: "Barcelona Rock Fest 2027",
+      startDate: "2027-07-01",
+      endDate: "2027-07-04",
+      offers: {
+        "@type": "Offer",
+        availability: "https://schema.org/InStock",
+        url: "https://example.test/tickets",
+      },
+    }) +
+    "</script>";
+  for (const control of [
+    "<a hidden href=",
+    '<a class="hidden" href=',
+    '<div class="hidden"><a href=',
+    '<a class="disabled" href=',
+  ]) {
+    const c = parse(html.replace("<a href=", control) + ld);
+    assert.equal(c.ticketStatus, undefined);
+    assert.equal(c.ticketsUrl, undefined);
+  }
+  const c = parse('<a href="https://foreign.test/tickets">Tickets</a>' + html + ld);
+  assert.equal(c.ticketStatus, "available");
+  assert.equal(c.ticketsUrl, "https://www.barcelonarockfest.com/en/tickets");
+  assert.ok(c.evidence.find((e) => e.field === "ticketStatus").excerpt.includes('href="/tickets"'));
+  assert.ok(c.evidence.find((e) => e.field === "ticketsUrl").excerpt.includes('href="/tickets"'));
+});
+test("excluded source identity cannot leak generic metadata, links or artists", () => {
+  const generic =
+    '<meta property="event:start_time" content="2027-07-01"><span data-artist="Foreign Band">Foreign Band</span>';
+  for (const url of [
+    "https://www.barcelonarockfest.com/archive",
+    "https://www.barcelonarockfest.com/?year=2026",
+    "https://foreign.test/",
+  ]) {
+    const c = parse(html + generic, { ...source, url });
+    for (const f of ["startDate", "endDate", "ticketsUrl", "ticketStatus", "lineup"])
+      assert.equal(c[f], undefined, f);
+    assert.equal(c.evidence.length, 0);
+  }
+});
+test("fetch rejects redirected Barcelona bodies and alternate fetch routes", async () => {
+  const { fetchSource } = await import("../lib/ingestion/fetch.ts");
+  for (const url of ["https://www.barcelonarockfest.com/archive", "https://foreign.test/"]) {
+    const response = new Response(html);
+    Object.defineProperty(response, "url", { value: url });
+    await assert.rejects(
+      fetchSource(source, { maxAttempts: 1, fetchImpl: async () => response }),
+      /identity/,
+    );
+  }
+  await assert.rejects(
+    fetchSource(
+      { ...source, fetchUrl: "https://foreign.test/" },
+      { maxAttempts: 1, fetchImpl: async () => new Response(html) },
+    ),
+    /identity/,
+  );
+});
+
+test("Barcelona keeps official event warnings but does not use JSON-LD offers as ticket proof", () => {
+  for (const status of ["EventCancelled", "EventPostponed"]) {
+    const event = {
+      "@type": "Event",
+      startDate: "2027-07-01",
+      endDate: "2027-07-04",
+      location: { address: { addressLocality: "Santa Coloma de Gramenet" } },
+      eventStatus: "https://schema.org/" + status,
+      offers: {
+        "@type": "Offer",
+        availability: "https://schema.org/InStock",
+        url: "https://foreign.test/tickets",
+      },
+    };
+    const ld = '<script type="application/ld+json">' + JSON.stringify(event) + "</script>";
+    const candidate = parse(html + ld);
+    assert.equal(candidate.ticketsUrl, "https://www.barcelonarockfest.com/en/tickets");
+    assert.equal(candidate.city, "Santa Coloma de Gramenet");
+    assert.ok(candidate.warnings.some((warning) => warning.includes(status)));
+    const current = { slug: source.festivalSlug, editionYear: 2027, lineup: [], headliners: [] };
+    assert.ok(
+      evaluateCandidate(current, candidate).reviewReasons.some((reason) => reason.includes(status)),
+    );
+    const archived = parse(html + ld, { ...source, url: source.url + "archive" });
+    assert.equal(archived.city, undefined);
+    assert.equal(archived.evidence.length, 0);
+    const jsonOnly = parse(ld, { ...source, strategies: ["json_ld_event"] });
+    assert.equal(jsonOnly.ticketStatus, undefined);
+    assert.equal(jsonOnly.ticketsUrl, undefined);
+  }
+});
+
+test("responsive Barcelona controls require a common visible viewport", () => {
+  const wrapControl = (classes, linkClasses = "") =>
+    html
+      .replace("<a href=", '<div class="' + classes + '"><a class="' + linkClasses + '" href=')
+      .replace("</a>", "</a></div>");
+  for (const classes of ["hidden md:block", "invisible md:visible", "md:flex hidden"]) {
+    assert.equal(parse(wrapControl(classes)).ticketStatus, "available", classes);
+  }
+  for (const document of [
+    wrapControl("hidden md:block", "md:hidden"),
+    wrapControl("invisible md:visible", "md:invisible"),
+    wrapControl("hidden md:block", "hidden md:inline-flex lg:hidden").replace(
+      "md:block",
+      "xl:block",
+    ),
+    wrapControl("hidden hover:block"),
+    wrapControl("hidden md:block").replace("<div class=", "<div hidden class="),
+  ])
+    assert.equal(parse(document).ticketStatus, undefined);
+});
+
+test("Barcelona fetch accepts an equivalent root URL but rejects unreviewed requests before fetching", async () => {
+  const { fetchSource } = await import("../lib/ingestion/fetch.ts");
+  const response = new Response(html);
+  Object.defineProperty(response, "url", { value: source.url });
+  assert.equal(
+    (
+      await fetchSource(
+        { ...source, url: source.url.slice(0, -1) },
+        { maxAttempts: 1, fetchImpl: async () => response },
+      )
+    ).response,
+    response,
+  );
+  for (const config of [
+    { ...source, url: source.url + "archive" },
+    { ...source, fetchUrl: "https://foreign.test/" },
+    { ...source, followLinkPattern: "tickets" },
+  ]) {
+    let requested = false;
+    await assert.rejects(
+      fetchSource(config, {
+        maxAttempts: 1,
+        fetchImpl: async () => {
+          requested = true;
+          return new Response(html);
+        },
+      }),
+      /identity/,
+    );
+    assert.equal(requested, false);
+  }
+});
+
+test("responsive Barcelona sale evidence must share a viewport with the dated banner", () => {
+  const desktop = '<div class="hidden md:block">' + html + "</div>";
+  const candidate = parse(desktop);
+  assert.equal(candidate.startDate, "2027-07-01");
+  assert.equal(candidate.ticketStatus, "available");
+
+  const separate = html
+    .replace(/(<h2[^>]*par-2[^>]*>.*?<\/h2>)/, '<div class="md:hidden">$1</div>')
+    .replace(/(<h2[^>]*par-3[^>]*>.*?<\/h2>)/, '<div class="hidden md:block">$1</div>');
+  assert.equal(parse(separate).startDate, "2027-07-01");
+  assert.equal(parse(separate).ticketStatus, undefined);
+});
+
+// Production requests negotiate English and the official root redirects to /en.
+test("Barcelona fetch accepts only official localized homepage redirects", async () => {
+  const { fetchSource } = await import("../lib/ingestion/fetch.ts");
+  for (const path of ["/en", "/en/", "/es", "/ca/"]) {
+    const response = new Response(html);
+    Object.defineProperty(response, "url", {
+      value: "https://www.barcelonarockfest.com" + path,
+    });
+    const fetched = await fetchSource(source, {
+      maxAttempts: 1,
+      fetchImpl: async () => response,
+    });
+    const candidate = parse(await fetched.response.text());
+    assert.equal(candidate.startDate, "2027-07-01");
+    assert.equal(candidate.endDate, "2027-07-04");
+    assert.equal(candidate.ticketStatus, "available");
+    assert.equal(candidate.lineup, undefined);
+  }
+  for (const url of [
+    "https://www.barcelonarockfest.com/en/archive",
+    "https://www.barcelonarockfest.com/en?year=2026",
+    "https://www.barcelonarockfest.com/en#2026",
+    "https://foreign.test/en",
+    "https://user@www.barcelonarockfest.com/en",
+    "https://www.barcelonarockfest.com:444/en",
+    "http://www.barcelonarockfest.com/en",
+  ]) {
+    const response = new Response(html);
+    Object.defineProperty(response, "url", { value: url });
+    await assert.rejects(
+      fetchSource(source, { maxAttempts: 1, fetchImpl: async () => response }),
+      /identity/,
+    );
+  }
+});
