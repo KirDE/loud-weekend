@@ -57,6 +57,7 @@ test("install stamps the offline shell and warms a revision-aware DB catalogue t
     "/icons/icon-192.png",
     "/icons/icon-512.png",
     "/icons/icon-maskable-512.png",
+    "/offline-trips.mjs",
   ]) {
     const response = await dispatch(listeners, new Request(`https://festivals.test${path}`));
     assert.equal(
@@ -75,6 +76,89 @@ test("install stamps the offline shell and warms a revision-aware DB catalogue t
     const response = await dispatch(listeners, new Request(url));
     assert.equal(response.headers.get("x-catalog-revision"), revisionA);
     assert.deepEqual(await response.json(), payload());
+  }
+});
+
+test("asset eviction keeps the installed trip shell, module and public catalogue available offline", async () => {
+  const { cache, caches } = memoryCache();
+  let online = true;
+  const { listeners } = await loadWorker({
+    cachesImpl: caches,
+    fetchImpl: async (request) => {
+      if (!online) throw new TypeError("offline");
+      if (request instanceof Request && request.url === `${CATALOG_URL}/`) return catalogReply();
+      return new Response(request.url ?? request);
+    },
+  });
+  let install;
+  listeners.install({
+    waitUntil: (promise) => {
+      install = promise;
+    },
+  });
+  await install;
+  for (let index = 0; index < 90; index++) {
+    const url = `https://festivals.test/_next/static/chunk-${index}.js`;
+    assert.equal(await (await dispatch(listeners, new Request(url))).text(), url);
+  }
+  assert.equal((await cache.keys()).length, 80);
+  assert.equal(await cache.match("/_next/static/chunk-0.js"), undefined);
+  assert.ok(await cache.match("/_next/static/chunk-89.js"));
+  online = false;
+  const navigation = await dispatch(listeners, {
+    method: "GET",
+    url: "https://festivals.test/festivals/a",
+    mode: "navigate",
+  });
+  assert.equal(await navigation.text(), "/offline.html");
+  const shell = await readFile(new URL("../public/offline.html", import.meta.url), "utf8");
+  const moduleUrl = shell.match(/offline-trips\.mjs\?shell=\d+/)?.[0];
+  assert.ok(moduleUrl, "New HTML must bypass the previous worker's unversioned module cache");
+  const module = await dispatch(listeners, new Request(`https://festivals.test/${moduleUrl}`));
+  assert.equal(await module.text(), "/offline-trips.mjs");
+  assert.deepEqual(await (await dispatch(listeners)).json(), payload());
+});
+
+test("worker activation removes only obsolete caches for its scope", async () => {
+  const obsolete = "festival-radar-public-v9";
+  const current = "festival-radar-public-v13";
+  const keys = new Set([obsolete, current, obsolete + ":%2Fradar", "unrelated-app-cache"]);
+  const { listeners } = await loadWorker({
+    cachesImpl: {
+      keys: async () => [...keys],
+      delete: async (key) => keys.delete(key),
+    },
+  });
+  let activate;
+  listeners.activate({
+    waitUntil: (promise) => {
+      activate = promise;
+    },
+  });
+  await activate;
+  assert.deepEqual([...keys], [current, obsolete + ":%2Fradar", "unrelated-app-cache"]);
+});
+
+test("public asset and trip module requests fall back to the network on Cache Storage failure", async () => {
+  for (const phase of ["open", "match", "put"]) {
+    const { cache, caches } = memoryCache();
+    const fail = async () => {
+      throw new DOMException("Storage unavailable", "QuotaExceededError");
+    };
+    if (phase === "open") caches.open = fail;
+    else cache[phase] = fail;
+    const { listeners } = await loadWorker({
+      cachesImpl: caches,
+      fetchImpl: async (request) => new Response(request.url),
+    });
+    for (const path of ["/_next/static/chunk.js", "/offline-trips.mjs"]) {
+      const url = `https://festivals.test${path}`;
+      assert.equal(
+        await (await dispatch(listeners, new Request(url))).text(),
+        url,
+        `${phase}: ${path}`,
+      );
+    }
   }
 });
 
@@ -263,6 +347,40 @@ test("a new revision replaces body and validator; a subsequent offline request u
   assert.deepEqual(await (await dispatch(listeners)).json(), payload("Festival B"));
 });
 
+for (const outcome of [200, 304, "network failure"]) {
+  test(`a delayed ${outcome} cannot return an older catalogue than a newer successful response`, async () => {
+    const { cache, caches } = memoryCache();
+    await seed(cache);
+    const started = Promise.withResolvers();
+    const delayedReply = Promise.withResolvers();
+    let requests = 0;
+    let online = true;
+    const { listeners } = await loadWorker({
+      cachesImpl: caches,
+      fetchImpl: async (request) => {
+        if (!online) throw new TypeError("offline");
+        assert.equal(request.headers.get("if-none-match"), `"${revisionA}"`);
+        if (++requests === 1) {
+          started.resolve();
+          return delayedReply.promise;
+        }
+        return catalogReply(revisionB, { body: payload("Festival B") });
+      },
+    });
+
+    const older = dispatch(listeners);
+    await started.promise;
+    assert.deepEqual(await (await dispatch(listeners)).json(), payload("Festival B"));
+    if (outcome === "network failure") delayedReply.reject(new TypeError("offline"));
+    else delayedReply.resolve(catalogReply(revisionA, { status: outcome }));
+    const late = await older;
+    assert.deepEqual(await late.json(), payload("Festival B"));
+    assert.equal((await cache.match(CATALOG_URL)).headers.get("etag"), `"${revisionB}"`);
+    online = false;
+    assert.deepEqual(await (await dispatch(listeners)).json(), payload("Festival B"));
+  });
+}
+
 test("304 without a cached body or with a mismatched revision retries unconditionally", async () => {
   for (const existing of [false, true]) {
     const { cache, caches } = memoryCache();
@@ -300,6 +418,7 @@ test("expired, malformed and private cached bodies cannot validate or fall back"
     [catalogReply(), Date.now() - 8 * 24 * 60 * 60 * 1000],
     [catalogReply(revisionA, { headers: { "Cache-Control": "private" } })],
     [catalogReply(revisionA, { body: { user: "private" } })],
+    [catalogReply(revisionA, { body: { ...payload(), festivals: [null] } })],
     [new Response("not json", { headers: catalogReply().headers })],
   ];
   for (const [candidate, stamp] of candidates) {
@@ -340,10 +459,79 @@ test("unsafe network responses are never saved and HTTP errors do not become sta
         return catalogReply(revisionA, options);
       },
     });
-    assert.equal((await dispatch(listeners)).status, options.status || 200);
+    assert.equal((await dispatch(listeners)).status, options.status || 502);
     assert.equal(await cache.match(CATALOG_URL), undefined);
     online = false;
     await assert.rejects(dispatch(listeners), /offline/);
+  }
+});
+
+test("an invalid public-looking catalogue cannot replace or revalidate a good offline copy", async () => {
+  const festival = { ...payload().festivals[0], startDate: "2027-06-04", endDate: "2027-06-05" };
+  const invalid = [
+    { ...payload(), festivals: [{ ...festival, endDate: "2027-06-03" }] },
+    {
+      ...payload(),
+      timetableStatus: "published",
+      festivals: [
+        {
+          ...festival,
+          timetable: [
+            {
+              date: "2027-06-06",
+              stage: "Main",
+              start: "20:00",
+              artist: "Example",
+              timeZone: "Europe/Berlin",
+              status: "scheduled",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      ...payload(),
+      timetableStatus: "published",
+      festivals: [
+        {
+          ...festival,
+          timetable: [
+            {
+              date: "2027-06-04",
+              stage: "Main",
+              start: "20:00",
+              artist: "Example",
+              timeZone: "Europe/Not-A-Time-Zone",
+              status: "scheduled",
+            },
+          ],
+        },
+      ],
+    },
+    { ...payload(), festivals: [festival, { ...festival, name: "Conflicting festival" }] },
+    { ...payload(), dataVersion: "different-edition" },
+    { ...payload(), editionYear: 2029 },
+    { ...payload(), privateNote: "not part of the public projection" },
+    { ...payload(), festivals: [{ ...payload().festivals[0], timetable: null }] },
+    {
+      ...payload(),
+      festivals: [{ ...payload().festivals[0], timetable: [{ artist: "Incomplete" }] }],
+    },
+  ];
+  for (const body of invalid) {
+    const { cache, caches } = memoryCache();
+    const stamp = Date.now() - 60_000;
+    await seed(cache, catalogReply(), stamp);
+    const { listeners } = await loadWorker({
+      cachesImpl: caches,
+      fetchImpl: async () => catalogReply(revisionB, { body }),
+    });
+    const response = await dispatch(listeners);
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const stored = await cache.match(CATALOG_URL);
+    assert.equal(stored.headers.get("x-festival-radar-cached-at"), String(stamp));
+    assert.deepEqual(await stored.json(), payload());
   }
 });
 
@@ -417,6 +605,7 @@ test("install succeeds without static snapshots when the DB catalogue is unavail
         "/icons/icon-maskable-512.png",
         "/manifest.webmanifest",
         "/offline.html",
+        "/offline-trips.mjs",
       ].sort(),
     );
     assert.equal(await cache.match("/offline/festivals-2027-v1.json"), undefined);
@@ -470,11 +659,22 @@ test("canonical trailing-slash consumer shares the saved body with the bare endp
   );
 });
 
-test("redirected catalogue responses cannot be cached even with public headers", async () => {
+test("redirected catalogue responses are rejected even with public headers", async () => {
   const { cache, caches } = memoryCache();
   const response = catalogReply();
   Object.defineProperty(response, "redirected", { value: true });
   const { listeners } = await loadWorker({ cachesImpl: caches, fetchImpl: async () => response });
-  assert.equal((await dispatch(listeners)).status, 200);
+  assert.equal((await dispatch(listeners)).status, 502);
   assert.equal(await cache.match(CATALOG_URL), undefined);
+});
+
+test("public catalogue accepts a new season with a matching data version", async () => {
+  const { cache, caches } = memoryCache();
+  const body = { ...payload(), editionYear: 2029, dataVersion: "festivals-2029-v1" };
+  const { listeners } = await loadWorker({
+    cachesImpl: caches,
+    fetchImpl: async () => catalogReply(revisionB, { body }),
+  });
+  assert.deepEqual(await (await dispatch(listeners)).json(), body);
+  assert.deepEqual(await (await cache.match(CATALOG_URL)).json(), body);
 });

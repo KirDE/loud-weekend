@@ -6,7 +6,7 @@ import { seedCatalog } from "./support/seed-catalog.ts";
 import { catalogSeed } from "./support/catalog.ts";
 import { addArtistAliases } from "../lib/catalog/artist-alias-repository.ts";
 import { evaluateCandidate } from "../lib/ingestion/policy.ts";
-import { publishIngestionResult } from "../lib/catalog/publication.ts";
+import { publishAdminFestivalChange, publishIngestionResult } from "../lib/catalog/publication.ts";
 import { createIngestionRun, persistAttempt } from "../lib/ingestion/repository.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db = createPrismaClient();
@@ -51,7 +51,7 @@ function result(name) {
     festivalSlug: "synthetic-fest",
     sourceUrl: "https://festival.example.test/",
     fetchedAt,
-    changes: [{ kind: "artist_added", field: "headliners", after: name, reviewRequired: false }],
+    changes: [{ kind: "headliner_added", field: "headliners", after: name, reviewRequired: false }],
     candidate: {
       schemaVersion: 1,
       festivalSlug: "synthetic-fest",
@@ -144,17 +144,21 @@ test("publication through a Unicode alias reuses artist ID, no duplicates or pro
 test("replacement rosters reject duplicate alias IDs before any lineup writes", async () => {
   const before = await db.lineupEntry.findMany({ orderBy: { id: "asc" } });
   const jobs = await db.catalogPlaylistRefresh.count();
-  const value = result("Alternate Name");
-  value.changes = [
-    { field: "headliners", after: ["Alternate Name", "別名"], reviewRequired: false },
-  ];
-  const attempt = await persist(value);
   await assert.rejects(
-    publishIngestionResult(db, {
-      attemptId: attempt.id,
-      result: value,
-      sourceCommit: "alias-test",
-    }),
+    db.$transaction((tx) =>
+      publishAdminFestivalChange(tx, {
+        actorLabel: "alias-test",
+        change: {
+          id: "alias-duplicate-review",
+          resourceKey: "synthetic-fest",
+          field: "headliners",
+          beforeValue: ["Sample Artist"],
+          afterValue: ["Alternate Name", "別名"],
+          sourceEvidence: null,
+          parserRunId: null,
+        },
+      }),
+    ),
     /duplicate alias/,
   );
   assert.deepEqual(await db.lineupEntry.findMany({ orderBy: { id: "asc" } }), before);
@@ -179,9 +183,13 @@ test("valid aliases beat unrelated derived slugs and a roster reads identities o
       },
     });
     const value = result("A/B");
-    value.changes = [
-      { field: "headliners", after: ["A/B", "Other New Act"], reviewRequired: false },
-    ];
+    value.candidate.headliners.push("Other New Act");
+    value.changes.push({
+      kind: "headliner_added",
+      field: "headliners",
+      after: "Other New Act",
+      reviewRequired: false,
+    });
     const attempt = await persist(value);
     await publishIngestionResult(measured, {
       attemptId: attempt.id,
@@ -221,6 +229,8 @@ test("persisted observed artist list retains the exact extracted alias", async (
 });
 test("publication refuses alias-driven cross-billing changes and global collisions", async () => {
   let value = result("Alternate Name");
+  value.candidate.headliners = undefined;
+  value.candidate.lineup = ["Alternate Name"];
   value.changes = [
     { kind: "artist_added", field: "lineup", after: "Alternate Name", reviewRequired: false },
   ];
@@ -247,4 +257,34 @@ test("publication refuses alias-driven cross-billing changes and global collisio
     }),
     /Ambiguous artist identity/,
   );
+});
+
+test("a canonical addition accepts an unambiguous alias in both raw observations", async () => {
+  const name = "Other Identity";
+  const alias = "Other Recorded Billing";
+  const artist = await db.artist.update({
+    where: { slug: "archived-other" },
+    data: { name, aliases: [alias] },
+  });
+  try {
+    const value = result(alias);
+    value.changes[0].after = name;
+    const attempt = await persist(value);
+    const publication = await publishIngestionResult(db, {
+      attemptId: attempt.id,
+      result: value,
+      sourceCommit: "alias-test",
+    });
+    assert.ok(publication);
+    const entry = await db.lineupEntry.findFirstOrThrow({
+      where: { artistId: artist.id, edition: { festival: { slug: value.festivalSlug } } },
+    });
+    assert.equal(entry.billing, "HEADLINER");
+    const saved = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    assert.deepEqual(saved.normalized.headliners, [alias]);
+  } finally {
+    await seedCatalog(db, catalogSeed);
+  }
 });
