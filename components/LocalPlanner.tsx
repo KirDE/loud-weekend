@@ -157,7 +157,7 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           ...emptyPlannerState,
           ...next,
           savedFilters: readDiscoveryPreferences(next.savedFilters),
-          seasonAttendance: current.seasonAttendance,
+          seasonAttendance: next.seasonAttendance ?? current.seasonAttendance,
         })),
       replaceFields: (fields: Partial<PlannerState>) =>
         setState((current) => ({ ...current, ...fields })),

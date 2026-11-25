@@ -4,6 +4,21 @@ import { readPlaylistExclusions } from "./playlist-selection.ts";
 export const legacyPlannerYear = 2027;
 export type Attendance = "going" | "maybe" | "not-going";
 
+export const seasonAttendanceKey = /^(?!2027:)[1-9][0-9]{3}:[a-z0-9][a-z0-9-]{0,179}$/;
+export function isAttendance(value: unknown): value is Attendance {
+  return value === "going" || value === "maybe" || value === "not-going";
+}
+
+export function readSeasonAttendance(value: unknown): Record<string, Attendance> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, Attendance] =>
+        seasonAttendanceKey.test(entry[0]) && isAttendance(entry[1]),
+    ),
+  );
+}
+
 type PlannerState = {
   favoriteFestivals: string[];
   favoriteArtists: string[];
@@ -22,14 +37,7 @@ export function serializePlannerState(state: PlannerState) {
 
 export function parsePlannerState(value: string): Partial<PlannerState> {
   const parsed = JSON.parse(value) as Partial<PlannerState>;
-  const seasonAttendance = Object.fromEntries(
-    Object.entries(parsed.seasonAttendance ?? {}).filter(
-      ([key, attendance]) =>
-        /^[1-9][0-9]{3}:[a-z0-9][a-z0-9-]*$/.test(key) &&
-        !key.startsWith(`${legacyPlannerYear}:`) &&
-        (attendance === "going" || attendance === "maybe" || attendance === "not-going"),
-    ),
-  );
+  const seasonAttendance = readSeasonAttendance(parsed.seasonAttendance);
   return {
     ...parsed,
     seasonAttendance: Object.keys(seasonAttendance).length ? seasonAttendance : undefined,

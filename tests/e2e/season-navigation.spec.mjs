@@ -195,3 +195,133 @@ test("season navigation and local attendance use verified editions without repla
     await db.$disconnect();
   }
 });
+
+test("account sync restores only verified season attendance and never shares it publicly", async ({
+  browser,
+  baseURL,
+}) => {
+  requireLocalDisposableDatabase(process.env.DATABASE_URL);
+  const db = createPrismaClient();
+  const first = await browser.newContext({ viewport: { width: 320, height: 720 } });
+  const second = await browser.newContext({ viewport: { width: 320, height: 720 } });
+  const email = `season-attendance-${Date.now()}@example.test`;
+  const password = "synthetic-season-password";
+  let editionId;
+  try {
+    const festival = await db.festival.findUniqueOrThrow({
+      where: { slug: "synthetic-fest" },
+      select: { id: true, officialUrl: true },
+    });
+    const edition = await db.festivalEdition.create({
+      data: {
+        festivalId: festival.id,
+        year: 2028,
+        status: "TBA",
+        ticketStatus: "UNKNOWN",
+        recordState: "TRACKING",
+        completeness: "TBA",
+        sourceUpdatedAt: new Date(),
+        provenance: {
+          create: {
+            field: "edition",
+            url: festival.officialUrl,
+            note: "Synthetic reviewed announcement",
+            checkedAt: new Date(),
+          },
+        },
+      },
+    });
+    editionId = edition.id;
+    expect(
+      (await first.request.post("/api/auth/register/", { data: { email, password } })).status(),
+    ).toBe(201);
+    expect(
+      (await second.request.post("/api/auth/login/", { data: { email, password } })).ok(),
+    ).toBe(true);
+
+    const key = "2028:synthetic-fest";
+    const plan = await first.newPage();
+    await plan.goto("/en/editions/2028/");
+    await plan.getByRole("combobox", { name: /Synthetic Fest 2028$/ }).selectOption("maybe");
+    await plan.goto("/en/planner/");
+    const sync = plan.locator(".accountSync");
+    const endpoint = "/api/sync/season-attendance/";
+    expect((await (await first.request.get(endpoint)).json()).document).toBeNull();
+    await sync.getByRole("button", { name: "Merge this device into my account" }).click();
+    await expect(sync.getByText("Everything is synchronized.", { exact: true })).toBeVisible();
+
+    const response = await second.request.get(endpoint);
+    expect(response.headers()["cache-control"]).toContain("private, no-store");
+    const { document } = await response.json();
+    expect(document.payload).toEqual({ seasonAttendance: { [key]: "maybe" } });
+    const authenticated = await second.request.get("/api/auth/me/");
+    const { user } = await authenticated.json();
+    const put = (seasonAttendance, accountId = user.id) =>
+      second.request.put(endpoint, {
+        headers: { origin: baseURL },
+        data: { accountId, revision: document.revision, payload: { seasonAttendance } },
+      });
+    expect((await put({ "2099:synthetic-fest": "going" })).status()).toBe(400);
+    expect((await put({ "2027:synthetic-fest": "going" })).status()).toBe(400);
+    expect((await put({ [key]: "going" }, "different-account")).status()).toBe(409);
+    expect((await (await second.request.get("/api/sync/plans/")).json()).document.payload).toEqual({
+      attendance: {},
+    });
+
+    const share = await first.request.post("/api/share/", {
+      headers: { origin: baseURL },
+      data: { documentId: document.id },
+    });
+    expect(share.status()).toBe(404);
+    const corruptShare = await db.shareLink.create({
+      data: { slug: `synthetic-${edition.id}`, userId: user.id, documentId: document.id },
+    });
+    for (const route of ["/api/share/", "/share/"]) {
+      expect((await first.request.get(`${route}${corruptShare.slug}/`)).status()).toBe(404);
+    }
+
+    const restored = await second.newPage();
+    await restored.goto("/en/planner/");
+    await restored.getByRole("button", { name: "Use account data on this device" }).click();
+    await expect(restored.getByText("Everything is synchronized.", { exact: true })).toBeVisible();
+    await restored.goto("/en/editions/2028/");
+    const attendance = restored.getByRole("combobox", { name: /Synthetic Fest 2028$/ });
+    await expect(attendance).toHaveValue("maybe");
+    await attendance.selectOption("");
+    await restored.goto("/en/planner/");
+    await restored.getByRole("button", { name: "Sync now" }).click();
+    await expect(restored.getByText("Everything is synchronized.", { exact: true })).toBeVisible();
+    const cleared = await (await second.request.get(endpoint)).json();
+    expect(cleared.document.payload).toEqual({ seasonAttendance: {} });
+    await plan.reload();
+    await sync.getByRole("button", { name: "Use account data on this device" }).click();
+    await expect(sync.getByText("Everything is synchronized.", { exact: true })).toBeVisible();
+    await plan.goto("/en/editions/2028/");
+    await expect(plan.getByRole("combobox", { name: /Synthetic Fest 2028$/ })).toHaveValue("");
+    await plan.getByRole("combobox", { name: /Synthetic Fest 2028$/ }).selectOption("going");
+    await plan.goto("/en/planner/");
+    await expect(sync.getByRole("button", { name: "Sync now" })).toBeVisible();
+    const favorite = (await (await second.request.get("/api/sync/favorites/")).json()).document;
+    expect(
+      (
+        await second.request.put("/api/sync/favorites/", {
+          headers: { origin: baseURL },
+          data: { revision: favorite.revision, payload: { favoriteFestivals: ["synthetic-fest"] } },
+        })
+      ).ok(),
+    ).toBe(true);
+    await sync.getByRole("button", { name: "Sync now" }).click();
+    await expect(sync.getByRole("alert")).toContainText("A newer version exists");
+    await sync.getByRole("button", { name: "Use other device" }).click();
+    await plan.goto("/en/editions/2028/");
+    await expect(plan.getByRole("combobox", { name: /Synthetic Fest 2028$/ })).toHaveValue("going");
+    expect((await (await second.request.get(endpoint)).json()).document.payload).toEqual({
+      seasonAttendance: {},
+    });
+  } finally {
+    await Promise.all([first.close(), second.close()]);
+    await db.user.deleteMany({ where: { email } });
+    if (editionId) await db.festivalEdition.deleteMany({ where: { id: editionId } });
+    await db.$disconnect();
+  }
+});
