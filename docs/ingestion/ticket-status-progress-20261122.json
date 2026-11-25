@@ -1,0 +1,1390 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-11-22T10:36:42+00:00",
+  "scope": "60 public current-edition paths; implementation proposals and offline evidence, never live ticket stock or release acceptance",
+  "catalogueSource": "https://loudweekend.eu/api/offline/catalog/",
+  "catalogueDataVersion": "festivals-2027-v1",
+  "mainObserved": "c6a8647",
+  "counts": {
+    "publicPaths": 60,
+    "withSourceSpecificProposals": 28,
+    "withoutVerifiedSourceSpecificProposal": 32
+  },
+  "notes": [
+    "Historical 13/59, 18/59 and 26/59 files retain their original timestamps and denominators.",
+    "#480 is in main; #482 now targets main. Other source PRs remain feature-parented until maintainer acceptance/deployment.",
+    "No check rollup returned for some old heads: not_available_in_current_query is not a current green CI assertion. Historical exact-head evidence remains in the dated 20261118 ledger.",
+    "Source/proposal/review/offline test success does not establish maintainer acceptance or production coverage.",
+    "This agent has not merged, deployed or written production data."
+  ],
+  "pullRequestsObserved": [
+    {
+      "number": 507,
+      "url": "https://github.com/KirDE/loud-weekend/pull/507",
+      "head": "6faf921b1f0ca9e3fcaabd963af511dac4e1ba66",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "6faf921b1f0ca9e3fcaabd963af511dac4e1ba66",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": {
+        "state": "PENDING",
+        "contexts": {
+          "nodes": [
+            {
+              "name": "core",
+              "status": "IN_PROGRESS",
+              "conclusion": null,
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012962194/job/137179089451"
+            },
+            {
+              "name": "core",
+              "status": "IN_PROGRESS",
+              "conclusion": null,
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012918770/job/137178960903"
+            },
+            {
+              "name": "browser-tests",
+              "status": "IN_PROGRESS",
+              "conclusion": null,
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012962194/job/137179089670"
+            },
+            {
+              "name": "browser-tests",
+              "status": "IN_PROGRESS",
+              "conclusion": null,
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012918770/job/137178961150"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "number": 501,
+      "url": "https://github.com/KirDE/loud-weekend/pull/501",
+      "head": "a34c1192224b814c86e429cf183492eafd8f40a7",
+      "base": "main",
+      "review": {
+        "commit_sha": "a34c1192224b814c86e429cf183492eafd8f40a7",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": {
+        "state": "PENDING",
+        "contexts": {
+          "nodes": [
+            {
+              "name": "core",
+              "status": "IN_PROGRESS",
+              "conclusion": null,
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012875218/job/137178824371"
+            },
+            {
+              "name": "core",
+              "status": "IN_PROGRESS",
+              "conclusion": null,
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012870587/job/137178810572"
+            },
+            {
+              "name": "browser-tests",
+              "status": "IN_PROGRESS",
+              "conclusion": null,
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012875218/job/137178824460"
+            },
+            {
+              "name": "browser-tests",
+              "status": "IN_PROGRESS",
+              "conclusion": null,
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012870587/job/137178810288"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "number": 498,
+      "url": "https://github.com/KirDE/loud-weekend/pull/498",
+      "head": "22b5ee54afbb5cb14d0408c23b7680a69855e391",
+      "base": "fix/434-ticket-publication-provenance",
+      "review": {
+        "commit_sha": "22b5ee54afbb5cb14d0408c23b7680a69855e391",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 497,
+      "url": "https://github.com/KirDE/loud-weekend/pull/497",
+      "head": "c1a1f6d0407557a6e1aeaebe817c7fb28bdc6afc",
+      "base": "fix/434-impericon-ticket-stock",
+      "review": {
+        "commit_sha": "c1a1f6d0407557a6e1aeaebe817c7fb28bdc6afc",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 496,
+      "url": "https://github.com/KirDE/loud-weekend/pull/496",
+      "head": "803bdef6d462e153ad9e3720150c49aeb2fb47ec",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "803bdef6d462e153ad9e3720150c49aeb2fb47ec",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 495,
+      "url": "https://github.com/KirDE/loud-weekend/pull/495",
+      "head": "51083b5f18d5eecf4a0a08650872baa22fe6059b",
+      "base": "fix/434-full-rewind-ticket-stock",
+      "review": {
+        "commit_sha": "51083b5f18d5eecf4a0a08650872baa22fe6059b",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 494,
+      "url": "https://github.com/KirDE/loud-weekend/pull/494",
+      "head": "d28a8a0b4ab33940d24adf5419739271fe0887bd",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "d28a8a0b4ab33940d24adf5419739271fe0887bd",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 493,
+      "url": "https://github.com/KirDE/loud-weekend/pull/493",
+      "head": "0b0150794cdb3d2b4518fb3f308fc286047e547b",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "0b0150794cdb3d2b4518fb3f308fc286047e547b",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 492,
+      "url": "https://github.com/KirDE/loud-weekend/pull/492",
+      "head": "a67aa9c5c83565fca92324949ad48540a18cf95f",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "a67aa9c5c83565fca92324949ad48540a18cf95f",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 491,
+      "url": "https://github.com/KirDE/loud-weekend/pull/491",
+      "head": "1aa9245bc6fbdf759ff40460baf33440f3914543",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "1aa9245bc6fbdf759ff40460baf33440f3914543",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 490,
+      "url": "https://github.com/KirDE/loud-weekend/pull/490",
+      "head": "8a368ab95f9ceb33d048a93bbde8a19a4da824e2",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "8a368ab95f9ceb33d048a93bbde8a19a4da824e2",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 489,
+      "url": "https://github.com/KirDE/loud-weekend/pull/489",
+      "head": "766ad5a1946bc6e2f96bad97f296b8387c9b681a",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "766ad5a1946bc6e2f96bad97f296b8387c9b681a",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 488,
+      "url": "https://github.com/KirDE/loud-weekend/pull/488",
+      "head": "818dfdf7cd9e10a8f822f238ee18f1d33d67997f",
+      "base": "fix/434-full-rewind-ticket-stock",
+      "review": {
+        "commit_sha": "818dfdf7cd9e10a8f822f238ee18f1d33d67997f",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 487,
+      "url": "https://github.com/KirDE/loud-weekend/pull/487",
+      "head": "276f51d68922a2d45090916aacfc7f65bd1fb924",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "276f51d68922a2d45090916aacfc7f65bd1fb924",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 486,
+      "url": "https://github.com/KirDE/loud-weekend/pull/486",
+      "head": "0096af2d95891722f37ec5ea0456936dc48844c1",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "0096af2d95891722f37ec5ea0456936dc48844c1",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 485,
+      "url": "https://github.com/KirDE/loud-weekend/pull/485",
+      "head": "9d63be8f6e9d5df82c62d2390b4219acd4e5a777",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "9d63be8f6e9d5df82c62d2390b4219acd4e5a777",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 484,
+      "url": "https://github.com/KirDE/loud-weekend/pull/484",
+      "head": "d15842192e98ce5e733c2aa5f1b39b3719160ccd",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "d15842192e98ce5e733c2aa5f1b39b3719160ccd",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 483,
+      "url": "https://github.com/KirDE/loud-weekend/pull/483",
+      "head": "738741fd14d2059f9d360c1c45e959d3d2ab9194",
+      "base": "fix/434-festival-ticket-parsers",
+      "review": {
+        "commit_sha": "738741fd14d2059f9d360c1c45e959d3d2ab9194",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": null
+    },
+    {
+      "number": 482,
+      "url": "https://github.com/KirDE/loud-weekend/pull/482",
+      "head": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "base": "main",
+      "review": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "quality": {
+        "state": "SUCCESS",
+        "contexts": {
+          "nodes": [
+            {
+              "name": "core",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS",
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012790991/job/137178573910"
+            },
+            {
+              "name": "core",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS",
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012785479/job/137178557789"
+            },
+            {
+              "name": "browser-tests",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS",
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012790991/job/137178573767"
+            },
+            {
+              "name": "browser-tests",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS",
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012785479/job/137178557973"
+            },
+            {
+              "name": "test-and-build",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS",
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012790991/job/137179609633"
+            },
+            {
+              "name": "test-and-build",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS",
+              "detailsUrl": "https://github.com/KirDE/loud-weekend/actions/runs/45012785479/job/137179510076"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "festivals": [
+    {
+      "slug": "2000trees",
+      "name": "2000trees",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Readability exposes older news, not reviewed current admission controls."
+    },
+    {
+      "slug": "alcatraz",
+      "name": "Alcatraz Open Air",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Official tickets page reachable, but extraction does not expose verified current admission controls."
+    },
+    {
+      "slug": "alpen-flair",
+      "name": "Alpen Flair",
+      "proposalPr": 485,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/485",
+      "proposalHeadObserved": "9d63be8f6e9d5df82c62d2390b4219acd4e5a777",
+      "reviewObserved": {
+        "commit_sha": "9d63be8f6e9d5df82c62d2390b4219acd4e5a777",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "barcelona-rock-fest",
+      "name": "Barcelona Rock Fest",
+      "proposalPr": 486,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/486",
+      "proposalHeadObserved": "0096af2d95891722f37ec5ea0456936dc48844c1",
+      "reviewObserved": {
+        "commit_sha": "0096af2d95891722f37ec5ea0456936dc48844c1",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "bloodstock",
+      "name": "Bloodstock Open Air",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Homepage marketing is not current purchase inventory."
+    },
+    {
+      "slug": "brutal-assault",
+      "name": "Brutal Assault",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "copenhell",
+      "name": "Copenhell",
+      "proposalPr": 491,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/491",
+      "proposalHeadObserved": "1aa9245bc6fbdf759ff40460baf33440f3914543",
+      "reviewObserved": {
+        "commit_sha": "1aa9245bc6fbdf759ff40460baf33440f3914543",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "download",
+      "name": "Download Festival",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "offline_source_publication_readback_replay_tamper_checks",
+        "evidence": "tests/catalog-publication.e2e.test.ts at 14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "acceptance": "pending_maintainer_release_acceptance"
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "dynamo-metal-fest",
+      "name": "Dynamo Metal Fest",
+      "proposalPr": 496,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/496",
+      "proposalHeadObserved": "803bdef6d462e153ad9e3720150c49aeb2fb47ec",
+      "reviewObserved": {
+        "commit_sha": "803bdef6d462e153ad9e3720150c49aeb2fb47ec",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "eurockeennes",
+      "name": "Eurockéennes de Belfort",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Existing parser has a synthetic priced-card positive case, but checked-in real homepage fixture has no current stock cards. Current source inventory proof still required."
+    },
+    {
+      "slug": "firenze-rocks",
+      "name": "Firenze Rocks",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "frequency",
+      "name": "Frequency Festival",
+      "proposalPr": 490,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/490",
+      "proposalHeadObserved": "8a368ab95f9ceb33d048a93bbde8a19a4da824e2",
+      "reviewObserved": {
+        "commit_sha": "8a368ab95f9ceb33d048a93bbde8a19a4da824e2",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "full-force",
+      "name": "Full Force",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "full-rewind",
+      "name": "Full Rewind",
+      "proposalPr": 487,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/487",
+      "proposalHeadObserved": "276f51d68922a2d45090916aacfc7f65bd1fb924",
+      "reviewObserved": {
+        "commit_sha": "276f51d68922a2d45090916aacfc7f65bd1fb924",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "graspop",
+      "name": "Graspop Metal Meeting",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Ticket page retains a dated sale-opening announcement already in the past; that is not current inventory."
+    },
+    {
+      "slug": "greenfield",
+      "name": "Greenfield Festival",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Current official ticket destination 403: live inventory could not be verified. Readable FAQ is not current inventory.",
+      "readOnlyRecheck20261122": {
+        "status": 403,
+        "conclusion": "Inventory unverified; retain last good data. No access bypass or provider writes performed."
+      }
+    },
+    {
+      "slug": "heavy-weekend",
+      "name": "Heavy Week-End",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "hellfest",
+      "name": "Hellfest Open Air",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Four-day pass sold out, future one-day sale and resale coexist. Do not flatten tier stock into global sold_out/not_on_sale; coordinate tier model #446."
+    },
+    {
+      "slug": "hurricane",
+      "name": "Hurricane Festival",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Current official ticket destination timeout: live inventory could not be verified. Current-year on-sale news/price is not yet verified against actual current admission purchase controls.",
+      "readOnlyRecheck20261122": {
+        "status": "timeout",
+        "conclusion": "Inventory unverified; retain last good data. No access bypass or provider writes performed."
+      }
+    },
+    {
+      "slug": "idays",
+      "name": "I-Days Milano",
+      "proposalPr": 495,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/495",
+      "proposalHeadObserved": "51083b5f18d5eecf4a0a08650872baa22fe6059b",
+      "reviewObserved": {
+        "commit_sha": "51083b5f18d5eecf4a0a08650872baa22fe6059b",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "collector_publication_integration_ci_pending",
+        "evidence": {
+          "pr": 498,
+          "head": "22b5ee54afbb5cb14d0408c23b7680a69855e391",
+          "run": 44210452447,
+          "test": "tests/catalog-publication.e2e.test.ts",
+          "scope": "Composed fetchSource (offline HTTP) to parser, evaluateCandidate, durable evidence, combined/stock-only publication, public readback/replay/rollback. New head clean-reviewed; full CI still pending at snapshot."
+        }
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "impericon",
+      "name": "Impericon Festival",
+      "proposalPr": 488,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/488",
+      "proposalHeadObserved": "818dfdf7cd9e10a8f822f238ee18f1d33d67997f",
+      "reviewObserved": {
+        "commit_sha": "818dfdf7cd9e10a8f822f238ee18f1d33d67997f",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "offline_adapter_publication_replay_rollback_verified",
+        "evidence": {
+          "pr": 497,
+          "head": "c1a1f6d0407557a6e1aeaebe817c7fb28bdc6afc",
+          "run": 44208471755,
+          "test": "tests/impericon-current.e2e.test.ts",
+          "scope": "Source-shaped announcement/product envelope to parser, persisted proof, combined and stock-only publication, readback, replay and rollback. HTTP collection is separately fixture-tested, not live production acceptance."
+        }
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "inferno",
+      "name": "Inferno Metal Festival",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "jera-on-air",
+      "name": "Jera On Air",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Current shop link exists; actual stock schema/product scopes not yet audited."
+    },
+    {
+      "slug": "leeds",
+      "name": "Leeds Festival",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "leyendas-del-rock",
+      "name": "Leyendas del Rock",
+      "proposalPr": 492,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/492",
+      "proposalHeadObserved": "a67aa9c5c83565fca92324949ad48540a18cf95f",
+      "reviewObserved": {
+        "commit_sha": "a67aa9c5c83565fca92324949ad48540a18cf95f",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "mad-cool",
+      "name": "Mad Cool Festival",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "masters-of-rock",
+      "name": "Masters of Rock",
+      "proposalPr": 484,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/484",
+      "proposalHeadObserved": "d15842192e98ce5e733c2aa5f1b39b3719160ccd",
+      "reviewObserved": {
+        "commit_sha": "d15842192e98ce5e733c2aa5f1b39b3719160ccd",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "mera-luna",
+      "name": "M'era Luna Festival",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Initial official source timed out; no inventory conclusion."
+    },
+    {
+      "slug": "midgardsblot",
+      "name": "Midgardsblot Festival",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Initial official source HTTP 403; no inventory conclusion."
+    },
+    {
+      "slug": "motocultor",
+      "name": "Motocultor Festival",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Ticket navigation without validated admission stock."
+    },
+    {
+      "slug": "mystic",
+      "name": "Mystic Festival",
+      "proposalPr": 483,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/483",
+      "proposalHeadObserved": "738741fd14d2059f9d360c1c45e959d3d2ab9194",
+      "reviewObserved": {
+        "commit_sha": "738741fd14d2059f9d360c1c45e959d3d2ab9194",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "nova-rock",
+      "name": "Nova Rock",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "paleo",
+      "name": "Paléo Festival",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "pinkpop",
+      "name": "Pinkpop",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "pistoia-blues",
+      "name": "Pistoia Blues Festival",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "polandrock",
+      "name": "Pol'and'Rock Festival",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "provinssi",
+      "name": "Provinssi",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Prior sale prose and future current-edition ticket gateway do not establish live Paylogic inventory."
+    },
+    {
+      "slug": "reading",
+      "name": "Reading Festival",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "resurrection-fest",
+      "name": "Resurrection Fest",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "roadburn",
+      "name": "Roadburn Festival",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Current-looking sale prose links stale/offsale ticket landing; no available/sold_out inference."
+    },
+    {
+      "slug": "rock-am-ring",
+      "name": "Rock am Ring",
+      "proposalPr": 507,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/507",
+      "proposalHeadObserved": "6faf921b1f0ca9e3fcaabd963af511dac4e1ba66",
+      "reviewObserved": {
+        "commit_sha": "6faf921b1f0ca9e3fcaabd963af511dac4e1ba66",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "PENDING",
+      "canonicalEvidence": {
+        "state": "offline_source_publication_readback_replay_tamper_checks",
+        "evidence": "tests/catalog-publication.e2e.test.ts at 6faf921b1f0ca9e3fcaabd963af511dac4e1ba66",
+        "acceptance": "pending_maintainer_release_acceptance"
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "rock-en-seine",
+      "name": "Rock en Seine",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "rock-for-people",
+      "name": "Rock for People",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Current official ticket destination 403: live inventory could not be verified. Partial capacity sold and tier changes coexist with on-sale copy; source-specific admission control/stock proof still needed.",
+      "readOnlyRecheck20261122": {
+        "status": 403,
+        "conclusion": "Inventory unverified; retain last good data. No access bypass or provider writes performed."
+      }
+    },
+    {
+      "slug": "rock-im-park",
+      "name": "Rock im Park",
+      "proposalPr": 507,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/507",
+      "proposalHeadObserved": "6faf921b1f0ca9e3fcaabd963af511dac4e1ba66",
+      "reviewObserved": {
+        "commit_sha": "6faf921b1f0ca9e3fcaabd963af511dac4e1ba66",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "PENDING",
+      "canonicalEvidence": {
+        "state": "offline_source_publication_readback_replay_tamper_checks",
+        "evidence": "tests/catalog-publication.e2e.test.ts at 6faf921b1f0ca9e3fcaabd963af511dac4e1ba66",
+        "acceptance": "pending_maintainer_release_acceptance"
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "rock-imperium",
+      "name": "Rock Imperium Festival",
+      "proposalPr": 493,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/493",
+      "proposalHeadObserved": "0b0150794cdb3d2b4518fb3f308fc286047e547b",
+      "reviewObserved": {
+        "commit_sha": "0b0150794cdb3d2b4518fb3f308fc286047e547b",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "rock-in-roma",
+      "name": "Rock in Roma",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Initial official source timed out; no inventory conclusion."
+    },
+    {
+      "slug": "rock-the-lakes",
+      "name": "Rock The Lakes",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Initial official source timed out; no inventory conclusion."
+    },
+    {
+      "slug": "rock-werchter",
+      "name": "Rock Werchter",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "rockharz",
+      "name": "Rockharz Open Air",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "offline_source_publication_readback_replay_tamper_checks",
+        "evidence": "tests/catalog-publication.e2e.test.ts at 14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "acceptance": "pending_maintainer_release_acceptance"
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "rockstadt",
+      "name": "Rockstadt Extreme Fest",
+      "proposalPr": 494,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/494",
+      "proposalHeadObserved": "d28a8a0b4ab33940d24adf5419739271fe0887bd",
+      "reviewObserved": {
+        "commit_sha": "d28a8a0b4ab33940d24adf5419739271fe0887bd",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "not_available_in_current_query",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "roskilde",
+      "name": "Roskilde Festival",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Later official /billetter request returned HTTP 403 Cloudflare; initial homepage 200 did not verify inventory."
+    },
+    {
+      "slug": "southside",
+      "name": "Southside Festival",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Current official ticket destination timeout: live inventory could not be verified. Readability exposes search chrome without inventory; treat as incomplete extraction, not a healthy stock check.",
+      "readOnlyRecheck20261122": {
+        "status": "timeout",
+        "conclusion": "Inventory unverified; retain last good data. No access bypass or provider writes performed."
+      }
+    },
+    {
+      "slug": "summer-breeze",
+      "name": "Summer Breeze Open Air",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "summer-punch",
+      "name": "Summer Punch Festival",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "New Summer Punch path from #504; no source-specific ticket inventory proposal has been verified."
+    },
+    {
+      "slug": "sweden-rock",
+      "name": "Sweden Rock Festival",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "tolminator",
+      "name": "Tolminator",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "tons-of-rock",
+      "name": "Tons of Rock",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Source-specific current admission/stock producer and real-source fixture audit remain incomplete. HTTP success or a ticket URL alone is not inventory proof."
+    },
+    {
+      "slug": "tuska",
+      "name": "Tuska Festival",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    },
+    {
+      "slug": "vainstream",
+      "name": "Vainstream Rockfest",
+      "proposalPr": null,
+      "proposalUrl": null,
+      "proposalHeadObserved": null,
+      "reviewObserved": null,
+      "qualityObserved": null,
+      "canonicalEvidence": {
+        "state": "pending_source_to_publication_acceptance",
+        "evidence": null
+      },
+      "remainingWork": "Current official ticket destination 403: live inventory could not be verified. Current regular products coexist with sold-out early-bird tiers. Raw product stock/control proof not yet audited; no global sellout inference.",
+      "readOnlyRecheck20261122": {
+        "status": 403,
+        "conclusion": "Inventory unverified; retain last good data. No access bypass or provider writes performed."
+      }
+    },
+    {
+      "slug": "wacken-open-air",
+      "name": "Wacken Open Air",
+      "proposalPr": 482,
+      "proposalUrl": "https://github.com/KirDE/loud-weekend/pull/482",
+      "proposalHeadObserved": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+      "reviewObserved": {
+        "commit_sha": "14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "has_any_findings": false,
+        "has_unresolved_findings": false,
+        "status": "completed"
+      },
+      "qualityObserved": "SUCCESS",
+      "canonicalEvidence": {
+        "state": "offline_source_publication_readback_replay_tamper_checks",
+        "evidence": "tests/catalog-publication.e2e.test.ts at 14d86807e5c3e2d09070e6a9b17dad6310320260",
+        "acceptance": "pending_maintainer_release_acceptance"
+      },
+      "remainingWork": "Await parent acceptance/deployment before focused integration onto main and fresh gates; no production acceptance asserted."
+    }
+  ]
+}

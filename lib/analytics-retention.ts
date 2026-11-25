@@ -1,4 +1,5 @@
 type AnalyticsDb = {
+  productEventDaily?: AnalyticsDb["analyticsDaily"];
   analyticsDaily: {
     deleteMany(args: { where: { day: { lt: Date } } }): Promise<{ count: number }>;
   };
@@ -29,5 +30,11 @@ export async function pruneAnalytics(db: AnalyticsDb, retentionValue?: string, n
   const retentionDays = retentionDaysFrom(retentionValue);
   const cutoff = analyticsCutoff(retentionDays, now);
   const result = await db.analyticsDaily.deleteMany({ where: { day: { lt: cutoff } } });
-  return { deletedAggregateRows: result.count, cutoff: cutoff.toISOString(), retentionDays };
+  const events = await db.productEventDaily?.deleteMany({ where: { day: { lt: cutoff } } });
+  return {
+    deletedAggregateRows: result.count,
+    ...(events ? { deletedProductEventRows: events.count } : {}),
+    cutoff: cutoff.toISOString(),
+    retentionDays,
+  };
 }
