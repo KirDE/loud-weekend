@@ -16,6 +16,7 @@ type Trip = Summary & {
     year: number;
     ownVote: Choice | null;
     tally: Partial<Record<Choice, number>>;
+    comments: { id: string; body: string; createdAt: string; own: boolean; canRemove: boolean }[];
   }[];
   invites?: {
     id: string;
@@ -63,9 +64,15 @@ const labels = {
     INVITED: "Invitation created",
     JOINED: "Invitation accepted",
     REVOKED: "Access revoked",
+    comments: "Comments",
+    addComment: "Post comment",
+    comment: "Write a comment",
+    removeComment: "Remove comment",
+    mine: "Your comment",
     leave: "Leave trip",
     remove: "Delete trip",
-    removePrompt: "Delete this trip for everyone? This removes all invitations and votes.",
+    removePrompt:
+      "Delete this trip for everyone? This removes all invitations, votes and comments.",
   },
   de: {
     title: "Gruppenreisen",
@@ -103,9 +110,15 @@ const labels = {
     INVITED: "Einladung erstellt",
     JOINED: "Einladung angenommen",
     REVOKED: "Zugriff widerrufen",
+    comments: "Kommentare",
+    addComment: "Kommentar senden",
+    comment: "Kommentar schreiben",
+    removeComment: "Kommentar entfernen",
+    mine: "Dein Kommentar",
     leave: "Reise verlassen",
     remove: "Reise löschen",
-    removePrompt: "Diese Reise für alle löschen? Einladungen und Stimmen werden entfernt.",
+    removePrompt:
+      "Diese Reise für alle löschen? Einladungen, Stimmen und Kommentare werden entfernt.",
   },
   ru: {
     title: "Групповые поездки",
@@ -142,9 +155,14 @@ const labels = {
     INVITED: "Приглашение создано",
     JOINED: "Приглашение принято",
     REVOKED: "Доступ отозван",
+    comments: "Комментарии",
+    addComment: "Отправить комментарий",
+    comment: "Написать комментарий",
+    removeComment: "Удалить комментарий",
+    mine: "Ваш комментарий",
     leave: "Покинуть поездку",
     remove: "Удалить поездку",
-    removePrompt: "Удалить поездку для всех? Все приглашения и голоса будут удалены.",
+    removePrompt: "Удалить поездку для всех? Все приглашения, голоса и комментарии будут удалены.",
   },
 } as const;
 
@@ -238,6 +256,7 @@ export function GroupTrips() {
       setTrip(selected);
       setSecret(result.secret ?? "");
       setStatus("ready");
+      return true;
     } catch (error) {
       if (authRevision.current !== revision) return;
       if (error === 401) setIndex(null);
@@ -299,7 +318,7 @@ export function GroupTrips() {
             </select>
           </label>
           {trip && (
-            <section aria-label={trip.title}>
+            <section key={trip.id} aria-label={trip.title}>
               <h2>{trip.title}</h2>
               <p>{t[trip.role]}</p>
               <button type="button" onClick={() => void perform(undefined, trip.id)}>
@@ -343,6 +362,64 @@ export function GroupTrips() {
                         .map((choice) => `${t[choice]}: ${option.tally[choice] ?? 0}`)
                         .join(" · ")}
                     </p>
+                    <details>
+                      <summary>
+                        {t.comments} ({option.comments.length})
+                      </summary>
+                      <ul>
+                        {option.comments.map((comment) => (
+                          <li key={comment.id}>
+                            <p className="groupTripComment">{comment.body}</p>
+                            <time dateTime={comment.createdAt}>{date(comment.createdAt)}</time>
+                            {comment.own && <> · {t.mine}</>}{" "}
+                            {comment.canRemove && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void perform(
+                                    {
+                                      kind: "remove-comment",
+                                      tripId: trip.id,
+                                      commentId: comment.id,
+                                    },
+                                    trip.id,
+                                  )
+                                }
+                              >
+                                {t.removeComment}
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      {trip.role !== "VIEWER" && (
+                        <form
+                          onSubmit={async (event) => {
+                            event.preventDefault();
+                            const form = event.currentTarget;
+                            const body = new FormData(form).get("comment");
+                            if (
+                              await perform(
+                                {
+                                  kind: "comment",
+                                  tripId: trip.id,
+                                  editionId: option.editionId,
+                                  body,
+                                },
+                                trip.id,
+                              )
+                            )
+                              form.reset();
+                          }}
+                        >
+                          <label>
+                            {t.comment}
+                            <textarea name="comment" maxLength={500} required rows={3} />
+                          </label>
+                          <button type="submit">{t.addComment}</button>
+                        </form>
+                      )}
+                    </details>
                   </li>
                 ))}
               </ul>

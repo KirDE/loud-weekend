@@ -16,6 +16,9 @@ const copy = {
     revoke: "Revoke",
     votes: "Votes",
     refresh: "Refresh trip",
+    comments: "Comments",
+    write: "Write a comment",
+    add: "Post comment",
   },
   de: {
     title: "Gruppenreisen",
@@ -29,6 +32,9 @@ const copy = {
     revoke: "Widerrufen",
     votes: "Stimmen",
     refresh: "Reise aktualisieren",
+    comments: "Kommentare",
+    write: "Kommentar schreiben",
+    add: "Kommentar senden",
   },
   ru: {
     title: "Групповые поездки",
@@ -42,6 +48,9 @@ const copy = {
     revoke: "Отозвать",
     votes: "Голоса",
     refresh: "Обновить поездку",
+    comments: "Комментарии",
+    write: "Написать комментарий",
+    add: "Отправить комментарий",
   },
 };
 
@@ -172,6 +181,20 @@ test("mobile owner shares a private edition vote with an invited account and can
           ).toBeLessThanOrEqual(320);
         }
 
+        const voteRegion = voter.page.getByRole("region", { name: "Browser fixture trip" });
+        await voteRegion.getByText(`${t.comments} (0)`, { exact: true }).click();
+        await voteRegion.getByLabel(t.write).fill("Synthetic private comment");
+        await voteRegion.getByRole("button", { name: t.add }).click();
+        await expect(
+          voteRegion.getByText("Synthetic private comment", { exact: true }),
+        ).toBeVisible();
+        const viewRegion = viewer.page.getByRole("region", { name: "Browser fixture trip" });
+        await viewRegion.getByRole("button", { name: t.refresh }).click();
+        await viewRegion.getByText(`${t.comments} (1)`, { exact: true }).click();
+        await expect(
+          viewRegion.getByText("Synthetic private comment", { exact: true }),
+        ).toBeVisible();
+        await expect(viewRegion.getByLabel(t.write)).toHaveCount(0);
         await group.getByRole("button", { name: t.refresh }).click();
         const voterGrant = (
           await db.groupTripInvite.findFirstOrThrow({
@@ -195,6 +218,20 @@ test("mobile owner shares a private edition vote with an invited account and can
         await expect(voter.page.getByRole("region", { name: "Browser fixture trip" })).toHaveCount(
           0,
         );
+        await viewRegion.getByRole("button", { name: t.refresh }).click();
+        await expect(
+          viewRegion.getByText("Synthetic private comment", { exact: true }),
+        ).toHaveCount(0);
+
+        if (language === "en") {
+          await group.getByText("Comments (0)", { exact: true }).click();
+          await group.getByLabel(t.write).fill("Unsubmitted draft for the first trip");
+          await owner.page.getByLabel(t.name).fill("Second fixture trip");
+          await owner.page.getByRole("button", { name: t.create }).click();
+          const second = owner.page.getByRole("region", { name: "Second fixture trip" });
+          await second.getByText("Comments (0)", { exact: true }).click();
+          await expect(second.getByLabel(t.write)).toHaveValue("");
+        }
       } finally {
         await Promise.all([owner.context.close(), voter.context.close(), viewer.context.close()]);
       }

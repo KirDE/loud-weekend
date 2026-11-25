@@ -4,10 +4,12 @@ import test from "node:test";
 import { createPrismaClient } from "../lib/prisma-client.mjs";
 import {
   acceptGroupTripInvite,
+  addGroupTripComment,
   createGroupTrip,
   GroupTripError,
   inviteToGroupTrip,
   readGroupTrip,
+  removeGroupTripComment,
   revokeGroupTripInvite,
   setGroupTripVote,
 } from "../lib/group-trips";
@@ -98,15 +100,35 @@ test("group trip grants scope reads and votes, serialize claims and revoke acces
           name: "Fixture",
           year: 2027,
           ownVote: null,
+          comments: [],
           tally: { GOING: 1, MAYBE: 1 },
         },
       ],
     });
+    await assert.rejects(
+      addGroupTripComment(db, viewer, id, edition, "Read-only"),
+      denied("missing"),
+    );
+    await assert.rejects(
+      addGroupTripComment(db, voter, id, unverified, "Wrong edition"),
+      denied("missing"),
+    );
+    await addGroupTripComment(db, voter, id, edition, "Meet at the entrance");
+    const [comment] = (await readGroupTrip(db, viewer, id)).options[0].comments;
+    assert.deepEqual(Object.keys(comment).sort(), ["body", "canRemove", "createdAt", "id", "own"]);
+    assert.equal(comment.body, "Meet at the entrance");
+    assert.equal(comment.canRemove, false);
+    await assert.rejects(removeGroupTripComment(db, viewer, id, comment.id), denied("missing"));
+    await removeGroupTripComment(db, owner, id, comment.id);
+    await addGroupTripComment(db, voter, id, edition, "Remove on revocation");
+
     await assert.rejects(revokeGroupTripInvite(db, voter, id, voteGrant.id), denied("missing"));
     await revokeGroupTripInvite(db, owner, id, voteGrant.id);
     await assert.rejects(readGroupTrip(db, voter, id), denied("missing"));
     await assert.rejects(setGroupTripVote(db, voter, id, edition, "GOING"), denied("missing"));
-    assert.deepEqual((await readGroupTrip(db, viewer, id)).options[0].tally, { MAYBE: 1 });
+    const afterRevoke = (await readGroupTrip(db, viewer, id)).options[0];
+    assert.deepEqual(afterRevoke.tally, { MAYBE: 1 });
+    assert.deepEqual(afterRevoke.comments, []);
 
     const expired = await inviteToGroupTrip(db, owner, id, "VIEWER");
     await db.groupTripInvite.update({
