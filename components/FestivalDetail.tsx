@@ -1,17 +1,32 @@
 "use client";
 
+import { sendProductEvent } from "@/lib/product-events";
+import type { PlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-readback";
+
 import { useState } from "react";
 import Link from "next/link";
+import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
+import type { DiscoveryLineups } from "@/lib/discovery-sort";
+import { LineupByDay } from "./LineupByDay";
+import type { PublicFestivalOverview } from "@/lib/catalog/festival-overviews";
+import { FestivalOverview } from "./FestivalOverview";
+import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
+import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
+import { FestivalArrival } from "./FestivalArrival";
 import { PlanningTools } from "./PlanningTools";
+import { PlaylistCoverageLabel } from "./PlaylistCoverageLabel";
 import type { PlaylistStatus } from "@/lib/domain/festival";
+import { formatFreshnessDate } from "@/lib/freshness-date";
 import { ticketPresentation } from "@/lib/tickets";
 import { festivalSetlistHistoryUrl } from "@/lib/setlist-history";
+import { festivalDateInterval } from "@/lib/festival-dates";
 import {
   announcedArtists,
   hasAnnouncedLineup,
+  lineupPresentation,
   sortFestivalLineup,
   type LineupSort,
 } from "@/lib/festival-lineup";
@@ -20,17 +35,27 @@ import { FavoriteButton, useLocalPlanner, type Attendance } from "./LocalPlanner
 export function FestivalDetail({
   item,
   festivals,
+  discoveryLineups,
   artistSlugs,
+  lineupDayArtistSlugs = [],
   playlist,
+  playlistRefreshFailures,
+  overview,
   artistPopularity = {},
+  arrivalFacts = [],
 }: {
   item: Festival;
   festivals: Festival[];
+  discoveryLineups?: DiscoveryLineups;
   artistSlugs: Readonly<Record<string, string>>;
+  lineupDayArtistSlugs?: readonly string[];
   playlist?: PlaylistStatus;
+  playlistRefreshFailures?: PlaylistRefreshFailures;
+  overview?: PublicFestivalOverview;
+  arrivalFacts?: readonly PublicArrivalFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
-  const { locale, t } = useLanguage();
+  const { language, locale, t } = useLanguage();
   const [lineupSort, setLineupSort] = useState<LineupSort>("official");
   const sortedLineup = sortFestivalLineup(item, lineupSort, locale, artistPopularity);
   const planner = useLocalPlanner();
@@ -44,13 +69,14 @@ export function FestivalDetail({
     }).format(new Date(`${value}T12:00:00Z`));
   const setlistUrl = festivalSetlistHistoryUrl(item.slug);
   const tickets = ticketPresentation(item);
-  const status =
-    item.status === "tba"
-      ? t("datesLineupTba")
-      : t(item.status === "confirmed" ? "confirmedLineup" : "partialLineup");
-  const playlistUrl = playlist?.spotifyUrl || item.playlistUrl;
+  const reviewedSpotify = item.reviewedPlaylistLinks?.spotify;
+  const reviewedYoutube = item.reviewedPlaylistLinks?.youtube_music;
+  const playlistUrl = reviewedSpotify || playlist?.spotifyUrl || item.playlistUrl;
+  const youtubePlaylistUrl = reviewedYoutube || playlist?.youtubeMusicUrl;
   const artistCount = announcedArtists(item).length;
   const hasArtists = hasAnnouncedLineup(item);
+  const lineupStatus = lineupPresentation(item);
+  const dates = festivalDateInterval(item);
   return (
     <div className="detailPage">
       <Link className="back" href="/">
@@ -64,19 +90,19 @@ export function FestivalDetail({
           </div>
           <h1>{item.name}</h1>
           <p className="detailDate">
-            {item.startDate
+            {dates && item.startDate
               ? `${prettyDate(item.startDate)}` +
                 `${item.endDate && item.endDate !== item.startDate ? ` — ${prettyDate(item.endDate)}` : ""}`
               : t("datesTba")}
           </p>
-          <span className={`status ${item.status}`}>{status}</span>
+          <span className={`status ${lineupStatus.tone}`}>{t(lineupStatus.label)}</span>
           {item.sourceDeprecated && (
             <span className="status deprecated">{t("sourceDeprecated")}</span>
           )}
         </div>
       </section>
       <section className="localActions">
-        <FavoriteButton kind="festival" value={item.slug} />
+        <FavoriteButton value={item.slug} />
         <select
           aria-label={t("attendanceFor", { festival: item.name })}
           value={planner.attendance[item.slug] || ""}
@@ -105,9 +131,18 @@ export function FestivalDetail({
             target="_blank"
             rel="noreferrer"
             data-ticket-status={tickets.status}
+            onClick={() => sendProductEvent("TICKET_OUTBOUND", language)}
           >
             <small>{t(tickets.status === "available" ? "passes" : tickets.label)}</small>
-            <strong>{t(tickets.status === "available" ? tickets.label : "ticketsInfo")}</strong>
+            <strong>
+              {t(
+                tickets.status === "available"
+                  ? tickets.label
+                  : tickets.status === "free"
+                    ? "festivalWebsite"
+                    : "ticketsInfo",
+              )}
+            </strong>
           </a>
         ) : (
           <div className="disabled" data-ticket-status={tickets.status}>
@@ -117,32 +152,46 @@ export function FestivalDetail({
         )}
         {playlistUrl ? (
           <a href={playlistUrl} target="_blank" rel="noreferrer">
-            <small>
-              {t("listen")}
-              {playlist
-                ? ` · ${playlist.artists} ${t("artists")} · ${playlist.tracks} ${t("tracks")}`
-                : ""}
-            </small>
+            <small>{t("listen")}</small>
             <strong>{t("spotifyPlaylist")}</strong>
+            <PlaylistCoverageLabel
+              coverage={
+                playlistUrl === playlist?.spotifyUrl ? playlist.coverage?.spotify : undefined
+              }
+              failed={playlistRefreshFailures?.spotify}
+            />
           </a>
         ) : (
           <div className="disabled">
             <small>{t("listen")}</small>
-            <strong>{t("playlistSoon")}</strong>
+            <strong>
+              {playlistRefreshFailures?.spotify ? t("spotifyPlaylist") : t("playlistSoon")}
+            </strong>
+            {playlistRefreshFailures?.spotify && <PlaylistCoverageLabel failed />}
           </div>
         )}
-        {playlist?.youtubeMusicUrl ? (
-          <a href={playlist.youtubeMusicUrl} target="_blank" rel="noreferrer">
-            <small>
-              {t("listen")}
-              {playlist.youtubeMusicArtists !== undefined &&
-              playlist.youtubeMusicTracks !== undefined
-                ? ` · ${playlist.youtubeMusicArtists} ${t("artists")} · ${playlist.youtubeMusicTracks} ${t("tracks")}`
-                : ""}
-            </small>
+        {youtubePlaylistUrl ? (
+          <a href={youtubePlaylistUrl} target="_blank" rel="noreferrer">
+            <small>{t("listen")}</small>
             <strong>{t("youtubeMusicPlaylist")}</strong>
+            <PlaylistCoverageLabel
+              coverage={
+                youtubePlaylistUrl === playlist?.youtubeMusicUrl
+                  ? playlist.coverage?.youtubeMusic
+                  : undefined
+              }
+              failed={playlistRefreshFailures?.youtubeMusic}
+            />
           </a>
-        ) : null}
+        ) : (
+          playlistRefreshFailures?.youtubeMusic && (
+            <div className="disabled">
+              <small>{t("listen")}</small>
+              <strong>{t("youtubeMusicPlaylist")}</strong>
+              <PlaylistCoverageLabel failed />
+            </div>
+          )
+        )}
         {setlistUrl ? (
           <a href={setlistUrl} target="_blank" rel="noreferrer">
             <small>{t("liveHistory")}</small>
@@ -155,6 +204,14 @@ export function FestivalDetail({
           </div>
         )}
       </div>
+      <FestivalOverview overview={overview} />
+      {item.editionYear && (
+        <OfflineTripDownload
+          key={`${item.slug}:${item.editionYear}`}
+          slug={item.slug}
+          year={item.editionYear}
+        />
+      )}
       <section className="lineupSection">
         <div className="sectionHeading">
           <div>
@@ -208,16 +265,54 @@ export function FestivalDetail({
             </div>
           </>
         )}
+        {item.lineupDays && (
+          <LineupByDay
+            key={`${item.slug}:${item.editionYear}`}
+            appearances={item.lineupDays}
+            publicArtistSlugs={lineupDayArtistSlugs}
+          />
+        )}
       </section>
-      <PlanningTools item={item} festivals={festivals} />
+      <PlanningTools
+        item={item}
+        festivals={festivals}
+        discoveryLineups={discoveryLineups}
+        favorites={planner.favoriteArtists}
+      />
+      <FestivalArrival facts={arrivalFacts} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
-        <p>{t("catalogUpdated", { date: prettyDate(item.updatedAt.slice(0, 10)) })}</p>
+        <p>
+          {item.freshness?.checkedAt ? (
+            <>
+              {t("latestSourceCheck")} ·{" "}
+              <time dateTime={item.freshness.checkedAt}>
+                {formatFreshnessDate(item.freshness.checkedAt, locale)}
+              </time>
+            </>
+          ) : (
+            t("sourceCheckUnavailable")
+          )}
+        </p>
+        {item.freshness?.sourceCheckStale && <p>{t("sourceCheckStale")}</p>}
+        {item.freshness?.lastPublishedAt && (
+          <p>
+            {t("latestCatalogPublication")} ·{" "}
+            <time dateTime={item.freshness.lastPublishedAt}>
+              {formatFreshnessDate(item.freshness.lastPublishedAt, locale)}
+            </time>
+          </p>
+        )}
         <p>{item.sourceDeprecated ? t("sourceDeprecatedHelp") : t("sourceText")}</p>
         <a href={item.officialUrl} target="_blank" rel="noreferrer">
           {t("primarySource")}
         </a>
       </section>
+      {item.editionYear !== undefined && (
+        <CorrectionReportForm
+          identity={{ target: "edition", slug: item.slug, year: item.editionYear }}
+        />
+      )}
     </div>
   );
 }

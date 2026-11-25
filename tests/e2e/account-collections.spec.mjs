@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 const copy = {
   en: {
+    clear: "Clear local data",
+    confirm: "Reset local plan",
     import: "Import playlists",
     sync: "Sync now",
     remote: "Use account data on this device",
@@ -11,6 +13,8 @@ const copy = {
     keep: "Keep this device",
   },
   de: {
+    clear: "Lokale Daten löschen",
+    confirm: "Lokalen Plan zurücksetzen",
     import: "Playlists importieren",
     sync: "Jetzt synchronisieren",
     remote: "Kontodaten auf diesem Gerät verwenden",
@@ -21,6 +25,8 @@ const copy = {
     keep: "Dieses Gerät behalten",
   },
   ru: {
+    clear: "Удалить локальные данные",
+    confirm: "Сбросить локальный план",
     import: "Импортировать плейлисты",
     sync: "Синхронизировать",
     remote: "Использовать данные аккаунта на устройстве",
@@ -66,6 +72,7 @@ for (const [locale, t] of Object.entries(copy))
           payload: { schemaVersion: 1, playlistFestivals: ["graspop"], spotify: null },
         },
       };
+      let waitForCollectionSave;
       let failImport = false,
         conflictNext = false,
         importRevisionConflict = false,
@@ -87,6 +94,7 @@ for (const [locale, t] of Object.entries(copy))
           kind = new URL(req.url()).pathname.split("/").filter(Boolean).at(-1);
         if (req.method() === "GET")
           return route.fulfill({ json: { document: docs[kind] ?? null } });
+        if (kind === "collections" && waitForCollectionSave) await waitForCollectionSave;
         const body = req.postDataJSON(),
           previous = docs[kind];
         if (kind === "collections" && conflictNext) {
@@ -105,6 +113,8 @@ for (const [locale, t] of Object.entries(copy))
             ? {
                 schemaVersion: 1,
                 playlistFestivals: body.payload.playlistFestivals,
+                playlistExcludedArtists:
+                  body.payload.playlistExcludedArtists ?? previous?.payload.playlistExcludedArtists,
                 spotify: previous?.payload.spotify ?? null,
               }
             : body.payload;
@@ -157,6 +167,7 @@ for (const [locale, t] of Object.entries(copy))
               favoriteArtists: [],
               attendance: {},
               playlistFestivals: ["wacken-open-air"],
+              playlistExcludedArtists: ["sample-artist"],
               savedFilters: {
                 query: "",
                 country: "all",
@@ -178,6 +189,7 @@ for (const [locale, t] of Object.entries(copy))
       await expect(panel.getByRole("heading", { name: t.saved })).toBeVisible();
       await expect(panel.locator("time")).toHaveAttribute("datetime", imported.syncedAt);
       expect(docs.collections.payload.playlistFestivals).toEqual(["graspop", "wacken-open-air"]);
+      expect(docs.collections.payload.playlistExcludedArtists).toEqual(["sample-artist"]);
       await panel.getByRole("button", { name: t.sync, exact: true }).click();
       await expect(panel).toHaveAttribute("aria-busy", "false");
       expect(docs.collections.payload.spotify).toEqual(imported);
@@ -249,10 +261,47 @@ for (const [locale, t] of Object.entries(copy))
       for (const field of ["favoriteFestivals", "favoriteArtists", "attendance", "savedFilters"])
         expect(retained[field]).toEqual(unsynced[field]);
 
-      failImport = true;
-      await panel.getByRole("button", { name: t.import, exact: true }).click();
+      expect(docs.collections.payload.playlistExcludedArtists).toEqual(["sample-artist"]);
+      await page.getByRole("button", { name: t.clear, exact: true }).click();
+      await page.getByRole("button", { name: t.confirm, exact: true }).click();
+      await page.getByRole("checkbox", { name: "Synthetic Fest", exact: true }).check();
+      await panel.getByRole("button", { name: t.sync, exact: true }).click();
       await expect(panel).toHaveAttribute("aria-busy", "false");
+      expect(docs.collections.payload.playlistExcludedArtists).toEqual([]);
+      expect(docs.collections.payload.spotify).toEqual(imported);
+      failImport = true;
+      const artistPicker = page.locator(".playlistArtistPicker");
+      await artistPicker.locator("summary").click();
+      const artist = artistPicker.getByRole("checkbox", { name: "Sample Artist", exact: true });
+      await expect(artist).toBeEnabled();
+      let releaseSave;
+      waitForCollectionSave = new Promise((resolve) => {
+        releaseSave = resolve;
+      });
+      const presave = page.waitForRequest(
+        (request) =>
+          request.method() === "PUT" && /\/api\/sync\/collections\/?$/.test(request.url()),
+      );
+      try {
+        await panel.getByRole("button", { name: t.import, exact: true }).click();
+        await presave;
+        await expect(artist).toBeDisabled();
+      } finally {
+        releaseSave();
+        waitForCollectionSave = undefined;
+      }
+      await expect(panel).toHaveAttribute("aria-busy", "false");
+      await expect(artist).toBeEnabled();
       await expect(link).toBeVisible();
       await expect(panel.locator("time")).toHaveAttribute("datetime", imported.syncedAt);
+      expect(docs.collections.payload.playlistExcludedArtists).toEqual([]);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              JSON.parse(localStorage.getItem("festival-radar-planner-v1")).playlistExcludedArtists,
+          ),
+        )
+        .toEqual([]);
     },
   );
