@@ -40,7 +40,9 @@ export async function importTimetable(
             item.timeZone,
             item.status,
             item.sourceUrl,
-            new Date(item.observedAt!).toISOString(),
+            new Date(item.observedAt).toISOString(),
+            item.window ? new Date(item.window.startsAt).toISOString() : null,
+            item.window ? new Date(item.window.endsAt).toISOString() : null,
           ])
           .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
       const before = normalize(
@@ -53,6 +55,10 @@ export async function importTimetable(
           status: row.status === "CANCELLED" ? "cancelled" : "scheduled",
           sourceUrl: row.sourceUrl ?? current.festival.officialUrl,
           observedAt: (row.observedAt ?? current.sourceUpdatedAt).toISOString(),
+          window:
+            row.startsAt && row.endsAt
+              ? { startsAt: row.startsAt.toISOString(), endsAt: row.endsAt.toISOString() }
+              : undefined,
         })),
       );
       const after = normalize(entries);
@@ -71,7 +77,9 @@ export async function importTimetable(
             timeZone: entry.timeZone,
             status: entry.status === "cancelled" ? "CANCELLED" : "ANNOUNCED",
             sourceUrl: entry.sourceUrl,
-            observedAt: new Date(entry.observedAt!),
+            observedAt: new Date(entry.observedAt),
+            startsAt: entry.window ? new Date(entry.window.startsAt) : null,
+            endsAt: entry.window ? new Date(entry.window.endsAt) : null,
           })),
         });
       }

@@ -8,6 +8,7 @@ import { festival } from "./support/catalog.ts";
 import {
   findTimetableConflicts,
   groupTimetable,
+  timetableLocalDateTime,
   validateFestivalTimetable,
 } from "../lib/timetables.ts";
 
@@ -96,4 +97,68 @@ test("the DB importer rejects missing database configuration without mutating it
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("only exact verified windows become schedule ranges, including overnight and DST offsets", () => {
+  const overnight = {
+    ...base,
+    start: "23:45",
+    window: { startsAt: "2027-06-10T21:45:00Z", endsAt: "2027-06-11T00:15:00+02:00" },
+  };
+  const checked = validateFestivalTimetable(festival, [overnight]);
+  assert.deepEqual(checked[0].window, overnight.window);
+  assert.equal(validateFestivalTimetable(festival, [base])[0].window, undefined);
+  const fallBack = {
+    ...base,
+    date: "2027-10-31",
+    start: "02:30",
+    window: { startsAt: "2027-10-31T02:30:00+02:00", endsAt: "2027-10-31T02:15:00+01:00" },
+  };
+  assert.doesNotThrow(() =>
+    validateFestivalTimetable({ ...festival, startDate: undefined, endDate: undefined }, [
+      fallBack,
+    ]),
+  );
+  assert.notEqual(
+    timetableLocalDateTime(fallBack.window.startsAt, fallBack.timeZone).offset,
+    timetableLocalDateTime(fallBack.window.endsAt, fallBack.timeZone).offset,
+  );
+  for (const invalid of [
+    { ...overnight, start: "23:46" },
+    { ...overnight, status: "cancelled" },
+    { ...overnight, window: { ...overnight.window, endsAt: undefined } },
+    { ...overnight, window: { ...overnight.window, endsAt: "2027-06-11T00:15:00" } },
+    { ...overnight, window: { ...overnight.window, endsAt: "2027-06-10T23:30:00+02:00" } },
+    { ...overnight, window: { ...overnight.window, endsAt: "2027-06-12T00:15:00+02:00" } },
+  ]) {
+    assert.throws(() => validateFestivalTimetable(festival, [invalid]), /window/);
+  }
+});
+
+test("repeated local hours keep verified instants distinct without guessing for start-only rows", () => {
+  const edition = { ...festival, startDate: undefined, endDate: undefined };
+  const first = {
+    ...base,
+    date: "2027-10-31",
+    start: "02:30",
+    window: { startsAt: "2027-10-31T02:30:00+02:00", endsAt: "2027-10-31T02:50:00+02:00" },
+  };
+  const second = {
+    ...first,
+    artist: "Other artist",
+    window: { startsAt: "2027-10-31T02:30:00+01:00", endsAt: "2027-10-31T02:50:00+01:00" },
+  };
+  assert.deepEqual(validateFestivalTimetable(edition, [first, second]), [first, second]);
+  assert.throws(
+    () =>
+      validateFestivalTimetable(edition, [
+        first,
+        { ...second, window: { ...first.window, startsAt: "2027-10-31T00:30:00Z" } },
+      ]),
+    /conflict/,
+  );
+  assert.throws(
+    () => validateFestivalTimetable(edition, [first, { ...second, window: undefined }]),
+    /conflict/,
+  );
 });

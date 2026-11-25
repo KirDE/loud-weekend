@@ -510,6 +510,8 @@ model TimetablePerformance {
   date       DateTime          @db.Date
   stage      String
   start      String
+  startsAt   DateTime?
+  endsAt     DateTime?
   timeZone   String?
   status     LineupEntryStatus @default(ANNOUNCED)
   sourceUrl  String?
