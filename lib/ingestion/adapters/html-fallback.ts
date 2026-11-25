@@ -62,30 +62,35 @@ function* metaContents(html: string, names: string[]): Generator<MarkedValue, un
   return undefined;
 }
 
-function dateMetadata(
+function markedDate(
   html: string,
   role: "start" | "end",
   warnings: string[],
 ): MarkedValue | undefined {
   const values = [
     ...metaContents(html, [`event:${role}_time`, `event:${role}_date`, `festival:${role}_date`]),
+    ...markedTimes(html, role),
   ];
   const days = new Set(values.map(({ value }) => plainDate(value)).filter(Boolean));
-  if (days.size > 1) warnings.push(`Conflicting HTML festival ${role} date metadata`);
+  if (days.size > 1) warnings.push(`Conflicting HTML festival ${role} date declarations`);
   return values[0];
 }
 
-function timeValue(
-  html: string,
-  role: "start" | "end",
-): { value: string; excerpt: string } | undefined {
+function* markedTimes(html: string, role: "start" | "end"): Generator<MarkedValue, undefined> {
+  const markers = new Set([
+    role,
+    `${role}date`,
+    `${role}-date`,
+    `festival-${role}`,
+    `festival-${role}-date`,
+  ]);
   for (const match of html.matchAll(/<time\b[^>]*>/gi)) {
     const attrs = attributes(match[0]);
     const marker =
       `${attrs.get("itemprop") ?? ""} ${attrs.get("class") ?? ""} ${attrs.get("data-role") ?? ""}`.toLowerCase();
-    if (!marker.includes(role)) continue;
+    if (!marker.split(/\s+/).some((token) => markers.has(token))) continue;
     const value = attrs.get("datetime");
-    if (value) return { value, excerpt: match[0].slice(0, 500) };
+    if (value) yield { value, excerpt: match[0].slice(0, 500) };
   }
   return undefined;
 }
@@ -206,8 +211,8 @@ export function extractHtmlFallbackCandidate(
     candidate.warnings.push("Barcelona source identity is not the reviewed homepage");
     return candidate;
   }
-  const start = dateMetadata(html, "start", candidate.warnings) ?? timeValue(html, "start");
-  const end = dateMetadata(html, "end", candidate.warnings) ?? timeValue(html, "end");
+  const start = markedDate(html, "start", candidate.warnings);
+  const end = markedDate(html, "end", candidate.warnings);
   const city = metaContents(html, ["event:location", "festival:city", "geo.placename"]).next()
     .value;
   const tickets = ticketLink(html, source.url);

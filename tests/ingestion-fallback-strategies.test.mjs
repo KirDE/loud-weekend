@@ -55,9 +55,53 @@ test("conflicting HTML festival date metadata holds otherwise safe ticket update
       );
       assert.ok(result.changes.some((change) => change.field === "ticketsUrl"));
       assert.equal(result.publishable, false);
-      assert.ok(result.reviewReasons.includes(`Conflicting HTML festival ${role} date metadata`));
+      assert.ok(
+        result.reviewReasons.includes(`Conflicting HTML festival ${role} date declarations`),
+      );
     }
   }
+});
+
+test("conflicting marked HTML dates hold otherwise safe ticket updates", () => {
+  for (const [role, currentDate, competingDate] of [
+    ["start", current.startDate, "2027-07-29"],
+    ["end", current.endDate, "2027-08-01"],
+  ]) {
+    const field = `${role}Date`;
+    const preferred = `<meta property="event:${role}_time" content="${currentDate}">`;
+    const firstTime = `<time itemprop="${field}" datetime="${currentDate}">`;
+    const competing = `<time itemprop="${field}" datetime="${competingDate}"></time>`;
+    for (const [first, html] of [
+      [preferred, competing + preferred],
+      [firstTime, firstTime + "</time>" + competing],
+    ]) {
+      const candidate = extract(html + ticket);
+      const result = evaluateCandidate(current, candidate);
+      assert.equal(candidate[field], currentDate);
+      assert.equal(candidate.evidence.find((evidence) => evidence.field === field)?.excerpt, first);
+      assert.deepEqual(
+        result.changes.map((change) => change.field),
+        ["ticketsUrl"],
+      );
+      assert.equal(result.publishable, false);
+      assert.ok(
+        result.reviewReasons.includes(`Conflicting HTML festival ${role} date declarations`),
+      );
+    }
+  }
+});
+
+test("equivalent dates and unrelated time markers do not hold a ticket update", () => {
+  const html =
+    '<meta property="event:start_time" content="2027-07-28">' +
+    '<time itemprop="startDate" datetime="2027-07-28T23:30:00-02:00"></time>' +
+    '<time class="presale-start" datetime="2027-05-01"></time>' +
+    '<time class="weekend" datetime="2027-07-29"></time>' +
+    ticket;
+  const candidate = extract(html);
+  assert.equal(candidate.startDate, current.startDate);
+  assert.equal(candidate.endDate, undefined);
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
 });
 
 test("equivalent HTML festival date metadata does not block ticket updates", () => {
