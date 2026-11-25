@@ -25,7 +25,9 @@ for (const [locale, [title, search, empty]] of Object.entries(localized)) {
       "href",
       new RegExp("/" + locale + "/planner/artists/$"),
     );
-    await page.getByRole("searchbox", { name: search }).fill("Second Artist");
+    await page
+      .getByRole("searchbox", { name: search })
+      .fill(locale === "de" ? "fixture stage name" : "Second Artist");
     const result = page
       .locator("section")
       .filter({ has: page.getByRole("searchbox") })
@@ -34,7 +36,9 @@ for (const [locale, [title, search, empty]] of Object.entries(localized)) {
     await expect(result).toHaveAttribute("aria-pressed", "true");
     const heading = page.getByRole("heading", { name: "Second Artist" });
     const saved = page.locator("article").filter({ has: heading });
-    await expect(saved.getByRole("link", { name: "Synthetic Fest · 2027" })).toHaveCount(1);
+    const edition = saved.getByRole("link", { name: "Synthetic Fest · 2027" });
+    await expect(edition).toHaveCount(1);
+    await expect(edition).toHaveAttribute("href", "/festivals/synthetic-fest/2027/");
     await expect(saved.getByRole("link", { name: /Synthetic Alpine/ })).toHaveCount(0);
     await expect(saved.getByRole("link", { name: "Second Artist" })).toHaveAttribute(
       "href",
@@ -45,6 +49,9 @@ for (const [locale, [title, search, empty]] of Object.entries(localized)) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       320,
     );
+    await edition.click();
+    await expect(page.getByRole("heading", { name: "Synthetic Fest 2027" })).toBeVisible();
+    await page.goBack();
     await saved.getByRole("button").click();
     await expect(page.getByText(empty)).toBeVisible();
   });
