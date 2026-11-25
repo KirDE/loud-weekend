@@ -1,4 +1,5 @@
 import type { FestivalEdition } from "./domain/edition.ts";
+import { editionOnHiatus } from "./edition-lifecycle.ts";
 import { festivalDateInterval } from "./festival-dates.ts";
 import type { Language } from "./language-preference.ts";
 
@@ -95,7 +96,12 @@ export const festivalGuides: Record<GuideTopic, Record<Language, GuideCopy>> = {
 export function selectGuideEditions(topic: GuideTopic, editions: readonly FestivalEdition[]) {
   return editions
     .filter((edition) => {
-      if (edition.recordState !== "current" || edition.status === "tba" || !edition.endDate)
+      if (
+        edition.recordState !== "current" ||
+        edition.status === "tba" ||
+        !edition.endDate ||
+        editionOnHiatus(edition)
+      )
         return false;
       const evidence = new Set<string>(edition.provenance.map(({ field }) => field));
       if (!evidence.has("dates") && !(evidence.has("startDate") && evidence.has("endDate")))
