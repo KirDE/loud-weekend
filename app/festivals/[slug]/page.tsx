@@ -9,7 +9,12 @@ import { FestivalDetail } from "@/components/FestivalDetail";
 import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
 import { getCatalog } from "@/lib/catalog/repository";
-import { canonicalPath, festivalDescription, festivalMusicEvent } from "@/lib/seo";
+import {
+  canonicalPath,
+  festivalDescription,
+  festivalMusicEvent,
+  localizedAlternates,
+} from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 export const dynamicParams = true;
@@ -26,7 +31,10 @@ export async function generateMetadata({
     ? {
         title: festival.name,
         description: festivalDescription(festival),
-        alternates: { canonical: canonicalPath(`/festivals/${festival.slug}`) },
+        alternates: {
+          canonical: canonicalPath(`/festivals/${festival.slug}`),
+          languages: localizedAlternates(`/festivals/${festival.slug}/`),
+        },
       }
     : {};
 }

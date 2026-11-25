@@ -8,6 +8,7 @@ import { transform } from "esbuild";
 import { editionRecordCompleteness } from "../lib/edition-status.ts";
 import { EditionHistory } from "../components/EditionHistory.tsx";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
+import { canonicalPath } from "../lib/seo.ts";
 import { LanguageProvider } from "../components/LanguageProvider.tsx";
 
 function makeEdition(overrides = {}) {
@@ -56,6 +57,7 @@ function loadPage(editions, artists = []) {
     },
     "@/lib/catalog/arrival-facts": { readArrivalFacts: async () => [] },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
+    "@/lib/seo": { canonicalPath },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
     "@/components/EditionHistory": { EditionHistory },
     "@/lib/db": { db },

@@ -116,6 +116,7 @@ function readyPlanner(items, locale) {
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/link": require("next/link"),
     "@/lib/planning": planning,
+    "@/lib/product-events": { sendProductEvent: () => undefined },
     "@/lib/favorite-artist": require("../lib/favorite-artist.ts"),
     "./PersonalCalendar": { PersonalCalendar: () => null },
     "@/lib/playlist-depth": require("../lib/playlist-depth.ts"),
