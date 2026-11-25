@@ -7,6 +7,20 @@ const site = "https://loudweekend.eu";
 const namespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
 const languages = ["x-default", "en", "de", "ru"];
 const crawlers = ["Googlebot", "Bingbot"];
+const fixedPaths = ["/", "/en/", "/de/", "/ru/", "/submit/"];
+const localizedGuide = /^\/(?:(?:en|de|ru)\/)?guides\/(?:germany|multi-day)\/$/;
+const editionDirectory = /^\/(?:(?:en|de|ru)\/)?editions\/\d{4}\/$/;
+const routeClasses = [
+  /^\/browse\/$/,
+  /^\/(?:en|de|ru)\/(?:about|faq)\/$/,
+  /^\/festivals\/[^/]+\/$/,
+  /^\/artists\/[^/]+\/$/,
+  /^\/festivals\/[^/]+\/\d{4}\/$/,
+  editionDirectory,
+  /^\/countries\/[a-z]{2}\/$/,
+  /^\/months\/(?:0[1-9]|1[0-2])\/$/,
+];
+const localizedDetail = /^\/(?:(?:en|de|ru)\/)?(?:festivals|artists)\/[^/]+\/$/;
 
 // A header may scope a rule to a crawler. Image preview limits also use
 // a colon, but "none" in that value position is not an indexing directive.
@@ -68,6 +82,14 @@ export function inspectSitemap(xml, now = Date.now()) {
     const entry = $(node);
     assert.equal(entry.children("loc").length, 1);
     const path = canonicalPath(entry.children("loc").text());
+    assert.ok(
+      fixedPaths.includes(path) ||
+        path === "/archive/" ||
+        localizedDetail.test(path) ||
+        localizedGuide.test(path) ||
+        routeClasses.some((type) => type.test(path)),
+      `unsupported sitemap path: ${path}`,
+    );
     assert.ok(!entries.has(path), `duplicate sitemap path: ${path}`);
     const timestamps = entry.children("lastmod");
     assert.ok(timestamps.length <= 1, `duplicate lastmod on ${path}`);
@@ -93,7 +115,7 @@ export function inspectSitemap(xml, now = Date.now()) {
     entries.set(path, alternates);
   }
   for (const [path, alternates] of entries) {
-    if (/^\/(?:(?:en|de|ru)\/)?(?:festivals|artists)\/[^/]+\/$/.test(path)) {
+    if (localizedDetail.test(path) || localizedGuide.test(path) || editionDirectory.test(path)) {
       assert.equal(alternates.size, languages.length, `missing detail hreflang on ${path}`);
     }
     if (!alternates.size) continue;
@@ -156,16 +178,8 @@ export async function checkIndexing(origin = site) {
   // Check all members of a representative localized cluster plus the canonical
   // path for each catalogue route class; do not crawl the entire site.
   const examples = [...entries.keys()].sort();
-  const sample = new Set(["/", "/en/", "/de/", "/ru/", "/submit/"]);
-  const editionDirectory = /^\/editions\/\d+\/$/;
-  for (const type of [
-    /^\/festivals\/[^/]+\/$/,
-    /^\/artists\/[^/]+\/$/,
-    /^\/festivals\/[^/]+\/\d+\/$/,
-    editionDirectory,
-    /^\/countries\/[a-z]{2}\/$/,
-    /^\/months\/\d{2}\/$/,
-  ]) {
+  const sample = new Set([...fixedPaths, ...examples.filter((path) => localizedGuide.test(path))]);
+  for (const type of routeClasses) {
     const path = examples.find((value) => type.test(value));
     assert.ok(path, `missing sitemap route class ${type}`);
     sample.add(path);
