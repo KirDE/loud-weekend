@@ -215,6 +215,36 @@ test("a separate JSON-LD record for the selected event can put ticket changes on
   }
 });
 
+test("JSON-LD status value objects preserve the editorial hold on ticket changes", () => {
+  const event = {
+    "@type": "MusicEvent",
+    "@id": "#festival-2027",
+    startDate: current.startDate,
+  };
+  const cancelled = "https://schema.org/EventCancelled";
+  const eventStatus = [{ "@value": "https://schema.org/EventScheduled" }, { "@value": cancelled }];
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const description = { "@id": event["@id"], eventStatus };
+
+  for (const page of [script({ ...event, eventStatus }), script(event) + script(description)]) {
+    const candidate = extract(page + ticket);
+    const result = evaluateCandidate(current, candidate);
+    assert.equal(candidate.startDate, current.startDate);
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [`Official event status requires review: ${cancelled}`]);
+  }
+
+  const unrelated = script(event) + script({ ...description, "@id": "#other" });
+  const scheduled = script({ ...event, eventStatus: eventStatus[0] });
+  for (const page of [unrelated, scheduled]) {
+    assert.equal(evaluateCandidate(current, extract(page + ticket)).publishable, true);
+  }
+});
+
 test("scheduled JSON-LD events do not hold verified ticket changes", () => {
   const event = {
     "@type": "MusicEvent",

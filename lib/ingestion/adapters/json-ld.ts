@@ -107,7 +107,11 @@ function text(value: unknown): string | undefined {
 function eventStatusRequiringReview(value: unknown): string | undefined {
   const statuses = Array.isArray(value) ? value : [value];
   return statuses
-    .map((status) => text((status as JsonLd | null | undefined)?.["@id"]) ?? text(status))
+    .map((status) => {
+      const record = status as JsonLd | null | undefined;
+      const literal = record?.["@value"];
+      return text(record?.["@id"]) ?? text(typeof literal === "string" ? literal : status);
+    })
     .find((status) => status && /cancelled|postponed|rescheduled|movedonline/i.test(status));
 }
 
