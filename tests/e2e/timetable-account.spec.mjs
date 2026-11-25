@@ -112,7 +112,7 @@ test("running order account copies are explicit, revisioned and isolated by acco
 
     const remote = await second.newPage();
     await remote.goto("/festivals/synthetic-west/2027/");
-    const toggle = remote.getByRole("button", { name: "Save to running order: Account Fixture" });
+    const toggle = remote.getByRole("button", { name: /running order: Account Fixture/ });
     const remotePanel = remote.locator(".runningOrderAccount");
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await remotePanel.getByText("Private account copy", { exact: true }).click();
@@ -121,6 +121,33 @@ test("running order account copies are explicit, revisioned and isolated by acco
     await remotePanel
       .getByRole("button", { name: "Replace device selection with account copy" })
       .click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+    const sameDeviceTab = await second.newPage();
+    await sameDeviceTab.goto("/festivals/synthetic-west/2027/");
+    const replace = remotePanel.getByRole("button", {
+      name: "Replace device selection with account copy",
+    });
+    const readStarted = Promise.withResolvers();
+    const releaseRead = Promise.withResolvers();
+    const pattern = "**/api/running-order/synthetic-west/2027/";
+    await remote.route(pattern, async (route) => {
+      const response = await route.fetch();
+      readStarted.resolve();
+      await releaseRead.promise;
+      await route.fulfill({ response });
+    });
+    try {
+      await replace.click();
+      await readStarted.promise;
+      await sameDeviceTab.getByRole("button", { name: /running order: Account Fixture/ }).click();
+    } finally {
+      releaseRead.resolve();
+    }
+    await expect(remotePanel.getByText(/Your device selection changed/)).toBeVisible();
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await remote.unroute(pattern);
+    await replace.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
 
     const simultaneous = await Promise.all([
