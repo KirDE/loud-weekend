@@ -284,11 +284,7 @@ for (const language of ["en", "de", "ru"] as const) {
     const html = renderToStaticMarkup(
       <LanguageProvider initialLanguage={language}>
         <LocalPlannerProvider>
-          <ArtistDetail
-            artist={artist}
-            appearances={appearances}
-            legacyFavoriteNames={[artist.name]}
-          />
+          <ArtistDetail artist={artist} legacySlugs={{}} appearances={appearances} />
         </LocalPlannerProvider>
       </LanguageProvider>,
     );
@@ -301,15 +297,15 @@ for (const language of ["en", "de", "ru"] as const) {
 }
 
 for (const [language, labels] of Object.entries({
-  en: ["Artists matched", "Verified coverage unavailable"],
-  de: ["Zugeordnete Künstler", "Keine verifizierten Angaben zur Abdeckung"],
-  ru: ["Подобрано артистов", "Подтверждённый охват неизвестен"],
+  en: ["Artists reported", "Verified coverage unavailable"],
+  de: ["Erfasste Künstler", "Keine verifizierten Angaben zur Abdeckung"],
+  ru: ["Указано артистов", "Подтверждённый охват неизвестен"],
 } as const)) {
   test(`playlist coverage reports provider-specific stored counts and times in ${language}`, () => {
     const spotifyUrl = "https://open.spotify.com/playlist/1234567890123456789012";
     const youtubeMusicUrl = "https://music.youtube.com/playlist?list=Synthetic01";
-    const spotify = { matchedArtists: 110, tracks: 220, recordedAt: "2026-11-20T12:00:00.000Z" };
-    const youtubeMusic = { matchedArtists: 8, tracks: 14, recordedAt: "2026-11-18T14:00:00.000Z" };
+    const spotify = { reportedArtists: 110, tracks: 220, recordedAt: "2026-11-20T12:00:00.000Z" };
+    const youtubeMusic = { reportedArtists: 8, tracks: 14, recordedAt: "2026-11-18T14:00:00.000Z" };
     const render = (
       coverage?: { spotify?: typeof spotify; youtubeMusic?: typeof youtubeMusic },
       reviewedPlaylistLinks?: (typeof festival)["reviewedPlaylistLinks"],

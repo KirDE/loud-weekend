@@ -1,3 +1,4 @@
+import { favoriteArtistSlug } from "./favorite-artists.ts";
 import type { Festival } from "./domain/festival.ts";
 import { distanceKm, type Coordinates } from "./festival-discovery.ts";
 import { festivalDateInterval } from "./festival-dates.ts";
@@ -28,12 +29,11 @@ export function uniqueFavoriteSlugs(artists: readonly ArtistKey[], current: Read
 }
 
 export function discoveryFavoriteSlugs(favorites: readonly string[], lineups?: DiscoveryLineups) {
+  const legacySlugs = lineups?.legacyFavoriteSlugs ?? {};
   return new Set(
     favorites.flatMap((key) => {
-      if (key.startsWith("artist:")) return [key.slice("artist:".length)];
-      if (lineups && Object.hasOwn(lineups.legacyFavoriteSlugs, key))
-        return [lineups.legacyFavoriteSlugs[key]];
-      return [];
+      const slug = favoriteArtistSlug(key, legacySlugs);
+      return slug === undefined ? [] : [slug];
     }),
   );
 }

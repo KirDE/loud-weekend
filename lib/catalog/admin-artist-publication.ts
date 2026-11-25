@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AdminChange, Prisma } from "@prisma/client";
+import { CanonicalReviewConflict } from "./admin-review-conflict";
 import { artistAliasIndex } from "./artist-aliases";
 
 const officialSite = { label: "Official site", source: "official" } as const;
@@ -27,15 +28,13 @@ function urlValue(value: unknown) {
 }
 
 async function readArtist(tx: Prisma.TransactionClient, slug: string) {
-  const artist = await tx.artist.findUnique({
+  return tx.artist.findUnique({
     where: { slug },
     include: { links: { orderBy: { position: "asc" } } },
   });
-  if (!artist) throw new Error("Select an existing artist by its canonical slug");
-  return artist;
 }
 
-type Artist = Awaited<ReturnType<typeof readArtist>>;
+type Artist = NonNullable<Awaited<ReturnType<typeof readArtist>>>;
 
 function readSite(artist: Artist) {
   const rows = artist.links.filter(
@@ -170,6 +169,7 @@ export async function prepareArtistDraft(
   values: Record<string, unknown>,
 ) {
   const artist = await readArtist(tx, slug);
+  if (!artist) throw new Error("Select an existing artist by its canonical slug");
   const changes = [];
   for (const [field, value] of Object.entries(values)) {
     switch (field) {
@@ -217,14 +217,17 @@ export async function publishAdminArtistChange(tx: Prisma.TransactionClient, cha
   if (evidence?.kind !== "artist-draft" || typeof evidence.artistId !== "string")
     throw new Error("Resubmit this artist edit using the canonical artist editor");
   const artist = await readArtist(tx, change.resourceKey);
-  if (artist.id !== evidence.artistId) throw new Error("The reviewed artist identity has changed");
+  if (artist?.id !== evidence.artistId)
+    throw new CanonicalReviewConflict("The reviewed artist identity has changed");
 
   switch (change.field) {
     case "canonicalName": {
       const name = nameValue(change.afterValue);
       if (artist.name === name) return "unchanged";
       if (artist.name !== change.beforeValue)
-        throw new Error("The canonical artist name changed after review was queued");
+        throw new CanonicalReviewConflict(
+          "The canonical artist name changed after review was queued",
+        );
       await assertUniqueName(tx, artist, name);
       const aliases = artist.aliases.includes(artist.name)
         ? artist.aliases
@@ -237,7 +240,9 @@ export async function publishAdminArtistChange(tx: Prisma.TransactionClient, cha
       const existing = readSite(artist);
       if (existing?.url === url && existing.verified) return "unchanged";
       if ((existing?.url ?? null) !== change.beforeValue)
-        throw new Error("The official artist site changed after review was queued");
+        throw new CanonicalReviewConflict(
+          "The official artist site changed after review was queued",
+        );
       // A reviewed official site must not overwrite an independent provider link.
       if (artist.links.some((link) => link.url === url && link.id !== existing?.id))
         throw new Error("This URL already belongs to a different artist link");
