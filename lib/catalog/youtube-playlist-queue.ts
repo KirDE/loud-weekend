@@ -1,3 +1,5 @@
+import type { PlaylistUnmatchedReasons } from "../domain/festival.ts";
+import { parseUnmatchedReasons } from "../playlist-coverage.ts";
 import { requestedProviders } from "./playlist-provider-scope.ts";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { withPlaylistRefreshLease, type PlaylistLease } from "./playlist-queue.ts";
@@ -16,6 +18,7 @@ export type YoutubePlan = {
   artists: number;
   sourceTracks: number;
   eligibleArtists?: number;
+  unmatchedReasons?: PlaylistUnmatchedReasons;
 };
 export type YoutubeInsert = {
   playlistId: string;
@@ -71,6 +74,13 @@ export function validateYoutubePlan(value: unknown): asserts value is YoutubePla
         plan.eligibleArtists > Math.min(plan.sourceTracks, 1000)))
   )
     throw new Error("Invalid YouTube plan");
+  if (
+    plan.unmatchedReasons !== undefined &&
+    (plan.eligibleArtists === undefined ||
+      !parseUnmatchedReasons(plan.unmatchedReasons, plan.eligibleArtists - plan.artists) ||
+      plan.unmatchedReasons.lookupIncomplete !== undefined)
+  )
+    throw new Error("Invalid YouTube coverage reasons");
 }
 
 // The earliest same-edition record owns creation identity and outstanding intents.

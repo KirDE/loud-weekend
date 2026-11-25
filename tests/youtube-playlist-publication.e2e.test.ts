@@ -80,6 +80,7 @@ test(
         artists: 1,
         sourceTracks: 2,
         eligibleArtists: 2,
+        unmatchedReasons: { duplicateTrack: 1 },
       };
       const attempt = async (offset: number, unknown?: string) => {
         // Keep failed fixtures out of the bounded worker scan during this test.
@@ -223,6 +224,7 @@ TIME ZONE 'UTC') + interval '1 day' WHERE "festivalSlug" = ${slug} AND status = 
       assert.deepEqual(binding?.coverageEvidence, {
         matchedArtists: 1,
         eligibleArtists: 2,
+        unmatchedReasons: { duplicateTrack: 1 },
         recordedAt: binding?.syncedAt?.toISOString(),
       });
       assert.equal(bindings.find((item) => item.provider === "spotify")?.syncedAt, null);

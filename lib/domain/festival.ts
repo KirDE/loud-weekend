@@ -59,9 +59,19 @@ export type Festival = {
   lineupDays?: LineupDayAppearance[];
 };
 
+export type PlaylistUnmatchedReasons = {
+  noEligibleTrack?: number;
+  duplicateTrack?: number;
+  lookupIncomplete?: number;
+};
+
 export type PlaylistCoverage = {
   reportedArtists: number;
-  verified?: { matchedArtists: number; eligibleArtists: number };
+  verified?: {
+    matchedArtists: number;
+    eligibleArtists: number;
+    unmatchedReasons?: PlaylistUnmatchedReasons;
+  };
   tracks: number;
   recordedAt: string;
 };

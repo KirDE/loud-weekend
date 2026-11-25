@@ -1,6 +1,6 @@
-import type { PlaylistCoverage } from "./domain/festival.ts";
+import type { PlaylistCoverage, PlaylistUnmatchedReasons } from "./domain/festival.ts";
 
-type Counts = { matchedArtists: number; eligibleArtists: number };
+type Counts = NonNullable<PlaylistCoverage["verified"]>;
 
 export function coverageEvidence(counts: Counts, syncedAt: Date) {
   return { ...counts, recordedAt: syncedAt.toISOString() };
@@ -10,6 +10,64 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+const reasonKeys = ["noEligibleTrack", "duplicateTrack", "lookupIncomplete"] as const;
+
+export function parseUnmatchedReasons(
+  value: unknown,
+  missing: number,
+): PlaylistUnmatchedReasons | undefined {
+  if (!isRecord(value) || !Number.isSafeInteger(missing) || missing < 1) return undefined;
+  const counts: PlaylistUnmatchedReasons = {};
+  let total = 0;
+  for (const [key, count] of Object.entries(value)) {
+    const reason = reasonKeys.find((known) => known === key);
+    if (
+      !reason ||
+      typeof count !== "number" ||
+      !Number.isSafeInteger(count) ||
+      count < 1 ||
+      count > missing
+    )
+      return undefined;
+    counts[reason] = count;
+    total += count;
+  }
+  return total === missing ? counts : undefined;
+}
+
+const spotifyDuplicateReasons = new Set(["duplicate_uri", "duplicate_song_key"]);
+const spotifyRejectionReasons = new Set([
+  "no_spotify_match",
+  "artist_mismatch",
+  "primary_artist_mismatch",
+  "artist_family_mismatch",
+  "strict_primary_artist_required",
+  "too_short_or_non_song",
+  "bad_version",
+  "soundtrack_style_version",
+]);
+
+function spotifyUnmatchedReason(
+  entry: Record<string, unknown>,
+): keyof PlaylistUnmatchedReasons | undefined {
+  if (
+    !Array.isArray(entry.errors) ||
+    !entry.errors.every((error) => typeof error === "string") ||
+    !Array.isArray(entry.choice_log) ||
+    !entry.choice_log.every((choice) => isRecord(choice) && typeof choice.skip === "string")
+  )
+    return undefined;
+  if (entry.errors.length) return "lookupIncomplete";
+  const skips = entry.choice_log.map((choice) => choice.skip as string);
+  if (
+    skips.some((skip) => !spotifyDuplicateReasons.has(skip) && !spotifyRejectionReasons.has(skip))
+  )
+    return undefined;
+  return skips.some((skip) => spotifyDuplicateReasons.has(skip))
+    ? "duplicateTrack"
+    : "noEligibleTrack";
+}
+
 export function spotifyCoverageCounts(plan: Record<string, unknown>): Counts | undefined {
   const entries = plan.report;
   if (!Array.isArray(entries) || entries.length !== plan.artists_count || entries.length > 1000)
@@ -17,6 +75,7 @@ export function spotifyCoverageCounts(plan: Record<string, unknown>): Counts | u
   const names = new Set<string>();
   let tracks = 0;
   let matchedArtists = 0;
+  const reasons: PlaylistUnmatchedReasons = {};
   for (const entry of entries) {
     if (
       !isRecord(entry) ||
@@ -32,11 +91,20 @@ export function spotifyCoverageCounts(plan: Record<string, unknown>): Counts | u
       return undefined;
     names.add(entry.artist);
     tracks += entry.count;
-    if (entry.count) matchedArtists++;
+    if (entry.count) {
+      matchedArtists++;
+    } else {
+      const reason = spotifyUnmatchedReason(entry);
+      if (reason) reasons[reason] = (reasons[reason] ?? 0) + 1;
+    }
   }
-  return matchedArtists && tracks === plan.track_count
-    ? { matchedArtists, eligibleArtists: entries.length }
-    : undefined;
+  if (!matchedArtists || tracks !== plan.track_count) return undefined;
+  const unmatchedReasons = parseUnmatchedReasons(reasons, entries.length - matchedArtists);
+  return {
+    matchedArtists,
+    eligibleArtists: entries.length,
+    ...(unmatchedReasons && { unmatchedReasons }),
+  };
 }
 
 export function playlistCoverage(row?: {
@@ -73,9 +141,15 @@ export function playlistCoverage(row?: {
     evidence.matchedArtists <= Math.min(artistCount, trackCount, evidence.eligibleArtists) &&
     evidence.eligibleArtists <= 1000
   ) {
+    const { matchedArtists, eligibleArtists } = evidence;
+    const unmatchedReasons = parseUnmatchedReasons(
+      evidence.unmatchedReasons,
+      eligibleArtists - matchedArtists,
+    );
     coverage.verified = {
-      matchedArtists: evidence.matchedArtists,
-      eligibleArtists: evidence.eligibleArtists,
+      matchedArtists,
+      eligibleArtists,
+      ...(unmatchedReasons && { unmatchedReasons }),
     };
   }
   return coverage;
