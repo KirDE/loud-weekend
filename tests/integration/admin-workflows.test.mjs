@@ -627,6 +627,52 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
     await db.artist.delete({ where: { id: otherArtist.id } });
   }
 
+  const linkClaimResponse = await admin.json("/api/admin", "POST", {
+    resourceKind: "artist",
+    resourceKey: artistSlug,
+    baseRevision: 0,
+    values: { officialUrl: officialSite },
+  });
+  assert.equal(linkClaimResponse.status, 201);
+  const linkClaimDraft = await linkClaimResponse.json();
+  const linkClaim = await db.adminChange.findFirstOrThrow({
+    where: { draftId: linkClaimDraft.id },
+  });
+  const providerLink = await db.artistLink.create({
+    data: {
+      artistId: originalArtist.id,
+      label: "Provider profile",
+      source: "provider",
+      url: officialSite,
+      verified: true,
+    },
+  });
+  try {
+    await assertCanonicalConflict(linkClaim);
+    assert.equal(
+      (await db.adminDraft.findUniqueOrThrow({ where: { id: linkClaimDraft.id } })).status,
+      "CONFLICT",
+    );
+    assert.deepEqual(await db.artistLink.findMany({ where: { artistId: originalArtist.id } }), [
+      providerLink,
+    ]);
+    assert.equal(await db.artistProvenance.count({ where: { artistId: originalArtist.id } }), 0);
+    assert.equal(
+      await db.adminResourceState.count({
+        where: { resourceKind: "ARTIST", resourceKey: artistSlug },
+      }),
+      0,
+    );
+    const alreadyClaimed = await queueArtist();
+    assert.equal(alreadyClaimed.status, 409);
+    assert.equal(
+      (await alreadyClaimed.json()).error,
+      "This URL already belongs to a different artist link",
+    );
+  } finally {
+    await db.artistLink.delete({ where: { id: providerLink.id } });
+  }
+
   const resubmittedArtist = await queueArtist();
   assert.equal(resubmittedArtist.status, 201);
   const { id: resubmittedArtistId } = await resubmittedArtist.json();
