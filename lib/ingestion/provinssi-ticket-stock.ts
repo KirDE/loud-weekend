@@ -338,6 +338,7 @@ export function observeProvinssiStock(
   return {
     status: "available",
     ticketsUrl: PROVINSSI_PURCHASE,
+    corroboratePrimaryPurchaseLink: true,
     excerpt:
       `${provinssiStockDatePrefix(dates.startDate, dates.endDate)} namespace ${PROVINSSI_SCOPE.namespace}; ` +
       `product ${PROVINSSI_PRODUCT}; EUR ${i.unit_price.amount}; published current public sale, ` +

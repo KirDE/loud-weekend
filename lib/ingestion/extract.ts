@@ -323,14 +323,13 @@ export function extractFestivalCandidate(
     candidate.observedEditionYears = [
       ...new Set([...candidate.observedEditionYears, source.editionYear]),
     ];
-    // Preserve corroborating Provinssi primary purchase-link evidence only when
-    // the verified stock route keeps exactly that same human destination.
+    // Retain primary proof only when the adapter corroborates the same purchase destination.
     const retainPrimaryTicketProof =
-      source.festivalSlug === "provinssi" &&
-      previousTicketsUrl === candidate.ticketsUrl &&
-      candidate.evidence.some((e) => e.field === "ticketsUrl" && e.sourceUrl === source.url);
+      ticket.corroboratePrimaryPurchaseLink && previousTicketsUrl === candidate.ticketsUrl;
     candidate.evidence = candidate.evidence.filter(
-      (evidence) => evidence.field !== "ticketsUrl" || retainPrimaryTicketProof,
+      (evidence) =>
+        evidence.field !== "ticketsUrl" ||
+        (retainPrimaryTicketProof && evidence.sourceUrl === source.url),
     );
     for (const field of ["ticketStatus", "ticketsUrl"] as const)
       candidate.evidence.push({

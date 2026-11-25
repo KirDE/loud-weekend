@@ -53,6 +53,7 @@ export type TicketObservation = {
   excerpt: string;
   warning?: string;
   ticketsUrl?: string;
+  corroboratePrimaryPurchaseLink?: true;
 };
 
 export type TicketPublicationPolicy = {
