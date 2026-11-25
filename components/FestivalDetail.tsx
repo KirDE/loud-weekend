@@ -1,10 +1,13 @@
 "use client";
 
+import type { PlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-readback";
+
 import { useState } from "react";
 import Link from "next/link";
 import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
+import { LineupByDay } from "./LineupByDay";
 import type { PublicFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { FestivalOverview } from "./FestivalOverview";
 import { OfflineTripDownload } from "./OfflineTrip";
@@ -35,7 +38,9 @@ export function FestivalDetail({
   festivals,
   discoveryLineups,
   artistSlugs,
+  lineupDayArtistSlugs = [],
   playlist,
+  playlistRefreshFailures,
   overview,
   artistPopularity = {},
   arrivalFacts = [],
@@ -44,7 +49,9 @@ export function FestivalDetail({
   festivals: Festival[];
   discoveryLineups?: DiscoveryLineups;
   artistSlugs: Readonly<Record<string, string>>;
+  lineupDayArtistSlugs?: readonly string[];
   playlist?: PlaylistStatus;
+  playlistRefreshFailures?: PlaylistRefreshFailures;
   overview?: PublicFestivalOverview;
   arrivalFacts?: readonly PublicArrivalFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
@@ -102,7 +109,7 @@ export function FestivalDetail({
       </section>
       <EditionLifecycleNotice item={item} />
       <section className="localActions">
-        <FavoriteButton kind="festival" value={item.slug} />
+        <FavoriteButton value={item.slug} />
         <select
           aria-label={t("attendanceFor", { festival: item.name })}
           value={planner.attendance[item.slug] || ""}
@@ -163,12 +170,16 @@ export function FestivalDetail({
               coverage={
                 playlistUrl === playlist?.spotifyUrl ? playlist.coverage?.spotify : undefined
               }
+              failed={playlistRefreshFailures?.spotify}
             />
           </a>
         ) : (
           <div className="disabled">
             <small>{t("listen")}</small>
-            <strong>{t("playlistSoon")}</strong>
+            <strong>
+              {playlistRefreshFailures?.spotify ? t("spotifyPlaylist") : t("playlistSoon")}
+            </strong>
+            {playlistRefreshFailures?.spotify && <PlaylistCoverageLabel failed />}
           </div>
         )}
         {youtubePlaylistUrl ? (
@@ -181,9 +192,18 @@ export function FestivalDetail({
                   ? playlist.coverage?.youtubeMusic
                   : undefined
               }
+              failed={playlistRefreshFailures?.youtubeMusic}
             />
           </a>
-        ) : null}
+        ) : (
+          playlistRefreshFailures?.youtubeMusic && (
+            <div className="disabled">
+              <small>{t("listen")}</small>
+              <strong>{t("youtubeMusicPlaylist")}</strong>
+              <PlaylistCoverageLabel failed />
+            </div>
+          )
+        )}
         {setlistUrl ? (
           <a href={setlistUrl} target="_blank" rel="noreferrer">
             <small>{t("liveHistory")}</small>
@@ -257,6 +277,13 @@ export function FestivalDetail({
                 ))}
               </div>
             </>
+          )}
+          {item.lineupDays && (
+            <LineupByDay
+              key={`${item.slug}:${item.editionYear}`}
+              appearances={item.lineupDays}
+              publicArtistSlugs={lineupDayArtistSlugs}
+            />
           )}
         </section>
       )}

@@ -149,7 +149,7 @@ function calendarStamp(value: string | undefined, generatedAt: Date) {
   return iso.replace(/[-:]|\.\d{3}/g, "");
 }
 
-export function calendarFile(items: CalendarEvent[], generatedAt = new Date()) {
+export function calendarFile(items: readonly CalendarEvent[], generatedAt = new Date()) {
   const events = items.flatMap((item) => {
     const dates = calendarDates(item);
     if (!dates) return [];

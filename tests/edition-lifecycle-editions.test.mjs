@@ -8,6 +8,7 @@ import {
   FestivalEditionContent,
 } from "../components/PublicCatalogPages.tsx";
 import { LanguageProvider, translate } from "../components/LanguageProvider.tsx";
+import { LocalPlannerProvider } from "../components/LocalPlanner.tsx";
 import { festival } from "./support/catalog.ts";
 
 const notice = {
@@ -33,7 +34,9 @@ const paused = {
   editionLifecycle: notice,
 };
 const render = (locale, element) =>
-  renderToStaticMarkup(h(LanguageProvider, { initialLanguage: locale }, element));
+  renderToStaticMarkup(
+    h(LanguageProvider, { initialLanguage: locale }, h(LocalPlannerProvider, null, element)),
+  );
 const detail = (item) =>
   h(FestivalEditionContent, { item, artistSlugs: { "Sample Artist": "sample-artist" } });
 for (const locale of ["en", "de", "ru"]) {

@@ -76,24 +76,37 @@ export async function readCalendarFeed(db: PrismaClient, key: string) {
           updatedAt: true,
           _count: { select: { lifecycleProposals: true } },
           festival: {
-            select: { slug: true, name: true, city: true, country: true, officialUrl: true },
+            select: {
+              slug: true,
+              name: true,
+              city: true,
+              country: true,
+              officialUrl: true,
+              updatedAt: true,
+            },
           },
         },
         orderBy: [{ startDate: "asc" }, { id: "asc" }],
       });
-      const events: Parameters<typeof calendarFile>[0] = [];
+      const events: Parameters<typeof calendarFile>[0][number][] = [];
       for (const edition of editions) {
         const editionLifecycle = edition._count.lifecycleProposals
           ? await readApprovedEditionLifecycleInSnapshot(tx, edition.id)
           : null;
+        const { festival } = edition;
+        const updatedAt =
+          festival.updatedAt > edition.updatedAt ? festival.updatedAt : edition.updatedAt;
         events.push({
-          ...edition.festival,
-          city: edition.festival.city ?? undefined,
+          slug: festival.slug,
+          name: festival.name,
+          city: festival.city ?? undefined,
+          country: festival.country,
+          officialUrl: festival.officialUrl,
           editionYear: edition.year,
           startDate: isoDate(edition.startDate),
           endDate: isoDate(edition.endDate),
           calendarId: edition.id,
-          calendarUpdatedAt: edition.updatedAt.toISOString(),
+          calendarUpdatedAt: updatedAt.toISOString(),
           editionLifecycle: editionLifecycle ?? undefined,
         });
       }

@@ -255,7 +255,7 @@ for (const locale of ["en", "de", "ru"]) {
 
 test("both actual artist routes use guarded appearances and festival metadata uses lifecycle description", async () => {
   const data = await readFile(new URL("../lib/artist-page.ts", import.meta.url), "utf8");
-  assert.match(data, /announcedArtists\(item\)\.includes\(artist.name\)/);
+  assert.match(data, /!editionOnHiatus\(festival\) &&\s+discoveryLineups\.artistSlugsByFestival/);
   for (const prefix of ["", "[lang]/"]) {
     const artistRoute = await readFile(
       new URL(`../app/${prefix}artists/[slug]/page.tsx`, import.meta.url),
