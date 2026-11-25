@@ -327,6 +327,9 @@ export function PlannerPage({
           <div className="eyebrow">{t.eyebrow}</div>
           <h1>{t.title}</h1>
           <p>{t.intro}</p>
+          <Link className="textLink" href="/group-trips/">
+            {{ en: "Group trips", de: "Gruppenreisen", ru: "Групповые поездки" }[language]}
+          </Link>
         </div>
         <PlannerReset
           disabled={syncBusy || playlist.status === "creating"}

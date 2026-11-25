@@ -185,6 +185,9 @@ model User {
   sessions                  Session[]
   documents                 SyncDocument[]
   shareLinks                ShareLink[]
+  ownedTrips                GroupTrip[]
+  tripAccess                GroupTripInvite[]
+  tripVotes                 GroupTripVote[]
   spotify                   SpotifyConnection?
   notificationPreferences   NotificationPreference[]
   notificationSubscriptions NotificationSubscription[]
@@ -339,6 +342,7 @@ model FestivalEdition {
   playlists       FestivalPlaylist[]
   playlistLinks   FestivalPlaylistLink[]
   sources         FestivalSource[]
+  groupTripOptions GroupTripOption[]
 
   overview        EditionOverview?
 
@@ -986,6 +990,85 @@ model OperationalState {
   updatedAt      DateTime @updatedAt
 }
 
+enum GroupTripRole {
+  VIEWER
+  VOTER
+}
+
+enum GroupTripChoice {
+  GOING
+  MAYBE
+  NOT_GOING
+}
+
+enum GroupTripAuditAction {
+  CREATED
+  INVITED
+  JOINED
+  REVOKED
+}
+
+model GroupTrip {
+  id        String           @id @default(cuid())
+  ownerId   String
+  title     String
+  createdAt DateTime         @default(now())
+  owner     User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  options   GroupTripOption[]
+  invites   GroupTripInvite[]
+  audit     GroupTripAudit[]
+
+  @@index([ownerId])
+}
+
+model GroupTripOption {
+  tripId    String
+  editionId String
+  trip      GroupTrip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  edition   FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  votes     GroupTripVote[]
+
+  @@id([tripId, editionId])
+  @@index([editionId])
+}
+
+model GroupTripInvite {
+  id          String        @id @default(cuid())
+  tripId      String
+  tokenHash   String        @unique
+  role        GroupTripRole
+  expiresAt   DateTime
+  claimedById String?
+  claimedAt   DateTime?
+  revokedAt   DateTime?
+  trip        GroupTrip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  claimedBy   User?         @relation(fields: [claimedById], references: [id], onDelete: SetNull)
+
+  @@index([tripId, claimedById])
+  @@index([claimedById])
+}
+
+model GroupTripVote {
+  tripId    String
+  editionId String
+  voterId   String
+  choice    GroupTripChoice
+  option    GroupTripOption @relation(fields: [tripId, editionId], references: [tripId, editionId], onDelete: Cascade)
+  voter     User            @relation(fields: [voterId], references: [id], onDelete: Cascade)
+
+  @@id([tripId, editionId, voterId])
+  @@index([voterId])
+}
+
+model GroupTripAudit {
+  id        String               @id @default(cuid())
+  tripId    String
+  action    GroupTripAuditAction
+  createdAt DateTime             @default(now())
+  trip      GroupTrip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, createdAt])
+}
 
 model GeographicOrigin {
   id          String  @id

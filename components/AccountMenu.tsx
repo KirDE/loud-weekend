@@ -179,6 +179,7 @@ export function AccountMenu() {
       setUser(null);
       setMode("login");
       setOpen(false);
+      window.dispatchEvent(new CustomEvent("loud-weekend-signed-out"));
     } catch {
       setError(t.failed);
     } finally {
