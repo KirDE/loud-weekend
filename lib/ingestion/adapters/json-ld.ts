@@ -111,7 +111,9 @@ function eventStatusRequiringReview(value: unknown): string | undefined {
     .find((status) => status && /cancelled|postponed|rescheduled|movedonline/i.test(status));
 }
 
-function eventDate(value: unknown): { day: string; instant?: number } | undefined {
+type EventDate = { day: string; instant?: number };
+
+function eventDate(value: unknown): EventDate | undefined {
   if (typeof value !== "string") return undefined;
   const valueText = value.trim();
   const plainDate = valueText.match(
@@ -126,6 +128,16 @@ function eventDate(value: unknown): { day: string; instant?: number } | undefine
     valueText.length > plainDate.length && /(?:z|[+-]\d{2}:?\d{2})$/i.test(valueText);
   return { day: plainDate, instant: hasOffset ? parsed : undefined };
 }
+
+function isReversed(start?: EventDate, end?: EventDate): boolean {
+  if (!start || !end) return false;
+  return (
+    !festivalDateInterval({ startDate: start.day, endDate: end.day }) ||
+    (start.instant !== undefined && end.instant !== undefined && end.instant < start.instant)
+  );
+}
+
+const reversedDateWarning = "JSON-LD Event end date precedes its start date";
 
 function city(location: unknown): string | undefined {
   if (!location || typeof location !== "object") return undefined;
@@ -209,15 +221,7 @@ export function extractJsonLdCandidate(
     startDate: eventDate(record.event.startDate),
     endDate: eventDate(record.event.endDate),
   }));
-  const matches = events.filter(({ startDate, endDate }) => {
-    if (!startDate || !endDate) return true;
-    if (!festivalDateInterval({ startDate: startDate.day, endDate: endDate.day })) return false;
-    return (
-      startDate.instant === undefined ||
-      endDate.instant === undefined ||
-      endDate.instant >= startDate.instant
-    );
-  });
+  const matches = events.filter(({ startDate, endDate }) => !isReversed(startDate, endDate));
   const matching = matches.filter(({ startDate }) =>
     startDate?.day.startsWith(`${source.editionYear}-`),
   );
@@ -232,8 +236,7 @@ export function extractJsonLdCandidate(
     observedEditionYears: [],
   };
 
-  if (matches.length !== events.length)
-    candidate.warnings.push("JSON-LD Event end date precedes its start date");
+  if (matches.length !== events.length) candidate.warnings.push(reversedDateWarning);
   if (!selected) {
     if (!events.length) candidate.warnings.push("No JSON-LD Event was found");
     return candidate;
@@ -250,22 +253,41 @@ export function extractJsonLdCandidate(
   };
   const selectedId = selected.id;
   const descriptions = (selectedId && dateDescriptions.get(selectedId)) || [selected.event];
+  const claimedDates = descriptions.map(({ startDate, endDate }) => ({
+    startDate: eventDate(startDate),
+    endDate: eventDate(endDate),
+  }));
   // Alternate claims can block publication but cannot supply the chosen fields or evidence.
-  for (const [field, label] of [
-    ["startDate", "start date"],
-    ["endDate", "end date"],
-  ] as const) {
+  const [agreedStart, agreedEnd] = (
+    [
+      ["startDate", "start date"],
+      ["endDate", "end date"],
+    ] as const
+  ).map(([field, label]) => {
     const days = new Set<string>();
+    const instants = new Set<number>();
     let invalid = false;
-    for (const description of descriptions) {
-      const claim = description[field];
-      if (claim == null) continue;
-      const date = eventDate(claim);
-      if (date) days.add(date.day);
-      else invalid = true;
+    for (const [index, dates] of claimedDates.entries()) {
+      const date = dates[field];
+      if (date) {
+        days.add(date.day);
+        if (date.instant !== undefined) instants.add(date.instant);
+      } else if (descriptions[index][field] != null) {
+        invalid = true;
+      }
     }
     if (invalid) candidate.warnings.push(`JSON-LD Event contains an invalid ${label}`);
     if (days.size > 1) candidate.warnings.push(`Conflicting JSON-LD festival ${field} claims`);
+    const day = days.size === 1 ? days.values().next().value : undefined;
+    const instant = instants.size === 1 ? instants.values().next().value : undefined;
+    return day ? { day, instant } : undefined;
+  });
+  if (
+    matches.length === events.length &&
+    (isReversed(agreedStart, agreedEnd) ||
+      claimedDates.some(({ startDate, endDate }) => isReversed(startDate, endDate)))
+  ) {
+    candidate.warnings.push(reversedDateWarning);
   }
   const lineupQuality = validateGenericLineup(fields.lineup ?? []);
   fields.lineup = lineupQuality.names.length

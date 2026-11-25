@@ -385,3 +385,63 @@ test("malformed dates bound to the selected JSON-LD event hold ticket updates", 
     assert.deepEqual(result.reviewReasons, [warning]);
   }
 });
+
+test("reversed dates linked to the selected JSON-LD event hold ticket updates", () => {
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const event = {
+    "@type": "MusicEvent",
+    "@id": "#festival-2027",
+    startDate: current.startDate,
+  };
+  const blankEvent = { ...event, "@id": "_:festival" };
+  const reversedEnd = { "@id": event["@id"], endDate: "2027-07-27" };
+  const reversedInstants = {
+    "@id": event["@id"],
+    startDate: "2027-07-28T20:00:00+02:00",
+    endDate: "2027-07-28T17:30:00Z",
+  };
+  const pages = [
+    [event, script(event) + script(reversedEnd)],
+    [blankEvent, script([blankEvent, { ...reversedEnd, "@id": "_:festival" }])],
+    [event, script(event) + script(reversedInstants)],
+    [
+      { ...event, startDate: reversedInstants.startDate },
+      script({ ...event, startDate: reversedInstants.startDate }) +
+        script({ "@id": event["@id"], endDate: reversedInstants.endDate }),
+    ],
+  ];
+
+  for (const [selected, page] of pages) {
+    const candidate = extract(page + ticket);
+    const result = evaluateCandidate(current, candidate);
+    assert.equal(candidate.startDate, current.startDate);
+    assert.equal(candidate.endDate, undefined);
+    assert.equal(
+      candidate.evidence.find((item) => item.field === "startDate").excerpt,
+      JSON.stringify(selected),
+    );
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, ["JSON-LD Event end date precedes its start date"]);
+  }
+});
+
+test("ordered or unbound split JSON-LD dates do not hold ticket updates", () => {
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  for (const [id, otherId, endDate] of [
+    ["#festival-2027", "#festival-2027", "2027-07-31"],
+    ["#festival-2027", "#afterparty", "2027-07-27"],
+    ["_:festival", "_:festival", "2027-07-27"],
+  ]) {
+    const page =
+      script({ "@type": "MusicEvent", "@id": id, startDate: current.startDate }) +
+      script({ "@id": otherId, endDate });
+    const candidate = extract(page + ticket);
+    assert.equal(candidate.endDate, undefined);
+    assert.deepEqual(candidate.warnings, []);
+    assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  }
+});
