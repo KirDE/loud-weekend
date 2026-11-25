@@ -13,6 +13,8 @@ import type { PublicFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { FestivalOverview } from "./FestivalOverview";
 import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
+import type { PublicCampingFact } from "@/lib/catalog/camping-facts";
+import { FestivalCamping } from "./FestivalCamping";
 import { useLanguage } from "./LanguageProvider";
 import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
 import { FestivalArrival } from "./FestivalArrival";
@@ -43,6 +45,7 @@ export function FestivalDetail({
   overview,
   artistPopularity = {},
   arrivalFacts = [],
+  campingFacts = [],
 }: {
   item: Festival;
   festivals: Festival[];
@@ -53,6 +56,7 @@ export function FestivalDetail({
   playlistRefreshFailures?: PlaylistRefreshFailures;
   overview?: PublicFestivalOverview;
   arrivalFacts?: readonly PublicArrivalFact[];
+  campingFacts?: readonly PublicCampingFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
   const { language, locale, t } = useLanguage();
@@ -280,6 +284,7 @@ export function FestivalDetail({
         favorites={planner.favoriteArtists}
       />
       <FestivalArrival facts={arrivalFacts} />
+      <FestivalCamping facts={campingFacts} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
         <p>

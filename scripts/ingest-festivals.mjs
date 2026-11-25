@@ -1,3 +1,4 @@
+import { isCampingSourceUrl } from "../lib/ingestion/adapters/camping-guidance.ts";
 import { organizerReviewCollector } from "../lib/ingestion/organizer-collector.ts";
 import { drainImportEvents } from "../lib/ingestion/import-events.ts";
 import { sendImportEvent, transportConfigured } from "../lib/ingestion/import-event-transport.mjs";
@@ -5,6 +6,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { listConfiguredSources } from "../lib/sources/repository.ts";
+import {
+  collectCampingCandidate,
+  registeredCampingSource,
+} from "../lib/ingestion/camping-collector.ts";
 import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
 import { fetchSource } from "../lib/ingestion/fetch.ts";
 import { evaluateCandidate } from "../lib/ingestion/policy.ts";
@@ -87,8 +92,19 @@ const hydratedSources = dueOnly
 const eligible = dueOnly
   ? dueFestivalSources(hydratedSources)
   : hydratedSources.filter((source) => source.enabled);
+function organizerCollector(source) {
+  const identity = {
+    slug: source.festivalSlug,
+    year: source.editionYear,
+    url: source.url,
+    parserKey: source.parserKey,
+  };
+  const organizer = organizerReviewCollector(source);
+  if (organizer) return organizer;
+  if (registeredCampingSource(identity)) return collectCampingCandidate;
+}
 let selected = eligible.filter(
-  (source) => (!slugArg || source.festivalSlug === slugArg) && !organizerReviewCollector(source),
+  (source) => (!slugArg || source.festivalSlug === slugArg) && !organizerCollector(source),
 );
 const notificationEndpoint =
   !dbDue &&
@@ -228,7 +244,10 @@ const summary = {
 };
 
 for (const source of selected) {
-  const healthUrl = isIndependentTicketUrl(source.url) ? source.url : undefined;
+  const healthUrl =
+    isIndependentTicketUrl(source.url) || isCampingSourceUrl(source.festivalSlug, source.url)
+      ? source.url
+      : undefined;
   let leaseCompleted = false;
   let publicationCommitted = false;
   let failureOutcome = "pre_attempt_error";
@@ -243,7 +262,7 @@ for (const source of selected) {
     let response;
     let html;
     let organizerReview;
-    const collectReview = sourceLease && organizerReviewCollector(source);
+    const collectReview = sourceLease && organizerCollector(source);
     failureStage = "fetch";
     try {
       if (collectReview) {
