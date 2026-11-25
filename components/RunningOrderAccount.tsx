@@ -14,6 +14,7 @@ const copy = {
     count: (count: number) => `Saved performances: ${count}`,
     login: "Sign in from the Account menu to use an account copy.",
     changed: "The account or saved copy changed. Check it again; no selection was replaced.",
+    deviceChanged: "Your device selection changed. It was kept. Choose Replace again to continue.",
     failed: "Could not complete the account action.",
     saved: "Account copy saved.",
     restored: "Device selection replaced.",
@@ -30,6 +31,8 @@ const copy = {
     login: "Melde dich im Konto-Menü an, um eine Kontokopie zu nutzen.",
     changed:
       "Das Konto oder die Kopie hat sich geändert. Prüfe sie erneut; keine Auswahl wurde ersetzt.",
+    deviceChanged:
+      "Deine Geräteauswahl wurde geändert und beibehalten. Wähle erneut Ersetzen, um fortzufahren.",
     failed: "Die Kontoaktion konnte nicht abgeschlossen werden.",
     saved: "Kontokopie gespeichert.",
     restored: "Geräteauswahl ersetzt.",
@@ -45,6 +48,8 @@ const copy = {
     count: (count: number) => `Сохранённые выступления: ${count}`,
     login: "Войдите через меню аккаунта, чтобы использовать личную копию.",
     changed: "Аккаунт или копия изменились. Проверьте их снова; выбор не был заменён.",
+    deviceChanged:
+      "Выбор на устройстве изменился и был сохранён. Чтобы заменить его, повторите действие.",
     failed: "Не удалось выполнить действие с аккаунтом.",
     saved: "Копия сохранена в аккаунте.",
     restored: "Выбор на устройстве заменён.",
@@ -71,15 +76,16 @@ export function RunningOrderAccount({
   slug: string;
   year: number;
   selected: string[];
-  replace: (ids: string[]) => boolean;
+  replace: (ids: string[], expected: string[]) => "updated" | "deviceChanged" | "failed";
 }) {
   const { language } = useLanguage();
   const t = copy[language];
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [status, setStatus] = useState<
-    "login" | "changed" | "failed" | "saved" | "restored" | "cleared"
+    "login" | "changed" | "deviceChanged" | "failed" | "saved" | "restored" | "cleared"
   >();
   const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
   const active = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -92,6 +98,7 @@ export function RunningOrderAccount({
     };
     window.addEventListener("loud-weekend-authenticated", reset);
     window.addEventListener("loud-weekend-signed-out", reset);
+    setReady(true);
     return () => {
       active.current?.abort();
       window.removeEventListener("loud-weekend-authenticated", reset);
@@ -144,7 +151,8 @@ export function RunningOrderAccount({
           setStatus("changed");
           return;
         }
-        setStatus(replace(copy.performanceIds) ? "restored" : "failed");
+        const result = replace(copy.performanceIds, selected);
+        setStatus(result === "updated" ? "restored" : result);
       }
       setSnapshot({ account, revision: copy.revision, count: copy.performanceIds.length });
     } catch {
@@ -161,7 +169,7 @@ export function RunningOrderAccount({
     <details className="runningOrderAccount">
       <summary>{t.title}</summary>
       <p>{t.hint}</p>
-      <button type="button" onClick={() => void run("check")} disabled={busy}>
+      <button type="button" onClick={() => void run("check")} disabled={!ready || busy}>
         {t.check}
       </button>
       {snapshot && (

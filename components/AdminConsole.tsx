@@ -1,4 +1,6 @@
 "use client";
+
+import { TicketOfferReviewQueue } from "./TicketOfferReviewQueue";
 import Link from "next/link";
 import { correctionQueueLabel } from "./CorrectionQueue";
 
@@ -54,7 +56,9 @@ export function AdminConsole({
   submissions: initialSubmissions,
   editionOptions = [],
   sourceHealth = [],
+  ticketOfferEditions = [],
 }: {
+  ticketOfferEditions?: { id: string; year: number }[];
   festivals: Festival[];
   artists: EditableArtist[];
   initialChanges: ReviewChange[];
@@ -115,6 +119,17 @@ export function AdminConsole({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ decision: status === "approved" ? "approve" : "reject" }),
       });
+      if (response.status === 409) {
+        const body = await response.json();
+        if (body?.status === "CONFLICT") {
+          setChanges((items) =>
+            items.map((item) =>
+              item.id === id ? { ...item, status: "conflict", conflict: true } : item,
+            ),
+          );
+          return setNotice({ key: "conflict" });
+        }
+      }
       if (!response.ok) return setNotice({ key: failureKey(response.status, "decisionFailed") });
       setChanges((items) => items.map((item) => (item.id === id ? { ...item, status } : item)));
       setNotice({ key: "decisionNotice" });
@@ -276,6 +291,14 @@ export function AdminConsole({
 
         {section === "review" && (
           <div className="reviewList">
+            {ticketOfferEditions.map((edition) => (
+              <TicketOfferReviewQueue
+                key={edition.id}
+                editionId={edition.id}
+                year={edition.year}
+                locale={language}
+              />
+            ))}
             <div className="adminToolbar">
               <p>{ta("reviewHelp")}</p>
               <select aria-label={ta("filter")}>

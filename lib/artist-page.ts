@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cache } from "react";
-import { legacyFavoriteNames } from "./favorite-artist";
+import { localizedAlternates } from "./seo";
+import { socialPreviewMetadata } from "./social-preview";
 import { getCatalog } from "./catalog/repository";
 import type { Festival } from "./domain/festival";
 import type { Language } from "./language-preference";
@@ -21,18 +22,16 @@ const phrases = {
 };
 
 export const readArtistPage = cache(async (slug: string) => {
-  const { artists, festivals } = await getCatalog();
+  const { artists, festivals, discoveryLineups } = await getCatalog();
   const artist = artists.find((item) => item.slug === slug);
   if (!artist) return null;
-  const uniqueBillingName = !artists.some(
-    (item) => item.slug !== slug && item.name === artist.name,
+  const appearances = festivals.filter((festival) =>
+    discoveryLineups.artistSlugsByFestival[festival.slug]?.includes(artist.slug),
   );
-  const appearances = uniqueBillingName
-    ? festivals.filter(
-        (item) => item.headliners.includes(artist.name) || item.lineup.includes(artist.name),
-      )
-    : [];
-  return { artist, appearances, legacyFavoriteNames: legacyFavoriteNames(artist, artists) };
+  const legacySlugs = Object.fromEntries(
+    Object.entries(discoveryLineups.legacyFavoriteSlugs).filter(([, slug]) => slug === artist.slug),
+  );
+  return { artist, appearances, legacySlugs };
 });
 
 export function artistMetadata(
@@ -49,12 +48,14 @@ export function artistMetadata(
   const description = names.length
     ? `${artist.name} · ${t.appearances}: ${new Intl.ListFormat(locale).format(names)}.`
     : `${artist.name} · ${t.fallback}`;
+  const canonical = language ? `/${language}${path}` : path;
   return {
+    ...socialPreviewMetadata({ kind: "artists", ...artist }, canonical, locale),
     title: artist.name,
     description,
     alternates: {
-      canonical: language ? `/${language}${path}` : path,
-      languages: { "x-default": path, en: `/en${path}`, de: `/de${path}`, ru: `/ru${path}` },
+      canonical,
+      languages: localizedAlternates(path),
     },
   };
 }

@@ -1,3 +1,8 @@
+import {
+  readApprovedTicketOffers,
+  type ApprovedTicketOffersReader,
+} from "../ingestion/ticket-offer-proposal-store.ts";
+import type { PublicTicketOffers } from "../domain/ticket-offer-proposal.ts";
 import { timetableEntrySchema } from "../timetables.ts";
 import { cache } from "react";
 import { YOUTUBE_URL } from "./youtube-playlist-queue.ts";
@@ -31,10 +36,13 @@ const dateOnly = (value: Date | null) => value?.toISOString().slice(0, 10);
 const instant = (value: Date | null) => value?.toISOString();
 const lower = <T extends string>(value: T) => value.toLocaleLowerCase() as Lowercase<T>;
 
-export class DatabaseCatalogRepository implements CatalogRepository {
-  private readonly client: PrismaClient;
+type CatalogReader = ApprovedTicketOffersReader &
+  Pick<PrismaClient, "festivalEdition" | "artist" | "catalogPublication" | "$queryRaw">;
 
-  constructor(client: PrismaClient) {
+export class DatabaseCatalogRepository implements CatalogRepository {
+  private readonly client: CatalogReader;
+
+  constructor(client: CatalogReader) {
     this.client = client;
   }
 
@@ -53,6 +61,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
             orderBy: [{ billing: "asc" }, { position: "asc" }],
           },
           provenance: { orderBy: [{ field: "asc" }, { checkedAt: "asc" }] },
+          lineupDays: { include: { artist: { select: { name: true, slug: true } } } },
           timetable: {
             // Legacy display defaults are not evidence for data-quality coverage.
             ...(requireTimetableEvidence && {
@@ -82,6 +91,25 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     if (!editionRows.length || !artistRows.length)
       throw new Error("database catalogue is empty or incomplete");
 
+    const currentIds = editionRows
+      .filter((row) => row.recordState === "CURRENT")
+      .map((row) => row.id);
+    const approvedTiers = new Map<string, PublicTicketOffers>();
+    for (const { editionId, proposal } of await readApprovedTicketOffers(this.client, currentIds)) {
+      const { editionYear, sourceUrl, observedAt, offers } = proposal;
+      approvedTiers.set(editionId, {
+        editionYear,
+        sourceUrl,
+        observedAt,
+        offers: offers.map(({ key, kind, status, price, saleDateText }) => ({
+          key,
+          kind,
+          status,
+          price,
+          saleDateText,
+        })),
+      });
+    }
     const editions = editionRows.map((row) => {
       const announced = row.lineup.filter(({ status }) => status === "ANNOUNCED");
       const headliners = announced
@@ -99,10 +127,45 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           .filter(({ checkedAt }) => checkedAt <= now)
           .map(({ checkedAt }) => checkedAt.toISOString()),
       );
+      const allocations = new Map(
+        row.lineupDays
+          .filter(
+            (allocation) =>
+              dateOnly(allocation.startDate) === dateOnly(row.startDate) &&
+              dateOnly(allocation.endDate) === dateOnly(row.endDate),
+          )
+          .map((allocation) => [allocation.artistId, allocation]),
+      );
+      const lineupDays = row.lineup
+        .filter(({ artistId, status }) => status === "ANNOUNCED" || allocations.has(artistId))
+        .map(({ artist, status }) => {
+          const allocation = allocations.get(artist.id);
+          return {
+            artist: artist.name,
+            artistSlug: artist.slug,
+            dates: allocation?.dates.map((date) => dateOnly(date)!) ?? [],
+            cancelled: status === "CANCELLED" || allocation?.status === "CANCELLED",
+            sourceUrl: allocation?.sourceUrl,
+            observedAt: allocation?.observedAt.toISOString(),
+          };
+        });
+      const rosterIds = new Set(row.lineup.map(({ artistId }) => artistId));
+      for (const allocation of allocations.values()) {
+        if (allocation.status !== "CANCELLED" || rosterIds.has(allocation.artistId)) continue;
+        lineupDays.push({
+          artist: allocation.artist.name,
+          artistSlug: allocation.artist.slug,
+          dates: allocation.dates.map((date) => dateOnly(date)!),
+          cancelled: true,
+          sourceUrl: allocation.sourceUrl,
+          observedAt: allocation.observedAt.toISOString(),
+        });
+      }
       const roster = announced.map(({ artist }) => artist);
       const aliases = row.timetable.length ? artistAliasIndex(roster) : undefined;
       const rosterById = new Map(roster.map((artist) => [artist.id, artist.name]));
       return {
+        lineupDays: lineupDays.some(({ sourceUrl }) => sourceUrl) ? lineupDays : undefined,
         ...(freshnessEvidence && {
           freshness: {
             lastSuccessfulSourceCheckAt,
@@ -147,6 +210,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           row.sources?.length && row.sources.every((s) => s.deprecatedAt !== null)
             ? row.sources.map((s) => s.deprecatedAt!.toISOString()).sort()[0]
             : undefined,
+        ...(approvedTiers.has(row.id) ? { ticketOffers: approvedTiers.get(row.id)! } : {}),
         ticketStatus: lower(row.ticketStatus),
         updatedAt: row.sourceUpdatedAt.toISOString(),
         genres: row.festival.genres,
@@ -271,6 +335,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         ({ provider, url }) => provider === "youtube_music" && YOUTUBE_URL.test(url),
       );
       if (!spotify && !youtube) continue;
+      const spotifyCoverage = playlistCoverage(spotify);
       playlists[row.festival.slug] = {
         spotifyUrl: spotify?.url,
         youtubeMusicUrl: youtube?.url,
@@ -282,7 +347,10 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         updatedAt:
           instant(spotify?.syncedAt ?? youtube?.syncedAt ?? null) ??
           row.sourceUpdatedAt.toISOString(),
-        coverage: { youtubeMusic: playlistCoverage(youtube) },
+        coverage: {
+          spotify: spotifyCoverage?.verified ? spotifyCoverage : undefined,
+          youtubeMusic: playlistCoverage(youtube),
+        },
       };
     }
     const freshness = {
@@ -308,7 +376,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           ],
         ]),
     );
-    const visibleSlugs = new Set(Object.values(artistSlugsByFestival).flat());
+    const visibleSlugs = new Set(artists.map((artist) => artist.slug));
     const discoveryLineups = {
       artistSlugsByFestival,
       artistNamesBySlug: Object.fromEntries(

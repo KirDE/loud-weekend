@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
 const key = "festival-radar-planner-v1";
@@ -216,12 +217,36 @@ test("backup, reset and undo include edition running orders without writing the 
   );
   await page.getByRole("button", { name: copy.en.clear, exact: true }).click();
   const dialog = page.getByRole("dialog");
-  const href = await dialog.getByRole("link", { name: copy.en.backup }).getAttribute("href");
-  expect(JSON.parse(decodeURIComponent(href.split(",")[1])).runningOrders).toEqual({
-    [current]: ["show-1"],
+  const otherTab = await page.context().newPage();
+  await otherTab.goto("/en/planner/");
+  const saveOrder = (picks) =>
+    otherTab.evaluate(
+      ([key, picks]) => localStorage.setItem(key, JSON.stringify(picks)),
+      [current, picks],
+    );
+  const backupLink = dialog.getByRole("link", { name: copy.en.backup });
+  async function downloadOrders() {
+    const [download] = await Promise.all([page.waitForEvent("download"), backupLink.click()]);
+    return JSON.parse(await readFile(await download.path(), "utf8")).runningOrders;
+  }
+
+  await saveOrder(["show-1", "show-2"]);
+  expect(await downloadOrders()).toEqual({
+    [current]: ["show-1", "show-2"],
     [archive]: ["archived-show"],
   });
-  await dialog.getByRole("button", { name: copy.en.reset, exact: true }).click();
+  await saveOrder(["show-3"]);
+  const reset = dialog.getByRole("button", { name: copy.en.reset, exact: true });
+  await reset.click();
+  await expect(dialog.getByRole("alert")).toContainText("Running orders changed");
+  expect(await state(page)).toEqual(saved);
+  expect(await otherTab.evaluate((key) => localStorage.getItem(key), current)).toBe('["show-3"]');
+
+  expect(await downloadOrders()).toEqual({
+    [current]: ["show-3"],
+    [archive]: ["archived-show"],
+  });
+  await reset.click();
   expect(
     await page.evaluate(
       (keys) => keys.map((key) => localStorage.getItem(key)),
@@ -235,7 +260,7 @@ test("backup, reset and undo include edition running orders without writing the 
       (keys) => keys.map((key) => localStorage.getItem(key)),
       [current, archive, unrelated],
     ),
-  ).toEqual(['["new-show","show-1"]', '["archived-show"]', "keep"]);
+  ).toEqual(['["new-show","show-3"]', '["archived-show"]', "keep"]);
   expect(writes()).toBe(0);
 });
 
@@ -243,16 +268,18 @@ test("failed planner persistence keeps the local plan and running orders", async
   const writes = await setup(page, true);
   const runningOrder = "festival-radar-timetable-v1:synthetic-fest:2027";
   await page.goto("/en/planner/");
-  await page.getByRole("button", { name: copy.en.clear, exact: true }).click();
+  const clear = page.getByRole("button", { name: copy.en.clear, exact: true });
+  await expect(clear).toBeEnabled();
+  await page.evaluate((key) => localStorage.setItem(key, '["show-1"]'), runningOrder);
+  await clear.click();
   const dialog = page.getByRole("dialog");
-  await page.evaluate((runningOrder) => {
-    localStorage.setItem(runningOrder, '["show-1"]');
+  await page.evaluate(() => {
     const setItem = Storage.prototype.setItem;
     Storage.prototype.setItem = function (name, value) {
       if (this === localStorage) throw new DOMException("Write denied", "QuotaExceededError");
       return setItem.call(this, name, value);
     };
-  }, runningOrder);
+  });
   await dialog.getByRole("button", { name: copy.en.reset, exact: true }).click();
   await expect(dialog.getByRole("alert")).toHaveText("Browser storage could not be updated.");
   expect(await state(page)).toEqual(saved);
@@ -266,21 +293,25 @@ test("a failed running-order removal rolls back the entire reset", async ({ page
   const first = "festival-radar-timetable-v1:synthetic-fest:2026";
   const second = "festival-radar-timetable-v1:synthetic-fest:2027";
   await page.goto("/en/planner/");
-  await page.getByRole("button", { name: copy.en.clear, exact: true }).click();
-  const dialog = page.getByRole("dialog");
+  const clear = page.getByRole("button", { name: copy.en.clear, exact: true });
+  await expect(clear).toBeEnabled();
   await page.evaluate(
     ({ first, second }) => {
       localStorage.setItem(first, ' [ "show-1" ] ');
       localStorage.setItem(second, '["show-2"]');
-      const removeItem = Storage.prototype.removeItem;
-      Storage.prototype.removeItem = function (name) {
-        if (this === localStorage && name === second)
-          throw new DOMException("Removal denied", "SecurityError");
-        return removeItem.call(this, name);
-      };
     },
     { first, second },
   );
+  await clear.click();
+  const dialog = page.getByRole("dialog");
+  await page.evaluate((key) => {
+    const removeItem = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (name) {
+      if (this === localStorage && name === key)
+        throw new DOMException("Removal denied", "SecurityError");
+      return removeItem.call(this, name);
+    };
+  }, second);
   await dialog.getByRole("button", { name: copy.en.reset, exact: true }).click();
   await expect(dialog.getByRole("alert")).toHaveText("Browser storage could not be updated.");
   expect(await state(page)).toEqual(saved);

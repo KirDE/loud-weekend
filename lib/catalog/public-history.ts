@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 const categories = {
   dates: ["startDate", "endDate", "dateLabel"],
-  lineup: ["lineup", "headliners"],
+  lineup: ["lineup", "headliners", "lineupDays"],
   tickets: ["ticketsUrl", "ticketStatus"],
   timetable: ["timetable"],
 } as const;

@@ -1,8 +1,24 @@
+import {
+  extractSwedenRockCandidate,
+  swedenRockTicketSupplementUrl,
+} from "./adapters/sweden-rock.ts";
 import { renderedTicketText } from "./rendered-ticket-text.ts";
 import { RFP_STOCK, RFP_PURCHASE, observeRfpStock } from "./rfp-ticket-stock.ts";
 import { observeIdaysTicketStock } from "./adapters/idays.ts";
 import { load } from "cheerio";
 import type { FestivalSource, FestivalCandidate } from "./types.ts";
+import {
+  HEAVY_STOCK,
+  HEAVY_PURCHASE,
+  fetchHeavyStockDocument,
+  isHeavyStockSource,
+  observeHeavyStock,
+} from "./heavy-ticket-stock.ts";
+import {
+  VAINSTREAM_STOCK,
+  isVainstreamStockSource,
+  observeVainstreamStock,
+} from "./vainstream-ticket-stock.ts";
 import {
   ALCATRAZ_STOCK,
   ALCATRAZ_PURCHASE,
@@ -21,6 +37,20 @@ export type TicketObservation = {
   ticketsUrl?: string;
 };
 
+type TicketAcquisition = (transport: {
+  fetchWithRetry: (url: string, headers: Record<string, string>) => Promise<Response>;
+  fetchOnce: (url: string, init: RequestInit) => Promise<Response>;
+  readText: (response: Response) => Promise<string>;
+}) => Promise<{ response: Response } | { html: string }>;
+
+const ticketAcquisitions = new Map<string, TicketAcquisition>([
+  [HEAVY_STOCK, fetchHeavyStockDocument],
+]);
+
+export function ticketSupplementAcquisition(url: string): TicketAcquisition | undefined {
+  return ticketAcquisitions.get(url);
+}
+
 /** A same-document response or a source adapter's reviewed canonical homepage. */
 export function matchesTicketPrimaryUrl(source: FestivalSource, finalUrl: string): boolean {
   return (
@@ -36,6 +66,8 @@ export function matchesTicketPrimaryUrl(source: FestivalSource, finalUrl: string
 export function ticketSupplementUrl(source: FestivalSource): string | undefined {
   if (source.fetchUrl || source.followLinkPattern || source.strategies.includes("manual_review"))
     return;
+  const swedenRock = swedenRockTicketSupplementUrl(source);
+  if (swedenRock) return swedenRock;
   const remaining = remainingTicketUrl(source);
   if (remaining) return remaining;
   let url: URL;
@@ -53,6 +85,8 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
     url.hash
   )
     return;
+  if (isHeavyStockSource(source)) return HEAVY_STOCK;
+  if (isVainstreamStockSource(source)) return VAINSTREAM_STOCK;
   if (isAlcatrazStockSource(source)) return ALCATRAZ_STOCK;
   if (
     source.festivalSlug === "rock-for-people" &&
@@ -97,12 +131,19 @@ export function ticketSupplementUrl(source: FestivalSource): string | undefined 
     url.pathname === "/"
   )
     return `https://www.wacken.com/de/tickets-shop/ticket-uebersicht-${source.editionYear}/`;
+  if (
+    source.festivalSlug === "motocultor" &&
+    url.hostname === "www.motocultor-festival.com" &&
+    ["/", "/actualites/"].includes(url.pathname)
+  )
+    return "https://www.motocultor-festival.com/";
 }
 
 /** Human purchase destination can differ from the machine-readable stock URL. */
 export function ticketSupplementPurchaseUrl(source: FestivalSource): string | undefined {
   const stockUrl = ticketSupplementUrl(source);
   if (!stockUrl) return;
+  if (stockUrl === HEAVY_STOCK) return HEAVY_PURCHASE;
   if (stockUrl === ALCATRAZ_STOCK) return ALCATRAZ_PURCHASE;
   if (stockUrl === RFP_STOCK) return RFP_PURCHASE;
   return source.festivalSlug === "full-rewind"
@@ -128,6 +169,17 @@ export function observeTicketSupplement(
   });
   if (!isTicketSupplementUrl(source, url) || html.length > 2_000_000)
     return fail("source identity or size changed");
+  if (swedenRockTicketSupplementUrl(source)) {
+    const ticket = extractSwedenRockCandidate(
+      html,
+      { ...source, url },
+      dates?.fetchedAt ?? new Date().toISOString(),
+    );
+    const evidence = ticket.evidence.find((entry) => entry.field === "ticketStatus");
+    if (!ticket.ticketStatus || !evidence?.excerpt || ticket.warnings.length)
+      return fail(ticket.warnings.join("; ") || "current ordinary-admission evidence absent");
+    return { status: ticket.ticketStatus, ticketsUrl: url, excerpt: evidence.excerpt };
+  }
   if (source.festivalSlug === "idays") return observeIdaysTicketStock(html, source.editionYear);
   if (source.festivalSlug === "rock-for-people")
     return observeRfpStock(html, source.editionYear, dates);
@@ -207,8 +259,10 @@ export function observeTicketSupplement(
       return fail("invalid public weekend product JSON");
     }
   }
+  if (url === HEAVY_STOCK) return observeHeavyStock(html, dates);
   if (url === ALCATRAZ_STOCK) return observeAlcatrazStock(html, source.editionYear, dates);
   if (remainingTicketUrl(source)) return observeRemainingTicket(html, source, dates);
+  if (url === VAINSTREAM_STOCK) return observeVainstreamStock(html, dates);
   const $ = load(html);
   const declaredEvents: Array<{
     name?: unknown;
@@ -225,6 +279,19 @@ export function observeTicketSupplement(
         /* Missing or invalid edition evidence remains review-required. */
       }
     });
+  // Like JSON-LD edition metadata, a decorative aria-hidden ticket stub is
+  // identity metadata only. Stock still requires visible ordinary-pass controls.
+  const motocultorEditions = new Map<object, { brand: string; year: string; dates: string }>();
+  if (source.festivalSlug === "motocultor")
+    $(".passes__list > .pass > .ticket").each((_, element) => {
+      const stub = $(element).children(".ticket__stub");
+      if (stub.length === 1)
+        motocultorEditions.set(element, {
+          brand: stub.children(".ticket__brand").text().trim(),
+          year: stub.children(".ticket__year").text().trim(),
+          dates: stub.children(".ticket__dates").text().replace(/\s+/g, " ").trim(),
+        });
+    });
   // Edition metadata above is not an inventory assertion. Ticket stock below
   // must come from the visible reviewed product structure, never generic text.
   $("script, style, noscript, template, [hidden], [inert], [aria-hidden='true']").remove();
@@ -235,6 +302,82 @@ export function observeTicketSupplement(
   const text = (value: string) => value.replace(/\s+/g, " ").trim();
   $("nav, footer").remove();
   const year = source.editionYear;
+  if (source.festivalSlug === "motocultor") {
+    if (
+      !text($("title").text()).startsWith(`Motocultor Festival ${year} - `) ||
+      $("link[rel='canonical']").length !== 1 ||
+      $("link[rel='canonical']").attr("href") !== url
+    )
+      return fail("current official homepage identity absent");
+    const cards = $(".passes__list > .pass > .ticket").filter(
+      (_, card) => text($(card).children(".ticket__main").children("h3").text()) === "Pass 4 jours",
+    );
+    if (cards.length !== 1) return fail("ordinary four-day pass absent or duplicated");
+    const card = cards.first(),
+      metadata = motocultorEditions.get(card[0]);
+    const dates = (metadata?.dates ?? "").match(
+      new RegExp(`^(\\d{1,2})\\s*[-–]\\s*(\\d{1,2})\\s+août\\s+${year}$`),
+    );
+    if (
+      metadata?.brand !== "Motocultor Festival" ||
+      metadata?.year !== String(year) ||
+      !dates ||
+      Number(dates[2]) - Number(dates[1]) !== 3 ||
+      Number(dates[1]) < 1 ||
+      Number(dates[2]) > 31
+    )
+      return fail("four-day admission edition absent or conflicting");
+    const main = card.children(".ticket__main");
+    const regular = main
+      .find(".tiers > .tier")
+      .filter((_, tier) => text($(tier).children(".tier__label").text()) === "Tarif normal");
+    if (regular.length !== 1) return fail("regular price tier absent or duplicated");
+    const tier = regular.first();
+    const disabled = "[disabled], [aria-disabled='true'], .disabled, .is-disabled";
+    const state = tier.children(".tier__state");
+    const price = tier.children(".tier__price");
+    const buy = main.children("a.ticket__cta[href]").filter((_, anchor) => {
+      const link = $(anchor);
+      try {
+        const target = new URL(link.attr("href")!);
+        return (
+          target.protocol === "https:" &&
+          target.hostname === "feverup.com" &&
+          !target.username &&
+          !target.password &&
+          !target.port &&
+          !target.hash &&
+          /^\/m\/\d+$/.test(target.pathname) &&
+          text(link.text()) === "Prendre mon pass" &&
+          link.closest(disabled).length === 0
+        );
+      } catch {
+        return false;
+      }
+    });
+    if (
+      tier.hasClass("tier--on-sale") &&
+      !tier.hasClass("tier--sold-out") &&
+      state.length === 1 &&
+      price.length === 1 &&
+      !state.closest(disabled).length &&
+      !price.closest(disabled).length &&
+      !state.find(disabled).length &&
+      !price.find(disabled).length &&
+      text(state.text()) === "En vente" &&
+      buy.length === 1 &&
+      /^\d+(?:[.,]\d+)?\s*€$/.test(text(price.text()))
+    )
+      return {
+        status: "available",
+        excerpt:
+          `Motocultor Festival ${year}; Pass 4 jours; Tarif normal; ` +
+          `${text(price.text())}; En vente; enabled official Fever Prendre mon pass control`,
+      };
+    // Sold-out early-bird tiers and unknown day-pass inventory do not prove
+    // whole-event sellout. Keep the last-good snapshot on any unsupported state.
+    return fail("no unambiguous on-sale regular four-day admission");
+  }
   if (["rock-am-ring", "rock-im-park"].includes(source.festivalSlug)) {
     const name = source.festivalSlug === "rock-am-ring" ? "Rock am Ring" : "Rock im Park";
     const title = text($("title").text());

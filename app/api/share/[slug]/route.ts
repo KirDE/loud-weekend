@@ -9,6 +9,7 @@ export async function GET(_: Request, context: { params: Promise<{ slug: string 
   });
   if (
     !link ||
+    link.document.kind === "SEASON_ATTENDANCE" ||
     link.document.kind === SyncKind.TRIP_BUDGETS ||
     (link.expiresAt && link.expiresAt <= new Date())
   )

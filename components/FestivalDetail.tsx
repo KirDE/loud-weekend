@@ -1,14 +1,21 @@
 "use client";
 
+import { sendProductEvent } from "@/lib/product-events";
+import type { PlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-readback";
+
 import { useState } from "react";
 import Link from "next/link";
 import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
+import { FestivalTicketOffers } from "./FestivalTicketOffers";
+import { LineupByDay } from "./LineupByDay";
 import type { PublicFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { FestivalOverview } from "./FestivalOverview";
 import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
+import type { PublicCampingFact } from "@/lib/catalog/camping-facts";
+import { FestivalCamping } from "./FestivalCamping";
 import { useLanguage } from "./LanguageProvider";
 import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
 import { FestivalArrival } from "./FestivalArrival";
@@ -33,21 +40,27 @@ export function FestivalDetail({
   festivals,
   discoveryLineups,
   artistSlugs,
+  lineupDayArtistSlugs = [],
   playlist,
+  playlistRefreshFailures,
   overview,
   artistPopularity = {},
   arrivalFacts = [],
+  campingFacts = [],
 }: {
   item: Festival;
   festivals: Festival[];
   discoveryLineups?: DiscoveryLineups;
   artistSlugs: Readonly<Record<string, string>>;
+  lineupDayArtistSlugs?: readonly string[];
   playlist?: PlaylistStatus;
+  playlistRefreshFailures?: PlaylistRefreshFailures;
   overview?: PublicFestivalOverview;
   arrivalFacts?: readonly PublicArrivalFact[];
+  campingFacts?: readonly PublicCampingFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
-  const { locale, t } = useLanguage();
+  const { language, locale, t } = useLanguage();
   const [lineupSort, setLineupSort] = useState<LineupSort>("official");
   const sortedLineup = sortFestivalLineup(item, lineupSort, locale, artistPopularity);
   const planner = useLocalPlanner();
@@ -94,7 +107,7 @@ export function FestivalDetail({
         </div>
       </section>
       <section className="localActions">
-        <FavoriteButton kind="festival" value={item.slug} />
+        <FavoriteButton value={item.slug} />
         <select
           aria-label={t("attendanceFor", { festival: item.name })}
           value={planner.attendance[item.slug] || ""}
@@ -123,6 +136,7 @@ export function FestivalDetail({
             target="_blank"
             rel="noreferrer"
             data-ticket-status={tickets.status}
+            onClick={() => sendProductEvent("TICKET_OUTBOUND", language)}
           >
             <small>{t(tickets.status === "available" ? "passes" : tickets.label)}</small>
             <strong>
@@ -149,12 +163,16 @@ export function FestivalDetail({
               coverage={
                 playlistUrl === playlist?.spotifyUrl ? playlist.coverage?.spotify : undefined
               }
+              failed={playlistRefreshFailures?.spotify}
             />
           </a>
         ) : (
           <div className="disabled">
             <small>{t("listen")}</small>
-            <strong>{t("playlistSoon")}</strong>
+            <strong>
+              {playlistRefreshFailures?.spotify ? t("spotifyPlaylist") : t("playlistSoon")}
+            </strong>
+            {playlistRefreshFailures?.spotify && <PlaylistCoverageLabel failed />}
           </div>
         )}
         {youtubePlaylistUrl ? (
@@ -167,9 +185,18 @@ export function FestivalDetail({
                   ? playlist.coverage?.youtubeMusic
                   : undefined
               }
+              failed={playlistRefreshFailures?.youtubeMusic}
             />
           </a>
-        ) : null}
+        ) : (
+          playlistRefreshFailures?.youtubeMusic && (
+            <div className="disabled">
+              <small>{t("listen")}</small>
+              <strong>{t("youtubeMusicPlaylist")}</strong>
+              <PlaylistCoverageLabel failed />
+            </div>
+          )
+        )}
         {setlistUrl ? (
           <a href={setlistUrl} target="_blank" rel="noreferrer">
             <small>{t("liveHistory")}</small>
@@ -182,6 +209,7 @@ export function FestivalDetail({
           </div>
         )}
       </div>
+      {item.ticketOffers && <FestivalTicketOffers value={item.ticketOffers} locale={language} />}
       <FestivalOverview overview={overview} />
       {item.editionYear && (
         <OfflineTripDownload
@@ -243,6 +271,13 @@ export function FestivalDetail({
             </div>
           </>
         )}
+        {item.lineupDays && (
+          <LineupByDay
+            key={`${item.slug}:${item.editionYear}`}
+            appearances={item.lineupDays}
+            publicArtistSlugs={lineupDayArtistSlugs}
+          />
+        )}
       </section>
       <PlanningTools
         item={item}
@@ -251,6 +286,7 @@ export function FestivalDetail({
         favorites={planner.favoriteArtists}
       />
       <FestivalArrival facts={arrivalFacts} />
+      <FestivalCamping facts={campingFacts} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
         <p>
