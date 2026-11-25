@@ -8,9 +8,9 @@ import {
   isTolminatorStockRoute,
   matchesTolminatorStockEdition,
 } from "../ingestion/adapters/tolminator-stock.ts";
-import { POLANDROCK_NEWSROOM } from "../ingestion/adapters/polandrock-admission.ts";
+import { admissionSources } from "../ingestion/adapters/admission-sources.ts";
 import { rosterFingerprint } from "./lineup-proof.ts";
-import { editionDateProblem } from "../domain/edition-dates.ts";
+import { editionDateProblem, isCalendarDate } from "../domain/edition-dates.ts";
 import { publishArrivalObservation, type ArrivalObservation } from "./arrival-import.ts";
 import {
   ticketSupplementUrl,
@@ -599,63 +599,75 @@ export async function publishIngestionResult(
           "Ingestion publication scope does not match the persisted festival, source and edition",
         );
       }
-      // Admission-only observations cannot turn a camping link or missing proof
-      // into free general entry. Bind request, normalized data and durable evidence.
+      // Either a reviewed admission endpoint or a free-admission claim invokes
+      // the same proof contract, even if the caller strips its source identity.
+      const admissionRoutes = [input.result.sourceUrl, candidate.attempt.finalUrl];
+      const admissionSource = admissionSources.find(({ url }) => admissionRoutes.includes(url));
       if (
-        (input.result.festivalSlug === "polandrock" || candidate.festivalSlug === "polandrock") &&
-        (candidate.attempt.requestedUrl === POLANDROCK_NEWSROOM ||
-          input.result.sourceUrl === POLANDROCK_NEWSROOM ||
-          observed.ticketStatus === "free" ||
-          stored?.ticketStatus === "free")
+        admissionSource ||
+        observed.ticketStatus === "free" ||
+        stored.ticketStatus === "free" ||
+        input.result.changes.some(
+          ({ field, after }) => field === "ticketStatus" && after === "free",
+        )
       ) {
-        const at = Date.parse(input.result.fetchedAt);
+        const { sourceUrl, fetchedAt, festivalSlug } = input.result;
+        const at = Date.parse(fetchedAt);
+        const fields = admissionSource?.fields ?? (["ticketStatus"] as const);
+        const year = observed.observedEditionYears[0];
         const valid =
-          input.result.festivalSlug === "polandrock" &&
-          candidate.festivalSlug === "polandrock" &&
-          candidate.attempt.requestedUrl === POLANDROCK_NEWSROOM &&
-          input.result.sourceUrl === POLANDROCK_NEWSROOM &&
+          candidate.attempt.finalUrl === sourceUrl &&
+          candidate.attempt.httpStatus === 200 &&
           Number.isFinite(at) &&
-          [observed, stored].every(
-            (c) =>
-              c &&
-              c.festivalSlug === "polandrock" &&
-              c.sourceUrl === POLANDROCK_NEWSROOM &&
-              c.fetchedAt === input.result.fetchedAt &&
-              c.ticketStatus === "free" &&
-              c.observedEditionYears?.length === 1 &&
-              c.observedEditionYears[0] === candidate.sourceYear &&
-              c.startDate === observed.startDate &&
-              c.endDate === observed.endDate &&
-              c.warnings?.length === 0 &&
-              ["lineup", "headliners", "ticketsUrl", "status"].every(
-                (f) => (c as unknown as Record<string, unknown>)[f] === undefined,
-              ) &&
-              ["startDate", "endDate", "ticketStatus"].every((field) =>
-                c.evidence?.some(
-                  (e) =>
-                    e.field === field &&
-                    e.sourceUrl === POLANDROCK_NEWSROOM &&
-                    Date.parse(e.observedAt) === at,
-                ),
-              ),
-          ) &&
-          input.result.changes.every(
-            (change) =>
-              ["startDate", "endDate", "ticketStatus"].includes(change.field) &&
-              same(change.after, (observed as unknown as Record<string, unknown>)[change.field]),
-          ) &&
-          ["startDate", "endDate", "ticketStatus"].every((field) =>
-            candidate.evidence.some(
+          year !== undefined &&
+          (candidate.sourceYear === null || year === candidate.sourceYear) &&
+          observed.ticketStatus === "free" &&
+          isDeepStrictEqual(stored, observed) &&
+          observed.fetchedAt === fetchedAt &&
+          observed.warnings.length === 0 &&
+          (!admissionSource ||
+            (admissionSource.url === sourceUrl &&
+              admissionSource.festivalSlug === festivalSlug &&
+              isCalendarDate(observed.startDate) &&
+              isCalendarDate(observed.endDate) &&
+              !editionDateProblem(year, observed.startDate, observed.endDate) &&
+              Object.keys(observed).every((key) =>
+                [
+                  "schemaVersion",
+                  "festivalSlug",
+                  "sourceUrl",
+                  "fetchedAt",
+                  "observedEditionYears",
+                  "warnings",
+                  "evidence",
+                  ...fields,
+                ].includes(key),
+              ))) &&
+          input.result.changes.every(({ field, after }) => {
+            const proofField = fields.find((key) => key === field);
+            return proofField ? same(after, observed[proofField]) : !admissionSource;
+          }) &&
+          fields.every((field) =>
+            observed.evidence.some(
               (e) =>
                 e.field === field &&
-                e.sourceUrl === POLANDROCK_NEWSROOM &&
-                e.observedAt.getTime() === at &&
-                same(e.observedValue, (observed as unknown as Record<string, unknown>)[field]),
+                e.sourceUrl === sourceUrl &&
+                Date.parse(e.observedAt) === at &&
+                e.excerpt?.trim() &&
+                candidate.evidence.some(
+                  (saved) =>
+                    saved.field === field &&
+                    saved.sourceUrl === e.sourceUrl &&
+                    saved.observedAt.getTime() === at &&
+                    saved.excerpt === e.excerpt &&
+                    saved.contentHash === createHash("sha256").update(e.excerpt!).digest("hex") &&
+                    same(saved.observedValue, observed[field]),
+                ),
             ),
           );
         if (!valid)
           throw new Error(
-            "PolandRock admission publication requires matching persisted official edition evidence",
+            "Free admission publication requires matching persisted official edition evidence",
           );
       }
       const sourceId = `ingestion:${candidate.id}`;

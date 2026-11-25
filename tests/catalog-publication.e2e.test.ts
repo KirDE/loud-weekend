@@ -2986,6 +2986,7 @@ test("PolandRock admission publishes with durable proof and rejects drift or sta
     "normalized-year",
     "stripped-source",
     "stripped-slug",
+    "redirected",
     "stale",
   ]) {
     await db.festivalEdition.update({
@@ -3024,6 +3025,11 @@ test("PolandRock admission publishes with durable proof and rejects drift or sta
       value.festivalSlug = "synthetic-fest";
       value.candidate.festivalSlug = "synthetic-fest";
     }
+    if (drift === "redirected")
+      await db.ingestionAttempt.update({
+        where: { id: attempt.id },
+        data: { finalUrl: "https://foreign.test/" },
+      });
     if (drift === "stale")
       await db.festivalEdition.update({
         where: { id: edition.id },
@@ -3053,7 +3059,7 @@ test("PolandRock admission publishes with durable proof and rejects drift or sta
     } else {
       await assert.rejects(
         publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
-        /PolandRock admission publication|Stale ticketStatus|Ingestion publication scope does not match/,
+        /Free admission publication|Stale ticketStatus|Ingestion publication scope does not match/,
       );
       assert.deepEqual(await counts(), before);
       assert.equal((await current()).ticketStatus, drift === "stale" ? "sold_out" : "unknown");

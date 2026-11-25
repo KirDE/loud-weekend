@@ -3,10 +3,16 @@ import type { FestivalCandidate, FestivalSource, FieldEvidence } from "../types.
 import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 
 export const POLANDROCK_NEWSROOM = "https://newsroom.polandrockfestival.pl/";
+export const polandrockAdmissionProof = {
+  url: POLANDROCK_NEWSROOM,
+  festivalSlug: "polandrock",
+  fields: ["startDate", "endDate", "ticketStatus"] as const,
+};
+
 /** Independent admission-only source. Never substitute this for a failed roster fetch. */
 export function isPolandrockAdmissionSource(source: FestivalSource): boolean {
   return (
-    source.festivalSlug === "polandrock" &&
+    source.festivalSlug === polandrockAdmissionProof.festivalSlug &&
     source.url === POLANDROCK_NEWSROOM &&
     source.strategies.includes("html_fallback") &&
     !source.fetchUrl &&

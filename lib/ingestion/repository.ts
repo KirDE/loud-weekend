@@ -1,5 +1,5 @@
 import { overviewSourceUrls } from "./adapters/festival-overview.ts";
-import { POLANDROCK_NEWSROOM } from "./adapters/polandrock-admission.ts";
+import { admissionSources } from "./adapters/admission-sources.ts";
 import { TOLMINATOR_PRODUCT } from "./adapters/tolminator-stock.ts";
 import { queueImportEvent } from "./import-event-queue.ts";
 import { createHash } from "node:crypto";
@@ -38,7 +38,7 @@ export async function createIngestionRun(
 
 // Only reviewed independent endpoints are excluded. Do not infer scope from
 // caller-supplied candidate fields (a failed request has no candidate at all).
-const independentTicketUrls = [TOLMINATOR_PRODUCT, POLANDROCK_NEWSROOM];
+const independentTicketUrls = [TOLMINATOR_PRODUCT, ...admissionSources.map(({ url }) => url)];
 export const isIndependentTicketUrl = (url: string) => independentTicketUrls.includes(url);
 const attemptScope = (
   festivalSlug: string,
