@@ -27,6 +27,7 @@ function eventId(record: JsonLd, sourceUrl: string): string | undefined {
 
 function eventRecords(html: string, sourceUrl: string) {
   const events: JsonLd[] = [];
+  const splitRelations: JsonLd[] = [];
   const reviewStatuses = new Map<string, string>();
   const $ = load(html);
   $("template").remove();
@@ -49,16 +50,24 @@ function eventRecords(html: string, sourceUrl: string) {
           types.some((type) => typeof type === "string" && type.toLowerCase().endsWith("event"))
         ) {
           events.push(record);
+        } else if (record.superEvent != null || record.subEvent != null) {
+          splitRelations.push(record);
         }
       }
     } catch {
       continue;
     }
   }
-  // A child can be independently defined in another script, with only the parent linking it.
+  // Named events can have separate descriptions containing only their relationships.
+  const eventIds = new Set(events.map((event) => eventId(event, sourceUrl)));
+  const linkedDescriptions = splitRelations.filter((record) => {
+    const id = eventId(record, sourceUrl);
+    return id && !id.startsWith("_:") && eventIds.has(id);
+  });
   const childIds = new Set<string>();
-  for (const event of events) {
+  for (const event of [...events, ...linkedDescriptions]) {
     const parentId = eventId(event, sourceUrl);
+    if (parentId && !parentId.startsWith("_:") && event.superEvent != null) childIds.add(parentId);
     for (const child of records(event.subEvent)) {
       const childId = eventId(child, sourceUrl);
       if (childId && childId !== parentId) childIds.add(childId);
