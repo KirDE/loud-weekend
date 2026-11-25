@@ -1,17 +1,13 @@
-import { notFound } from "next/navigation";
-import { EditionYearContent } from "@/components/PublicCatalogPages";
-import { getCatalog } from "@/lib/catalog/repository";
-import { canonicalPath } from "@/lib/seo";
+import { renderSeason, seasonMetadata } from "@/lib/season-page";
 
 export const dynamic = "force-dynamic";
-export async function generateMetadata({ params }: { params: Promise<{ year: string }> }) {
-  return { alternates: { canonical: canonicalPath(`/editions/${Number((await params).year)}`) } };
+
+type Props = { params: Promise<{ year: string }> };
+
+export async function generateMetadata({ params }: Props) {
+  return seasonMetadata((await params).year);
 }
 
-export default async function EditionYearPage({ params }: { params: Promise<{ year: string }> }) {
-  const year = Number((await params).year);
-  const { editions } = await getCatalog();
-  const items = editions.filter(({ editionYear }) => editionYear === year);
-  if (!items.length) notFound();
-  return <EditionYearContent year={year} items={items} />;
+export default async function EditionYearPage({ params }: Props) {
+  return renderSeason((await params).year);
 }

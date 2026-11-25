@@ -44,6 +44,7 @@ async function shell(slug = `first-lineup-${randomUUID()}`) {
   });
 }
 function input(edition: Awaited<ReturnType<typeof shell>>) {
+  const reviewedAt = new Date();
   return {
     editionId: edition.id,
     festivalSlug: edition.festival.slug,
@@ -54,11 +55,11 @@ function input(edition: Awaited<ReturnType<typeof shell>>) {
       lineup: ["First Roster Artist"],
       status: "partial" as "partial" | "tba",
     },
-    observedAt: new Date(),
+    reviewedAt,
     evidence: ["headliners", "lineup", "status"].map((field) => ({
       field,
       url: "https://festival.example.test/",
-      checkedAt: new Date().toISOString(),
+      checkedAt: reviewedAt.toISOString(),
       contentHash: "a".repeat(64),
       excerpt: "Verified official roster",
     })),
@@ -92,6 +93,46 @@ test("first reviewed lineup creates one native job; replays and later updates do
   });
   assert.equal(later?.playlistRefreshRequested, false);
 });
+test("a delayed reviewed roster preserves the newer edition source timestamp", async () => {
+  const edition = await shell();
+  const value = input(edition);
+  const newerObservation = new Date(value.reviewedAt.getTime() - 60_000);
+  value.evidence = value.evidence.map((item) => ({
+    ...item,
+    checkedAt: new Date(newerObservation.getTime() - 60_000).toISOString(),
+  }));
+  await db.festivalEdition.update({
+    where: { id: edition.id },
+    data: { sourceUpdatedAt: newerObservation },
+  });
+
+  const publication = await publish(value);
+  assert.ok(publication?.lineupChanged);
+  const updated = await db.festivalEdition.findUniqueOrThrow({
+    where: { id: edition.id },
+    include: { lineup: true },
+  });
+  assert.equal(updated.lineup.length, 1);
+  assert.equal(updated.sourceUpdatedAt.toISOString(), newerObservation.toISOString());
+
+  const newer = new Date(newerObservation.getTime() + 60_000);
+  const next = await publish({
+    ...value,
+    sourceId: `reviewed:${randomUUID()}`,
+    facts: { ...value.facts, lineup: ["First Roster Artist", "Second Roster Artist"] },
+    evidence: value.evidence.map((item) => ({ ...item, checkedAt: newer.toISOString() })),
+  });
+  assert.ok(next?.lineupChanged);
+  assert.equal(
+    (
+      await db.festivalEdition.findUniqueOrThrow({
+        where: { id: edition.id },
+      })
+    ).sourceUpdatedAt.toISOString(),
+    newer.toISOString(),
+  );
+});
+
 for (const guard of [
   "binding",
   "previous-publication",

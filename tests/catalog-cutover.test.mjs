@@ -10,7 +10,8 @@ test("public catalogue routes resolve fresh data at request time", async () => {
   const catalogueRoutes = [];
   for (const file of files) {
     const source = await readFile(path.join("app", file), "utf8");
-    if (!/\b(?:getCatalog|getHomeCatalog|readSitemapPublications)\b/.test(source)) continue;
+    if (!/\b(?:getCatalog|getHomeCatalog|readArtistPage|readSitemapPublications)\b/.test(source))
+      continue;
     catalogueRoutes.push(file);
     assert.match(source, /export const dynamic = "force-dynamic"/);
     if (file !== "[lang]/page.tsx") assert.doesNotMatch(source, /generateStaticParams/);
@@ -24,10 +25,17 @@ test("public catalogue routes resolve fresh data at request time", async () => {
     "root homepage must remain in the freshness check",
   );
   assert.ok(catalogueRoutes.length >= 16);
+  for (const file of ["artists/[slug]/page.tsx", "[lang]/artists/[slug]/page.tsx"]) {
+    assert.ok(catalogueRoutes.includes(file), "artist pages must remain in the freshness check");
+  }
+  const artistLoader = await readFile("lib/artist-page.ts", "utf8");
+  assert.match(artistLoader, /readArtistPage = cache\(async/);
+  assert.match(artistLoader, /await getCatalog\(\)/);
   const homeLoader = await readFile("lib/home-metadata.ts", "utf8");
+  assert.match(homeLoader, /getHomeCatalog\s*=\s*cache\(async\s*\(\)\s*=>\s*\{/);
   assert.match(
     homeLoader,
-    /getHomeCatalog\s*=\s*cache\(\(\)\s*=>\s*getCatalog\(\{\s*includeFreshness:\s*true\s*\}\)\)/,
+    /const catalogue = await getCatalog\(\{\s*includeFreshness:\s*true\s*\}\)/,
   );
 });
 

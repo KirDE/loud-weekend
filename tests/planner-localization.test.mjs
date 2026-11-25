@@ -4,6 +4,7 @@ import test from "node:test";
 
 const planner = readFileSync(new URL("../components/PlannerPage.tsx", import.meta.url), "utf8");
 const views = readFileSync(new URL("../components/FestivalViews.tsx", import.meta.url), "utf8");
+const map = readFileSync(new URL("../components/FestivalLocationMap.tsx", import.meta.url), "utf8");
 const chrome = readFileSync(new URL("../components/SiteChrome.tsx", import.meta.url), "utf8");
 const language = readFileSync(
   new URL("../components/LanguageProvider.tsx", import.meta.url),
@@ -45,7 +46,7 @@ test("planner calendar and map expose localized visible and accessible copy", ()
     assert.match(views, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(views, /aria-label=\{t\.previous\}/);
-  assert.match(views, /aria-label=\{t\.mapLabel\}/);
+  assert.match(map, /aria-label=\{t\.mapLabel\}/);
 });
 
 test("primary navigation uses the translated notification label", () => {

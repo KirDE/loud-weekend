@@ -37,7 +37,14 @@ export function notificationEventsForChanges(
   const editionYear = festival.editionYear ?? Number(festival.startDate?.slice(0, 4));
   if (!Number.isInteger(editionYear))
     throw new Error(`Festival ${festival.slug} has no edition identity`);
+  // Use the resulting state so a later verified transition to paid tickets
+  // can still announce sales, while ancillary URL changes never invent them.
+  const freeAdmission =
+    (changes.find((c) => c.kind === "ticket_status_changed" && c.field === "ticketStatus")?.after ??
+      festival.ticketStatus) === "free";
   return changes.flatMap((change) => {
+    if (freeAdmission && ["tickets_changed", "ticket_status_changed"].includes(change.kind))
+      return [];
     let type = eventType(change);
     if (change.kind === "ticket_status_changed" && change.after === "low") type = "TICKETS_LOW";
     if (!type) return [];

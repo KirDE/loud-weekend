@@ -11,12 +11,13 @@ const monitor = "LoudWeekendIndexingCheck/1.0";
 // Next.js serves blocking head metadata for Bingbot. Keep the monitor
 // identifiable while requesting that HTML-only crawler representation.
 const htmlMonitor = monitor + " (Bingbot metadata compatibility)";
-const fixedPaths = ["/", "/en/", "/de/", "/ru/", "/submit/", "/archive/"];
+const fixedPaths = ["/", "/en/", "/de/", "/ru/", "/submit/"];
+const editionDirectory = /^\/editions\/\d{4}\/$/;
 const routeClasses = [
   /^\/festivals\/[^/]+\/$/,
   /^\/artists\/[^/]+\/$/,
   /^\/festivals\/[^/]+\/\d{4}\/$/,
-  /^\/editions\/\d{4}\/$/,
+  editionDirectory,
   /^\/countries\/[a-z]{2}\/$/,
   /^\/months\/(?:0[1-9]|1[0-2])\/$/,
 ];
@@ -84,6 +85,7 @@ export function inspectSitemap(xml, now = Date.now()) {
     const path = canonicalPath(entry.children("loc").text());
     assert.ok(
       fixedPaths.includes(path) ||
+        path === "/archive/" ||
         localizedDetail.test(path) ||
         routeClasses.some((type) => type.test(path)),
       `unsupported sitemap path: ${path}`,
@@ -208,6 +210,20 @@ export async function checkIndexing(origin = site) {
       const link = $(`head link[rel="alternate"][hreflang="${lang}"]`).filter(outsideTemplate);
       assert.equal(link.length, 1, `missing/duplicate ${lang} alternate on ${path}`);
       assert.equal(link.attr("href"), site + target, `alternate mismatch on ${path}`);
+    }
+    if (editionDirectory.test(path)) {
+      // The year directory links to the archive only when there are archive records.
+      const catalogueLink = $(".directoryPage > a").attr("href");
+      assert.ok(
+        catalogueLink === "/archive/" || catalogueLink === "/browse/",
+        `missing catalogue navigation on ${path}`,
+      );
+      assert.equal(
+        entries.has("/archive/"),
+        catalogueLink === "/archive/",
+        `archive sitemap listing disagrees with ${path}`,
+      );
+      if (catalogueLink === "/archive/") sample.add("/archive/");
     }
   }
   return { entries: entries.size, sampled: sample.size };
