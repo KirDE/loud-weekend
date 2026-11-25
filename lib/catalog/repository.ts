@@ -1,3 +1,8 @@
+import {
+  readApprovedTicketOffers,
+  type ApprovedTicketOffersReader,
+} from "../ingestion/ticket-offer-proposal-store.ts";
+import type { PublicTicketOffers } from "../domain/ticket-offer-proposal.ts";
 import { timetableEntrySchema } from "../timetables.ts";
 import { cache } from "react";
 import { YOUTUBE_URL } from "./youtube-playlist-queue.ts";
@@ -31,10 +36,8 @@ const dateOnly = (value: Date | null) => value?.toISOString().slice(0, 10);
 const instant = (value: Date | null) => value?.toISOString();
 const lower = <T extends string>(value: T) => value.toLocaleLowerCase() as Lowercase<T>;
 
-type CatalogReader = Pick<
-  PrismaClient,
-  "festivalEdition" | "artist" | "catalogPublication" | "$queryRaw"
->;
+type CatalogReader = ApprovedTicketOffersReader &
+  Pick<PrismaClient, "festivalEdition" | "artist" | "catalogPublication" | "$queryRaw">;
 
 export class DatabaseCatalogRepository implements CatalogRepository {
   private readonly client: CatalogReader;
@@ -88,6 +91,25 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     if (!editionRows.length || !artistRows.length)
       throw new Error("database catalogue is empty or incomplete");
 
+    const currentIds = editionRows
+      .filter((row) => row.recordState === "CURRENT")
+      .map((row) => row.id);
+    const approvedTiers = new Map<string, PublicTicketOffers>();
+    for (const { editionId, proposal } of await readApprovedTicketOffers(this.client, currentIds)) {
+      const { editionYear, sourceUrl, observedAt, offers } = proposal;
+      approvedTiers.set(editionId, {
+        editionYear,
+        sourceUrl,
+        observedAt,
+        offers: offers.map(({ key, kind, status, price, saleDateText }) => ({
+          key,
+          kind,
+          status,
+          price,
+          saleDateText,
+        })),
+      });
+    }
     const editions = editionRows.map((row) => {
       const announced = row.lineup.filter(({ status }) => status === "ANNOUNCED");
       const headliners = announced
@@ -188,6 +210,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           row.sources?.length && row.sources.every((s) => s.deprecatedAt !== null)
             ? row.sources.map((s) => s.deprecatedAt!.toISOString()).sort()[0]
             : undefined,
+        ...(approvedTiers.has(row.id) ? { ticketOffers: approvedTiers.get(row.id)! } : {}),
         ticketStatus: lower(row.ticketStatus),
         updatedAt: row.sourceUpdatedAt.toISOString(),
         genres: row.festival.genres,
