@@ -610,7 +610,9 @@ test("session lookup errors are retryable and never start account sync", async (
   const syncRequests = [];
   await page.route("**/api/auth/me**", (route) => route.fulfill(reply));
   await page.route("**/api/sync/**", (route) => {
-    syncRequests.push(route.request().method());
+    const request = route.request();
+    const kind = new URL(request.url()).pathname.split("/").filter(Boolean).at(-1);
+    syncRequests.push([request.method(), kind]);
     return route.fulfill({ json: { document: null } });
   });
   await page.goto("/en/planner/");
@@ -637,5 +639,12 @@ test("session lookup errors are retryable and never start account sync", async (
   reply = { json: { user: { id: userId, email: "browser-collections@example.test" } } };
   await page.evaluate(() => window.dispatchEvent(new Event("loud-weekend-authenticated")));
   await expect(panel.getByRole("button", { name: copy.en.sync, exact: true })).toBeEnabled();
-  expect(syncRequests).toEqual(["GET", "GET", "GET", "GET"]);
+  expect(syncRequests.toSorted()).toEqual([
+    ["GET", "budgets"],
+    ["GET", "collections"],
+    ["GET", "favorites"],
+    ["GET", "plans"],
+    ["GET", "saved-filters"],
+    ["GET", "season-attendance"],
+  ]);
 });
