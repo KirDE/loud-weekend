@@ -3072,7 +3072,7 @@ test("Roskilde actual collector→durable proof→publication/public read/replay
           requested: /Ingestion publication scope does not match/,
           "source-strip": /Ingestion publication scope does not match/,
           "slug-source-strip": /Ingestion publication scope does not match/,
-        }[drift] ?? /Roskilde stock publication requires/,
+        }[drift] ?? /Stock publication requires/,
         drift,
       );
       assert.deepEqual(await counts(), before);

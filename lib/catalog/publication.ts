@@ -1,17 +1,10 @@
-import {
-  isRoskildeStockRoute,
-  matchesRoskildeStockEdition,
-} from "../ingestion/adapters/roskilde-stock.ts";
+import { stockProofSources } from "../ingestion/adapters/stock-proof-sources.ts";
 import {
   publishOverviewObservation,
   type OverviewObservation,
 } from "./festival-overview-import.ts";
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
-import {
-  isTolminatorStockRoute,
-  matchesTolminatorStockEdition,
-} from "../ingestion/adapters/tolminator-stock.ts";
 import { rosterFingerprint } from "./lineup-proof.ts";
 import { editionDateProblem } from "../domain/edition-dates.ts";
 import { publishArrivalObservation, type ArrivalObservation } from "./arrival-import.ts";
@@ -674,12 +667,8 @@ export async function publishIngestionResult(
         observed.sourceUrl,
         stored.sourceUrl,
       ];
-      const isRoskilde = stockRoutes.some(isRoskildeStockRoute);
-      const routeMatches = isRoskilde ? isRoskildeStockRoute : isTolminatorStockRoute;
-      const editionMatches = isRoskilde
-        ? matchesRoskildeStockEdition
-        : matchesTolminatorStockEdition;
-      if (stockRoutes.some(routeMatches)) {
+      const stockSource = stockProofSources.find(({ url }) => stockRoutes.includes(url));
+      if (stockSource) {
         const time = Date.parse(observed.fetchedAt);
         const allowed = new Set([
           "schemaVersion",
@@ -694,7 +683,7 @@ export async function publishIngestionResult(
         ]);
         const valid =
           [input.result.festivalSlug, candidate.festivalSlug, observed.festivalSlug].every((slug) =>
-            editionMatches(slug, observed.observedEditionYears),
+            stockSource.matchesEdition(slug, observed.observedEditionYears),
           ) &&
           [
             input.result.sourceUrl,
@@ -702,7 +691,7 @@ export async function publishIngestionResult(
             candidate.attempt.requestedUrl,
             candidate.attempt.finalUrl,
             observed.ticketsUrl,
-          ].every(routeMatches) &&
+          ].every((url) => url === stockSource.url) &&
           candidate.attempt.httpStatus === 200 &&
           isDeepStrictEqual(stored, observed) &&
           Object.keys(observed).every((key) => allowed.has(key)) &&
@@ -725,7 +714,7 @@ export async function publishIngestionResult(
             const proof = observed.evidence.filter((e) => e.field === field);
             return (
               proof.length === 1 &&
-              routeMatches(proof[0].sourceUrl) &&
+              proof[0].sourceUrl === stockSource.url &&
               proof[0].observedAt === observed.fetchedAt &&
               typeof proof[0].excerpt === "string" &&
               proof[0].excerpt.length > 0 &&
@@ -733,7 +722,7 @@ export async function publishIngestionResult(
               candidate.evidence.some(
                 (saved) =>
                   saved.field === field &&
-                  routeMatches(saved.sourceUrl) &&
+                  saved.sourceUrl === stockSource.url &&
                   saved.excerpt === proof[0].excerpt &&
                   saved.observedAt.getTime() === time &&
                   saved.contentHash ===
@@ -743,10 +732,7 @@ export async function publishIngestionResult(
             );
           });
         if (!valid)
-          throw new Error(
-            (isRoskilde ? "Roskilde" : "Tolminator") +
-              " stock publication requires matching persisted ticket-only proof",
-          );
+          throw new Error("Stock publication requires matching persisted ticket-only proof");
       }
       if (observed.ticketSupplement || stored.ticketSupplement) {
         const registeredSource = {
