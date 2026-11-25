@@ -366,3 +366,31 @@ test("split subEvent links scope blank nodes to their own script", () => {
   assert.equal(sharedScript.startDate, "2026-07-01");
   assert.equal(sharedScript.ticketStatus, "sold_out");
 });
+
+test("split relationships owned by a blank node only bind to events in the same script", () => {
+  const edition = {
+    "@type": "MusicEvent",
+    "@id": "_:edition",
+    startDate: "2027-07-01",
+    offers: { url: "https://tickets.example/fest" },
+  };
+  const show = {
+    "@type": "MusicEvent",
+    "@id": "_:show",
+    startDate: "2027-07-02",
+    offers: { url: "https://tickets.example/show" },
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  for (const relation of [
+    { "@id": "_:show", superEvent: { "@id": "_:edition" } },
+    { "@id": "_:edition", subEvent: { "@id": "_:show" } },
+  ]) {
+    const extract = (html) => extractJsonLdCandidate(html, source, "2026-08-28T21:00:00Z");
+    const sharedScript = extract(script([show, relation, edition]));
+    assert.equal(sharedScript.ticketsUrl, "https://tickets.example/fest");
+    assert.deepEqual(sharedScript.warnings, []);
+
+    const separateScripts = extract(script(relation) + script([show, edition]));
+    assert.match(separateScripts.warnings.join("; "), /Multiple JSON-LD Events/);
+  }
+});
