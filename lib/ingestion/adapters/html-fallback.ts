@@ -7,7 +7,7 @@ import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 import { extractMastersOfRockCandidate } from "./masters-of-rock.ts";
 import { extractSummerBreezeCandidate } from "./summer-breeze.ts";
 import { extractEurockeennesCandidate } from "./eurockeennes.ts";
-import { applyBarcelonaBanner } from "./barcelona-banner.ts";
+import { applyBarcelonaBanner, isBarcelonaSource } from "./barcelona-banner.ts";
 import { extractOfficialMarkupCandidate } from "./official-markup.ts";
 import { extractResurrectionCandidate } from "./resurrection.ts";
 import { extractSwedenRockCandidate } from "./sweden-rock.ts";
@@ -44,21 +44,35 @@ function plainDate(value: string | undefined): string | undefined {
   const match = value.match(/\b(20\d{2})[-/.](0[1-9]|1[0-2])[-/.](0[1-9]|[12]\d|3[01])\b/);
   if (match) return `${match[1]}-${match[2]}-${match[3]}`;
   const parsed = new Date(value);
-  return Number.isNaN(parsed.valueOf()) ? undefined : parsed.toISOString().slice(0, 10);
+  if (Number.isNaN(parsed.valueOf())) return undefined;
+  // A valid ISO date-time asserts its own local calendar day, not the UTC day.
+  return value.match(/^(\d{4}-\d{2}-\d{2})[Tt]\d/)?.[1] ?? parsed.toISOString().slice(0, 10);
 }
 
-function metaContent(
-  html: string,
-  names: string[],
-): { value: string; excerpt: string } | undefined {
+type MarkedValue = { value: string; excerpt: string };
+
+function* metaContents(html: string, names: string[]): Generator<MarkedValue, undefined> {
   const expected = new Set(names.map((name) => name.toLowerCase()));
   for (const match of html.matchAll(/<meta\b[^>]*>/gi)) {
     const attrs = attributes(match[0]);
     const key = (attrs.get("property") ?? attrs.get("name") ?? "").toLowerCase();
     const content = attrs.get("content");
-    if (expected.has(key) && content) return { value: content, excerpt: match[0].slice(0, 500) };
+    if (expected.has(key) && content) yield { value: content, excerpt: match[0].slice(0, 500) };
   }
   return undefined;
+}
+
+function dateMetadata(
+  html: string,
+  role: "start" | "end",
+  warnings: string[],
+): MarkedValue | undefined {
+  const values = [
+    ...metaContents(html, [`event:${role}_time`, `event:${role}_date`, `festival:${role}_date`]),
+  ];
+  const days = new Set(values.map(({ value }) => plainDate(value)).filter(Boolean));
+  if (days.size > 1) warnings.push(`Conflicting HTML festival ${role} date metadata`);
+  return values[0];
 }
 
 function timeValue(
@@ -143,14 +157,8 @@ function markedNames(
     }
   }
   const quality = validateGenericLineup(values, combinedFlags);
-  const byNormalizedName = new Map<string, string>();
-  for (const value of quality.names) {
-    const normalized = value.toLocaleLowerCase();
-    if (!byNormalizedName.has(normalized)) byNormalizedName.set(normalized, value);
-  }
-  const unique = [...byNormalizedName.values()];
-  return unique.length || quality.warnings.length
-    ? { values: unique, excerpt, warnings: quality.warnings }
+  return quality.names.length || quality.warnings.length
+    ? { values: quality.names, excerpt, warnings: quality.warnings }
     : undefined;
 }
 
@@ -194,13 +202,14 @@ export function extractHtmlFallbackCandidate(
     warnings: [],
     observedEditionYears: [],
   };
-  const start =
-    metaContent(html, ["event:start_time", "event:start_date", "festival:start_date"]) ??
-    timeValue(html, "start");
-  const end =
-    metaContent(html, ["event:end_time", "event:end_date", "festival:end_date"]) ??
-    timeValue(html, "end");
-  const city = metaContent(html, ["event:location", "festival:city", "geo.placename"]);
+  if (source.festivalSlug === "barcelona-rock-fest" && !isBarcelonaSource(source)) {
+    candidate.warnings.push("Barcelona source identity is not the reviewed homepage");
+    return candidate;
+  }
+  const start = dateMetadata(html, "start", candidate.warnings) ?? timeValue(html, "start");
+  const end = dateMetadata(html, "end", candidate.warnings) ?? timeValue(html, "end");
+  const city = metaContents(html, ["event:location", "festival:city", "geo.placename"]).next()
+    .value;
   const tickets = ticketLink(html, source.url);
   const lineup = markedNames(
     html,
