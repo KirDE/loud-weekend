@@ -56,4 +56,5 @@ ticketProducerPublication({
     }));
   },
   refusalPattern: /matching persisted official ticket evidence/,
+  rescheduleRefusalPattern: /Summer Punch publication requires matching persisted stock dates/,
 });

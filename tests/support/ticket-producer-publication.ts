@@ -28,6 +28,7 @@ export function ticketProducerPublication(input: {
   forbiddenCandidates?: (candidate: FestivalCandidate) => FestivalCandidate[];
   refusalPattern?: RegExp;
   exerciseAnnouncementAddition?: boolean;
+  rescheduleRefusalPattern?: RegExp;
 }) {
   test(
     `${input.slug}` +
@@ -167,6 +168,29 @@ export function ticketProducerPublication(input: {
           assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
         }
         const attempt = await persist(value);
+        if (input.rescheduleRefusalPattern) {
+          assert.ok(edition.endDate);
+          const rescheduled = await db.festivalEdition.update({
+            where: { id: edition.id },
+            data: { endDate: new Date(edition.endDate.getTime() + 86_400_000) },
+          });
+          const publications = await db.catalogPublication.count();
+          await assert.rejects(
+            publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit }),
+            input.rescheduleRefusalPattern,
+          );
+          assert.deepEqual(
+            await db.festivalEdition.findUnique({ where: { id: edition.id } }),
+            rescheduled,
+          );
+          assert.equal(await db.catalogPublication.count(), publications);
+          assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
+          assert.equal(await db.festivalPlaylist.count(), bindings);
+          await db.festivalEdition.update({
+            where: { id: edition.id },
+            data: { endDate: edition.endDate },
+          });
+        }
         const publication = await publishIngestionResult(db, {
           attemptId: attempt.id,
           result: value,

@@ -22,6 +22,9 @@ export const SUMMER_LIMIT_REQUEST = {
 };
 const edition = 2027;
 const eventName = `Summer Punch Festival ${edition} - Karnet 3 dniowy`;
+const summerStockDatePrefix = (startDate: string, endDate: string) =>
+  `${eventName}; ${startDate}–${endDate}; ordinary KARNET 3 DNIOWY; `;
+
 export function isSummerStockSource(source: FestivalSource): boolean {
   return (
     source.festivalSlug === "summer-punch" &&
@@ -335,7 +338,7 @@ export function observeSummerStock(
     status: "available",
     ticketsUrl: SUMMER_PURCHASE,
     excerpt:
-      `${eventName}; ${dates.startDate}–${dates.endDate}; ordinary KARNET 3 DNIOWY; ` +
+      summerStockDatePrefix(dates.startDate, dates.endDate) +
       `namespace ${SUMMER_SCOPE.namespace}; product ${SUMMER_SCOPE.productId}; PLN ${r.pwsc}; ` +
       "public ordinary rate limit and ordinary sector capacity positive, sector limit not reached; " +
       "no ticket selected/reserved",
@@ -344,4 +347,39 @@ export function observeSummerStock(
 
 export const summerStockPublication: TicketPublicationPolicy = {
   requiredFields: ["ticketStatus", "ticketsUrl"],
+  validatePrimary({ result, requestedUrl, stored, evidence, edition }) {
+    const observed = result.candidate;
+    if (!observed.ticketSupplement) return { markPartial: false };
+
+    const { startDate, endDate } = observed;
+    const matchesCatalogueDates =
+      typeof startDate === "string" &&
+      typeof endDate === "string" &&
+      (["startDate", "endDate"] as const).every((field) => {
+        const date = observed[field];
+        return (
+          date === edition[field] &&
+          date === stored[field] &&
+          observed.evidence.some(
+            (proof) => proof.field === field && proof.sourceUrl === requestedUrl,
+          ) &&
+          evidence.some(
+            (proof) =>
+              proof.field === field &&
+              proof.sourceUrl === requestedUrl &&
+              proof.observedValue === date,
+          )
+        );
+      }) &&
+      observed.evidence.some(
+        (proof) =>
+          proof.field === "ticketStatus" &&
+          proof.sourceUrl === SUMMER_STOCK &&
+          proof.excerpt?.startsWith(summerStockDatePrefix(startDate, endDate)),
+      );
+    if (!matchesCatalogueDates) {
+      throw new Error("Summer Punch publication requires matching persisted stock dates");
+    }
+    return { markPartial: false };
+  },
 };
