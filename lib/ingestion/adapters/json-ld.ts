@@ -14,6 +14,14 @@ function records(value: unknown): JsonLd[] {
   return [record, ...records(record["@graph"])];
 }
 
+function* documentRecords(value: unknown): Generator<JsonLd> {
+  for (const record of records(value)) {
+    yield record;
+    // Included nodes are document-level descriptions, not timetable entries.
+    yield* documentRecords(record["@included"]);
+  }
+}
+
 function eventKey(record: JsonLd, sourceUrl: string, scriptIndex: number): string | undefined {
   const id = record["@id"];
   if (typeof id !== "string" || !id.trim()) return undefined;
@@ -40,7 +48,7 @@ function eventRecords(html: string, sourceUrl: string) {
     if (!source) continue;
     try {
       const parsed = JSON.parse(source);
-      for (const record of records(parsed)) {
+      for (const record of documentRecords(parsed)) {
         const id = eventKey(record, sourceUrl, scriptIndex);
         if (id) {
           const status = eventStatusRequiringReview(record.eventStatus);
