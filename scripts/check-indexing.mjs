@@ -6,7 +6,10 @@ const site = "https://loudweekend.eu";
 const namespace = "http://www.sitemaps.org/schemas/sitemap/0.9";
 const languages = ["x-default", "en", "de", "ru"];
 
-const noIndex = /\b(?:noindex|none)\b/i;
+// A header may scope a rule to a crawler. Image preview limits also use
+// a colon, but "none" in that value position is not an indexing directive.
+const noIndexHeader =
+  /(?:^|,)\s*(?:(?!max-image-preview\s*:)[\w-]+\s*:\s*)?(?:noindex|none)\s*(?:,|$)/i;
 
 async function get(origin, path, mime, limit) {
   const response = await fetch(new URL(path, origin), {
@@ -21,7 +24,7 @@ async function get(origin, path, mime, limit) {
       `${path}: expected HTTP 200 and ${mime.join(" or ")}, got ${response.status} ${type ?? ""}`,
     );
   }
-  if (noIndex.test(response.headers.get("x-robots-tag") ?? "")) {
+  if (noIndexHeader.test(response.headers.get("x-robots-tag") ?? "")) {
     await response.body.cancel();
     throw new Error(`${path}: X-Robots-Tag disallows indexing`);
   }
