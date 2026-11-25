@@ -23,6 +23,8 @@ test("combined extraction keeps JSON-LD precedence and fills missing HTML fields
   assert.equal(result.city, "Berlin");
   assert.deepEqual(result.lineup, ["JSON Band"]);
   assert.equal(result.ticketsUrl, "https://example.test/tickets");
-  assert.deepEqual(result.warnings, []);
+  assert.deepEqual(result.warnings, [
+    "Conflicting extraction claims for startDate: 2027-06-01 versus 2027-07-01",
+  ]);
   assert.equal(new Set(result.evidence.map(({ field }) => field)).size, result.evidence.length);
 });

@@ -15,3 +15,19 @@ export function publicSeasonEditions(editions: readonly FestivalEdition[]) {
 export function seasonYears(editions: readonly FestivalEdition[]) {
   return [...new Set(editions.map(({ editionYear }) => editionYear))].sort((a, b) => b - a);
 }
+
+export function hasSeasonCalendarDates(edition: FestivalEdition) {
+  const { startDate, endDate } = edition;
+  const fields = new Set(edition.provenance.map(({ field }) => field));
+  return (
+    (fields.has("dates") || (fields.has("startDate") && fields.has("endDate"))) &&
+    Boolean(
+      startDate && endDate && validDate(startDate) && validDate(endDate) && startDate <= endDate,
+    )
+  );
+}
+
+function validDate(value: string) {
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}

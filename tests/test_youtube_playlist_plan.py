@@ -832,6 +832,27 @@ class YoutubePlanTests(unittest.TestCase):
         self.assertEqual(plan["videoIds"], VIDEOS[:2])
         self.assertEqual(plan["expectedUrl"], "")
         self.assertEqual(plan["sourceTracks"], 3)
+        self.assertEqual(plan["eligibleArtists"], 1)
+
+    def test_discovery_classifies_only_unmatched_lineup_artists(self):
+        report = {'playlist_name': 'Festival', 'report': [
+            {'artist': 'First', 'tracks': ['First - One']},
+            {'artist': 'Duplicate', 'tracks': ['Duplicate - Two']},
+            {'artist': 'No Match', 'tracks': ['No Match - Three']},
+            {'artist': 'Later Match', 'tracks': ['Later Match - Four', 'Later Match - Five']},
+            {'artist': 'Ineligible', 'tracks': []},
+        ]}
+        def search(query):
+            if query['title'] == 'Three':
+                return None
+            return {'videoId': VIDEOS[1 if query['title'] == 'Five' else 0]}
+        plan = discover_plan(
+            {"sourceReport": report, "slug": "synthetic", "editionYear": 2027, "expectedUrl": ""},
+            search=search,
+        )
+        self.assertEqual(plan['eligibleArtists'], 4)
+        self.assertEqual(plan['artists'], 2)
+        self.assertEqual(plan['unmatchedReasons'], {'duplicateTrack': 1, 'noEligibleTrack': 1})
 
     def test_cli_failure_is_sanitized(self):
         script = Path(__file__).parents[1] / "scripts/spotify_gmm_2026/youtube_playlist_plan.py"

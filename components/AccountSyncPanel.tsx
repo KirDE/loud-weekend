@@ -5,16 +5,26 @@ import { useEffect, useState } from "react";
 import { readTripBudgets } from "@/lib/trip-budget";
 import { readDiscoveryPreferences } from "@/lib/discovery-preferences";
 import { readCollections, mergeCollections } from "@/lib/collections";
+import { readSeasonAttendance } from "@/lib/planner-storage";
 import { useLanguage } from "./LanguageProvider";
 import { emptyPlannerState, type PlannerState, useLocalPlanner } from "./LocalPlanner";
-type Kind = "favorites" | "collections" | "saved-filters" | "plans" | "budgets";
+type Kind =
+  "favorites" | "collections" | "saved-filters" | "plans" | "season-attendance" | "budgets";
 type Document = { id: string; payload: unknown; revision: number; updatedAt: string };
 type Conflict = { kind: Kind; local: unknown; remote: Document };
-const kinds: Kind[] = ["favorites", "collections", "saved-filters", "plans", "budgets"];
+const kinds: Kind[] = [
+  "favorites",
+  "collections",
+  "saved-filters",
+  "plans",
+  "season-attendance",
+  "budgets",
+];
 const labels = {
   en: {
     title: "Account sync",
     local: "Your local plan remains available while signed out.",
+    season: "Attendance from other seasons stays private and is not included in public plan links.",
     migrate: "Merge this device into my account",
     replace: "Use account data on this device",
     sync: "Sync now",
@@ -42,6 +52,8 @@ const labels = {
   de: {
     title: "Konto-Synchronisierung",
     local: "Dein lokaler Plan bleibt ohne Anmeldung verfügbar.",
+    season:
+      "Teilnahmeangaben aus anderen Saisons bleiben privat und erscheinen nicht in öffentlichen Plan-Links.",
     migrate: "Dieses Gerät mit meinem Konto zusammenführen",
     replace: "Kontodaten auf diesem Gerät verwenden",
     sync: "Jetzt synchronisieren",
@@ -69,6 +81,7 @@ const labels = {
   ru: {
     title: "Синхронизация аккаунта",
     local: "Без входа локальный план останется доступен.",
+    season: "Отметки об участии в других сезонах остаются личными и не видны по публичным ссылкам.",
     migrate: "Объединить данные устройства с аккаунтом",
     replace: "Использовать данные аккаунта на устройстве",
     sync: "Синхронизировать",
@@ -108,6 +121,7 @@ function payloads(p: ReturnType<typeof useLocalPlanner>): Record<Kind, unknown> 
     }),
     "saved-filters": { savedFilters: p.savedFilters },
     plans: { attendance: p.attendance },
+    "season-attendance": { seasonAttendance: p.seasonAttendance ?? {} },
     budgets: p.tripBudgets,
   };
 }
@@ -119,6 +133,9 @@ function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
     ...playlistSelection(documents.collections?.payload),
     savedFilters: readDiscoveryPreferences(value("saved-filters").savedFilters),
     ...value("plans"),
+    seasonAttendance: documents["season-attendance"]
+      ? readSeasonAttendance(value("season-attendance").seasonAttendance)
+      : undefined,
     tripBudgets: readTripBudgets(documents.budgets?.payload),
   };
 }
@@ -135,6 +152,13 @@ function mergePayload(kind: Kind, remote: unknown, local: unknown) {
       ),
     };
   if (kind === "collections") return mergeCollections(remote, local);
+  if (kind === "season-attendance")
+    return {
+      seasonAttendance: {
+        ...readSeasonAttendance(a.seasonAttendance),
+        ...readSeasonAttendance(b.seasonAttendance),
+      },
+    };
   if (kind === "plans") return { attendance: { ...a.attendance, ...b.attendance } };
   if (kind === "budgets") return { ...readTripBudgets(remote), ...readTripBudgets(local) };
   return { ...a, ...b };
@@ -157,8 +181,13 @@ export function AccountSyncPanel({
     setBusyState(value);
     onBusyChange?.(value);
   }
-  async function readDocument(kind: Kind) {
-    const response = await fetch("/api/sync/" + kind, { cache: "no-store" });
+  const syncHeaders = (accountId: string) => ({ "X-Sync-Account": accountId });
+  async function readDocument(kind: Kind, accountId: string, signal?: AbortSignal) {
+    const response = await fetch("/api/sync/" + kind, {
+      cache: "no-store",
+      headers: syncHeaders(accountId),
+      signal,
+    });
     if (!response.ok) throw new Error(t.failed);
     const { document } = (await response.json()) as { document?: Document | null };
     if (
@@ -180,45 +209,57 @@ export function AccountSyncPanel({
     return document;
   }
 
-  async function readDocuments() {
+  async function readDocuments(accountId: string, signal?: AbortSignal) {
     const entries = await Promise.all(
-      kinds.map(async (kind) => [kind, await readDocument(kind)] as const),
+      kinds.map(async (kind) => [kind, await readDocument(kind, accountId, signal)] as const),
     );
     return Object.fromEntries(entries.filter(([, document]) => document)) as Partial<
       Record<Kind, Document>
     >;
   }
 
-  async function load() {
-    try {
-      const me = await fetch("/api/auth/me", { cache: "no-store" });
-      if (!me.ok) {
-        setUser(null);
-        setDocs({});
-        return;
-      }
-      setUser((await me.json()).user);
-      setDocs({});
-      setDocs(await readDocuments());
-    } catch {
-      setStatus(t.failed);
-    }
-  }
-
   useEffect(() => {
+    let active: AbortController | undefined;
+    async function load() {
+      active?.abort();
+      const { signal } = (active = new AbortController());
+      setUser(null);
+      setDocs({});
+      setConflict(null);
+      setShareUrl("");
+      setStatus("");
+      try {
+        const me = await fetch("/api/auth/me", { cache: "no-store", signal });
+        if (!me.ok) return;
+        const { user: account } = (await me.json()) as { user: { id: string; email: string } };
+        const documents = await readDocuments(account.id, signal);
+        if (signal.aborted) return;
+        setDocs(documents);
+        setUser(account);
+      } catch {
+        if (!signal.aborted) setStatus(t.failed);
+      }
+    }
     void load();
     const listener = () => void load();
     window.addEventListener("loud-weekend-authenticated", listener);
-    return () => window.removeEventListener("loud-weekend-authenticated", listener);
+    window.addEventListener("loud-weekend-signed-out", listener);
+    return () => {
+      active?.abort();
+      window.removeEventListener("loud-weekend-authenticated", listener);
+      window.removeEventListener("loud-weekend-signed-out", listener);
+    };
   }, []);
   async function put(kind: Kind, payload: unknown, revision: number) {
+    if (!user) throw new Error(t.failed);
+    const accountId = user.id;
     const response = await fetch(`/api/sync/${kind}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ payload, revision }),
+      body: JSON.stringify({ payload, revision, accountId }),
     });
     if (response.status === 409) {
-      const latest = await readDocument(kind);
+      const latest = await readDocument(kind, accountId);
       if (!latest) throw new Error(t.failed);
       setConflict({ kind, local: payload, remote: latest });
       throw new Error("conflict");
@@ -234,7 +275,8 @@ export function AccountSyncPanel({
     setConflict(null);
     try {
       if (mode === "remote") {
-        const latest = await readDocuments();
+        if (!user) throw new Error(t.failed);
+        const latest = await readDocuments(user.id);
         planner.replace(plannerFrom(latest));
         setDocs(latest);
         setStatus(t.current);
@@ -243,6 +285,7 @@ export function AccountSyncPanel({
       const local = payloads(planner),
         next = { ...docs };
       for (const kind of kinds) {
+        if (kind === "season-attendance" && !next[kind] && !planner.seasonAttendance) continue;
         if (kind === "budgets" && !next.budgets && !Object.keys(planner.tripBudgets).length)
           continue;
         const content =
@@ -281,6 +324,7 @@ export function AccountSyncPanel({
           },
           "saved-filters": { savedFilters: state.savedFilters },
           plans: { attendance: state.attendance },
+          "season-attendance": { seasonAttendance: state.seasonAttendance },
           budgets: { tripBudgets: state.tripBudgets },
         };
         planner.replaceFields(fields[kind]);
@@ -339,7 +383,8 @@ export function AccountSyncPanel({
         body: JSON.stringify({ revision: saved.revision }),
       });
       if (response.status === 409) {
-        const document = await readDocument("collections");
+        if (!user) throw new Error(t.failed);
+        const document = await readDocument("collections", user.id);
         if (!document) throw new Error(t.failed);
         setConflict({ kind: "collections", local: selection, remote: document });
         setStatus(t.conflict);
@@ -363,7 +408,7 @@ export function AccountSyncPanel({
       <section className="plannerSection accountSync">
         <h2>{t.title}</h2>
         <p>{t.local}</p>
-        <strong>{t.login}</strong>
+        <strong>{status || t.login}</strong>
       </section>
     );
   return (
@@ -389,6 +434,7 @@ export function AccountSyncPanel({
           {t.sync}
         </button>
       </div>
+      <p>{t.season}</p>
       {conflict && (
         <div className="syncConflict" role="alert">
           <strong>{t.conflict}</strong>

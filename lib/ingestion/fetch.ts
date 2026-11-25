@@ -94,7 +94,7 @@ import {
   GRASPOP_DOCUMENTS,
 } from "./adapters/graspop.ts";
 
-export type FetchAttempt = { response: Response; attempts: number };
+export type FetchAttempt = { response: Response; attempts: number; verifiedPrimaryUrl?: string };
 export type FetchOptions = {
   fetchImpl?: typeof fetch;
   sleep?: (milliseconds: number) => Promise<void>;
@@ -647,7 +647,16 @@ async function fetchSourceWithoutTicketSupplement(
           attempts: initial.attempts,
         });
       const linked = await fetchWithRetry(linkedUrl);
-      return { response: linked.response, attempts: initial.attempts + linked.attempts };
+      if (linked.response.ok && linked.response.url && linked.response.url !== linkedUrl)
+        throw Object.assign(
+          new Error("Motocultor announcement changed its discovered official identity"),
+          { attempts: initial.attempts + linked.attempts },
+        );
+      return {
+        response: linked.response,
+        attempts: initial.attempts + linked.attempts,
+        verifiedPrimaryUrl: linkedUrl,
+      };
     }
   }
 
@@ -1122,6 +1131,7 @@ export async function fetchSource(
   try {
     if (
       !matchesTicketPrimaryUrl(source, primary.response.url) &&
+      primary.response.url !== primary.verifiedPrimaryUrl &&
       !(source.festivalSlug === "alcatraz" && alcatrazPrimaryUrl(source.url, primary.response.url))
     )
       throw new Error("Official ticket primary source changed identity");
