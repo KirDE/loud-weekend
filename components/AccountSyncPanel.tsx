@@ -345,14 +345,16 @@ export function AccountSyncPanel({
   }
 
   async function synchronize(mode: "merge" | "remote" | "normal" = "normal") {
+    if (!user || user.signal.aborted) return;
+    const { id: accountId, signal } = user;
     setBusy(true);
     setStatus("");
     setConflict(null);
     const merged: Partial<PlannerState> = {};
     try {
       if (mode === "remote") {
-        if (!user) throw new Error(t.failed);
-        const latest = await readDocuments(user.id);
+        const latest = await readDocuments(accountId, signal);
+        signal.throwIfAborted();
         setDocs(latest);
         if (!Object.keys(latest).length) {
           setStatus(t.noAccountData);
@@ -379,17 +381,21 @@ export function AccountSyncPanel({
           content,
           remote?.revision ?? 0,
           mode === "merge" ? "merge" : "replace",
+          signal,
         );
+        signal.throwIfAborted();
         if (mode === "merge") Object.assign(merged, accountDocumentFields(kind, saved));
       }
       setStatus(t.current);
     } catch (reason) {
-      if (!(reason instanceof Error && reason.message === "conflict"))
+      if (!signal.aborted && !(reason instanceof Error && reason.message === "conflict"))
         setStatus(reason instanceof Error ? reason.message : t.failed);
     } finally {
-      // Keep the account changes that were saved before a later document failed.
-      if (Object.keys(merged).length) planner.merge(merged, planner);
-      setBusy(false);
+      if (!signal.aborted) {
+        // Keep acknowledged changes only while the same account is active.
+        if (Object.keys(merged).length) planner.merge(merged, planner);
+        setBusy(false);
+      }
     }
   }
 
