@@ -27,7 +27,7 @@ export async function readSitemapPublications(
         'name', 'city', 'country', 'countryCode', 'genres', 'officialUrl',
         'startDate', 'endDate', 'dateLabel', 'status', 'completeness', 'ticketStatus',
         'ticketsUrl', 'lineup', 'headliners', 'finalLineup', 'lineupDays', 'timetable', 'recordState',
-        'arrival', 'overview'
+        'arrival', 'overview', 'camping'
       ]) AS festival,
       MAX("createdAt") FILTER (WHERE 'venue' = ANY(fields)) AS "homeVenue",
       MAX("createdAt") FILTER (WHERE fields && ARRAY[

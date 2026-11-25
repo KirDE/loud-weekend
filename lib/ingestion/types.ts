@@ -1,3 +1,4 @@
+import type { CampingObservation } from "../catalog/camping-import.ts";
 import type { OverviewObservation } from "../catalog/festival-overview-import.ts";
 import type { ArrivalObservation } from "../catalog/arrival-import.ts";
 import type { Festival } from "../domain/festival.ts";
@@ -23,6 +24,7 @@ export type FestivalSource = {
 
 export type FieldEvidence = {
   field:
+    | "camping"
     | "arrival"
     | "overview"
     | keyof Pick<
@@ -60,6 +62,7 @@ export type FestivalCandidate = Partial<
   // An unranked news announcement adds members; absence is not a cancellation.
   lineupScope?: "announcement";
   arrival?: ArrivalObservation;
+  camping?: CampingObservation;
   overview?: OverviewObservation;
   /** Announcement feeds add artists; absence is not a removal. */
   artistListMode?: "additive";

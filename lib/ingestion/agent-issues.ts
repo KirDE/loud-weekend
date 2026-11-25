@@ -1,5 +1,7 @@
 import { rosterFingerprint } from "../catalog/lineup-proof.ts";
 import { Prisma, type PrismaClient, type Prisma as PrismaTypes } from "@prisma/client";
+import { campingObservation } from "../catalog/camping-import.ts";
+import { CAMPING_ADAPTER, registeredCampingSource } from "./camping-collector.ts";
 import { overviewObservation } from "../catalog/festival-overview-import.ts";
 import { OVERVIEW_ADAPTER, registeredOverviewSource } from "./overview-collector.ts";
 import { arrivalObservation } from "../catalog/arrival-import.ts";
@@ -19,6 +21,7 @@ import {
 } from "./agent-contract.ts";
 import { mapSource, validateSource } from "../sources/repository.ts";
 import {
+  publishAgentCampingResolution,
   publishAgentFestivalResolution,
   publishAgentOrganizerResolution,
 } from "../catalog/publication.ts";
@@ -60,6 +63,7 @@ export async function inspectSource(db: Database, sourceId: string) {
       festival: true,
       edition: {
         include: {
+          campingFacts: { orderBy: { field: "asc" } },
           overview: true,
           lineup: {
             include: {
@@ -106,6 +110,20 @@ export async function inspectSource(db: Database, sourceId: string) {
   if (!manual && !failed && !review) return null;
   const kind = failed ? "failure" : manual ? "manual_source" : "review";
   const normalized = (c?.normalized ?? {}) as Record<string, unknown>;
+  const parsedCamping = campingObservation.safeParse(normalized.camping);
+  const camping = parsedCamping.success ? parsedCamping.data : null;
+  const campingEvidence =
+    c?.evidence.filter((e) => e.field === "camping" && e.adapter === CAMPING_ADAPTER) ?? [];
+  const campingFingerprint = camping
+    ? fingerprint({
+        camping,
+        evidence: campingEvidence.map((e) => ({
+          url: e.sourceUrl,
+          observedAt: e.observedAt.toISOString(),
+          contentHash: e.contentHash,
+        })),
+      })
+    : null;
   const parsedOverview = overviewObservation.safeParse(normalized.overview);
   const overview = parsedOverview.success ? parsedOverview.data : null;
   const overviewEvidence =
@@ -163,6 +181,12 @@ export async function inspectSource(db: Database, sourceId: string) {
     source: config(s),
     kind,
     facts,
+    ...(camping && {
+      camping: {
+        editionId: camping.editionId,
+        facts: [...camping.facts].sort((a, b) => a.field.localeCompare(b.field)),
+      },
+    }),
     ...(arrival && {
       arrival: {
         ...arrival,
@@ -231,6 +255,16 @@ export async function inspectSource(db: Database, sourceId: string) {
     candidateId: c?.id ?? null,
     attemptId: a?.id ?? null,
     current,
+    ...(camping && {
+      campingFingerprint,
+      currentCamping: s.edition.campingFacts.map((fact) => ({
+        ...fact,
+        earliestDate: fact.earliestDate?.toISOString(),
+        checkedOn: fact.checkedOn.toISOString(),
+      })),
+      campingCountry: s.festival.countryCode,
+      campingOfficialUrl: s.festival.officialUrl,
+    }),
     ...(overview && {
       overviewFingerprint,
       currentOverview: s.edition.overview
@@ -281,6 +315,7 @@ export async function inspectSource(db: Database, sourceId: string) {
           id: c.id,
           facts,
           ...(arrival && { arrival, arrivalFingerprint }),
+          ...(camping && { camping, campingFingerprint }),
           ...(overview && { overview, overviewFingerprint }),
           reviewState: c.reviewState,
           warnings: c.warnings,
@@ -557,6 +592,35 @@ TIME ZONE 'UTC')) FOR UPDATE
 `;
       if (sources.length !== 1) throw new ImportAgentError("busy");
       allowedEvidence(i, d, now);
+      const candidateCamping = i.candidate && "camping" in i.candidate ? i.candidate.camping : null;
+      const campingDocuments =
+        i.candidate?.evidence.filter(
+          (e) => e.field === "camping" && e.adapter === CAMPING_ADAPTER,
+        ) ?? [];
+      const campingSource = registeredCampingSource(i.source);
+      const [campingDocument] = campingDocuments;
+      if (
+        d.camping &&
+        (!campingSource ||
+          !candidateCamping ||
+          i.candidate?.reviewState !== "PENDING" ||
+          i.kind === "failure" ||
+          i.attempt?.status !== "REVIEW" ||
+          i.candidate.campingFingerprint !== d.camping ||
+          candidateCamping.editionId !== i.current.editionId ||
+          candidateCamping.editionYear !== i.current.year ||
+          candidateCamping.festivalSlug !== i.festivalSlug ||
+          candidateCamping.sourceUrl !== i.source.url ||
+          campingDocuments.length !== 1 ||
+          campingDocument.url !== i.source.url ||
+          !/^[a-f0-9]{64}$/.test(campingDocument.contentHash) ||
+          campingDocument.observedAt > now ||
+          campingDocument.observedAt.getTime() < now.getTime() - 86_400_000 ||
+          campingDocument.observedAt.toISOString().slice(0, 10) !== candidateCamping.checkedOn)
+      )
+        throw new ImportAgentError("invalid");
+      if (d.action === "apply" && campingSource && !d.camping && (!d.source || d.facts))
+        throw new ImportAgentError("invalid");
       const candidateOverview =
         i.candidate && "overview" in i.candidate ? i.candidate.overview : null;
       const overviewDocuments =
@@ -633,6 +697,22 @@ TIME ZONE 'UTC')) FOR UPDATE
           throw new ImportAgentError("invalid");
       }
       const publicationSourceId = "openclaw:" + i.issueId + ":" + i.snapshot;
+      const persistedCampingEvidence = campingDocuments.map((e) => ({
+        ...e,
+        observedAt: e.observedAt.toISOString(),
+      }));
+      const campingPublication =
+        d.camping && candidateCamping
+          ? await publishAgentCampingResolution(tx, {
+              sourceId: publicationSourceId,
+              camping: candidateCamping,
+              evidence: {
+                candidateId: i.candidate?.id,
+                fingerprint: d.camping,
+                documents: persistedCampingEvidence,
+              },
+            })
+          : null;
       const persistedOverviewEvidence = overviewDocuments.map((e) => ({
         ...e,
         observedAt: e.observedAt.toISOString(),
@@ -693,7 +773,7 @@ TIME ZONE 'UTC')) FOR UPDATE
           i.candidate.diffs.length > 0 ||
           !Array.isArray(i.candidate.warnings) ||
           i.candidate.warnings.length > 0);
-      let publication = organizerPublication;
+      let publication = organizerPublication ?? campingPublication;
       if (d.action === "apply") {
         if (d.facts && changedFacts)
           publication = await publishAgentFestivalResolution(tx, {
@@ -761,6 +841,7 @@ TIME ZONE 'UTC')) FOR UPDATE
       const parserRepairId =
         ["apply", "dismiss"].includes(d.action) &&
         !d.arrival &&
+        !d.camping &&
         !d.overview &&
         (publication?.fields.some((field) => field !== "finalLineup") ||
           changedSource ||
@@ -793,6 +874,7 @@ TIME ZONE 'UTC')) FOR UPDATE
         publicationId: publication?.id ?? null,
         ...(d.arrival && { arrivalPublished }),
         ...(d.overview && { overviewPublished }),
+        ...(d.camping && { campingPublished: !!campingPublication }),
         parserRepairId,
         providerJobs: publication?.playlistRefreshRequested ? 1 : 0,
         at: now.toISOString(),
@@ -833,12 +915,15 @@ TIME ZONE 'UTC')) FOR UPDATE
             facts: d.facts ?? {},
             sourceChange: d.source ?? null,
             ...(d.arrival && { arrival: candidateArrival, arrivalFingerprint: d.arrival }),
+            ...(d.camping && { camping: candidateCamping, campingFingerprint: d.camping }),
             ...(d.overview && { overview: candidateOverview, overviewFingerprint: d.overview }),
           },
           evidence:
             d.arrival || d.overview
               ? [...persistedArrivalEvidence, ...persistedOverviewEvidence]
-              : d.evidence,
+              : d.camping
+                ? persistedCampingEvidence
+                : d.evidence,
           metadata: {
             issueId: i.issueId,
             reason: d.reason,

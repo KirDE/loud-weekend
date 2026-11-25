@@ -348,6 +348,7 @@ model FestivalEdition {
   groupTripOptions GroupTripOption[]
 
   venue           EditionVenue?
+  campingFacts    EditionCampingFact[]
   overview        EditionOverview?
 
   @@unique([festivalId, year])
@@ -366,6 +367,33 @@ model EditionVenue {
   latitude      Float
   longitude     Float
   edition       FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+}
+
+enum EditionCampingField {
+  camping
+  arrival
+  accessibility
+  facilities
+  motorhomes
+  viewing
+}
+
+model EditionCampingFact {
+  editionId     String
+  field         EditionCampingField
+  editionYear   Int
+  city          String
+  countryCode   String              @db.Char(2)
+  organizerHost String
+  descriptionEn String?
+  descriptionDe String?
+  descriptionRu String?
+  earliestDate  DateTime?           @db.Date
+  sourceUrl     String
+  checkedOn     DateTime            @db.Date
+  edition       FestivalEdition     @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, field])
 }
 
 model EditionOverview {
