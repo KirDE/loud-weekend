@@ -74,6 +74,7 @@ async function fixture(
       track_uris: uris,
       track_count: 2,
       artists_count: 1,
+      report: [{ artist: "Synthetic", count: 2, tracks: ["Synthetic - One", "Synthetic - Two"] }],
     });
     await run({ slug, editionId: festival.editions[0].id, jobId: job.id, claim });
   } finally {
@@ -113,6 +114,11 @@ test(
         where: { editionId_provider: { editionId, provider: "spotify" } },
       });
       assert.equal(binding.trackCount, 2);
+      assert.deepEqual(binding.coverageEvidence, {
+        matchedArtists: 1,
+        eligibleArtists: 1,
+        recordedAt: binding.syncedAt?.toISOString(),
+      });
       const plan = failed.desiredPlan as { playlist_url: string; track_uris: string[] };
       assert.equal(plan.playlist_url, spotifyUrl);
       assert.deepEqual(plan.track_uris, uris);

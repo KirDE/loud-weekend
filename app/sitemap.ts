@@ -1,76 +1,87 @@
+import { hasArchiveRecords } from "@/lib/catalog/browse";
 import { availableFestivalMonths } from "@/lib/festival-dates";
 import type { MetadataRoute } from "next";
 import { supportedLanguages } from "@/lib/catalog/public";
+import { publicSeasonEditions, seasonYears } from "@/lib/catalog/seasons";
 import { getCatalog } from "@/lib/catalog/repository";
-import { CATALOG_UPDATED_AT, SITE_ORIGIN } from "@/lib/seo";
+import { SITE_ORIGIN } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const { festivals, artists, editions } = await getCatalog();
-  const editionYears = [...new Set(editions.map(({ editionYear }) => editionYear))];
+  const { festivals, artists, editions, freshness } = await getCatalog({ includeFreshness: true });
+  const publicEditions = publicSeasonEditions(editions);
+  const editionYears = seasonYears(publicEditions);
   const countries = [...new Set(festivals.map((item) => item.countryCode.toLowerCase()))];
   const months = availableFestivalMonths(festivals).map((month) => String(month).padStart(2, "0"));
   return [
     {
       url: `${SITE_ORIGIN}/`,
-      lastModified: CATALOG_UPDATED_AT,
+      lastModified: freshness.lastPublishedAt,
       changeFrequency: "daily",
       priority: 1,
     },
-    ...festivals.map(({ slug, updatedAt }) => ({
+    ...festivals.map(({ slug, freshness }) => ({
       url: `${SITE_ORIGIN}/festivals/${slug}/`,
-      lastModified: updatedAt,
+      lastModified: freshness?.lastPublishedAt,
       changeFrequency: "daily" as const,
       priority: 0.8,
     })),
     ...artists.map(({ slug }) => ({
       url: `${SITE_ORIGIN}/artists/${slug}/`,
-      lastModified: CATALOG_UPDATED_AT,
       changeFrequency: "weekly" as const,
       priority: 0.6,
     })),
     ...countries.map((code) => ({
       url: `${SITE_ORIGIN}/countries/${code}/`,
-      lastModified: CATALOG_UPDATED_AT,
       changeFrequency: "weekly" as const,
       priority: 0.7,
     })),
     ...months.map((month) => ({
       url: `${SITE_ORIGIN}/months/${month}/`,
-      lastModified: CATALOG_UPDATED_AT,
       changeFrequency: "weekly" as const,
       priority: 0.7,
     })),
     ...supportedLanguages.map((lang) => ({
       url: `${SITE_ORIGIN}/${lang}/`,
-      lastModified: CATALOG_UPDATED_AT,
+      lastModified: freshness.lastPublishedAt,
       changeFrequency: "weekly" as const,
       priority: 0.8,
     })),
-    ...editionYears.map((year) => ({
-      url: `${SITE_ORIGIN}/editions/${year}/`,
-      lastModified: CATALOG_UPDATED_AT,
-      changeFrequency: "monthly" as const,
-      priority: 0.6,
-    })),
+    ...editionYears.flatMap((year) =>
+      ["", "/en", "/de", "/ru"].map((prefix) => ({
+        url: `${SITE_ORIGIN}${prefix}/editions/${year}/`,
+        changeFrequency: "monthly" as const,
+        priority: 0.6,
+      })),
+    ),
     ...editions.map(({ slug, editionYear, snapshotAt }) => ({
       url: `${SITE_ORIGIN}/festivals/${slug}/${editionYear}/`,
-      lastModified: snapshotAt ?? CATALOG_UPDATED_AT,
+      lastModified: snapshotAt,
       changeFrequency: editionYear < 2027 ? ("yearly" as const) : ("weekly" as const),
       priority: 0.6,
     })),
     {
-      url: `${SITE_ORIGIN}/archive/`,
-      lastModified: CATALOG_UPDATED_AT,
-      changeFrequency: "monthly",
-      priority: 0.5,
+      url: `${SITE_ORIGIN}/browse/`,
+      changeFrequency: "weekly",
+      priority: 0.6,
     },
+    ...(hasArchiveRecords(publicEditions)
+      ? [
+          {
+            url: `${SITE_ORIGIN}/archive/`,
+            changeFrequency: "monthly" as const,
+            priority: 0.5,
+          },
+        ]
+      : []),
     {
       url: `${SITE_ORIGIN}/submit/`,
-      lastModified: CATALOG_UPDATED_AT,
       changeFrequency: "monthly",
       priority: 0.4,
     },
+    ...supportedLanguages.flatMap((lang) =>
+      ["about", "faq"].map((page) => ({ url: `${SITE_ORIGIN}/${lang}/${page}/` })),
+    ),
   ];
 }
