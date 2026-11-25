@@ -25,6 +25,8 @@ const labels = {
     confirm: "Reset local plan",
     done: "Local plan reset. Your account data has not changed.",
     undo: "Undo local reset",
+    changed:
+      "Running orders changed. Download an updated backup or reopen this dialog before resetting.",
     failed: "Browser storage could not be updated.",
     overLimit:
       "Undo would exceed a plan limit. Download the backup or remove a newer item, then try again.",
@@ -41,6 +43,8 @@ const labels = {
     confirm: "Lokalen Plan zurücksetzen",
     done: "Lokaler Plan zurückgesetzt. Deine Kontodaten bleiben unverändert.",
     undo: "Lokales Zurücksetzen rückgängig machen",
+    changed:
+      "Spielpläne wurden geändert. Lade eine neue Sicherung herunter oder öffne diesen Dialog erneut.",
     failed: "Der Browserspeicher konnte nicht aktualisiert werden.",
     overLimit:
       "Dadurch würde ein Planlimit überschritten. Lade die Sicherung herunter oder " +
@@ -58,6 +62,8 @@ const labels = {
     confirm: "Сбросить локальный план",
     done: "Локальный план сброшен. Данные аккаунта не изменились.",
     undo: "Отменить локальный сброс",
+    changed:
+      "Расписания изменились. Скачайте новую копию или откройте это окно заново перед сбросом.",
     failed: "Не удалось обновить хранилище браузера.",
     overLimit:
       "Отмена превысит лимит плана. Скачайте резервную копию или удалите новую запись и повторите попытку.",
@@ -95,13 +101,18 @@ export function PlannerReset({
     description = useId();
   const [backup, setBackup] = useState<Backup | null>(null);
   const [runningOrders, setRunningOrders] = useState<Record<string, string[]>>({});
+  const resetBaseline = useRef(runningOrders);
+  const [changed, setChanged] = useState(false);
   const [failed, setFailed] = useState(false);
   const [undoError, setUndoError] = useState(false);
 
   function open() {
     setFailed(false);
+    setChanged(false);
     try {
-      setRunningOrders(browserRunningOrderSnapshot(localStorage));
+      const current = browserRunningOrderSnapshot(localStorage);
+      resetBaseline.current = current;
+      setRunningOrders(current);
       onOpenChange(true);
       dialog.current?.showModal();
     } catch {
@@ -112,6 +123,16 @@ export function PlannerReset({
   function reset() {
     try {
       const current = browserRunningOrderSnapshot(localStorage);
+      const baseline = resetBaseline.current;
+      if (
+        Object.keys(current).length !== Object.keys(baseline).length ||
+        Object.entries(current).some(
+          ([key, picks]) => JSON.stringify(picks) !== JSON.stringify(baseline[key]),
+        )
+      ) {
+        setChanged(true);
+        return false;
+      }
       clearBrowserRunningOrders(localStorage, current);
       setUndoError(false);
       setBackup({ ...snapshot(planner), runningOrders: current });
@@ -183,10 +204,26 @@ export function PlannerReset({
         <a
           className="outlineButton"
           href={backupHref(backupData)}
+          onClick={(event) => {
+            try {
+              const current = browserRunningOrderSnapshot(localStorage);
+              const data: Backup = snapshot(planner);
+              if (Object.keys(current).length) data.runningOrders = current;
+              event.currentTarget.href = backupHref(data);
+              resetBaseline.current = current;
+              setRunningOrders(current);
+              setChanged(false);
+              setFailed(false);
+            } catch {
+              event.preventDefault();
+              setFailed(true);
+            }
+          }}
           download="loud-weekend-plan-backup.json"
         >
           {t.backup}
         </a>
+        {changed && <p role="alert">{t.changed}</p>}
         {failed && <p role="alert">{t.failed}</p>}
         <form method="dialog" className="playlistActions">
           <button autoFocus type="submit" value="cancel">
