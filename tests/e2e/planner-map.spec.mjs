@@ -39,7 +39,10 @@ test("the discovery map follows the card filters and uses no third-party map req
   await expect(page.locator(".festivalLocationCanvas")).toHaveCount(0);
   const countryFilter = page.locator("select").filter({ has: page.locator('option[value="AT"]') });
   await countryFilter.selectOption("AT");
-  await page.getByRole("button", { name: "Show festival map" }).click();
+  await page.getByRole("button", { name: "Show festival map" }).press("Enter");
+  await expect(
+    page.getByRole("region", { name: "Map of Europe with festival locations" }),
+  ).toBeFocused();
   const map = page.getByRole("group", { name: "Map of Europe with festival locations" });
   const marker = map.getByRole("button", { name: /Synthetic Alpine.*Approximate location/ });
   await expect(marker).toBeVisible();
@@ -64,10 +67,17 @@ test("a failed WebGL initialization leaves the list and its links available", as
       return type.includes("webgl") ? null : getContext.call(this, type, ...args);
     };
   });
-  await page.goto("/planner/");
+  await page.goto("/");
+  await page.getByRole("button", { name: "Show festival map" }).press("Enter");
   await expect(page.getByText("Map unavailable. Use the festival list below.")).toBeVisible({
     timeout: 15_000,
   });
-  await page.getByText("Festivals by country (list)", { exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Map of Europe with festival locations" }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  const list = page.getByText("Festivals by country (list)", { exact: true });
+  await expect(list).toBeFocused();
+  await list.press("Enter");
   await expect(page.locator(".mapTextList").getByRole("link")).toHaveCount(4);
 });

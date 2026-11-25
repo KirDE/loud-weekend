@@ -307,6 +307,11 @@ export function FestivalLocationMap({
   const { language, locale } = useLanguage();
   const t = festivalMapLabels[language];
   const [enabled, setEnabled] = useState(!optIn);
+  const activationTarget = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (optIn && enabled) activationTarget.current?.focus();
+  }, [optIn, enabled]);
   const groups = useMemo(() => {
     const names = new Intl.DisplayNames([locale], { type: "region", fallback: "none" });
     const countries = new Map<string, { name: string; festivals: Festival[] }>();
@@ -325,11 +330,13 @@ export function FestivalLocationMap({
   return (
     <div className="festivalLocationMap">
       {enabled ? (
-        festivals.some(festivalMapPoint) ? (
-          <FestivalMapViewport festivals={festivals} t={t} />
-        ) : (
-          <p role="status">{t.empty}</p>
-        )
+        <div ref={activationTarget} role="region" aria-label={t.mapLabel} tabIndex={-1}>
+          {festivals.some(festivalMapPoint) ? (
+            <FestivalMapViewport festivals={festivals} t={t} />
+          ) : (
+            <p role="status">{t.empty}</p>
+          )}
+        </div>
       ) : (
         <button type="button" className="outlineButton" onClick={() => setEnabled(true)}>
           {t.show}
