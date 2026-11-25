@@ -284,11 +284,7 @@ for (const language of ["en", "de", "ru"] as const) {
     const html = renderToStaticMarkup(
       <LanguageProvider initialLanguage={language}>
         <LocalPlannerProvider>
-          <ArtistDetail
-            artist={artist}
-            appearances={appearances}
-            legacyFavoriteNames={[artist.name]}
-          />
+          <ArtistDetail artist={artist} legacySlugs={{}} appearances={appearances} />
         </LocalPlannerProvider>
       </LanguageProvider>,
     );

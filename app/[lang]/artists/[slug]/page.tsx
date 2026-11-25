@@ -25,7 +25,7 @@ export default async function ArtistPage({ params }: Props) {
     <ArtistDetail
       artist={data.artist}
       appearances={data.appearances}
-      legacyFavoriteNames={data.legacyFavoriteNames}
+      legacySlugs={data.legacySlugs}
     />
   );
 }
