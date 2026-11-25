@@ -15,7 +15,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (body.decision !== "approve" && body.decision !== "reject") return error("Invalid decision");
   try {
     const outcome = await decideChange((await params).id, body.decision, admin);
-    if (outcome.conflict) return NextResponse.json(outcome.conflict, { status: 409 });
+    if ("conflict" in outcome) return NextResponse.json(outcome.conflict, { status: 409 });
     const result = outcome.decided;
     if (result.playlistRefreshRequested && process.env.APP_URL && process.env.INTERNAL_API_SECRET) {
       const url = new URL("/api/playlists/run/", process.env.APP_URL);
