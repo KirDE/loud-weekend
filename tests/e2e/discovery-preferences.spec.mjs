@@ -165,7 +165,15 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
       .toEqual(activeFilters);
     await secondPage.unroute(filtersRoute);
 
-    for (const response of [{ status: 503 }, { json: {} }, invalidPayload]) {
+    const invalidFields = {
+      json: {
+        document: {
+          ...previous,
+          payload: { savedFilters: { ...activeFilters, origin: 42, ticketsOnly: "true" } },
+        },
+      },
+    };
+    for (const response of [{ status: 503 }, { json: {} }, invalidPayload, invalidFields]) {
       await secondPage.route(filtersRoute, (route) => route.fulfill(response));
       await pull.click();
       await expect(secondPage.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
@@ -180,8 +188,34 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
       await secondPage.unroute(filtersRoute);
     }
 
+    const plansRoute = "**/api/sync/plans*";
+    const { document: plans } = await (await page.request.get("/api/sync/plans/")).json();
+    await secondPage.route(plansRoute, (route) =>
+      route.fulfill({
+        json: { document: { ...plans, payload: { attendance: "invalid" } } },
+      }),
+    );
+    await pull.click();
+    await expect(secondPage.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
+    await expect
+      .poll(() =>
+        secondPage.evaluate(
+          (key) => JSON.parse(localStorage.getItem(key)).savedFilters,
+          storageKey,
+        ),
+      )
+      .toEqual(activeFilters);
+    await secondPage.unroute(plansRoute);
+
+    // A valid older plan may contain extra fields. They do not own discovery preferences.
+    await secondPage.route(plansRoute, (route) =>
+      route.fulfill({
+        json: { document: { ...plans, payload: { attendance: {}, savedFilters: activeFilters } } },
+      }),
+    );
     await pull.click();
     await expect(secondPage.getByText("Everything is synchronized.")).toBeVisible();
+    await secondPage.unroute(plansRoute);
     await secondPage.goto("/en/");
     await expectFilters(secondPage, latest);
     await expect(secondPage.locator(".festivalCard h2")).toHaveText(["Synthetic Fest"]);
@@ -191,6 +225,7 @@ test("legacy discovery filters migrate, persist and sync to an independent brows
 });
 
 test("taking remote favorites leaves unrelated unsynced planner data on this device", async ({
+  baseURL,
   page,
 }) => {
   const local = {
@@ -213,29 +248,50 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
     password: "synthetic conflict test password",
   };
   expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
-  // Establish the empty favorites baseline before simulating the second device.
-  const baseline = page.waitForResponse(
-    (response) =>
-      response.request().method() === "GET" &&
-      new URL(response.url()).pathname === "/api/sync/favorites/",
-  );
+  const headers = { origin: new URL(baseURL).origin };
+  const favoritesPath = "/api/sync/favorites/";
+  const initial = await page.request.put(favoritesPath, {
+    headers,
+    data: { revision: 0, payload: { favoriteFestivals: [], favoriteArtists: [] } },
+  });
+  expect(initial.status()).toBe(201);
+  const { document: baseline } = await initial.json();
+  expect(baseline.revision).toBe(1);
+
   await page.goto("/en/planner/");
-  const favorites = await baseline;
-  expect(favorites.ok()).toBeTruthy();
-  expect((await favorites.json()).document).toBeNull();
+  // This button becomes enabled only after the React panel has loaded the account document.
+  await expect(
+    page.getByRole("button", { name: "Use account data on this device", exact: true }),
+  ).toBeEnabled();
 
-  // Another device creates favorites before this one tries to sync its local version.
   const remote = { favoriteFestivals: ["remote-festival"], favoriteArtists: [] };
-  expect(
-    (
-      await page.request.put("/api/sync/favorites/", {
-        headers: { origin: new URL(page.url()).origin },
-        data: { revision: 0, payload: remote },
-      })
-    ).status(),
-  ).toBe(201);
+  const updated = await page.request.put(favoritesPath, {
+    headers,
+    data: { revision: baseline.revision, payload: remote },
+  });
+  expect(updated.status()).toBe(200);
+  expect((await updated.json()).document.revision).toBe(baseline.revision + 1);
 
+  const favoritesRoute = "**/api/sync/favorites*";
+  const { document } = await (await page.request.get("/api/sync/favorites/")).json();
+  await page.route(favoritesRoute, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          json: { document: { ...document, payload: { favoriteFestivals: [false] } } },
+        })
+      : route.continue(),
+  );
   await page.getByRole("button", { name: "Sync now", exact: true }).click();
+  await expect(page.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use other device", exact: true })).toHaveCount(0);
+  await page.unroute(favoritesRoute);
+
+  const conflict = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" && new URL(response.url()).pathname === favoritesPath,
+  );
+  await page.getByRole("button", { name: "Sync now", exact: true }).click();
+  expect((await conflict).status()).toBe(409);
   await page.getByRole("button", { name: "Use other device", exact: true }).click();
   await expect(
     page.getByText("Conflict resolved. Sync again to send other local changes."),
@@ -246,4 +302,54 @@ test("taking remote favorites leaves unrelated unsynced planner data on this dev
 
   const savedFilters = await page.request.get("/api/sync/saved-filters/");
   expect((await savedFilters.json()).document).toBeNull();
+});
+
+test("keeping this device during a sync conflict sends the newest local attendance", async ({
+  page,
+}) => {
+  const local = { attendance: { "synthetic-fest": "going" } };
+  await page.addInitScript(
+    ({ key, planner }) => {
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(planner));
+    },
+    { key: storageKey, planner: local },
+  );
+
+  const credentials = {
+    email: `discovery-keep-device-${randomUUID()}@example.test`,
+    password: "synthetic conflict test password",
+  };
+  expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
+  await page.goto("/en/planner/");
+  const attendance = page.locator(".planList select");
+  await expect(attendance).toHaveValue("going");
+  const sync = page.getByRole("button", { name: "Sync now", exact: true });
+  await sync.click();
+  await expect(page.getByText("Everything is synchronized.")).toBeVisible();
+
+  const plansUrl = "/api/sync/plans/";
+  const { document } = await (await page.request.get(plansUrl)).json();
+  expect(
+    (
+      await page.request.put(plansUrl, {
+        headers: { origin: new URL(page.url()).origin },
+        data: {
+          revision: document.revision,
+          payload: { attendance: { "synthetic-fest": "not-going" } },
+        },
+      })
+    ).status(),
+  ).toBe(200);
+
+  await sync.click();
+  const keepLocal = page.getByRole("button", { name: "Keep this device", exact: true });
+  await expect(keepLocal).toBeVisible();
+  await attendance.selectOption("maybe");
+  await keepLocal.click();
+  await expect(
+    page.getByText("Conflict resolved. Sync again to send other local changes."),
+  ).toBeVisible();
+  await expect(attendance).toHaveValue("maybe");
+  const saved = await (await page.request.get(plansUrl)).json();
+  expect(saved.document.payload.attendance).toEqual({ "synthetic-fest": "maybe" });
 });

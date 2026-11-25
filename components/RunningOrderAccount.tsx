@@ -80,6 +80,7 @@ export function RunningOrderAccount({
     "login" | "changed" | "failed" | "saved" | "restored" | "cleared"
   >();
   const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
   const active = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -92,6 +93,7 @@ export function RunningOrderAccount({
     };
     window.addEventListener("loud-weekend-authenticated", reset);
     window.addEventListener("loud-weekend-signed-out", reset);
+    setReady(true);
     return () => {
       active.current?.abort();
       window.removeEventListener("loud-weekend-authenticated", reset);
@@ -161,7 +163,7 @@ export function RunningOrderAccount({
     <details className="runningOrderAccount">
       <summary>{t.title}</summary>
       <p>{t.hint}</p>
-      <button type="button" onClick={() => void run("check")} disabled={busy}>
+      <button type="button" onClick={() => void run("check")} disabled={!ready || busy}>
         {t.check}
       </button>
       {snapshot && (
