@@ -476,3 +476,65 @@ test("a visibly disabled checkout button cannot establish Rockstadt stock", () =
   assert.deepEqual(candidate.lineup, artists);
   assert.ok(candidate.warnings.some((warning) => warning.includes("inventory requires review")));
 });
+
+// The live first-wave label is an album anniversary performance, not a new band.
+const anniversaryLabel = "Venom -Black Metal (45th anniversary)";
+function performanceArticle(label, artist = "Venom") {
+  return fixture
+    .replace(announcement, announcement.replace("Venom", label))
+    .replace(
+      '<div id="details"',
+      `<h3 class="event-artist-heading"><a class="event-artist-link">${artist}</a></h3>` +
+        '<div id="details"',
+    );
+}
+
+test("corroborated album anniversary labels retain the existing artist identity", () => {
+  for (const label of [anniversaryLabel, "Venom – Black Metal (50th anniversary)"]) {
+    const candidate = extract(performanceArticle(label));
+    assert.deepEqual(candidate.lineup, artists);
+    const result = evaluateCandidate({ ...current, lineup: artists }, candidate);
+    assert.deepEqual(
+      result.changes.filter(({ kind }) => kind === "artist_added"),
+      [],
+    );
+  }
+});
+
+test("anniversary normalization requires a matching article artist and explicit album suffix", () => {
+  for (const [label, card] of [
+    [anniversaryLabel, "Other Band"],
+    ["Venom -Black Metal", "Venom"],
+    ["Venom Inc.", "Venom"],
+    ["Venom featuring Guest", "Venom"],
+  ]) {
+    const candidate = extract(performanceArticle(label, card));
+    assert.ok(candidate.lineup.includes(label));
+  }
+  const later = performanceArticle(anniversaryLabel).replace(
+    "Towards the Sinister</strong>",
+    "Towards the Sinister, New Band</strong>",
+  );
+  assert.ok(extract(later).lineup.includes("New Band"));
+});
+
+test("hidden and duplicate artist cards cannot corroborate a performance label", () => {
+  for (const attribute of ["hidden", 'aria-hidden="true"', 'style="display:none"']) {
+    const hidden = performanceArticle(anniversaryLabel).replace(
+      '<h3 class="event-artist-heading">',
+      `<h3 ${attribute} class="event-artist-heading">`,
+    );
+    assert.ok(extract(hidden).lineup.includes(anniversaryLabel));
+  }
+  const doubled = performanceArticle(anniversaryLabel).replace(
+    '<h3 class="event-artist-heading">',
+    '<h3 class="event-artist-heading"><a class="event-artist-link">Venom</a></h3>' +
+      '<h3 class="event-artist-heading">',
+  );
+  assert.ok(extract(doubled).lineup.includes(anniversaryLabel));
+  const duplicate = performanceArticle(anniversaryLabel).replace(
+    "Towards the Sinister</strong>",
+    "Towards the Sinister, Venom</strong>",
+  );
+  noEvidence(duplicate);
+});

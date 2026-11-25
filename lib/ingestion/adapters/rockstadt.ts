@@ -147,7 +147,7 @@ export function rockstadt(html: string, source: FestivalSource) {
   // HTML tag names are case-insensitive; the live article also uses <Strong>.
   const announcement = description.match(/First confirmed names:\s*<strong>([^<>]+)<\/strong>/i);
   if (!announcement) return undefined;
-  const names = text(announcement[1]).split(/,\s*/);
+  let names = text(announcement[1]).split(/,\s*/);
   if (
     !names.length ||
     names.some((name) => !name || name.length > 160 || !/\p{L}/u.test(name)) ||
@@ -175,6 +175,22 @@ export function rockstadt(html: string, source: FestivalSource) {
     if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test($(element).attr("style") ?? ""))
       $(element).remove();
   });
+  // The article can append album-anniversary performance copy to a band name.
+  // Strip only that explicit suffix, corroborated by an artist card in this
+  // edition's article. Do not split compound billing or infer names from JSON-LD.
+  const cardNames = $(".event-artist-heading .event-artist-link")
+    .toArray()
+    .map((element) => text($(element).text()));
+  names = names.map((name) => {
+    const performance = name.match(/^(.+?)\s+[-–—]\s*.+?\s+\(\d+(?:st|nd|rd|th) anniversary\)$/i);
+    if (!performance) return name;
+    const matches = cardNames.filter(
+      (card) => card.toLocaleLowerCase() === performance[1].toLocaleLowerCase(),
+    );
+    return matches.length === 1 ? matches[0] : name;
+  });
+  if (new Set(names.map((name) => name.toLocaleLowerCase())).size !== names.length)
+    return undefined;
   const disabled = ".disabled, .sold-out, .unavailable";
   const blocked = (element: ReturnType<typeof $>) =>
     element.is(disabled) || element.parents(disabled).length > 0;
@@ -255,7 +271,7 @@ export function rockstadt(html: string, source: FestivalSource) {
             "Rockstadt current ordinary admission inventory requires review; no global sellout inferred",
         }),
     excerpt:
-      `${title}; 26-30 iulie '27; Ghimbav (Brașov); First confirmed names: ${names.join(", ")}` +
+      `${title}; 26-30 iulie '27; Ghimbav (Brașov); First confirmed names: ${text(announcement[1])}` +
       (sale ? "; live festival admission tariff, selectable quantity; Comandă bilete" : ""),
   };
 }
