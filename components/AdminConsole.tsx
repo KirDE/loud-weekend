@@ -115,6 +115,17 @@ export function AdminConsole({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ decision: status === "approved" ? "approve" : "reject" }),
       });
+      if (response.status === 409) {
+        const body = await response.json();
+        if (body?.status === "CONFLICT") {
+          setChanges((items) =>
+            items.map((item) =>
+              item.id === id ? { ...item, status: "conflict", conflict: true } : item,
+            ),
+          );
+          return setNotice({ key: "conflict" });
+        }
+      }
       if (!response.ok) return setNotice({ key: failureKey(response.status, "decisionFailed") });
       setChanges((items) => items.map((item) => (item.id === id ? { ...item, status } : item)));
       setNotice({ key: "decisionNotice" });
