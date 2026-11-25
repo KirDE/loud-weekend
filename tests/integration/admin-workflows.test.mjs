@@ -852,14 +852,17 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
 
   for (const approveFirst of [true, false]) {
     const approvedName = approveFirst ? "Integration Approved First" : "Integration Rejected First";
-    const revision = approveFirst ? 4 : 5;
+    const { revision } = await db.adminResourceState.findUniqueOrThrow({
+      where: { resourceKind_resourceKey: { resourceKind: "ARTIST", resourceKey: artistSlug } },
+      select: { revision: true },
+    });
     const mixedResponse = await admin.json("/api/admin", "POST", {
       resourceKind: "artist",
       resourceKey: artistSlug,
       baseRevision: revision,
       values: { canonicalName: approvedName, officialUrl: "https://rejected.example.test/" },
     });
-    assert.equal(mixedResponse.status, 201);
+    assert.equal(mixedResponse.status, 201, await mixedResponse.clone().text());
     const mixedDraft = await mixedResponse.json();
     const name = await db.adminChange.findFirstOrThrow({
       where: { draftId: mixedDraft.id, field: "canonicalName" },
@@ -885,7 +888,8 @@ test("persisted admin drafts, decisions, conflicts, authorization and audit inva
       include: { links: true },
     });
     assert.equal(published.name, approvedName);
-    assert.equal(published.links[0].url, officialSite);
+    assert.equal(published.links.find(({ id }) => id === officialLinkId)?.url, officialSite);
+    assert.ok(!published.links.some(({ url }) => url === "https://rejected.example.test/"));
   }
 
   const logoBytes = await sharp({
