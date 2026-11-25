@@ -3210,7 +3210,7 @@ test("social previews show parser-backed approved dates but not unsupported edit
             excerpt: "2027-06-09",
           },
         ],
-        observedAt,
+        reviewedAt: observedAt,
       }),
     );
     assert.equal(await preview(), festivalPreviewDate(2027, "en", { startDate: "2027-06-09" }));

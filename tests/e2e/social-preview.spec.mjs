@@ -110,7 +110,7 @@ test("public festival and artist URLs advertise distinct localized, cacheable pr
         sourceId: `openclaw:social-preview-fixture:${slug}`,
         reason: "Synthetic edition date proof",
         facts,
-        observedAt: evidenceAt,
+        reviewedAt: evidenceAt,
         evidence: Object.keys(facts).map((field) => ({
           field,
           url: "https://festival.example.test/dates",
