@@ -216,7 +216,7 @@ test("undo refuses an over-limit merge, keeps the backup and can succeed after r
   const undo = page.getByRole("button", { name: "Undo local reset" });
   await undo.click();
   await expect(
-    page.getByRole("alert").filter({ hasText: "Undo would exceed the budget limit" }),
+    page.getByRole("alert").filter({ hasText: "Undo would exceed a plan limit" }),
   ).toBeVisible();
   const backup = await page
     .getByRole("link", { name: "Download plan backup (.json)" })

@@ -144,7 +144,13 @@ test.before(async () => {
   await db.shareLink.deleteMany();
   await db.syncDocument.deleteMany();
   await db.session.deleteMany();
-  await db.user.deleteMany();
+  // This suite owns only these registration identities; preserve shared audit actors.
+  await db.user.deleteMany({
+    where: {
+      email: { in: ["first@example.com", "second@example.com"] },
+      adminAuditEntries: { none: {} },
+    },
+  });
 
   mock = http
     .createServer(async (request, response) => {
@@ -251,7 +257,7 @@ test.before(async () => {
 
 test.after(async () => {
   await stopApp();
-  await new Promise((resolve) => mock.close(resolve));
+  if (mock) await new Promise((resolve) => mock.close(resolve));
   await db.$disconnect();
 });
 

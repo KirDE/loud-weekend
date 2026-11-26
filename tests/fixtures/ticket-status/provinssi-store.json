@@ -1,0 +1,106 @@
+{
+  "is_sold_out": false,
+  "uses_vouchers": false,
+  "_links": {
+    "self": {
+      "href": "https://shopping-api.paylogic.com/storefront?sale=https://shopping-api.paylogic.com/sales/f20f4130e7bd49b99eeb38ad7236ccd9"
+    }
+  },
+  "_embedded": {
+    "shop:event": {
+      "uid": "a406b7bdc0d74330bbb7a19e57766d96",
+      "event_start": "2027-07-01T12:00:00Z",
+      "event_end": "2027-07-03T20:59:00Z",
+      "sold_out": false,
+      "title": {
+        "en": "PROVINSSI 2027",
+        "fi": "PROVINSSI 2027"
+      }
+    },
+    "shop:product": [
+      {
+        "uid": "5fb581dd9f104d0298c11bf2f38e5b11",
+        "price": {
+          "amount": "214.00",
+          "currency": "EUR"
+        },
+        "type": "entrance",
+        "sale_start": "2026-07-05T21:01:00Z",
+        "sale_end": "2026-12-31T21:59:00Z",
+        "min_per_order": null,
+        "max_per_order": null,
+        "separately_saleable": true,
+        "parents": null,
+        "combo": null,
+        "personalization_required": false,
+        "requires_membership": false,
+        "provides_membership": false,
+        "name": {
+          "en": "3 DAYS",
+          "fi": "3 PÄIVÄÄ"
+        },
+        "self": "https://shopping-api.paylogic.com/products/5fb581dd9f104d0298c11bf2f38e5b11",
+        "event": "https://shopping-api.paylogic.com/events/a406b7bdc0d74330bbb7a19e57766d96",
+        "_links": {
+          "self": {
+            "href": "https://shopping-api.paylogic.com/products/5fb581dd9f104d0298c11bf2f38e5b11"
+          },
+          "shop:event": {
+            "href": "https://shopping-api.paylogic.com/events/a406b7bdc0d74330bbb7a19e57766d96"
+          }
+        }
+      }
+    ]
+  },
+  "categories": [
+    {
+      "uid": "51df16042ca2429097b41a43feb2e105",
+      "name": {
+        "en": "PROVINSSI TICKETS 2027",
+        "fi": "PROVINSSI-LIPUT 2027"
+      },
+      "categories": [
+        {
+          "uid": "ecb7c54a27d14cf787d4b7fd1953b01e",
+          "name": {
+            "en": "THREE DAYS",
+            "fi": "KOLME PÄIVÄÄ"
+          },
+          "items": [
+            {
+              "product": "https://shopping-api.paylogic.com/products/5fb581dd9f104d0298c11bf2f38e5b11",
+              "min_quantity": null,
+              "max_quantity": null,
+              "is_sold_out": false,
+              "combo": [],
+              "unit_price": {
+                "amount": "219.00",
+                "currency": "EUR"
+              },
+              "total": {
+                "amount": "219.00",
+                "currency": "EUR"
+              },
+              "sections": [],
+              "available_in_secondary_sale": false,
+              "price_breakdown": {
+                "unit_price_including_service_costs": {
+                  "amount": "219.00",
+                  "currency": "EUR"
+                },
+                "unit_price_excluding_service_costs": {
+                  "amount": "214.00",
+                  "currency": "EUR"
+                },
+                "unit_price_service_costs": {
+                  "amount": "5.00",
+                  "currency": "EUR"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

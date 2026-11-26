@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CatalogFreshness } from "@/lib/domain/freshness";
 import { formatFreshnessDate } from "@/lib/freshness-date";
 import type { Festival } from "@/lib/domain/festival";
+import { FestivalLocationMap } from "./FestivalLocationMap";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
 import {
@@ -528,6 +529,7 @@ export function FestivalExplorer({
           </span>
         )}
       </div>
+      <FestivalLocationMap festivals={visible} optIn />
       {withoutRoster > 0 && (
         <p className="compareHint">{t("artistMatchesUnknown", { count: withoutRoster })}</p>
       )}
