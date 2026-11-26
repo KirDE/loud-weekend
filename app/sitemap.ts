@@ -19,7 +19,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
   const [{ festivals, artists, editions }, publications, tierApprovals] = await db.$transaction(
     async (tx) => {
-      const catalog = await new DatabaseCatalogRepository(tx).read();
+      const catalog = await new DatabaseCatalogRepository(db).readInSnapshot(tx);
       const publications = await readSitemapPublications(tx, now);
       const tierApprovals = await readSitemapTicketOfferApprovals(tx, catalog.festivals, now);
       return [catalog, publications, tierApprovals] as const;
@@ -57,10 +57,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const key = editionYear === undefined ? undefined : editionKey(slug, editionYear);
     const publication = key === undefined ? undefined : publications.get(key);
     const nameDate = sharedNames.get(slug);
+    const lifecycleApproval = festival.editionLifecycle?.approvedAt;
     const lastModified = latestDate([
       publication?.festival ?? undefined,
       nameDate,
       key === undefined ? undefined : tierApprovals.get(key),
+      lifecycleApproval && Date.parse(lifecycleApproval) <= now.getTime()
+        ? lifecycleApproval
+        : undefined,
     ]);
     const directoryDate = latestDate([publication?.directory ?? undefined, nameDate]);
     const appearanceDate = latestDate([publication?.appearance ?? undefined, nameDate]);

@@ -45,20 +45,16 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     this.client = client;
   }
 
-  async read({
-    includeFreshness = false,
-    requireTimetableEvidence = false,
-  }: CatalogReadOptions = {}): Promise<CatalogSnapshot> {
-    return this.client.$transaction(
-      (tx) => this.readSnapshot(tx, includeFreshness, requireTimetableEvidence),
-      { isolationLevel: "RepeatableRead" },
-    );
+  async read(options: CatalogReadOptions = {}): Promise<CatalogSnapshot> {
+    return this.client.$transaction((tx) => this.readInSnapshot(tx, options), {
+      isolationLevel: "RepeatableRead",
+    });
   }
 
-  private async readSnapshot(
+  /** Read within a caller-owned RepeatableRead transaction. */
+  async readInSnapshot(
     tx: Prisma.TransactionClient,
-    includeFreshness: boolean,
-    requireTimetableEvidence: boolean,
+    { includeFreshness = false, requireTimetableEvidence = false }: CatalogReadOptions = {},
   ): Promise<CatalogSnapshot> {
     const now = new Date();
     const [editionRows, artistRows, freshnessEvidence] = await Promise.all([

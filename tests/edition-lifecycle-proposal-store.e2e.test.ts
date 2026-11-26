@@ -1,3 +1,4 @@
+import sitemap from "../app/sitemap.ts";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -232,6 +233,10 @@ let actorId: string;
 let originalAllowlist: string | undefined;
 let reviewed: Awaited<ReturnType<typeof stage>>;
 const email = "lifecycle-review-fixture@example.invalid";
+const sitemapDates = async () =>
+  Object.fromEntries(
+    (await sitemap()).map(({ url, lastModified }) => [new URL(url).pathname, lastModified]),
+  );
 const decisionInput = () => ({
   snapshotId: reviewed.id,
   expectedContentHash: reviewed.contentHash,
@@ -327,6 +332,25 @@ test("decision insert failure rolls back audit atomically", async () => {
   assert.equal(await db.editionLifecycleReviewDecision.count(), 0);
 });
 test("concurrent exact-revision decisions replay once with immutable audit and NO canonical effects", async () => {
+  const previousDay = new Date(time - 86_400_000);
+  await db.catalogPublication.create({
+    data: {
+      source: "ADMIN",
+      sourceId: "lifecycle-sitemap-fixture",
+      festivalSlug: slug,
+      editionYear: 2027,
+      actorLabel: "fixture",
+      fields: ["name"],
+      createdAt: previousDay,
+    },
+  });
+  const pendingDates = await sitemapDates();
+  const changedPaths = ["", "/en", "/de", "/ru"].flatMap((prefix) => [
+    `${prefix}/`,
+    `${prefix}/festivals/${slug}/`,
+  ]);
+  for (const path of changedPaths) assert.equal(pendingDates[path], previousDay.toISOString());
+
   const before = await db.festivalEdition.findMany();
   const n = await db.adminAuditEntry.count();
   const rows = await Promise.all([decide(db, decisionInput()), decide(db, decisionInput())]);
@@ -334,6 +358,15 @@ test("concurrent exact-revision decisions replay once with immutable audit and N
   assert.equal(await db.adminAuditEntry.count(), n + 1);
   assert.equal(rows[0].audit.actorId, actorId);
   assert.equal(rows[0].audit.actorLabel, actorId);
+  const approvalDate = rows[0].audit.createdAt.toISOString();
+  const approvedSitemapDates = await sitemapDates();
+  for (const path of changedPaths) assert.equal(approvedSitemapDates[path], approvalDate);
+  for (const path of ["/countries/fr/", `/festivals/${slug}/2027/`, "/editions/2027/"]) {
+    assert.ok(Object.hasOwn(pendingDates, path), `Missing control entry ${path}`);
+    assert.equal(approvedSitemapDates[path], pendingDates[path]);
+  }
+  assert.equal((await decide(db, decisionInput())).id, rows[0].id);
+  assert.deepEqual(await sitemapDates(), approvedSitemapDates);
   assert.equal((await read(db, editionId))!.reviewState, "approved");
   assert.equal((await read(db, editionId))!.eligibleForReview, false);
   await assert.rejects(
@@ -449,6 +482,7 @@ test("new rejected observation does not silently inherit previous approval", asy
   } finally {
     Date.now = now;
   }
+  const approvedSitemapDates = await sitemapDates();
   reviewed = await stage(db, input(102));
   assert.deepEqual(
     await publicRead(db, editionId),
@@ -456,7 +490,9 @@ test("new rejected observation does not silently inherit previous approval", asy
     "New pending does not inherit approval or restamp previous notice",
   );
   assert.equal((await read(db, editionId))!.reviewState, "pending");
+  assert.deepEqual(await sitemapDates(), approvedSitemapDates);
   const rejected = await decide(db, { ...decisionInput(), decision: "reject" });
+  assert.deepEqual(await sitemapDates(), approvedSitemapDates);
   assert.equal(rejected.decision, "reject");
   assert.deepEqual(
     await publicRead(db, editionId),
