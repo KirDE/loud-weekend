@@ -31,6 +31,14 @@ export async function POST(request: Request) {
         orderBy: { kind: "asc" },
         select: { kind: true, payload: true, revision: true, createdAt: true, updatedAt: true },
       },
+      runningOrders: {
+        orderBy: [{ edition: { festival: { slug: "asc" } } }, { edition: { year: "asc" } }],
+        select: {
+          revision: true,
+          performanceIds: true,
+          edition: { select: { year: true, festival: { select: { slug: true } } } },
+        },
+      },
       passkeys: {
         orderBy: { createdAt: "asc" },
         select: { deviceType: true, backedUp: true, createdAt: true, lastUsedAt: true },

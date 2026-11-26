@@ -1,6 +1,7 @@
 import type { Festival } from "@/lib/domain/festival";
 
 type TicketLabel =
+  | "ticketsInfo"
   | "ticketsFree"
   | "officialTickets"
   | "ticketsLow"
@@ -20,6 +21,10 @@ export function ticketPresentation(item: Festival): TicketPresentation {
   // ticket URLs must not become a misleading general-admission CTA.
   if (item.ticketStatus === "free")
     return { status: "free", href: item.officialUrl || undefined, label: "ticketsFree" };
+  // Reviewed mixed categories are not a whole-festival stock claim. The
+  // official source is information only, never an inferred resale purchase.
+  if (item.ticketOffers)
+    return { status: "unknown", href: item.ticketOffers.sourceUrl, label: "ticketsInfo" };
   const href = item.ticketsUrl || undefined;
   // A missing link cannot prove a sellout. Keep known negative states truthful,
   // but do not advertise an actionable offer without an official destination.

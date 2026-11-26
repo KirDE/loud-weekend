@@ -131,7 +131,7 @@ export function PlanningTools({
           {t.map}
         </a>
       </div>
-      <StageTimetable entries={item.timetable} />
+      <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
       {similar.length > 0 && (
         <div className="recommendations">
           <h3>{reasons.title}</h3>
