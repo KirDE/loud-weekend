@@ -327,12 +327,19 @@ export function observeProvinssiStock(
     !Number.isFinite(amount(p.price)) ||
     !Number.isFinite(amount(i.unit_price)) ||
     amount(i.total) !== amount(i.unit_price) ||
-    amount(i.price_breakdown?.unit_price_including_service_costs) !== amount(i.unit_price) ||
+    !Number.isFinite(amount(i.price_breakdown?.unit_price_including_service_costs)) ||
+    // Paylogic exposes either net or service-inclusive item prices. Both must
+    // reconcile with the same product base and explicit service-cost breakdown.
+    ![amount(p.price), amount(i.price_breakdown?.unit_price_including_service_costs)].includes(
+      amount(i.unit_price),
+    ) ||
     amount(i.price_breakdown?.unit_price_excluding_service_costs) !== amount(p.price) ||
     !Number.isFinite(amount(i.price_breakdown?.unit_price_service_costs)) ||
     Math.abs(
-      amount(p.price) + amount(i.price_breakdown?.unit_price_service_costs) - amount(i.unit_price),
-    ) > 0.011
+      amount(p.price) +
+        amount(i.price_breakdown?.unit_price_service_costs) -
+        amount(i.price_breakdown?.unit_price_including_service_costs),
+    ) > 0.000001
   )
     return fail();
   return {
@@ -341,7 +348,8 @@ export function observeProvinssiStock(
     corroboratePrimaryPurchaseLink: true,
     excerpt:
       `${provinssiStockDatePrefix(dates.startDate, dates.endDate)} namespace ${PROVINSSI_SCOPE.namespace}; ` +
-      `product ${PROVINSSI_PRODUCT}; EUR ${i.unit_price.amount}; published current public sale, ` +
+      `product ${PROVINSSI_PRODUCT}; EUR ${i.price_breakdown.unit_price_including_service_costs.amount}; ` +
+      "published current public sale, " +
       "exact ordinary category is_sold_out=false and single-ticket order allowed; no ticket selected/reserved",
   };
 }

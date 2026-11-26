@@ -148,3 +148,69 @@ test("Provinssi compares provider timestamps to locally dated organizer evidence
   delete stock.store.event.event_end;
   assert.equal(observe(shifted).status, undefined);
 });
+
+const netStock = () =>
+  JSON.parse(
+    readFileSync(
+      new URL("./fixtures/ticket-status/provinssi-net-price-20261126.json", import.meta.url),
+      "utf8",
+    ),
+  );
+test("real November ordinary stock separates net unit price from service-inclusive price", () => {
+  const d = netStock();
+  const observed = observeProvinssiStock(JSON.stringify(d), dates);
+  assert.equal(observed.status, "available");
+  assert.match(observed.excerpt, /EUR 219.00/);
+});
+test("later ordinary prices accept both net and gross item conventions with matching fees", () => {
+  for (const unit of ["224.00", "230.00"]) {
+    const d = netStock(),
+      i = d.store.categories[0].categories[0].items[0];
+    d.store.products[0].price.amount = "224.00";
+    i.unit_price.amount = i.total.amount = unit;
+    i.price_breakdown.unit_price_excluding_service_costs.amount = "224.00";
+    i.price_breakdown.unit_price_service_costs.amount = "6.00";
+    i.price_breakdown.unit_price_including_service_costs.amount = "230.00";
+    const observed = observeProvinssiStock(JSON.stringify(d), dates);
+    assert.equal(observed.status, "available");
+    assert.match(observed.excerpt, /EUR 230.00/);
+  }
+});
+test("net-price evidence still refuses conflicting totals, breakdowns, currencies and soldout", () => {
+  for (const mode of ["total", "unit", "gross", "net", "fee", "currency", "soldout"]) {
+    const d = netStock(),
+      i = d.store.categories[0].categories[0].items[0];
+    if (mode === "total") i.total.amount = "219.00";
+    if (mode === "unit") i.unit_price.amount = i.total.amount = "216.00";
+    if (mode === "gross") i.price_breakdown.unit_price_including_service_costs.amount = "220.00";
+    if (mode === "net") i.price_breakdown.unit_price_excluding_service_costs.amount = "213.00";
+    if (mode === "fee") i.price_breakdown.unit_price_service_costs.amount = "6.00";
+    if (mode === "currency") i.price_breakdown.unit_price_including_service_costs.currency = "USD";
+    if (mode === "soldout") i.is_sold_out = true;
+    assert.equal(observeProvinssiStock(JSON.stringify(d), dates).status, undefined, mode);
+  }
+});
+
+test("one-cent gross discrepancies fail closed for both pricing conventions", () => {
+  for (const gross of ["218.99", "219.01"]) {
+    for (const net of [true, false]) {
+      const d = netStock(),
+        i = d.store.categories[0].categories[0].items[0];
+      i.price_breakdown.unit_price_including_service_costs.amount = gross;
+      i.unit_price.amount = i.total.amount = net ? "214.00" : gross;
+      assert.equal(observeProvinssiStock(JSON.stringify(d), dates).status, undefined);
+    }
+  }
+});
+test("fractional-cent floating-point noise does not reject reconciled ordinary prices", () => {
+  for (const unit of ["224.10", "230.30"]) {
+    const d = netStock(),
+      i = d.store.categories[0].categories[0].items[0];
+    d.store.products[0].price.amount = "224.10";
+    i.unit_price.amount = i.total.amount = unit;
+    i.price_breakdown.unit_price_excluding_service_costs.amount = "224.10";
+    i.price_breakdown.unit_price_service_costs.amount = "6.20";
+    i.price_breakdown.unit_price_including_service_costs.amount = "230.30";
+    assert.equal(observeProvinssiStock(JSON.stringify(d), dates).status, "available");
+  }
+});
