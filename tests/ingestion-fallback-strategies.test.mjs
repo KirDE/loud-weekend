@@ -385,6 +385,49 @@ test("included JSON-LD relationship records keep side events out of festival pro
   assert.equal(evaluateCandidate(current, candidate).publishable, true);
 });
 
+test("JSON-LD subEvent sets cannot supply side-event ticket evidence for a festival", () => {
+  const festival = {
+    "@type": "MusicEvent",
+    "@id": "#festival",
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/festival-tickets/" },
+  };
+  const sideEvent = {
+    "@type": "MusicEvent",
+    "@id": "#afterparty",
+    name: "Afterparty",
+    startDate: `${current.startDate}T21:00:00+02:00`,
+    offers: { url: "https://www.wacken.com/afterparty-tickets/" },
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const reference = { "@id": sideEvent["@id"] };
+
+  for (const [primary, extra] of [
+    [{ ...festival, subEvent: { "@set": reference } }, ""],
+    [
+      festival,
+      script({
+        "@id": festival["@id"],
+        subEvent: { "@set": [sideEvent], "@index": "related events" },
+      }),
+    ],
+  ]) {
+    const candidate = extract(script([sideEvent, primary]) + extra);
+    assert.equal(candidate.ticketsUrl, festival.offers.url);
+    assert.equal(candidate.timetable, undefined);
+    assert.equal(
+      candidate.evidence.find(({ field }) => field === "ticketsUrl").excerpt,
+      JSON.stringify(primary),
+    );
+    assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  }
+
+  const ambiguous = extract(
+    script([sideEvent, { ...festival, subEvent: { "@set": [{ "@id": "#other" }] } }]),
+  );
+  assert.equal(evaluateCandidate(current, ambiguous).publishable, false);
+});
+
 test("scheduled JSON-LD events do not hold verified ticket changes", () => {
   const event = {
     "@type": "MusicEvent",

@@ -14,6 +14,15 @@ function records(value: unknown): JsonLd[] {
   return [record, ...records(record["@graph"])];
 }
 
+function setMembers(value: unknown): unknown[] {
+  const values = Array.isArray(value) ? value : [value];
+  return values.flatMap((member) => {
+    if (!member || typeof member !== "object" || !Object.hasOwn(member, "@set")) return [member];
+    const members = (member as JsonLd)["@set"];
+    return Array.isArray(members) ? members : [members];
+  });
+}
+
 function* documentRecords(value: unknown): Generator<JsonLd> {
   for (const record of records(value)) {
     yield record;
@@ -84,7 +93,7 @@ function eventRecords(html: string, sourceUrl: string) {
   for (const { record, scriptIndex } of [...events, ...linkedDescriptions]) {
     const parentId = eventKey(record, sourceUrl, scriptIndex);
     if (parentId && record.superEvent != null) childIds.add(parentId);
-    for (const child of records(record.subEvent)) {
+    for (const child of setMembers(record.subEvent).flatMap(records)) {
       const childId = eventKey(child, sourceUrl, scriptIndex);
       if (childId && childId !== parentId) childIds.add(childId);
     }
@@ -113,13 +122,7 @@ function text(value: unknown): string | undefined {
 }
 
 function eventStatusRequiringReview(value: unknown): string | undefined {
-  const statuses = Array.isArray(value) ? value : [value];
-  return statuses
-    .flatMap((status) => {
-      if (!status || typeof status !== "object" || !Object.hasOwn(status, "@set")) return [status];
-      const members = (status as JsonLd)["@set"];
-      return Array.isArray(members) ? members : [members];
-    })
+  return setMembers(value)
     .map((status) => {
       const record = status as JsonLd | null | undefined;
       const literal = record?.["@value"];
