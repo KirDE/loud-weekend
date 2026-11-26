@@ -17,6 +17,7 @@ function fixture(patch = {}) {
     enabled: true,
     deprecatedAt: null,
     configurationBackfilledAt: new Date(),
+    cadenceSeconds: 86400,
     editionId: "edition-1",
     editionYear: 2027,
     parserKey: input.parserKey,
@@ -146,4 +147,13 @@ test("IDs and payload shape cannot smuggle scope or URL/config changes", () => {
     { commit: "short" },
   ])
     assert.equal(sourceRecheckInput.safeParse({ ...input, ...change }).success, false);
+});
+
+test("recheck requires a runnable cadence and never records an unclaimable request", async () => {
+  for (const cadenceSeconds of [null, 0, -1]) {
+    const f = fixture({ cadenceSeconds });
+    await assert.rejects(requestSourceRecheck(f.db, input), { code: "stale" });
+    assert.equal(f.writes.length, 0);
+    assert.equal(f.receipts.size, 0);
+  }
 });

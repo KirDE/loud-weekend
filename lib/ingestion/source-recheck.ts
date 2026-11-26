@@ -35,6 +35,7 @@ export async function requestSourceRecheck(db: PrismaClient, value: unknown) {
         !source.enabled ||
         source.deprecatedAt ||
         !source.configurationBackfilledAt ||
+        (source.cadenceSeconds ?? 0) <= 0 ||
         source.editionId !== input.editionId ||
         source.editionYear !== input.editionYear ||
         source.parserKey !== input.parserKey ||

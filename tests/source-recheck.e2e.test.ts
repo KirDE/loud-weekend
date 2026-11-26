@@ -6,6 +6,7 @@ import { seedCatalog } from "./support/seed-catalog.ts";
 import { catalogSeed } from "./support/catalog.ts";
 import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
 import { GET, POST } from "../app/api/ingestion/agent/route.ts";
+import { claimDueSources } from "../lib/ingestion/lease.ts";
 import { requestSourceRecheck } from "../lib/ingestion/source-recheck.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const commit = "a".repeat(40);
@@ -43,6 +44,7 @@ test.beforeEach(async () => {
       strategies: ["official_markup"],
       parserKey: "official_markup:synthetic",
       refreshPolicy: "daily",
+      cadenceSeconds: 86400,
       configurationBackfilledAt: new Date(),
       nextRunAt: new Date(Date.now() + 86400000),
       httpEtag: "old-tag",
@@ -147,4 +149,43 @@ test("concurrent requests have one durable receipt and cannot repeat source muta
     }),
     1,
   );
+});
+
+test("unrunnable cadences cannot poison receipts; the normal worker claims a valid recheck", async () => {
+  const before = await db.festivalSource.findUniqueOrThrow({ where: { id: input.sourceId } });
+  // The database itself rejects nonpositive integers; null is the permitted
+  // unrunnable configuration that previously poisoned the successful receipt.
+  for (const cadenceSeconds of [0, -1])
+    await assert.rejects(
+      db.festivalSource.update({ where: { id: input.sourceId }, data: { cadenceSeconds } }),
+      /FestivalSource_cadenceSeconds_check/,
+    );
+  for (const cadenceSeconds of [null]) {
+    await db.festivalSource.update({ where: { id: input.sourceId }, data: { cadenceSeconds } });
+    assert.equal((await POST(request(input))).status, 409);
+    const unchanged = await db.festivalSource.findUniqueOrThrow({ where: { id: input.sourceId } });
+    assert.equal(unchanged.nextRunAt?.toISOString(), before.nextRunAt?.toISOString());
+    assert.equal(unchanged.httpEtag, before.httpEtag);
+    assert.equal(
+      await db.operationalState.count({
+        where: {
+          key: { startsWith: "source-recheck-" },
+          payload: { path: ["sourceId"], equals: input.sourceId },
+        },
+      }),
+      0,
+    );
+  }
+  await db.festivalSource.update({
+    where: { id: input.sourceId },
+    data: { cadenceSeconds: 86400 },
+  });
+  assert.equal((await POST(request(input))).status, 200);
+  const claimed = await claimDueSources(db, {
+    owner: randomUUID(),
+    now: new Date(Date.now() + 1000),
+    limit: 100,
+    ttlMs: 60000,
+  });
+  assert.ok(claimed.some((row) => row.id === input.sourceId));
 });

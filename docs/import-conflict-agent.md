@@ -239,7 +239,8 @@ After a parser repair is reviewed, deployed and verified, `source-recheck
 observation. Decision fields are `sourceId`, `editionId`, `editionYear`,
 `sourceUrl` (the effective configured fetch URL), `parserKey` and the exact
 currently deployed full `commit`. The server rejects a
-stale/non-current binding, any existing actionable case, active importer lease,
+stale/non-current binding, null/nonpositive cadence, any existing actionable case,
+active importer lease,
 or source failure. This is not a backoff reset, a manual importer or publication.
 The serializable audited request only makes the bound source due and clears its
 conditional-fetch validators. It preserves all configuration/history and enqueues
