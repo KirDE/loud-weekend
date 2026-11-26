@@ -1,89 +1,89 @@
 import { expect, test } from "@playwright/test";
 
-async function expectNoDocumentOverflow(page) {
-  const geometry = await page.evaluate(() => ({
-    viewportWidth: window.innerWidth,
-    documentWidth: document.documentElement.scrollWidth,
-    bodyWidth: document.body.scrollWidth,
-  }));
-  expect(Math.max(geometry.documentWidth, geometry.bodyWidth)).toBeLessThanOrEqual(
-    geometry.viewportWidth,
-  );
-}
-
-async function edgeMarkerIndexes(markers) {
-  const positions = await markers.evaluateAll((elements) =>
-    elements.map((element, index) => ({
-      index,
-      left: Number.parseFloat(getComputedStyle(element.parentElement).left),
-    })),
-  );
-  positions.sort((a, b) => a.left - b.left);
-  const center = positions.reduce((closest, position) =>
-    Math.abs(position.left - 50) < Math.abs(closest.left - 50) ? position : closest,
-  );
-  return [positions[0].index, center.index, positions.at(-1).index];
-}
-
-for (const width of [320, 375, 390]) {
-  test(`mobile map popup stays usable at ${width}px`, async ({ page }) => {
+for (const width of [320, 375, 390, 1280]) {
+  test(`map results stay usable at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/planner/");
-    const markers = page.locator(".mapMarker > button");
-    await expect(markers).toHaveCount(4);
-    await expectNoDocumentOverflow(page);
-
-    for (const index of await edgeMarkerIndexes(markers)) {
-      const marker = markers.nth(index);
-      await marker.click();
-      await expect(marker).toHaveAttribute("aria-expanded", "true");
-      const panel = marker.locator("xpath=../div");
-      await expect(panel).toBeVisible();
-      const box = await panel.boundingBox();
-      expect(box).not.toBeNull();
-      expect(box.x).toBeGreaterThanOrEqual(0);
-      expect(box.x + box.width).toBeLessThanOrEqual(width);
-      expect(box.width).toBeGreaterThanOrEqual(width - 40);
-      const firstLink = panel.locator("a").first();
-      await expect(firstLink).toHaveAttribute("href", /^\/festivals\/.+\/$/);
-      await expect(firstLink).toBeInViewport();
-      await expectNoDocumentOverflow(page);
-      await marker.click();
-      await expect(panel).toBeHidden();
-    }
-
-    const austria = markers.filter({ hasText: "AT" });
-    await austria.click();
-    const festivalLink = austria.locator("xpath=../div/a").first();
-    const route = await festivalLink.getAttribute("href");
+    const map = page.getByRole("group", { name: "Map of Europe with festival locations" });
+    const markers = map.locator(".festivalLocationMarker");
+    await expect(markers.first()).toBeVisible();
+    const marker = markers.first();
+    await marker.click();
+    await expect(marker).toHaveAttribute("aria-expanded", "true");
+    const results = map.locator(".festivalLocationPopup");
+    const link = results.getByRole("link").first();
+    const route = await link.getAttribute("href");
     expect(route).toMatch(/^\/festivals\/.+\/$/);
-    await festivalLink.focus();
-    await expect(festivalLink).toBeFocused();
-    await festivalLink.press("Enter");
+    await expect(link).toBeFocused();
+    await expect(link).toBeInViewport();
+    const { x, width: panelWidth } = await results.boundingBox();
+    expect(x).toBeGreaterThanOrEqual(0);
+    expect(x + panelWidth).toBeLessThanOrEqual(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await link.press("Enter");
     await expect(page).toHaveURL(new RegExp(`${route}$`));
-    await page.goBack();
-    await expect(page).toHaveURL(/\/planner\/$/);
-    await expectNoDocumentOverflow(page);
-
-    const mapBox = await page.locator(".europeMap").boundingBox();
-    expect(mapBox.x).toBeGreaterThanOrEqual(0);
-    expect(mapBox.x + mapBox.width).toBeLessThanOrEqual(width);
   });
 }
 
-test("desktop map positioning and links remain operable", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/planner/");
-  const marker = page.locator(".mapMarker > button").filter({ hasText: "AT" });
+test("the discovery map follows the card filters and uses no third-party map requests", async ({
+  page,
+}) => {
+  const base = new URL("/", test.info().project.use.baseURL).origin;
+  await page.goto("/");
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  const external = [];
+  page.on("request", (request) => {
+    if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== base)
+      external.push(new URL(request.url()).hostname);
+  });
+  await expect(page.locator(".festivalLocationCanvas")).toHaveCount(0);
+  const countryFilter = page.locator("select").filter({ has: page.locator('option[value="AT"]') });
+  await countryFilter.selectOption("AT");
+  await page.getByRole("button", { name: "Show festival map" }).press("Enter");
+  await expect(
+    page.getByRole("region", { name: "Map of Europe with festival locations" }),
+  ).toBeFocused();
+  const map = page.getByRole("group", { name: "Map of Europe with festival locations" });
+  const marker = map.getByRole("button", { name: /Synthetic Alpine.*Approximate location/ });
+  await expect(marker).toBeVisible();
+  await expect(page.locator(".festivalGrid article")).toHaveCount(1);
   await marker.click();
-  const panel = marker.locator("xpath=../div");
-  await expect(panel).toBeVisible();
-  await expect(panel.getByRole("link", { name: /Synthetic Alpine/ })).toHaveAttribute(
-    "href",
-    "/festivals/synthetic-alpine/",
-  );
-  expect(
-    await marker.locator("xpath=..").evaluate((element) => getComputedStyle(element).transform),
-  ).not.toBe("none");
-  await expectNoDocumentOverflow(page);
+  await expect(map.getByRole("link", { name: "Synthetic Alpine" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(marker).toBeFocused();
+  await expect(marker).toHaveAttribute("aria-expanded", "false");
+  await expect(map.getByRole("link", { name: "Synthetic Alpine" })).toBeHidden();
+  await marker.press("Enter");
+  await expect(map.getByRole("link", { name: "Synthetic Alpine" })).toBeFocused();
+
+  await countryFilter.selectOption("ES");
+  await expect(map.getByRole("link", { name: "Synthetic Alpine" })).toBeHidden();
+  await expect(
+    map.getByRole("button", { name: /Synthetic South.*Approximate location/ }),
+  ).toBeVisible();
+  await expect(map.locator(".festivalLocationMarker")).toHaveCount(1);
+  await expect(page.locator(".festivalGrid article")).toHaveCount(1);
+  expect(external).toEqual([]);
+});
+
+test("a failed WebGL initialization leaves the list and its links available", async ({ page }) => {
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...args) {
+      return type.includes("webgl") ? null : getContext.call(this, type, ...args);
+    };
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Show festival map" }).press("Enter");
+  await expect(page.getByText("Map unavailable. Use the festival list below.")).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(
+    page.getByRole("region", { name: "Map of Europe with festival locations" }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  const list = page.getByText("Festivals by country (list)", { exact: true });
+  await expect(list).toBeFocused();
+  await list.press("Enter");
+  await expect(page.locator(".mapTextList").getByRole("link")).toHaveCount(4);
 });

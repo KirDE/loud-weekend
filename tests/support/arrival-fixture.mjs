@@ -14,7 +14,12 @@ export async function stageOrganizerFixture(
   db,
   festival,
   pages,
-  { editionYear = 2027, primary, collect, fingerprintField },
+  {
+    editionYear = 2027,
+    primary,
+    collect = collectArrivalCandidate,
+    fingerprintField = "arrivalFingerprint",
+  } = {},
 ) {
   const edition = await db.festivalEdition.findUniqueOrThrow({
     where: { festivalId_year: { festivalId: festival.id, year: editionYear } },
