@@ -36,3 +36,17 @@ for (const [lang, name] of Object.entries(accountNames)) {
       await expect(trigger).toBeFocused();
     });
 }
+
+test("a stalled session check does not trap the account disclosure", async ({ page }) => {
+  await page.route("**/api/auth/me", () => {
+    // Leave the session request unanswered so the client must time out.
+  });
+  const request = page.waitForRequest("**/api/auth/me");
+  await page.goto("/en/");
+  await request;
+  const trigger = page.getByRole("button", { name: "Account", exact: true });
+  await expect(trigger).toBeEnabled({ timeout: 10_000 });
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("region", { name: "Account", exact: true })).toBeVisible();
+});
