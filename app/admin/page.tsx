@@ -6,6 +6,8 @@ import { AdminConsole } from "@/components/AdminConsole";
 import { currentAdmin } from "@/lib/admin-access";
 import { adminSnapshot } from "@/lib/admin-store";
 import { getCatalog } from "@/lib/catalog/repository";
+import { db } from "@/lib/db";
+import { listTicketOfferReviewEditions } from "@/lib/ingestion/ticket-offer-proposal-store";
 import { redirect } from "next/navigation";
 
 export const metadata = { title: "Administration | Loud Weekend" };
@@ -13,12 +15,14 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
   if (!(await currentAdmin())) redirect("/?admin=forbidden");
-  const [snapshot, { festivals, editions, artists }] = await Promise.all([
+  const [snapshot, { festivals, editions, artists }, ticketOfferEditions] = await Promise.all([
     adminSnapshot(),
     getCatalog(),
+    listTicketOfferReviewEditions(db),
   ]);
   return (
     <AdminConsole
+      ticketOfferEditions={ticketOfferEditions}
       editionOptions={editions.map(({ slug, name, editionYear, recordState }) => ({
         slug,
         name,

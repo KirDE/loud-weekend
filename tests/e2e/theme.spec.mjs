@@ -38,7 +38,9 @@ for (const [language, label] of [
         true,
       );
       const geometry = await page.locator("footer").evaluate((footer) => {
-        const boxes = [...footer.children].map((el) => el.getBoundingClientRect());
+        const boxes = [...footer.children]
+          .filter((el) => !el.matches(".footerGuides"))
+          .map((el) => el.getBoundingClientRect());
         return {
           pickerLeft: footer.querySelector(".languagePicker").getBoundingClientRect().left,
           firstLeft: boxes[0].left,

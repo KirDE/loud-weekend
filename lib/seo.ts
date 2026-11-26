@@ -2,11 +2,21 @@ import { festivalDateInterval } from "./festival-dates.ts";
 import { announcedArtists } from "./festival-lineup.ts";
 import type { Festival } from "@/lib/domain/festival";
 
+import { supportedLanguages } from "./catalog/public";
+
 export const SITE_ORIGIN = "https://loudweekend.eu";
 
 export function canonicalPath(path: string) {
   const normalized = path.startsWith("/") ? path : `/${path}`;
   return normalized.endsWith("/") ? normalized : `${normalized}/`;
+}
+
+export function localizedAlternates(path: string): Record<string, string> {
+  const canonical = canonicalPath(path);
+  return Object.fromEntries([
+    ["x-default", canonical],
+    ...supportedLanguages.map((lang) => [lang, `/${lang}${canonical}`]),
+  ]);
 }
 
 export function festivalMusicEvent(item: Festival, language?: string) {
@@ -45,7 +55,7 @@ export function festivalMusicEvent(item: Festival, language?: string) {
     url: `${SITE_ORIGIN}${language ? `/${language}` : ""}/festivals/${item.slug}/`,
     sameAs: item.officialUrl,
     ...(item.ticketStatus === "free" ? { isAccessibleForFree: true } : {}),
-    ...(item.ticketsUrl && availability
+    ...(!item.ticketOffers && item.ticketsUrl && availability
       ? { offers: { "@type": "Offer", url: item.ticketsUrl, availability } }
       : {}),
   };

@@ -1,5 +1,7 @@
+import { campingSourceFilters, isCampingSourceUrl } from "./adapters/camping-guidance.ts";
 import { overviewSourceUrls } from "./adapters/festival-overview.ts";
-import { TOLMINATOR_PRODUCT } from "./adapters/tolminator-stock.ts";
+import { admissionSources } from "./adapters/admission-sources.ts";
+import { stockProofSources } from "./adapters/stock-proof-sources.ts";
 import { queueImportEvent } from "./import-event-queue.ts";
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -37,20 +39,27 @@ export async function createIngestionRun(
 
 // Only reviewed independent endpoints are excluded. Do not infer scope from
 // caller-supplied candidate fields (a failed request has no candidate at all).
-const independentTicketUrls = [TOLMINATOR_PRODUCT];
+const independentTicketUrls = [
+  ...stockProofSources.map(({ url }) => url),
+  ...admissionSources.map(({ url }) => url),
+];
+export const isIndependentTicketUrl = (url: string) => independentTicketUrls.includes(url);
 const attemptScope = (
   festivalSlug: string,
   requestedUrl?: string,
 ): Prisma.IngestionAttemptWhereInput =>
   requestedUrl
     ? { requestedUrl }
-    : { requestedUrl: { notIn: [...independentTicketUrls, ...overviewSourceUrls(festivalSlug)] } };
+    : {
+        requestedUrl: { notIn: [...independentTicketUrls, ...overviewSourceUrls(festivalSlug)] },
+        NOT: campingSourceFilters,
+      };
 
 export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
   return db.$transaction(async (tx) => {
-    const { arrival, overview } = input.result?.candidate ?? {};
-    const organizer = arrival ?? overview;
-    if (Boolean(input.sourceLease) !== Boolean(organizer))
+    const { arrival, overview, camping } = input.result?.candidate ?? {};
+    const organizer = arrival ?? overview ?? camping;
+    if (Boolean(input.sourceLease) !== Boolean(organizer) || (camping && (arrival || overview)))
       throw new Error("Organizer observations require a source lease");
     if (
       arrival &&
@@ -77,7 +86,8 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
     }
     const result = input.result;
     const independent =
-      independentTicketUrls.includes(input.requestedUrl) ||
+      isIndependentTicketUrl(input.requestedUrl) ||
+      isCampingSourceUrl(input.festivalSlug, input.requestedUrl) ||
       overviewSourceUrls(input.festivalSlug).includes(input.requestedUrl);
     const scope = attemptScope(input.festivalSlug, independent ? input.requestedUrl : undefined);
     const status = !result
@@ -124,7 +134,7 @@ export async function persistAttempt(db: PrismaClient, input: AttemptInput) {
           sourceEdition: result.candidate.startDate,
           sourceYear: result.candidate.startDate
             ? Number(result.candidate.startDate.slice(0, 4))
-            : (result.candidate.arrival?.editionYear ?? result.candidate.overview?.editionYear),
+            : organizer?.editionYear,
           normalized: result.candidate as Prisma.InputJsonValue,
           warnings: result.candidate.warnings,
           publishable: result.publishable,
@@ -228,6 +238,12 @@ export const ingestionQueries = {
     }),
   sourceStates: (db: Client) =>
     db.ingestionSourceState.findMany({ select: { festivalSlug: true, lastSuccessfulCheck: true } }),
+  lastSuccessfulCheck: (db: Client, festivalSlug: string, requestedUrl: string) =>
+    db.ingestionAttempt.findFirst({
+      where: { festivalSlug, requestedUrl, status: { not: "FAILED" } },
+      orderBy: { endedAt: "desc" },
+      select: { endedAt: true },
+    }),
   lastSuccessfulExtraction: (db: Client, festivalSlug: string, requestedUrl?: string) =>
     db.ingestionEvidence.findFirst({
       where: { candidate: { festivalSlug, attempt: attemptScope(festivalSlug, requestedUrl) } },
