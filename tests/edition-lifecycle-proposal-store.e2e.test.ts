@@ -345,11 +345,10 @@ test("concurrent exact-revision decisions replay once with immutable audit and N
     },
   });
   const pendingDates = await sitemapDates();
-  const changedPaths = ["", "/en", "/de", "/ru"].flatMap((prefix) => [
-    `${prefix}/`,
-    `${prefix}/festivals/${slug}/`,
-  ]);
-  for (const path of changedPaths) assert.equal(pendingDates[path], previousDay.toISOString());
+  const prefixes = ["", "/en", "/de", "/ru"];
+  const homePaths = prefixes.map((prefix) => `${prefix}/`);
+  const dossierPaths = prefixes.map((prefix) => `${prefix}/festivals/${slug}/`);
+  for (const path of dossierPaths) assert.equal(pendingDates[path], previousDay.toISOString());
 
   const before = await db.festivalEdition.findMany();
   const n = await db.adminAuditEntry.count();
@@ -360,7 +359,15 @@ test("concurrent exact-revision decisions replay once with immutable audit and N
   assert.equal(rows[0].audit.actorLabel, actorId);
   const approvalDate = rows[0].audit.createdAt.toISOString();
   const approvedSitemapDates = await sitemapDates();
-  for (const path of changedPaths) assert.equal(approvedSitemapDates[path], approvalDate);
+  // Earlier integration tests may have published newer facts for another festival.
+  for (const path of [...homePaths, ...dossierPaths]) {
+    const baseline = pendingDates[path];
+    assert.ok(
+      typeof baseline === "string" && baseline < approvalDate,
+      `Expected an older baseline for ${path}`,
+    );
+    assert.equal(approvedSitemapDates[path], approvalDate);
+  }
   for (const path of ["/countries/fr/", `/festivals/${slug}/2027/`, "/editions/2027/"]) {
     assert.ok(Object.hasOwn(pendingDates, path), `Missing control entry ${path}`);
     assert.equal(approvedSitemapDates[path], pendingDates[path]);
