@@ -325,7 +325,7 @@ export function AccountSyncPanel({
     setDocs((current) => ({ ...current, [kind]: document }));
     return document;
   }
-  function applyAccountDocument(kind: Kind, document: Document) {
+  function accountDocumentFields(kind: Kind, document: Document) {
     const state = plannerFrom({ [kind]: document });
     const fields = {
       favorites: {
@@ -341,17 +341,20 @@ export function AccountSyncPanel({
       "season-attendance": { seasonAttendance: state.seasonAttendance },
       budgets: { tripBudgets: state.tripBudgets },
     };
-    planner.replaceFields(fields[kind], planner);
+    return fields[kind];
   }
 
   async function synchronize(mode: "merge" | "remote" | "normal" = "normal") {
+    if (!user || user.signal.aborted) return;
+    const { id: accountId, signal } = user;
     setBusy(true);
     setStatus("");
     setConflict(null);
+    const merged: Partial<PlannerState> = {};
     try {
       if (mode === "remote") {
-        if (!user) throw new Error(t.failed);
-        const latest = await readDocuments(user.id);
+        const latest = await readDocuments(accountId, signal);
+        signal.throwIfAborted();
         setDocs(latest);
         if (!Object.keys(latest).length) {
           setStatus(t.noAccountData);
@@ -359,35 +362,40 @@ export function AccountSyncPanel({
         }
         for (const kind of kinds) {
           const document = latest[kind];
-          if (document) applyAccountDocument(kind, document);
+          if (document) planner.replaceFields(accountDocumentFields(kind, document), planner);
         }
         setStatus(t.current);
         return;
       }
-      const local = payloads(planner),
-        next = { ...docs };
+      const local = payloads(planner);
       for (const kind of kinds) {
-        if (kind === "season-attendance" && !next[kind] && !planner.seasonAttendance) continue;
-        if (kind === "budgets" && !next.budgets && !Object.keys(planner.tripBudgets).length)
-          continue;
+        const remote = docs[kind];
+        if (kind === "season-attendance" && !remote && !planner.seasonAttendance) continue;
+        if (kind === "budgets" && !remote && !Object.keys(planner.tripBudgets).length) continue;
         const content =
-          mode === "merge" && next[kind]
-            ? mergePayload(kind, next[kind]!.payload, local[kind])
+          mode === "merge" && remote
+            ? mergePayload(kind, remote.payload, local[kind])
             : local[kind];
-        next[kind] = await put(
+        const saved = await put(
           kind,
           content,
-          next[kind]?.revision ?? 0,
+          remote?.revision ?? 0,
           mode === "merge" ? "merge" : "replace",
+          signal,
         );
+        signal.throwIfAborted();
+        if (mode === "merge") Object.assign(merged, accountDocumentFields(kind, saved));
       }
-      if (mode === "merge") planner.merge(plannerFrom(next), planner);
       setStatus(t.current);
     } catch (reason) {
-      if (!(reason instanceof Error && reason.message === "conflict"))
+      if (!signal.aborted && !(reason instanceof Error && reason.message === "conflict"))
         setStatus(reason instanceof Error ? reason.message : t.failed);
     } finally {
-      setBusy(false);
+      if (!signal.aborted) {
+        // Keep acknowledged changes only while the same account is active.
+        if (Object.keys(merged).length) planner.merge(merged, planner);
+        setBusy(false);
+      }
     }
   }
 
@@ -402,13 +410,14 @@ export function AccountSyncPanel({
         let content = local;
         if (mode === "merge") content = mergePayload(kind, remote.payload, local);
         if (mode === "spotify") content = spotifySelection(remote.payload, planner);
-        await put(kind, content, remote.revision, mode, signal);
+        const saved = await put(kind, content, remote.revision, mode, signal);
         if (signal.aborted) return;
+        if (mode === "merge") planner.merge(accountDocumentFields(kind, saved), planner);
       } else {
         const latest = await readDocument(kind, accountId, signal);
         if (signal.aborted) return;
         if (!latest || latest.id !== remote.id) throw new Error(t.failed);
-        applyAccountDocument(kind, latest);
+        planner.replaceFields(accountDocumentFields(kind, latest), planner);
         setDocs((current) => ({ ...current, [kind]: latest }));
       }
       setConflict(null);
