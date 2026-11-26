@@ -486,6 +486,64 @@ test("JSON-LD subEvent sets cannot supply side-event ticket evidence for a festi
   assert.equal(evaluateCandidate(current, ambiguous).publishable, false);
 });
 
+test("reversed JSON-LD event relationships preserve festival ticket proof", () => {
+  const festival = {
+    "@type": "Festival",
+    "@id": "#festival",
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/festival-tickets/" },
+  };
+  const afterparty = {
+    "@type": "MusicEvent",
+    "@id": "#afterparty",
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/afterparty-tickets/" },
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  for (const [primary, child, split] of [
+    [{ ...festival, "@reverse": { superEvent: { "@id": "#afterparty" } } }, afterparty],
+    [
+      festival,
+      afterparty,
+      {
+        "@id": "#afterparty",
+        "@reverse": { "https://schema.org/subEvent": [{ "@id": "#festival" }] },
+      },
+    ],
+    [
+      { ...festival, "@reverse": { "http://schema.org/superEvent": [{ "@id": "_:afterparty" }] } },
+      { ...afterparty, "@id": "_:afterparty" },
+    ],
+    [
+      festival,
+      { ...afterparty, "@id": undefined, "@reverse": { subEvent: { "@id": "#festival" } } },
+    ],
+  ]) {
+    const candidate = extract(script([child, primary]) + (split ? script(split) : ""));
+    assert.equal(candidate.ticketsUrl, festival.offers.url);
+    assert.equal(candidate.timetable, undefined);
+    assert.equal(
+      candidate.evidence.find(({ field }) => field === "ticketsUrl").excerpt,
+      JSON.stringify(primary),
+    );
+    assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  }
+
+  const blankChild = { ...afterparty, "@id": "_:afterparty" };
+  for (const page of [
+    script(blankChild) +
+      script({ ...festival, "@reverse": { superEvent: { "@id": "_:afterparty" } } }),
+    script([afterparty, { ...festival, "@reverse": { superEvent: { "@id": "#other" } } }]),
+    script([{ ...afterparty, "@reverse": { subEvent: { "@id": "#afterparty" } } }, festival]),
+    script([
+      afterparty,
+      { ...festival, "@reverse": { "https://other.example/superEvent": { "@id": "#afterparty" } } },
+    ]),
+  ]) {
+    assert.equal(evaluateCandidate(current, extract(page)).publishable, false);
+  }
+});
+
 test("scheduled JSON-LD events do not hold verified ticket changes", () => {
   const event = {
     "@type": "MusicEvent",

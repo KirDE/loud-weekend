@@ -43,6 +43,15 @@ function eventKey(record: JsonLd, sourceUrl: string, scriptIndex: number): strin
   }
 }
 
+function reversedEventReferences(record: JsonLd, property: "superEvent" | "subEvent"): JsonLd[] {
+  const reverse = record["@reverse"];
+  if (!reverse || typeof reverse !== "object" || Array.isArray(reverse)) return [];
+  const properties = reverse as JsonLd;
+  return [property, `https://schema.org/${property}`, `http://schema.org/${property}`].flatMap(
+    (key) => setMembers(properties[key]).flatMap(records),
+  );
+}
+
 function eventRecords(html: string, sourceUrl: string) {
   const events: ScriptRecord[] = [];
   const splitRelations: ScriptRecord[] = [];
@@ -78,7 +87,11 @@ function eventRecords(html: string, sourceUrl: string) {
           )
         ) {
           events.push({ record, scriptIndex });
-        } else if (record.superEvent != null || record.subEvent != null) {
+        } else if (
+          record.superEvent != null ||
+          record.subEvent != null ||
+          record["@reverse"] != null
+        ) {
           splitRelations.push({ record, scriptIndex });
         }
       }
@@ -94,20 +107,30 @@ function eventRecords(html: string, sourceUrl: string) {
     const id = eventKey(record, sourceUrl, scriptIndex);
     return id && eventIds.has(id);
   });
-  const childIds = new Set<string>();
+  const childrenToExclude = new Set<string | JsonLd>();
   for (const { record, scriptIndex } of [...events, ...linkedDescriptions]) {
-    const parentId = eventKey(record, sourceUrl, scriptIndex);
-    if (parentId && record.superEvent != null) childIds.add(parentId);
-    for (const child of setMembers(record.subEvent).flatMap(records)) {
+    const id = eventKey(record, sourceUrl, scriptIndex);
+    // The inverse of subEvent points from a child to its parent.
+    const hasReverseParent = reversedEventReferences(record, "subEvent").some((parent) => {
+      const parentId = eventKey(parent, sourceUrl, scriptIndex);
+      return parentId && parentId !== id && eventIds.has(parentId);
+    });
+    if (record.superEvent != null || hasReverseParent) childrenToExclude.add(id ?? record);
+    // The inverse of superEvent points from a parent to its children.
+    const children = [
+      ...setMembers(record.subEvent).flatMap(records),
+      ...reversedEventReferences(record, "superEvent"),
+    ];
+    for (const child of children) {
       const childId = eventKey(child, sourceUrl, scriptIndex);
-      if (childId && childId !== parentId) childIds.add(childId);
+      if (childId && childId !== id) childrenToExclude.add(childId);
     }
   }
   return {
     events: events
       .filter(({ record, scriptIndex }) => {
         const id = eventKey(record, sourceUrl, scriptIndex);
-        return record.superEvent == null && (!id || !childIds.has(id));
+        return !childrenToExclude.has(id ?? record);
       })
       .map(({ record, scriptIndex }) => ({
         event: record,
