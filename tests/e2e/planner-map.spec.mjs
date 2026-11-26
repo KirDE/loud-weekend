@@ -49,6 +49,12 @@ test("the discovery map follows the card filters and uses no third-party map req
   await expect(page.locator(".festivalGrid article")).toHaveCount(1);
   await marker.click();
   await expect(map.getByRole("link", { name: "Synthetic Alpine" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(marker).toBeFocused();
+  await expect(marker).toHaveAttribute("aria-expanded", "false");
+  await expect(map.getByRole("link", { name: "Synthetic Alpine" })).toBeHidden();
+  await marker.press("Enter");
+  await expect(map.getByRole("link", { name: "Synthetic Alpine" })).toBeFocused();
 
   await countryFilter.selectOption("ES");
   await expect(map.getByRole("link", { name: "Synthetic Alpine" })).toBeHidden();
