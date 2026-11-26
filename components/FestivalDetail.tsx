@@ -8,11 +8,14 @@ import Link from "next/link";
 import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
+import { FestivalTicketOffers } from "./FestivalTicketOffers";
 import { LineupByDay } from "./LineupByDay";
 import type { PublicFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { FestivalOverview } from "./FestivalOverview";
 import { OfflineTripDownload } from "./OfflineTrip";
 import { FestivalLogo } from "./FestivalLogo";
+import type { PublicCampingFact } from "@/lib/catalog/camping-facts";
+import { FestivalCamping } from "./FestivalCamping";
 import { useLanguage } from "./LanguageProvider";
 import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
 import { FestivalArrival } from "./FestivalArrival";
@@ -43,6 +46,7 @@ export function FestivalDetail({
   overview,
   artistPopularity = {},
   arrivalFacts = [],
+  campingFacts = [],
 }: {
   item: Festival;
   festivals: Festival[];
@@ -53,6 +57,7 @@ export function FestivalDetail({
   playlistRefreshFailures?: PlaylistRefreshFailures;
   overview?: PublicFestivalOverview;
   arrivalFacts?: readonly PublicArrivalFact[];
+  campingFacts?: readonly PublicCampingFact[];
   artistPopularity?: Readonly<Record<string, number | null>>;
 }) {
   const { language, locale, t } = useLanguage();
@@ -204,6 +209,7 @@ export function FestivalDetail({
           </div>
         )}
       </div>
+      {item.ticketOffers && <FestivalTicketOffers value={item.ticketOffers} locale={language} />}
       <FestivalOverview overview={overview} />
       {item.editionYear && (
         <OfflineTripDownload
@@ -280,6 +286,7 @@ export function FestivalDetail({
         favorites={planner.favoriteArtists}
       />
       <FestivalArrival facts={arrivalFacts} />
+      <FestivalCamping facts={campingFacts} />
       <section className="sourceNote">
         <strong>{t("transparency")}</strong>
         <p>

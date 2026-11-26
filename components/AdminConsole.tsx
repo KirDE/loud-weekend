@@ -1,4 +1,6 @@
 "use client";
+
+import { TicketOfferReviewQueue } from "./TicketOfferReviewQueue";
 import Link from "next/link";
 import { correctionQueueLabel } from "./CorrectionQueue";
 
@@ -54,7 +56,9 @@ export function AdminConsole({
   submissions: initialSubmissions,
   editionOptions = [],
   sourceHealth = [],
+  ticketOfferEditions = [],
 }: {
+  ticketOfferEditions?: { id: string; year: number }[];
   festivals: Festival[];
   artists: EditableArtist[];
   initialChanges: ReviewChange[];
@@ -287,6 +291,14 @@ export function AdminConsole({
 
         {section === "review" && (
           <div className="reviewList">
+            {ticketOfferEditions.map((edition) => (
+              <TicketOfferReviewQueue
+                key={edition.id}
+                editionId={edition.id}
+                year={edition.year}
+                locale={language}
+              />
+            ))}
             <div className="adminToolbar">
               <p>{ta("reviewHelp")}</p>
               <select aria-label={ta("filter")}>
