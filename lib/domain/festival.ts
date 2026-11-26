@@ -1,3 +1,4 @@
+import type { PublicTicketOffers } from "./ticket-offer-proposal.ts";
 import type { EditionFreshness } from "./freshness.ts";
 
 // Catalogue shapes are independent of the live, repository-backed seed data.
@@ -12,6 +13,14 @@ export type TimetableEntry = {
   status: "scheduled" | "cancelled";
   sourceUrl: string;
   observedAt: string;
+};
+
+export type FestivalVenue = {
+  name: string;
+  source: string;
+  checkedOn: string;
+  latitude: number;
+  longitude: number;
 };
 
 export type LineupDayAppearance = {
@@ -37,6 +46,7 @@ export type Festival = {
   finalLineup?: true;
   officialUrl: string;
   ticketsUrl?: string;
+  ticketOffers?: PublicTicketOffers;
   playlistUrl?: string;
   reviewedPlaylistLinks?: { spotify?: string; youtube_music?: string };
   freshness?: EditionFreshness;
@@ -57,6 +67,7 @@ export type Festival = {
   updatedAt: string;
   genres: string[];
   coordinates?: { latitude: number; longitude: number };
+  venue?: FestivalVenue;
   timetable?: TimetableEntry[];
   lineupDays?: LineupDayAppearance[];
 };

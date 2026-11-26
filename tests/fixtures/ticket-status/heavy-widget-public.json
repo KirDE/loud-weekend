@@ -1,0 +1,44 @@
+{
+  "widget_key": "734dcd1a-6e7c-4465-b353-3bd5dcddd20b",
+  "widget_events": [
+    {
+      "widget_event_key": "734dcd1a-6e7c-4465-b353-3bd5dcddd20b",
+      "event": {
+        "id": 2166331,
+        "name": "HEAVY WEEK-END 2027",
+        "status": "published",
+        "publication_status": "published",
+        "time_status": "upcoming",
+        "currency": "EUR",
+        "start_date": "2027-06-04T15:30:00Z",
+        "sale_start_date": null,
+        "sale_end_date": null
+      }
+    }
+  ],
+  "first_step": {
+    "slug": "4-redirect",
+    "is_final": true,
+    "data": {
+      "actions": [
+        {
+          "action": "form",
+          "args": [
+            {
+              "url": "https://www.weezevent.com/widget_billeterie.php",
+              "query": {
+                "id_evenement": 2166331,
+                "widget_key": "734dcd1a-6e7c-4465-b353-3bd5dcddd20b",
+                "locale": "en_GB",
+                "color_primary": "000000"
+              },
+              "parameters": {
+                "token": "SYNTHETIC_TEST_TOKEN_ONLY"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

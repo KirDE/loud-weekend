@@ -1,3 +1,4 @@
+import { summerStockResponse } from "./support/summer-stock-fixture.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -151,7 +152,8 @@ test("Summer Punch additive roster cannot be replaced by the admin path, includi
   }
   assert.doesNotThrow(() => assertAdminArtistReviewAllowed("summer-punch", ["startDate"]));
 });
-test("fetch rejects foreign/same-origin redirects, missing response identity and acquisition overrides", async () => {
+test("fetch rejects foreign/same-origin redirects, missing response identity and acquisition overrides", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-22T14:08:00Z") });
   const { fetchSource } = await import("../lib/ingestion/fetch.ts");
   const reply = (url) => {
     const r = new Response(html, { status: 200 });
@@ -172,7 +174,7 @@ test("fetch rejects foreign/same-origin redirects, missing response identity and
       /trusted identity/,
     );
   const accepted = await fetchSource(source, {
-    fetchImpl: async () => reply(source.url),
+    fetchImpl: async (url) => summerStockResponse(url) ?? reply(source.url),
     maxAttempts: 1,
   });
   assert.equal(accepted.response.url, source.url);

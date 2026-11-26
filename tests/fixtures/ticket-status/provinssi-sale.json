@@ -1,0 +1,18 @@
+{
+  "uid": "f20f4130e7bd49b99eeb38ad7236ccd9",
+  "event_uid": "a406b7bdc0d74330bbb7a19e57766d96",
+  "state": "Published",
+  "requires_approval": false,
+  "queue_enabled": false,
+  "start_date": "2026-06-25T11:00:00Z",
+  "end_date": "2027-07-03T23:30:00Z",
+  "jwt_token": "c3ludGhldGlj.dGVzdA.c2ln",
+  "_embedded": {
+    "shop:event": {
+      "uid": "a406b7bdc0d74330bbb7a19e57766d96",
+      "title": {
+        "en": "PROVINSSI 2027"
+      }
+    }
+  }
+}
