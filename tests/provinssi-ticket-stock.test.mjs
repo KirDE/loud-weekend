@@ -190,3 +190,27 @@ test("net-price evidence still refuses conflicting totals, breakdowns, currencie
     assert.equal(observeProvinssiStock(JSON.stringify(d), dates).status, undefined, mode);
   }
 });
+
+test("one-cent gross discrepancies fail closed for both pricing conventions", () => {
+  for (const gross of ["218.99", "219.01"]) {
+    for (const net of [true, false]) {
+      const d = netStock(),
+        i = d.store.categories[0].categories[0].items[0];
+      i.price_breakdown.unit_price_including_service_costs.amount = gross;
+      i.unit_price.amount = i.total.amount = net ? "214.00" : gross;
+      assert.equal(observeProvinssiStock(JSON.stringify(d), dates).status, undefined);
+    }
+  }
+});
+test("fractional-cent floating-point noise does not reject reconciled ordinary prices", () => {
+  for (const unit of ["224.10", "230.30"]) {
+    const d = netStock(),
+      i = d.store.categories[0].categories[0].items[0];
+    d.store.products[0].price.amount = "224.10";
+    i.unit_price.amount = i.total.amount = unit;
+    i.price_breakdown.unit_price_excluding_service_costs.amount = "224.10";
+    i.price_breakdown.unit_price_service_costs.amount = "6.20";
+    i.price_breakdown.unit_price_including_service_costs.amount = "230.30";
+    assert.equal(observeProvinssiStock(JSON.stringify(d), dates).status, "available");
+  }
+});

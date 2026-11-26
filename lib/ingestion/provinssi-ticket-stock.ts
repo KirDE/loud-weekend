@@ -339,7 +339,7 @@ export function observeProvinssiStock(
       amount(p.price) +
         amount(i.price_breakdown?.unit_price_service_costs) -
         amount(i.price_breakdown?.unit_price_including_service_costs),
-    ) > 0.011
+    ) > 0.000001
   )
     return fail();
   return {
