@@ -133,10 +133,11 @@ export function PlannerReset({
         setChanged(true);
         return false;
       }
-      clearBrowserRunningOrders(localStorage, current);
+      const previous = { ...snapshot(planner), runningOrders: current };
+      planner.clear(() => clearBrowserRunningOrders(localStorage, current));
       setUndoError(false);
-      setBackup({ ...snapshot(planner), runningOrders: current });
-      planner.clear();
+      setBackup(previous);
+      setFailed(false);
       window.dispatchEvent(new Event(timetablePlanChanged));
       return true;
     } catch {

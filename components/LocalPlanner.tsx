@@ -36,6 +36,7 @@ export const emptyPlannerState: PlannerState = {
   playlistFestivals: [],
   savedFilters: defaultDiscoveryPreferences,
 };
+const plannerStorageKey = "festival-radar-planner-v1";
 const Context = createContext<
   | (PlannerState & {
       ready: boolean;
@@ -54,7 +55,7 @@ const Context = createContext<
       replace: (value: PlannerState) => void;
       replaceFields: (value: Partial<PlannerState>, expected: PlannerState) => void;
       merge: (value: Partial<PlannerState>) => void;
-      clear: () => void;
+      clear: (clearRelatedData: () => void) => void;
     })
   | null
 >(null);
@@ -63,7 +64,7 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
   const [ready, setReady] = useState(false);
   useEffect(() => {
     try {
-      const value = localStorage.getItem("festival-radar-planner-v1");
+      const value = localStorage.getItem(plannerStorageKey);
       if (value) {
         const restored = parsePlannerState(value);
         setState({
@@ -73,12 +74,15 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
         });
       }
     } catch {
-      localStorage.removeItem("festival-radar-planner-v1");
+      localStorage.removeItem(plannerStorageKey);
     }
     setReady(true);
   }, []);
   useEffect(() => {
-    if (ready) localStorage.setItem("festival-radar-planner-v1", serializePlannerState(state));
+    if (!ready) return;
+    const serialized = serializePlannerState(state);
+    if (localStorage.getItem(plannerStorageKey) !== serialized)
+      localStorage.setItem(plannerStorageKey, serialized);
   }, [ready, state]);
   const toggle = (a: string[], v: string) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]);
   const value = useMemo(
@@ -195,7 +199,19 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
             }),
           };
         }),
-      clear: () => setState({ ...emptyPlannerState, playlistExcludedArtists: [] }),
+      clear: (clearRelatedData: () => void) => {
+        const cleared: PlannerState = { ...emptyPlannerState, playlistExcludedArtists: [] };
+        const previous = localStorage.getItem(plannerStorageKey);
+        localStorage.setItem(plannerStorageKey, serializePlannerState(cleared));
+        try {
+          clearRelatedData();
+        } catch (error) {
+          if (previous === null) localStorage.removeItem(plannerStorageKey);
+          else localStorage.setItem(plannerStorageKey, previous);
+          throw error;
+        }
+        setState(cleared);
+      },
     }),
     [ready, state],
   );
