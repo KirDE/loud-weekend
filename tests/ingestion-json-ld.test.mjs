@@ -273,3 +273,33 @@ test("a child event listed first does not displace or invalidate its parent edit
   assert.equal(candidate.lineup, undefined);
   assert.deepEqual(candidate.warnings, []);
 });
+
+test("a parent subEvent reference excludes its separately defined side event", () => {
+  const { superEvent: _inverse, ...child } = sideShow;
+  const show = { ...child, "@id": "https://festival.example/#afterparty" };
+  const parent = {
+    "@type": "MusicEvent",
+    startDate: "2027-07-01",
+    subEvent: [{ "@id": "#afterparty" }],
+    offers: { url: "https://tickets.example/fest", availability: "SoldOut" },
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const extract = (edition) =>
+    extractJsonLdCandidate(
+      script({ "@graph": [show] }) + script(edition),
+      source,
+      "2026-08-28T21:00:00Z",
+    );
+
+  const candidate = extract(parent);
+  assert.equal(candidate.startDate, "2027-07-01");
+  assert.equal(candidate.ticketsUrl, "https://tickets.example/fest");
+  assert.equal(candidate.ticketStatus, "sold_out");
+  assert.equal(candidate.lineup, undefined);
+  assert.deepEqual(candidate.warnings, []);
+
+  const archived = extract({ ...parent, startDate: "2026-07-01" });
+  assert.deepEqual(archived.observedEditionYears, [2026]);
+  assert.equal(archived.lineup, undefined);
+  assert.match(archived.warnings.join("; "), /does not match catalogue edition 2027/);
+});
