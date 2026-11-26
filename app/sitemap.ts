@@ -57,14 +57,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const key = editionYear === undefined ? undefined : editionKey(slug, editionYear);
     const publication = key === undefined ? undefined : publications.get(key);
     const nameDate = sharedNames.get(slug);
-    const lifecycleApproval = festival.editionLifecycle?.approvedAt;
+    const approvedAt = festival.editionLifecycle?.approvedAt;
+    const lifecycleApproval =
+      approvedAt && Date.parse(approvedAt) <= now.getTime() ? approvedAt : undefined;
     const lastModified = latestDate([
       publication?.festival ?? undefined,
       nameDate,
       key === undefined ? undefined : tierApprovals.get(key),
-      lifecycleApproval && Date.parse(lifecycleApproval) <= now.getTime()
-        ? lifecycleApproval
-        : undefined,
+      lifecycleApproval,
     ]);
     const directoryDate = latestDate([publication?.directory ?? undefined, nameDate]);
     const appearanceDate = latestDate([publication?.appearance ?? undefined, nameDate]);
@@ -75,7 +75,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       appearanceDates.set(name, latestDate([appearanceDates.get(name), appearanceDate]));
     }
     if (/^[A-Z]{2}$/.test(countryCode)) {
-      countries.set(countryCode, latestDate([countries.get(countryCode), directoryDate]));
+      countries.set(
+        countryCode,
+        latestDate([countries.get(countryCode), directoryDate, lifecycleApproval]),
+      );
     }
     for (let month = 1; month <= 12; month += 1) {
       if (festivalOverlapsMonth(festival, month))

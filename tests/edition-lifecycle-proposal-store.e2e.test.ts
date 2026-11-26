@@ -340,7 +340,7 @@ test("concurrent exact-revision decisions replay once with immutable audit and N
       festivalSlug: slug,
       editionYear: 2027,
       actorLabel: "fixture",
-      fields: ["name"],
+      fields: ["name", "city"],
       createdAt: previousDay,
     },
   });
@@ -360,7 +360,7 @@ test("concurrent exact-revision decisions replay once with immutable audit and N
   const approvalDate = rows[0].audit.createdAt.toISOString();
   const approvedSitemapDates = await sitemapDates();
   // Earlier integration tests may have published newer facts for another festival.
-  for (const path of [...homePaths, ...dossierPaths]) {
+  for (const path of [...homePaths, ...dossierPaths, "/countries/fr/"]) {
     const baseline = pendingDates[path];
     assert.ok(
       typeof baseline === "string" && baseline < approvalDate,
@@ -368,7 +368,7 @@ test("concurrent exact-revision decisions replay once with immutable audit and N
     );
     assert.equal(approvedSitemapDates[path], approvalDate);
   }
-  for (const path of ["/countries/fr/", `/festivals/${slug}/2027/`, "/editions/2027/"]) {
+  for (const path of [`/festivals/${slug}/2027/`, "/editions/2027/"]) {
     assert.ok(Object.hasOwn(pendingDates, path), `Missing control entry ${path}`);
     assert.equal(approvedSitemapDates[path], pendingDates[path]);
   }
