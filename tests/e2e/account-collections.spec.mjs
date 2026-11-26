@@ -37,6 +37,13 @@ const copy = {
     keep: "Оставить данные устройства",
   },
 };
+const documentKinds = {
+  favorites: "FAVORITES",
+  collections: "COLLECTIONS",
+  "saved-filters": "SAVED_FILTERS",
+  plans: "FESTIVAL_PLANS",
+};
+const userId = "synthetic-user";
 for (const [locale, t] of Object.entries(copy))
   test(
     locale +
@@ -58,6 +65,8 @@ for (const [locale, t] of Object.entries(copy))
       const docs = {
         collections: {
           id: "collection",
+          userId,
+          kind: documentKinds.collections,
           revision: 1,
           updatedAt: imported.syncedAt,
           payload: { schemaVersion: 1, playlistFestivals: ["graspop"], spotify: null },
@@ -71,7 +80,7 @@ for (const [locale, t] of Object.entries(copy))
         route.fulfill({
           json: {
             user: {
-              id: "synthetic-user",
+              id: userId,
               email: "browser-collections@example.test",
               emailVerified: true,
               role: "USER",
@@ -109,7 +118,9 @@ for (const [locale, t] of Object.entries(copy))
               }
             : body.payload;
         docs[kind] = {
-          id: kind,
+          id: previous?.id ?? kind,
+          userId,
+          kind: documentKinds[kind],
           revision: (previous?.revision ?? 0) + 1,
           updatedAt: imported.syncedAt,
           payload,
