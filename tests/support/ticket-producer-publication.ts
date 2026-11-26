@@ -25,6 +25,11 @@ export function ticketProducerPublication(input: {
     archived: boolean,
     db: ReturnType<typeof createPrismaClient>,
   ) => Promise<FestivalCandidate>;
+  forbiddenCandidates?: (candidate: FestivalCandidate) => FestivalCandidate[];
+  refusalPattern?: RegExp;
+  exerciseAnnouncementAddition?: boolean;
+  rescheduleRefusalPattern?: RegExp;
+  exerciseMissingStartDate?: boolean;
 }) {
   test(
     `${input.slug}` +
@@ -100,7 +105,9 @@ export function ticketProducerPublication(input: {
           endDate: candidate.endDate ?? `${year}-06-04`,
           city: candidate.city,
           headliners: candidate.headliners ?? [],
-          lineup: candidate.lineup ?? [],
+          lineup: input.exerciseAnnouncementAddition
+            ? candidate.lineup!.slice(0, -1)
+            : (candidate.lineup ?? []),
         };
         await seedCatalog(db, {
           ...catalogSeed,
@@ -134,10 +141,57 @@ export function ticketProducerPublication(input: {
         assert.equal(value.publishable, true, JSON.stringify(value.reviewReasons));
         assert.ok(value.changes.some((c) => c.field === "ticketStatus"));
         assert.ok(
-          value.changes.every((c) => ["ticketStatus", "ticketsUrl"].includes(c.field)),
-          "stock check must not publish artists",
+          value.changes.every(
+            (c) =>
+              ["ticketStatus", "ticketsUrl"].includes(c.field) ||
+              (input.exerciseAnnouncementAddition && c.kind === "artist_added"),
+          ),
+          "only independently verified announcement additions may accompany stock",
         );
+        // Explicitly prove the canonical boundary even with forged policy approval.
+        for (const forbidden of input.forbiddenCandidates?.(structuredClone(candidate)) ?? []) {
+          const blocked = evaluateCandidate(await read(), forbidden);
+          assert.equal(blocked.publishable, false);
+          const forged = {
+            ...blocked,
+            publishable: true,
+            reviewReasons: [],
+            changes: blocked.changes.map((c) => ({ ...c, reviewRequired: false })),
+          };
+          const rejected = await persist(forged),
+            count = await db.catalogPublication.count();
+          await assert.rejects(
+            publishIngestionResult(db, { attemptId: rejected.id, result: forged, sourceCommit }),
+            input.refusalPattern ?? /./,
+          );
+          assert.equal(await db.catalogPublication.count(), count);
+          assert.equal((await read()).ticketStatus, "unknown");
+          assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
+        }
         const attempt = await persist(value);
+        if (input.rescheduleRefusalPattern) {
+          assert.ok(edition.endDate);
+          const rescheduled = await db.festivalEdition.update({
+            where: { id: edition.id },
+            data: { endDate: new Date(edition.endDate.getTime() + 86_400_000) },
+          });
+          const publications = await db.catalogPublication.count();
+          await assert.rejects(
+            publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit }),
+            input.rescheduleRefusalPattern,
+          );
+          assert.deepEqual(
+            await db.festivalEdition.findUnique({ where: { id: edition.id } }),
+            rescheduled,
+          );
+          assert.equal(await db.catalogPublication.count(), publications);
+          assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
+          assert.equal(await db.festivalPlaylist.count(), bindings);
+          await db.festivalEdition.update({
+            where: { id: edition.id },
+            data: { endDate: edition.endDate },
+          });
+        }
         const publication = await publishIngestionResult(db, {
           attemptId: attempt.id,
           result: value,
@@ -148,6 +202,8 @@ export function ticketProducerPublication(input: {
         const after = await read();
         assert.equal(after.ticketStatus, candidate.ticketStatus);
         assert.equal(after.ticketsUrl, candidate.ticketsUrl);
+        if (input.exerciseAnnouncementAddition)
+          assert.ok(after.lineup.includes(candidate.lineup!.at(-1)!));
         const durable = await db.ingestionEvidence.findMany({
           where: { candidate: { attemptId: attempt.id } },
         });
@@ -215,6 +271,28 @@ export function ticketProducerPublication(input: {
           candidate.ticketStatus === "low" ? "sold_out" : "low",
         );
         assert.equal((await read()).ticketsUrl, undefined);
+        if (input.exerciseMissingStartDate) {
+          await db.festivalEdition.update({
+            where: { id: edition.id },
+            data: { startDate: null, ticketStatus: "UNKNOWN" },
+          });
+          const missingStart = evaluateCandidate(await read(), candidate);
+          assert.equal(missingStart.publishable, true, JSON.stringify(missingStart.reviewReasons));
+          assert.ok(missingStart.changes.some(({ field }) => field === "startDate"));
+          assert.ok(missingStart.changes.some(({ field }) => field === "ticketStatus"));
+          const restoredAttempt = await persist(missingStart);
+          assert.ok(
+            await publishIngestionResult(db, {
+              attemptId: restoredAttempt.id,
+              result: missingStart,
+              sourceCommit,
+            }),
+          );
+          const restored = await read();
+          assert.equal(restored.startDate, candidate.startDate);
+          assert.equal(restored.endDate, candidate.endDate);
+          assert.equal(restored.ticketStatus, candidate.ticketStatus);
+        }
         assert.equal(await db.catalogPlaylistRefresh.count(), jobs);
         assert.equal(await db.festivalPlaylist.count(), bindings);
       } finally {

@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { createPrismaClient } from "../lib/prisma-client.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
@@ -9,8 +10,13 @@ import { seedCatalog } from "./support/seed-catalog.ts";
 import { DatabaseCatalogRepository, readCatalog } from "../lib/catalog/repository.ts";
 import { catalogSeed, festival } from "./support/catalog.ts";
 import { createIngestionRun, persistAttempt } from "../lib/ingestion/repository.ts";
-import { publishAdminFestivalChange } from "../lib/catalog/publication.ts";
+import {
+  publishAdminFestivalChange,
+  publishAgentFestivalResolution,
+} from "../lib/catalog/publication.ts";
 import type { IngestionResult } from "../lib/ingestion/types.ts";
+import { brutalAssaultVenueSource } from "../lib/ingestion/adapters/brutal-assault-venue.ts";
+import { collectReviewedVenue } from "../lib/ingestion/venue-collector.ts";
 import sitemap from "../app/sitemap.ts";
 import { importLineupDays } from "../lib/catalog/lineup-days-import.ts";
 import { readEditionHistory } from "../lib/catalog/public-history.ts";
@@ -708,23 +714,185 @@ test("public freshness separates edition-bound checks, publication and source fa
     assert.equal(dates["/"], published);
     assert.equal(dates["/de/"], published);
     assert.equal(dates[`/festivals/${slug}/`], published);
-    assert.equal(dates[`/festivals/${slug}/2027/`], undefined);
-    assert.equal(dates[`/festivals/${slug}/2026/`], archived.snapshotAt?.toISOString());
+    // A city change is visible on the current festival, country/month cards
+    // and the appearing artist's page, but not on the edition dossier or listing.
     for (const path of [
-      "/submit/",
-      "/archive/",
-      "/editions/2027/",
+      `/de/festivals/${slug}/`,
       "/artists/sample-artist/",
+      "/ru/artists/sample-artist/",
       "/countries/de/",
       "/months/06/",
     ]) {
+      assert.equal(dates[path], published, path);
+    }
+    assert.equal(dates[`/festivals/${slug}/2027/`], undefined);
+    assert.equal(dates[`/festivals/${slug}/2026/`], archivePublished.toISOString());
+    for (const path of ["/archive/", "/editions/2026/"])
+      assert.equal(dates[path], archivePublished.toISOString(), path);
+    for (const path of ["/submit/", "/editions/2027/"]) {
       assert.ok(path in dates);
       assert.equal(dates[path], undefined);
     }
+    assert.ok(!("/months/12/" in dates));
+    await db.catalogPublication.create({
+      data: {
+        source: "ADMIN",
+        sourceId: `${slug}-future`,
+        festivalSlug: slug,
+        editionYear: current.year,
+        actorLabel: "private-actor-fixture",
+        fields: ["name"],
+        createdAt: ago(-72),
+      },
+    });
+    await db.festivalEdition.update({ where: { id: current.id }, data: { snapshotAt: ago(-72) } });
+    assert.deepEqual(await sitemapDates(), dates, "future evidence may not change the sitemap");
+
+    const arrival = await db.catalogPublication.create({
+      data: {
+        source: "INGESTION",
+        sourceId: `${slug}-reviewed-arrival`,
+        festivalSlug: slug,
+        editionYear: current.year,
+        actorLabel: "fixture",
+        fields: ["arrival"],
+        createdAt: new Date(),
+      },
+    });
+    const arrivalDates = await sitemapDates();
+    const arrivalDate = arrival.createdAt.toISOString();
+    assert.equal(arrivalDates[`/festivals/${slug}/`], arrivalDate);
+    assert.equal(arrivalDates[`/festivals/${slug}/2027/`], arrivalDate);
+    for (const path of ["/archive/", "/editions/2027/", "/countries/de/", "/months/06/"]) {
+      assert.equal(arrivalDates[path], dates[path], path);
+    }
+
+    const provenanceUrl = "https://official.example.test/ticket-update";
+    const reviewedTicket = await db.$transaction((tx) =>
+      publishAgentFestivalResolution(tx, {
+        editionId: current.id,
+        festivalSlug: slug,
+        sourceId: `${slug}-reviewed-ticket`,
+        reason: "Review the corrected official ticket link",
+        facts: { ticketsUrl: "https://tickets.example.test/updated" },
+        evidence: [
+          {
+            field: "ticketsUrl",
+            url: provenanceUrl,
+            excerpt: "Official ticket link has changed",
+            contentHash: "a".repeat(64),
+            checkedAt: validAt.toISOString(),
+          },
+        ],
+        reviewedAt: validAt,
+      }),
+    );
+    assert.ok(
+      await db.editionProvenance.findFirst({
+        where: { editionId: current.id, url: provenanceUrl, checkedAt: validAt },
+      }),
+    );
+    assert.ok(reviewedTicket);
+    const updatedDates = await sitemapDates();
+    assert.equal(updatedDates[`/festivals/${slug}/2027/`], reviewedTicket.createdAt.toISOString());
+    assert.equal(updatedDates["/editions/2027/"], undefined);
+    assert.equal(updatedDates[`/festivals/${slug}/2026/`], archivePublished.toISOString());
+    const finalLineup = await db.catalogPublication.create({
+      data: {
+        source: "ADMIN",
+        sourceId: `${slug}-reviewed-final-lineup`,
+        festivalSlug: slug,
+        editionYear: current.year,
+        actorLabel: "fixture",
+        evidence: { reviewPolicy: "openclaw-import-conflicts-v1" },
+        fields: ["finalLineup"],
+      },
+    });
+    const finalDates = await sitemapDates();
+    for (const path of [
+      "/",
+      "/de/",
+      `/festivals/${slug}/`,
+      `/festivals/${slug}/2027/`,
+      "/countries/de/",
+      "/months/06/",
+      "/editions/2027/",
+    ]) {
+      assert.equal(finalDates[path], finalLineup.createdAt.toISOString(), path);
+    }
+    for (const path of ["/artists/sample-artist/", "/archive/", "/editions/2026/"]) {
+      assert.equal(finalDates[path], updatedDates[path], path);
+    }
+    const overview = await db.catalogPublication.create({
+      data: {
+        source: "INGESTION",
+        sourceId: `${slug}-overview`,
+        festivalSlug: slug,
+        editionYear: current.year,
+        actorLabel: "fixture",
+        evidence: {},
+        fields: ["overview"],
+      },
+    });
+    const overviewDates = await sitemapDates();
+    for (const path of ["/", "/de/", `/festivals/${slug}/`, `/ru/festivals/${slug}/`])
+      assert.equal(overviewDates[path], overview.createdAt.toISOString(), path);
+    for (const path of ["/editions/2027/", "/countries/de/", "/months/06/"])
+      assert.equal(overviewDates[path], finalDates[path], path);
   } finally {
     // Publication receipts are append-only; the unique fixture slug isolates reruns.
     await db.ingestionSourceState.deleteMany({ where: { festivalSlug: slug } });
     await db.ingestionCandidate.deleteMany({ where: { runId: run.id } });
     await db.ingestionRun.delete({ where: { id: run.id } });
   }
+});
+
+test("reviewed public venue changes advance only the localized homepage sitemap clock", async () => {
+  const { festivalSlug: slug, countryCode, organizerHost, sourceUrl } = brutalAssaultVenueSource;
+  await seedCatalog(db, {
+    ...catalogSeed,
+    festivals: [
+      {
+        ...festival,
+        slug,
+        countryCode,
+        city: "Jaroměř",
+        officialUrl: `https://${organizerHost}/`,
+      },
+    ],
+    editions: catalogSeed.editions.map((edition) => ({ ...edition, slug })),
+  });
+  const sitemapDates = async () =>
+    Object.fromEntries(
+      (await sitemap()).map(({ url, lastModified }) => [new URL(url).pathname, lastModified]),
+    );
+  const before = await sitemapDates();
+  const original = readFileSync(
+    new URL("./fixtures/brutal-assault/about-venue.html", import.meta.url),
+    "utf8",
+  );
+  const fetchImpl: typeof fetch = async () => {
+    const response = new Response(original.replace("Josefov Fortress", "Updated fixture venue"), {
+      headers: { "content-type": "text/html" },
+    });
+    Object.defineProperty(response, "url", { value: sourceUrl });
+    return response;
+  };
+
+  const preview = await collectReviewedVenue(db, 2027, { fetchImpl });
+  assert.deepEqual(await sitemapDates(), before);
+  await collectReviewedVenue(db, 2027, { fetchImpl, approval: preview.token, actor: "fixture" });
+  const { festivals } = await new DatabaseCatalogRepository(db).read();
+  assert.equal(festivals.find((item) => item.slug === slug)?.venue?.name, "Updated fixture venue");
+  const receipt = await db.catalogPublication.findFirstOrThrow({
+    where: { festivalSlug: slug, editionYear: 2027, fields: { has: "venue" } },
+  });
+  const home = receipt.createdAt.toISOString();
+  const published = await sitemapDates();
+  assert.deepEqual(published, { ...before, "/": home, "/en/": home, "/de/": home, "/ru/": home });
+
+  const repeat = await collectReviewedVenue(db, 2027, { fetchImpl });
+  await collectReviewedVenue(db, 2027, { fetchImpl, approval: repeat.token, actor: "fixture" });
+  assert.equal(await db.catalogPublication.count({ where: { festivalSlug: slug } }), 1);
+  assert.deepEqual(await sitemapDates(), published);
 });

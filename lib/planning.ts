@@ -95,7 +95,7 @@ function calendarDates(item: Pick<Festival, "startDate" | "endDate">) {
   };
 }
 
-function escapeIcs(value: string) {
+export function escapeIcs(value: string) {
   return value
     .replaceAll("\\", "\\\\")
     .replaceAll(";", "\\;")

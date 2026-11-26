@@ -139,7 +139,11 @@ export function AccountMenu() {
       )
       .catch(() => undefined);
     const sessionCheck = new AbortController();
-    const signal = AbortSignal.any([sessionCheck.signal, AbortSignal.timeout(5_000)]);
+    const { signal } = sessionCheck;
+    const timeout = window.setTimeout(() => {
+      sessionCheck.abort();
+      setReady(true);
+    }, 5_000);
     fetch("/api/auth/me", { cache: "no-store", signal })
       .then(async (response) => {
         if (!response.ok) return;
@@ -148,9 +152,13 @@ export function AccountMenu() {
       })
       .catch(() => undefined)
       .finally(() => {
-        if (!sessionCheck.signal.aborted) setReady(true);
+        window.clearTimeout(timeout);
+        if (!signal.aborted) setReady(true);
       });
-    return () => sessionCheck.abort();
+    return () => {
+      window.clearTimeout(timeout);
+      sessionCheck.abort();
+    };
   }, []);
 
   function dismiss() {
@@ -236,6 +244,9 @@ export function AccountMenu() {
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error(t.failed);
+      setUser(null);
+      setMode("login");
+      setOpen(false);
       window.dispatchEvent(new CustomEvent("loud-weekend-signed-out"));
       // Reload other account surfaces; device choices remain in local storage.
       window.location.reload();

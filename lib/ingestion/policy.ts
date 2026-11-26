@@ -356,15 +356,22 @@ export function evaluateCandidate(
   changes
     .filter((change) => change.reviewRequired)
     .forEach((change) => reviewReasons.add(change.reason || `${change.kind} requires review`));
+
+  // Keep the source billing intact, but omit absent fields just as JSON persistence does.
+  const publicationCandidate = artists.length
+    ? { ...effective, headliners: observedCandidate.headliners, lineup: observedCandidate.lineup }
+    : effective;
+  if (artists.length) {
+    if (publicationCandidate.headliners === undefined) delete publicationCandidate.headliners;
+    if (publicationCandidate.lineup === undefined) delete publicationCandidate.lineup;
+  }
   return {
     schemaVersion: INGESTION_SCHEMA_VERSION,
     festivalSlug: current.slug,
     sourceUrl: candidate.sourceUrl,
     fetchedAt: candidate.fetchedAt,
     changes,
-    candidate: artists.length
-      ? { ...effective, headliners: observedCandidate.headliners, lineup: observedCandidate.lineup }
-      : effective,
+    candidate: publicationCandidate,
     publishable: changes.length > 0 && reviewReasons.size === 0,
     reviewReasons: [...reviewReasons],
   };
