@@ -107,6 +107,11 @@ function text(value: unknown): string | undefined {
 function eventStatusRequiringReview(value: unknown): string | undefined {
   const statuses = Array.isArray(value) ? value : [value];
   return statuses
+    .flatMap((status) => {
+      if (!status || typeof status !== "object" || !Object.hasOwn(status, "@set")) return [status];
+      const members = (status as JsonLd)["@set"];
+      return Array.isArray(members) ? members : [members];
+    })
     .map((status) => {
       const record = status as JsonLd | null | undefined;
       const literal = record?.["@value"];

@@ -289,6 +289,45 @@ test("JSON-LD status value objects preserve the editorial hold on ticket changes
   }
 });
 
+test("explicit JSON-LD status sets hold ticket changes only for the selected event", () => {
+  const event = {
+    "@type": "MusicEvent",
+    "@id": "#festival-2027",
+    startDate: current.startDate,
+  };
+  const cancelled = "https://schema.org/EventCancelled";
+  const scheduled = "https://schema.org/EventScheduled";
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+
+  for (const eventStatus of [
+    { "@set": { "@id": cancelled } },
+    { "@set": [scheduled, { "@value": cancelled }], "@index": "official" },
+    [scheduled, { "@set": [cancelled] }],
+  ]) {
+    const description = { "@id": event["@id"], eventStatus };
+    for (const page of [script({ ...event, eventStatus }), script(event) + script(description)]) {
+      const candidate = extract(page + ticket);
+      const result = evaluateCandidate(current, candidate);
+      assert.equal(candidate.startDate, current.startDate);
+      assert.deepEqual(
+        result.changes.map(({ field }) => field),
+        ["ticketsUrl"],
+      );
+      assert.equal(result.publishable, false);
+      assert.deepEqual(result.reviewReasons, [
+        `Official event status requires review: ${cancelled}`,
+      ]);
+    }
+    const unrelated = script(event) + script({ ...description, "@id": "#other" });
+    assert.equal(evaluateCandidate(current, extract(unrelated + ticket)).publishable, true);
+  }
+
+  for (const members of [[{ "@id": scheduled }], [], null]) {
+    const page = script({ ...event, eventStatus: { "@set": members } });
+    assert.equal(evaluateCandidate(current, extract(page + ticket)).publishable, true);
+  }
+});
+
 test("scheduled JSON-LD events do not hold verified ticket changes", () => {
   const event = {
     "@type": "MusicEvent",
