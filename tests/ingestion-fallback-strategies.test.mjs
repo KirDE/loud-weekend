@@ -231,6 +231,12 @@ test("a separate JSON-LD record for the selected event can put ticket changes on
   for (const page of [
     script({ "@graph": [event, statusRecord] }),
     script(statusRecord) + script(event),
+    script({
+      "@graph": [
+        { ...event, "@id": "_:event" },
+        { ...statusRecord, "@id": "_:event" },
+      ],
+    }),
   ]) {
     const result = evaluateCandidate(current, extract(page + ticket));
     assert.deepEqual(
@@ -330,7 +336,7 @@ test("equivalent date claims and independently supplied missing dates still comb
   assert.equal(evaluateCandidate(current, candidate).publishable, true);
 });
 
-test("conflicting dates on the same named JSON-LD event hold unrelated ticket changes", () => {
+test("conflicting dates on the same JSON-LD event hold unrelated ticket changes", () => {
   const event = {
     "@type": "MusicEvent",
     "@id": "#festival-2027",
@@ -343,13 +349,19 @@ test("conflicting dates on the same named JSON-LD event hold unrelated ticket ch
     ["endDate", "2027-08-01"],
   ]) {
     const other = { "@id": new URL(event["@id"], source.url).href, [field]: competingDate };
-    for (const page of [script({ "@graph": [event, other] }), script(other) + script(event)]) {
+    const blankEvent = { ...event, "@id": "_:festival" };
+    const pages = [
+      [script({ "@graph": [event, other] }), event],
+      [script(other) + script(event), event],
+      [script([blankEvent, { ...other, "@id": "_:festival" }]), blankEvent],
+    ];
+    for (const [page, selectedEvent] of pages) {
       const candidate = extract(page + ticket);
       const result = evaluateCandidate(current, candidate);
       assert.equal(candidate[field], event[field]);
       assert.equal(
         candidate.evidence.find((item) => item.field === field).excerpt,
-        JSON.stringify(event),
+        JSON.stringify(selectedEvent),
       );
       assert.deepEqual(
         result.changes.map((change) => change.field),

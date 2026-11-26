@@ -14,26 +14,16 @@ function records(value: unknown): JsonLd[] {
   return [record, ...records(record["@graph"])];
 }
 
-function eventId(record: JsonLd, sourceUrl: string): string | undefined {
+function eventKey(record: JsonLd, sourceUrl: string, scriptIndex: number): string | undefined {
   const id = record["@id"];
   if (typeof id !== "string" || !id.trim()) return undefined;
-  // Blank-node IDs are not relative URLs.
-  if (id.startsWith("_:")) return id;
+  // Named IDs can link across scripts; blank-node labels belong to one script.
+  if (id.startsWith("_:")) return `${scriptIndex}:${id}`;
   try {
     return new URL(id, sourceUrl).href;
   } catch {
     return undefined;
   }
-}
-
-function relationshipId(
-  record: JsonLd,
-  sourceUrl: string,
-  scriptIndex: number,
-): string | undefined {
-  const id = eventId(record, sourceUrl);
-  // Named IDs can link across scripts; blank-node labels belong to one script.
-  return id?.startsWith("_:") ? `${scriptIndex}:${id}` : id;
 }
 
 function eventRecords(html: string, sourceUrl: string) {
@@ -51,9 +41,8 @@ function eventRecords(html: string, sourceUrl: string) {
     try {
       const parsed = JSON.parse(source);
       for (const record of records(parsed)) {
-        const id = eventId(record, sourceUrl);
-        // A named node can have separate descriptions. Do not join blank nodes across scripts.
-        if (id && !id.startsWith("_:")) {
+        const id = eventKey(record, sourceUrl, scriptIndex);
+        if (id) {
           const status = eventStatusRequiringReview(record.eventStatus);
           if (status) reviewStatuses.set(id, status);
           if (record.startDate != null || record.endDate != null) {
@@ -75,28 +64,34 @@ function eventRecords(html: string, sourceUrl: string) {
       continue;
     }
   }
-  // Named events can have separate descriptions containing only their relationships.
-  const eventIds = new Set(events.map(({ record }) => eventId(record, sourceUrl)));
-  const linkedDescriptions = splitRelations.filter(({ record }) => {
-    const id = eventId(record, sourceUrl);
-    return id && !id.startsWith("_:") && eventIds.has(id);
+  // Bind relationship-only descriptions to known events using the same identity as their claims.
+  const eventIds = new Set(
+    events.map(({ record, scriptIndex }) => eventKey(record, sourceUrl, scriptIndex)),
+  );
+  const linkedDescriptions = splitRelations.filter(({ record, scriptIndex }) => {
+    const id = eventKey(record, sourceUrl, scriptIndex);
+    return id && eventIds.has(id);
   });
   const childIds = new Set<string>();
   for (const { record, scriptIndex } of [...events, ...linkedDescriptions]) {
-    const parentId = relationshipId(record, sourceUrl, scriptIndex);
+    const parentId = eventKey(record, sourceUrl, scriptIndex);
     if (parentId && record.superEvent != null) childIds.add(parentId);
     for (const child of records(record.subEvent)) {
-      const childId = relationshipId(child, sourceUrl, scriptIndex);
+      const childId = eventKey(child, sourceUrl, scriptIndex);
       if (childId && childId !== parentId) childIds.add(childId);
     }
   }
   return {
     events: events
       .filter(({ record, scriptIndex }) => {
-        const id = relationshipId(record, sourceUrl, scriptIndex);
+        const id = eventKey(record, sourceUrl, scriptIndex);
         return record.superEvent == null && (!id || !childIds.has(id));
       })
-      .map(({ record }) => ({ event: record, excerpt: JSON.stringify(record).slice(0, 500) })),
+      .map(({ record, scriptIndex }) => ({
+        event: record,
+        id: eventKey(record, sourceUrl, scriptIndex),
+        excerpt: JSON.stringify(record).slice(0, 500),
+      })),
     reviewStatuses,
     dateDescriptions,
   };
@@ -292,7 +287,7 @@ export function extractJsonLdCandidate(
     }
   }
 
-  const selectedId = eventId(selected.event, source.url);
+  const selectedId = selected.id;
   const descriptions = selectedId ? dateDescriptions.get(selectedId) : undefined;
   if (descriptions && descriptions.length > 1) {
     // Alternate claims can block publication but cannot supply the chosen fields or evidence.
