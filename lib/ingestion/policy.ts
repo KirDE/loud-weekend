@@ -216,9 +216,13 @@ export function evaluateCandidate(
     );
   // Dynamo/Tons of Rock/Heavy Week-End retain their separate provider policy.
   if (
-    ["dynamo-metal-fest", "tons-of-rock", "heavy-weekend", "barcelona-rock-fest"].includes(
-      current.slug,
-    ) &&
+    [
+      "dynamo-metal-fest",
+      "tons-of-rock",
+      "heavy-weekend",
+      "barcelona-rock-fest",
+      "hellfest",
+    ].includes(current.slug) &&
     changes.some((change) => change.kind === "artist_added" || change.kind === "headliner_added")
   )
     reviewReasons.add("Agent review required before lineup-triggered provider activity");

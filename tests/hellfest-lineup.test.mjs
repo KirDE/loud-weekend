@@ -1,3 +1,4 @@
+import { evaluateCandidate } from "../lib/ingestion/policy.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -72,4 +73,40 @@ test("missing cards fails closed instead of pretending source is quiet", () => {
   const c = parse(html.replaceAll('class="home__bands-artist-', 'class="archive-'));
   assert.equal(c.lineup, undefined);
   assert.ok(c.warnings.length);
+});
+
+test("new Hellfest artists require protected review; unchanged and partial replays preserve billing", () => {
+  const c = parse();
+  const current = {
+    slug: "hellfest",
+    editionYear: 2027,
+    name: "Hellfest",
+    city: "Clisson",
+    startDate: "2027-06-17",
+    endDate: "2027-06-20",
+    status: "partial",
+    ticketStatus: "unknown",
+    headliners: [],
+    lineup: [],
+  };
+  const fresh = evaluateCandidate(current, c);
+  assert.equal(fresh.publishable, false);
+  assert.ok(
+    fresh.reviewReasons.includes("Agent review required before lineup-triggered provider activity"),
+  );
+  const accepted = {
+    ...current,
+    headliners: ["GOJIRA"],
+    lineup: c.lineup.filter((n) => n !== "GOJIRA"),
+  };
+  const same = evaluateCandidate(accepted, c);
+  assert.deepEqual(same.changes, []);
+  assert.deepEqual(same.reviewReasons, []);
+  const partial = evaluateCandidate(accepted, { ...c, lineup: ["GOJIRA", "FAITH NO MORE"] });
+  assert.deepEqual(partial.changes, []);
+  assert.deepEqual(partial.reviewReasons, []);
+  const later = evaluateCandidate(accepted, { ...c, lineup: [...c.lineup, "Future Act"] });
+  assert.equal(later.publishable, false);
+  assert.ok(later.reviewReasons.length);
+  assert.equal(later.changes.filter((x) => x.kind === "artist_added").length, 1);
 });
