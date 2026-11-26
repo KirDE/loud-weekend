@@ -185,6 +185,7 @@ model User {
   emailVerifiedAt           DateTime?
   sessions                  Session[]
   documents                 SyncDocument[]
+  runningOrders             RunningOrder[]
   shareLinks                ShareLink[]
   ownedTrips                GroupTrip[]
   tripAccess                GroupTripInvite[]
@@ -201,6 +202,7 @@ model User {
   reviewedSubmissions       FestivalSubmission[]       @relation("SubmissionReviewer")
   submissionAuditEntries    FestivalSubmissionAudit[]
   emailVerificationTokens   EmailVerificationToken[]
+  ticketOfferDecisions      TicketOfferReviewDecision[]
   passkeys                  Passkey[]
   googleIdentity            GoogleIdentity?
   calendarSubscription      CalendarSubscription?
@@ -342,15 +344,60 @@ model FestivalEdition {
   lineupDays      EditionLineupDayAllocation[]
   arrivalFacts    EditionArrivalFact[]
   timetable       TimetablePerformance[]
+  runningOrders   RunningOrder[]
   playlists       FestivalPlaylist[]
   playlistLinks   FestivalPlaylistLink[]
   sources         FestivalSource[]
+  ticketOfferProposals TicketOfferProposalSnapshot[]
   groupTripOptions GroupTripOption[]
 
+  venue           EditionVenue?
+  campingFacts    EditionCampingFact[]
   overview        EditionOverview?
 
   @@unique([festivalId, year])
   @@index([year, recordState])
+}
+
+model EditionVenue {
+  editionId     String          @id
+  editionYear   Int
+  countryCode   String          @db.Char(2)
+  organizerHost String
+  city          String
+  name          String
+  sourceUrl     String
+  checkedOn     DateTime        @db.Date
+  latitude      Float
+  longitude     Float
+  edition       FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+}
+
+enum EditionCampingField {
+  camping
+  arrival
+  accessibility
+  facilities
+  motorhomes
+  viewing
+}
+
+model EditionCampingFact {
+  editionId     String
+  field         EditionCampingField
+  editionYear   Int
+  city          String
+  countryCode   String              @db.Char(2)
+  organizerHost String
+  descriptionEn String?
+  descriptionDe String?
+  descriptionRu String?
+  earliestDate  DateTime?           @db.Date
+  sourceUrl     String
+  checkedOn     DateTime            @db.Date
+  edition       FestivalEdition     @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([editionId, field])
 }
 
 model EditionOverview {
@@ -785,6 +832,18 @@ model SyncDocument {
   @@unique([userId, kind])
 }
 
+model RunningOrder {
+  userId         String
+  editionId      String
+  performanceIds String[]
+  revision       Int             @default(1)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  edition        FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, editionId])
+  @@index([editionId])
+}
+
 model ShareLink {
   id         String       @id @default(cuid())
   slug       String       @unique
@@ -1016,6 +1075,35 @@ model OperationalState {
   leaseOwner     String?
   leaseExpiresAt DateTime?
   updatedAt      DateTime @updatedAt
+}
+
+// Immutable pending observations only. No approval/publication state is inferred.
+model TicketOfferProposalSnapshot {
+  id            String @id @default(cuid())
+  editionId     String
+  sourceUrl     String
+  observedAt    DateTime @db.Timestamptz(3)
+  contentHash   String @db.Char(64)
+  parserVersion String
+  proposal      Json
+  createdAt     DateTime @default(now())
+  edition       FestivalEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  decision      TicketOfferReviewDecision?
+
+  @@unique([editionId, observedAt])
+}
+
+// Append-only reviewer decision; one explicit decision for one exact snapshot.
+model TicketOfferReviewDecision {
+  id           String @id @default(cuid())
+  snapshotId   String @unique
+  contentHash  String @db.Char(64)
+  decision     String
+  actorId      String
+  createdAt    DateTime @default(now())
+  snapshot     TicketOfferProposalSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  actor        User @relation(fields: [actorId], references: [id], onDelete: Restrict)
 }
 
 model GoogleOAuthAttempt {

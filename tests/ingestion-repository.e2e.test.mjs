@@ -1,5 +1,7 @@
-import { createPrismaClient } from "../lib/prisma-client.mjs";
+import { POLANDROCK_NEWSROOM } from "../lib/ingestion/adapters/polandrock-admission.ts";
 import { TOLMINATOR_PRODUCT } from "../lib/ingestion/adapters/tolminator-stock.ts";
+import { createPrismaClient } from "../lib/prisma-client.mjs";
+import { ROSKILDE_PRODUCTS_URL } from "../lib/ingestion/adapters/roskilde-stock.ts";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import {
@@ -141,92 +143,123 @@ test("persists partial failure, retry lineage and immutable candidate history", 
   );
 });
 
-test("independent stock success/failure cannot reset primary health, extraction or lineage", async () => {
-  const run = await createIngestionRun(db, {
-    trigger: "TEST",
-    sourceCommit: "health-isolation",
-    totalSources: 2,
-  });
-  createdRunIds.push(run.id);
-  const primaryUrl = "https://example.test/festival";
-  let tick = 10;
-  const save = (url, value, festivalSlug = slug) =>
-    persistAttempt(db, {
-      runId: run.id,
-      festivalSlug,
-      requestedUrl: url,
-      finalUrl: url,
-      httpStatus: value ? 200 : 403,
-      durationMs: 1,
-      startedAt: now,
-      endedAt: new Date(now.getTime() + tick++ * 1000),
-      ...(value ? { result: value } : { error: "HTTP 403" }),
+for (const stockUrl of [TOLMINATOR_PRODUCT, ROSKILDE_PRODUCTS_URL, POLANDROCK_NEWSROOM]) {
+  test(`independent acquisition cannot reset primary health or lineage: ${stockUrl}`, async () => {
+    const run = await createIngestionRun(db, {
+      trigger: "TEST",
+      sourceCommit: "health-isolation",
+      totalSources: 2,
     });
-  const primary = await ingestionQueries.latestResult(db, slug);
-  const health = (await ingestionQueries.sourceStates(db)).find((s) => s.festivalSlug === slug);
-  const extraction = await ingestionQueries.lastSuccessfulExtraction(db, slug);
-  const failure = await save(primaryUrl);
-  assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 1);
-  const value = result("2027-06-04", true);
-  value.sourceUrl = value.candidate.sourceUrl = TOLMINATOR_PRODUCT;
-  value.candidate.evidence = [
-    {
-      field: "ticketStatus",
-      sourceUrl: TOLMINATOR_PRODUCT,
-      observedAt: new Date(now.getTime() + 9000).toISOString(),
-      excerpt: "Synthetic current ordinary stock",
-    },
-  ];
-  value.candidate.ticketStatus = "available";
-  const stock = await save(TOLMINATOR_PRODUCT, value);
-  assert.equal(stock.priorAttemptId, null, "primary attempt is not a stock predecessor");
-  const stockCandidate = await db.ingestionCandidate.findUnique({ where: { attemptId: stock.id } });
-  assert.equal(stockCandidate.supersedesId, null, "stock does not supersede roster candidate");
-  assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 1);
-  assert.equal((await ingestionQueries.latestResult(db, slug)).id, failure.id);
-  assert.deepEqual(
-    (await ingestionQueries.sourceStates(db)).find((s) => s.festivalSlug === slug),
-    health,
-  );
-  assert.deepEqual(await ingestionQueries.lastSuccessfulExtraction(db, slug), extraction);
-  assert.equal((await ingestionQueries.latestResult(db, slug, TOLMINATOR_PRODUCT)).id, stock.id);
-  assert.equal(await ingestionQueries.consecutiveFailures(db, slug, TOLMINATOR_PRODUCT), 0);
-  assert.equal(
-    (
-      await ingestionQueries.lastSuccessfulExtraction(db, slug, TOLMINATOR_PRODUCT)
-    ).observedAt.toISOString(),
-    value.candidate.evidence[0].observedAt,
-  );
-  const stockFailure = await save(TOLMINATOR_PRODUCT);
-  assert.equal(stockFailure.priorAttemptId, stock.id);
-  assert.equal(await ingestionQueries.consecutiveFailures(db, slug, TOLMINATOR_PRODUCT), 1);
-  assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 1);
-  const failure2 = await save(primaryUrl);
-  assert.equal(failure2.priorAttemptId, failure.id);
-  assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 2);
-  const recovery = await save(primaryUrl, result("2027-06-05", true));
-  assert.equal(recovery.priorAttemptId, failure2.id);
-  const recoveredCandidate = await db.ingestionCandidate.findUnique({
-    where: { attemptId: recovery.id },
+    createdRunIds.push(run.id);
+    const primaryUrl = "https://example.test/festival";
+    let tick = 10;
+    const save = (url, value, festivalSlug = slug) =>
+      persistAttempt(db, {
+        runId: run.id,
+        festivalSlug,
+        requestedUrl: url,
+        finalUrl: url,
+        httpStatus: value ? 200 : 403,
+        durationMs: 1,
+        startedAt: now,
+        endedAt: new Date(now.getTime() + tick++ * 1000),
+        ...(value ? { result: value } : { error: "HTTP 403" }),
+      });
+    const slug = new URL(stockUrl).hostname + "-health-proof";
+    const primarySeed = result("2027-06-04", true);
+    primarySeed.festivalSlug = primarySeed.candidate.festivalSlug = slug;
+    primarySeed.sourceUrl = primarySeed.candidate.sourceUrl = primaryUrl;
+    await save(primaryUrl, primarySeed);
+    const primary = await ingestionQueries.latestResult(db, slug);
+    const health = (await ingestionQueries.sourceStates(db)).find((s) => s.festivalSlug === slug);
+    const extraction = await ingestionQueries.lastSuccessfulExtraction(db, slug);
+    const failure = await save(primaryUrl);
+    assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 1);
+    const value = result("2027-06-04", true);
+    value.festivalSlug = value.candidate.festivalSlug = slug;
+    value.sourceUrl = value.candidate.sourceUrl = stockUrl;
+    value.candidate.evidence = [
+      {
+        field: "ticketStatus",
+        sourceUrl: stockUrl,
+        observedAt: new Date(now.getTime() + 9000).toISOString(),
+        excerpt: "Synthetic current ordinary stock",
+      },
+    ];
+    value.candidate.ticketStatus = "available";
+    const stock = await save(stockUrl, value);
+    assert.equal(stock.priorAttemptId, null, "primary attempt is not a stock predecessor");
+    const stockCandidate = await db.ingestionCandidate.findUnique({
+      where: { attemptId: stock.id },
+    });
+    assert.equal(stockCandidate.supersedesId, null, "stock does not supersede roster candidate");
+    assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 1);
+    assert.equal((await ingestionQueries.latestResult(db, slug)).id, failure.id);
+    assert.deepEqual(
+      (await ingestionQueries.sourceStates(db)).find((s) => s.festivalSlug === slug),
+      health,
+    );
+    assert.deepEqual(await ingestionQueries.lastSuccessfulExtraction(db, slug), extraction);
+    assert.equal((await ingestionQueries.latestResult(db, slug, stockUrl)).id, stock.id);
+    assert.equal(await ingestionQueries.consecutiveFailures(db, slug, stockUrl), 0);
+    assert.equal(
+      (
+        await ingestionQueries.lastSuccessfulExtraction(db, slug, stockUrl)
+      ).observedAt.toISOString(),
+      value.candidate.evidence[0].observedAt,
+    );
+    const stockFailure = await save(stockUrl);
+    assert.equal(stockFailure.priorAttemptId, stock.id);
+    assert.equal(await ingestionQueries.consecutiveFailures(db, slug, stockUrl), 1);
+    assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 1);
+    const failure2 = await save(primaryUrl);
+    assert.equal(failure2.priorAttemptId, failure.id);
+    assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 2);
+    const recovery = await save(primaryUrl, primarySeed);
+    assert.equal(recovery.priorAttemptId, failure2.id);
+    const recoveredCandidate = await db.ingestionCandidate.findUnique({
+      where: { attemptId: recovery.id },
+    });
+    assert.equal(recoveredCandidate.supersedesId, primary.candidate.id);
+    assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 0);
+    assert.equal(
+      await ingestionQueries.consecutiveFailures(db, slug, stockUrl),
+      1,
+      "primary recovery does not heal failed stock",
+    );
+    const primaryFailure = await save(primaryUrl);
+    const recoveryHealth = (await ingestionQueries.sourceStates(db)).find(
+      (s) => s.festivalSlug === slug,
+    );
+    const stockRecovery = await save(stockUrl, value);
+    assert.equal(stockRecovery.priorAttemptId, stockFailure.id);
+    const stockRecoveryCandidate = await db.ingestionCandidate.findUnique({
+      where: { attemptId: stockRecovery.id },
+    });
+    assert.equal(stockRecoveryCandidate.supersedesId, stockCandidate.id);
+    assert.equal(await ingestionQueries.consecutiveFailures(db, slug, stockUrl), 0);
+    assert.equal(
+      await ingestionQueries.consecutiveFailures(db, slug),
+      1,
+      "stock recovery cannot heal failed primary",
+    );
+    assert.equal((await ingestionQueries.latestResult(db, slug)).id, primaryFailure.id);
+    assert.deepEqual(
+      (await ingestionQueries.sourceStates(db)).find((s) => s.festivalSlug === slug),
+      recoveryHealth,
+    );
+    const isolatedSlug = `${slug}-stock-only`;
+    const isolated = structuredClone(value);
+    isolated.festivalSlug = isolated.candidate.festivalSlug = isolatedSlug;
+    await save(stockUrl, isolated, isolatedSlug);
+    assert.equal(
+      await db.ingestionSourceState.findUnique({ where: { festivalSlug: isolatedSlug } }),
+      null,
+      "stock cannot create primary health",
+    );
+    assert.equal(await ingestionQueries.latestResult(db, isolatedSlug), null);
+    assert.equal(await ingestionQueries.lastSuccessfulExtraction(db, isolatedSlug), null);
+    assert.equal(await ingestionQueries.consecutiveFailures(db, isolatedSlug), 0);
+    assert.ok(await ingestionQueries.latestResult(db, isolatedSlug, stockUrl));
   });
-  assert.equal(recoveredCandidate.supersedesId, primary.candidate.id);
-  assert.equal(await ingestionQueries.consecutiveFailures(db, slug), 0);
-  assert.equal(
-    await ingestionQueries.consecutiveFailures(db, slug, TOLMINATOR_PRODUCT),
-    1,
-    "primary recovery does not heal failed stock",
-  );
-  const isolatedSlug = `${slug}-stock-only`;
-  const isolated = structuredClone(value);
-  isolated.festivalSlug = isolated.candidate.festivalSlug = isolatedSlug;
-  await save(TOLMINATOR_PRODUCT, isolated, isolatedSlug);
-  assert.equal(
-    await db.ingestionSourceState.findUnique({ where: { festivalSlug: isolatedSlug } }),
-    null,
-    "stock cannot create primary health",
-  );
-  assert.equal(await ingestionQueries.latestResult(db, isolatedSlug), null);
-  assert.equal(await ingestionQueries.lastSuccessfulExtraction(db, isolatedSlug), null);
-  assert.equal(await ingestionQueries.consecutiveFailures(db, isolatedSlug), 0);
-  assert.ok(await ingestionQueries.latestResult(db, isolatedSlug, TOLMINATOR_PRODUCT));
-});
+}
