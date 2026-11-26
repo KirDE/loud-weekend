@@ -216,6 +216,43 @@ for (const [status, eventStatus] of [
   });
 }
 
+test("a separate JSON-LD record for the selected event can put ticket changes on hold", () => {
+  const event = {
+    "@id": "#festival-2027",
+    "@type": "MusicEvent",
+    startDate: current.startDate,
+    eventStatus: "https://schema.org/EventScheduled",
+  };
+  const statusRecord = {
+    "@id": new URL(event["@id"], source.url).href,
+    eventStatus: { "@id": "https://schema.org/EventCancelled" },
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  for (const page of [
+    script({ "@graph": [event, statusRecord] }),
+    script(statusRecord) + script(event),
+  ]) {
+    const result = evaluateCandidate(current, extract(page + ticket));
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [
+      "Official event status requires review: https://schema.org/EventCancelled",
+    ]);
+  }
+  for (const [eventId, statusId] of [
+    [event["@id"], "#side-event"],
+    ["_:event", "_:event"],
+    [undefined, undefined],
+  ]) {
+    const page =
+      script({ ...event, "@id": eventId }) + script({ ...statusRecord, "@id": statusId });
+    assert.equal(evaluateCandidate(current, extract(page + ticket)).publishable, true);
+  }
+});
+
 test("scheduled JSON-LD events do not hold verified ticket changes", () => {
   const event = {
     "@type": "MusicEvent",
