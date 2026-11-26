@@ -1,3 +1,5 @@
+import { collectRoskildeStock } from "../lib/ingestion/adapters/roskilde-stock-transport.ts";
+import { ROSKILDE_PRODUCTS_URL } from "../lib/ingestion/adapters/roskilde-stock.ts";
 import { readCatalog } from "../lib/catalog/repository.ts";
 import { createPrismaClient } from "../lib/prisma-client.mjs";
 import assert from "node:assert/strict";
@@ -135,6 +137,7 @@ test.before(async () => {
       ...catalogSeed.festivals,
       rfpFestival,
       rockharz,
+      { ...rockharz, slug: "roskilde", name: "Synthetic Roskilde" },
       { ...rockharz, slug: "idays", name: "Synthetic I-Days" },
       graspop,
       download,
@@ -149,6 +152,12 @@ test.before(async () => {
       {
         ...catalogSeed.editions.find((e) => e.recordState === "current")!,
         ...rockharz,
+        recordState: "current" as const,
+      },
+      {
+        ...catalogSeed.editions.find((e) => e.recordState === "current")!,
+        ...rockharz,
+        slug: "roskilde",
         recordState: "current" as const,
       },
       {
@@ -3010,6 +3019,297 @@ test("I-Days direct ticketsUrl-only publication validates durable proof and atom
         "PENDING",
       );
     }
+  }
+});
+
+test("Roskilde actual collector→durable proof→publication/public read/replay and adversarial rollback", async () => {
+  const html = await readFile(
+    new URL("./fixtures/roskilde/tickster-products.html", import.meta.url),
+    "utf8",
+  );
+  const init =
+    "<title>Roskilde Festival - Tickster</title><h3>Partout</h3><p>Alle otte dage på Roskilde Festival 2027.</p>";
+  const read = async () =>
+    (await readCatalog({ database: db })).festivals.find((f) => f.slug === "roskilde")!;
+  for (const drift of [
+    "none",
+    "missing",
+    "value",
+    "source",
+    "time",
+    "hash",
+    "excerpt",
+    "normalized",
+    "http",
+    "final",
+    "requested",
+    "future",
+    "expired",
+    "source-strip",
+    "slug-source-strip",
+    "extra-date",
+    "stale",
+  ]) {
+    const edition = await db.festivalEdition.findFirstOrThrow({
+      where: { festival: { slug: "roskilde" }, recordState: "CURRENT" },
+    });
+    const oldUrl = "https://www.roskilde-festival.dk/";
+    await db.festivalEdition.update({
+      where: { id: edition.id },
+      data: { ticketStatus: "UNKNOWN", ticketsUrl: oldUrl },
+    });
+    const beforeFestival = await read();
+    const candidate = await collectRoskildeStock({
+      fetch: (async (url: string | URL | Request) => {
+        const text = String(url) === ROSKILDE_PRODUCTS_URL ? html : init;
+        const response = new Response(text, {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+        Object.defineProperty(response, "url", { value: String(url) });
+        return response;
+      }) as typeof fetch,
+    });
+    if (drift === "future" || drift === "expired") {
+      candidate.fetchedAt = new Date(
+        Date.now() + (drift === "future" ? 120_000 : -172_800_000),
+      ).toISOString();
+      candidate.evidence.forEach((e) => (e.observedAt = candidate.fetchedAt));
+    }
+    if (drift === "extra-date") {
+      candidate.startDate = "2027-01-01";
+      candidate.evidence.push({
+        field: "startDate",
+        sourceUrl: ROSKILDE_PRODUCTS_URL,
+        observedAt: candidate.fetchedAt,
+        excerpt: "unsupported date",
+      });
+    }
+    const value = evaluateCandidate(beforeFestival, candidate);
+    // Simulate a compromised policy-approved payload: the durable stock gate
+    // must independently forbid seller date changes even with forged approval.
+    if (drift === "extra-date") {
+      value.publishable = true;
+      value.reviewReasons = [];
+      value.changes.forEach((c) => (c.reviewRequired = false));
+    }
+    assert(value.publishable, JSON.stringify(value.reviewReasons));
+    const attempt = await persist(value);
+    // Receipt completion is real wall time even for a forged future/expired
+    // observation. Do not poison independent health ordering with fake receipts.
+    await db.ingestionAttempt.update({
+      where: { id: attempt.id },
+      data: { startedAt: new Date(), endedAt: new Date() },
+    });
+    const saved = await db.ingestionCandidate.findUniqueOrThrow({
+      where: { attemptId: attempt.id },
+    });
+    const where = { candidateId: saved.id, field: "ticketStatus" };
+    if (drift === "missing") await db.ingestionEvidence.deleteMany({ where });
+    if (drift === "value")
+      await db.ingestionEvidence.updateMany({ where, data: { observedValue: "unknown" } });
+    if (drift === "source")
+      await db.ingestionEvidence.updateMany({ where, data: { sourceUrl: oldUrl } });
+    if (drift === "time")
+      await db.ingestionEvidence.updateMany({ where, data: { observedAt: new Date(0) } });
+    if (drift === "hash")
+      await db.ingestionEvidence.updateMany({ where, data: { contentHash: "corrupt" } });
+    if (drift === "excerpt")
+      await db.ingestionEvidence.updateMany({ where, data: { excerpt: "changed" } });
+    if (drift === "normalized")
+      await db.ingestionCandidate.update({
+        where: { id: saved.id },
+        data: { normalized: { ...candidate, ticketStatus: "unknown" } },
+      });
+    if (drift === "http")
+      await db.ingestionAttempt.update({ where: { id: attempt.id }, data: { httpStatus: 403 } });
+    if (drift === "final")
+      await db.ingestionAttempt.update({ where: { id: attempt.id }, data: { finalUrl: oldUrl } });
+    if (drift === "requested")
+      await db.ingestionAttempt.update({
+        where: { id: attempt.id },
+        data: { requestedUrl: oldUrl },
+      });
+    if (["source-strip", "slug-source-strip"].includes(drift)) {
+      value.sourceUrl = oldUrl;
+      value.candidate.sourceUrl = oldUrl;
+      if (drift === "slug-source-strip") {
+        value.festivalSlug = "synthetic-fest";
+        value.candidate.festivalSlug = "synthetic-fest";
+      }
+    }
+    if (drift === "stale")
+      await db.festivalEdition.update({ where: { id: edition.id }, data: { ticketStatus: "LOW" } });
+    const counts = () =>
+      Promise.all([
+        db.artist.count(),
+        db.lineupEntry.count(),
+        db.catalogPublication.count(),
+        db.catalogPlaylistRefresh.count(),
+      ]);
+    const before = await counts();
+    if (drift === "none") {
+      const publication = await publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: value,
+        sourceCommit: suffix,
+      });
+      assert(publication);
+      const replay = await publishIngestionResult(db, {
+        attemptId: attempt.id,
+        result: value,
+        sourceCommit: suffix,
+      });
+      assert(replay);
+      assert.equal(replay.id, publication.id);
+      const after = await read();
+      assert.equal(after.ticketStatus, "available");
+      assert.equal(after.ticketsUrl, ROSKILDE_PRODUCTS_URL);
+      assert.equal(after.startDate, beforeFestival.startDate);
+      assert.equal(after.endDate, beforeFestival.endDate);
+      assert.deepEqual(after.lineup, beforeFestival.lineup);
+      assert.deepEqual(await counts(), [before[0], before[1], before[2] + 1, before[3]]);
+      const proofs = await db.ingestionEvidence.findMany({ where: { candidateId: saved.id } });
+      assert.equal(proofs.length, 2);
+      assert.doesNotMatch(JSON.stringify(proofs), /cookie|session=|quantity[0-9]/i);
+    } else {
+      await assert.rejects(
+        publishIngestionResult(db, { attemptId: attempt.id, result: value, sourceCommit: suffix }),
+        {
+          future: /Ingestion observation time is later than the completed attempt or current time/,
+          stale: /Stale/,
+          requested: /Ingestion publication scope does not match/,
+          "source-strip": /Ingestion publication scope does not match/,
+          "slug-source-strip": /Ingestion publication scope does not match/,
+        }[drift] ?? /Stock publication requires/,
+        drift,
+      );
+      assert.deepEqual(await counts(), before);
+      const after = await read();
+      assert.equal(after.ticketStatus, drift === "stale" ? "low" : "unknown");
+      assert.equal(after.ticketsUrl, oldUrl);
+      assert.equal(after.startDate, beforeFestival.startDate);
+      assert.equal(after.endDate, beforeFestival.endDate);
+      assert.equal(
+        (await db.ingestionCandidate.findUniqueOrThrow({ where: { id: saved.id } })).reviewState,
+        "PENDING",
+      );
+    }
+  }
+});
+
+test("Roskilde audit-only invocation preserves health and rejects wrong targets", async () => {
+  const { recordRoskildeStockAttempt } =
+    await import("../lib/ingestion/roskilde-stock-invocation.ts");
+  const html = await readFile(
+    new URL("./fixtures/roskilde/tickster-products.html", import.meta.url),
+    "utf8",
+  );
+  const init =
+    "<title>Roskilde Festival - Tickster</title><h3>Partout</h3><p>Alle otte dage på Roskilde Festival 2027.</p>";
+  const edition = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "roskilde" }, recordState: "CURRENT" },
+  });
+  const officialUrl = "https://www.roskilde-festival.dk/";
+  const festival = await db.festival.findUniqueOrThrow({ where: { id: edition.festivalId } });
+  await db.festival.update({ where: { id: festival.id }, data: { officialUrl } });
+  const read = async () =>
+    (await readCatalog({ database: db })).festivals.find((f) => f.slug === "roskilde")!;
+  const snapshot = async () => ({
+    festival: await read(),
+    publications: await db.catalogPublication.count(),
+    jobs: await db.catalogPlaylistRefresh.count(),
+    primary: await db.ingestionSourceState.findUnique({ where: { festivalSlug: "roskilde" } }),
+  });
+  const before = await snapshot();
+  const options = {
+    sourceCommit: "abcdef1234567",
+    fetch: (async (url: string | URL | Request) => {
+      const response = new Response(String(url) === ROSKILDE_PRODUCTS_URL ? html : init, {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "set-cookie": "session=synthetic-private; Path=/; Secure",
+        },
+      });
+      Object.defineProperty(response, "url", { value: String(url) });
+      return response;
+    }) as typeof fetch,
+  };
+  try {
+    const good = await recordRoskildeStockAttempt(db, options);
+    assert.notEqual(good.status, "FAILED");
+    assert.equal(good.consecutiveFailures, 0);
+    assert.ok(good.lastSuccessfulExtraction);
+    assert.deepEqual(await snapshot(), before);
+    const row = await db.ingestionAttempt.findUniqueOrThrow({
+      where: { id: good.attemptId },
+      include: { candidate: { include: { evidence: true } } },
+    });
+    assert.equal(row.requestedUrl, ROSKILDE_PRODUCTS_URL);
+    assert.equal(row.finalUrl, ROSKILDE_PRODUCTS_URL);
+    assert.equal(row.httpStatus, 200);
+    assert.equal(row.candidate?.reviewState, "PENDING");
+    assert.equal(row.candidate?.evidence.length, 2);
+    assert.doesNotMatch(JSON.stringify(row), /synthetic-private|set-cookie|<html/i);
+    for (const fetch of [
+      async () => new Response("blocked", { status: 403 }),
+      async () => {
+        throw Error("private.invalid/?token=do-not-store");
+      },
+    ]) {
+      const failed = await recordRoskildeStockAttempt(db, { ...options, fetch });
+      assert.equal(failed.status, "FAILED");
+      assert.equal(failed.error, "Roskilde stock collection failed");
+      assert.ok(failed.consecutiveFailures > 0);
+      assert.equal(failed.lastSuccessfulExtraction, good.lastSuccessfulExtraction);
+      const failedRow = await db.ingestionAttempt.findUniqueOrThrow({
+        where: { id: failed.attemptId },
+        include: { candidate: true },
+      });
+      assert.equal(failedRow.candidate, null);
+      assert.equal(failedRow.httpStatus, null);
+      assert.doesNotMatch(JSON.stringify(failedRow), /do-not-store|private.invalid/);
+      assert.equal(
+        (await db.ingestionRun.findUniqueOrThrow({ where: { id: failedRow.runId } })).status,
+        "FAILED",
+      );
+      assert.deepEqual(await snapshot(), before);
+    }
+    const recovered = await recordRoskildeStockAttempt(db, options);
+    assert.equal(recovered.consecutiveFailures, 0);
+    assert.ok(recovered.lastSuccessfulExtraction);
+    assert.deepEqual(await snapshot(), before);
+    const runCount = await db.ingestionRun.count();
+    let fetched = false;
+    const forbiddenFetch: typeof fetch = async () => {
+      fetched = true;
+      throw Error();
+    };
+    await assert.rejects(
+      recordRoskildeStockAttempt(db, { sourceCommit: "invalid", fetch: forbiddenFetch }),
+      /commit/,
+    );
+    await db.festivalEdition.update({ where: { id: edition.id }, data: { year: 2028 } });
+    await assert.rejects(
+      recordRoskildeStockAttempt(db, { ...options, fetch: forbiddenFetch }),
+      /2027/,
+    );
+    await db.festivalEdition.update({ where: { id: edition.id }, data: { year: 2027 } });
+    await db.festival.update({
+      where: { id: festival.id },
+      data: { officialUrl: "https://foreign.invalid/" },
+    });
+    await assert.rejects(
+      recordRoskildeStockAttempt(db, { ...options, fetch: forbiddenFetch }),
+      /2027/,
+    );
+    assert.equal(fetched, false);
+    assert.equal(await db.ingestionRun.count(), runCount);
+  } finally {
+    await db.festivalEdition.update({ where: { id: edition.id }, data: { year: edition.year } });
+    await db.festival.update({
+      where: { id: festival.id },
+      data: { officialUrl: festival.officialUrl },
+    });
   }
 });
 

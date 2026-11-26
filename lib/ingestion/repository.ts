@@ -1,7 +1,7 @@
 import { campingSourceFilters, isCampingSourceUrl } from "./adapters/camping-guidance.ts";
 import { overviewSourceUrls } from "./adapters/festival-overview.ts";
 import { admissionSources } from "./adapters/admission-sources.ts";
-import { TOLMINATOR_PRODUCT } from "./adapters/tolminator-stock.ts";
+import { stockProofSources } from "./adapters/stock-proof-sources.ts";
 import { queueImportEvent } from "./import-event-queue.ts";
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -39,7 +39,10 @@ export async function createIngestionRun(
 
 // Only reviewed independent endpoints are excluded. Do not infer scope from
 // caller-supplied candidate fields (a failed request has no candidate at all).
-const independentTicketUrls = [TOLMINATOR_PRODUCT, ...admissionSources.map(({ url }) => url)];
+const independentTicketUrls = [
+  ...stockProofSources.map(({ url }) => url),
+  ...admissionSources.map(({ url }) => url),
+];
 export const isIndependentTicketUrl = (url: string) => independentTicketUrls.includes(url);
 const attemptScope = (
   festivalSlug: string,

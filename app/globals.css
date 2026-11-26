@@ -3597,6 +3597,24 @@ summary:focus-visible {
   max-width: 28rem;
 }
 
+.runningOrderAccount {
+  margin-block: 0.75rem;
+}
+
+.runningOrderAccount summary {
+  cursor: pointer;
+}
+
+.runningOrderAccountIdentity {
+  overflow-wrap: anywhere;
+}
+
+.runningOrderAccountActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .ticketOfferSection {
   margin-block: 2rem;
 }
