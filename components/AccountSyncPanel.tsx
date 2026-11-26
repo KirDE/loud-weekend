@@ -22,6 +22,14 @@ const kinds: Kind[] = [
   "season-attendance",
   "budgets",
 ];
+const documentKinds: Record<Kind, string> = {
+  favorites: "FAVORITES",
+  collections: "COLLECTIONS",
+  "saved-filters": "SAVED_FILTERS",
+  plans: "FESTIVAL_PLANS",
+  "season-attendance": "SEASON_ATTENDANCE",
+  budgets: "TRIP_BUDGETS",
+};
 const favoritesPayload = z.object({
   favoriteFestivals: z.array(z.string()).optional(),
   favoriteArtists: z.array(z.string()).optional(),
@@ -220,6 +228,31 @@ export function AccountSyncPanel({
     onBusyChange?.(value);
   }
   const syncHeaders = (accountId: string) => ({ "X-Sync-Account": accountId });
+  async function parseDocument(kind: Kind, response: Response) {
+    const document = (await response.json().catch(() => null))?.document as
+      (Document & { kind?: string; userId?: string }) | null | undefined;
+    if (document === null) return null;
+    if (
+      !document ||
+      typeof document.id !== "string" ||
+      !document.id ||
+      !Number.isSafeInteger(document.revision) ||
+      document.revision < 1 ||
+      document.payload === undefined ||
+      document.kind !== documentKinds[kind]
+    ) {
+      throw new Error(t.failed);
+    }
+    if (kind === "collections") readCollections(document.payload);
+    if (kind === "favorites" && !favoritesPayload.safeParse(document.payload).success)
+      throw new Error(t.failed);
+    if (kind === "plans" && !plansPayload.safeParse(document.payload).success)
+      throw new Error(t.failed);
+    if (kind === "saved-filters" && !savedFiltersPayload.safeParse(document.payload).success)
+      throw new Error(t.failed);
+    return document;
+  }
+
   async function readDocument(kind: Kind, accountId: string, signal?: AbortSignal) {
     const response = await fetch("/api/sync/" + kind, {
       cache: "no-store",
@@ -227,29 +260,7 @@ export function AccountSyncPanel({
       signal,
     });
     if (!response.ok) throw new Error(t.failed);
-    const { document } = (await response.json()) as { document?: Document | null };
-    if (
-      document !== null &&
-      (!document ||
-        typeof document.id !== "string" ||
-        !Number.isInteger(document.revision) ||
-        document.revision < 0 ||
-        document.payload === undefined)
-    ) {
-      throw new Error(t.failed);
-    }
-    if (kind === "collections" && document) readCollections(document.payload);
-    if (kind === "favorites" && document && !favoritesPayload.safeParse(document.payload).success)
-      throw new Error(t.failed);
-    if (kind === "plans" && document && !plansPayload.safeParse(document.payload).success)
-      throw new Error(t.failed);
-    if (
-      kind === "saved-filters" &&
-      document &&
-      !savedFiltersPayload.safeParse(document.payload).success
-    )
-      throw new Error(t.failed);
-    return document;
+    return parseDocument(kind, response);
   }
 
   async function readDocuments(accountId: string, signal?: AbortSignal) {
@@ -299,13 +310,14 @@ export function AccountSyncPanel({
   async function put(
     kind: Kind,
     payload: unknown,
-    revision: number,
+    base?: Document,
     mode: ConflictMode = "replace",
     signal?: AbortSignal,
   ) {
     if (!user) throw new Error(t.failed);
     signal?.throwIfAborted();
     const accountId = user.id;
+    const revision = base?.revision ?? 0;
     const response = await fetch(`/api/sync/${kind}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -320,8 +332,15 @@ export function AccountSyncPanel({
       throw new Error("conflict");
     }
     if (!response.ok) throw new Error(t.failed);
-    const { document } = (await response.json()) as { document: Document };
+    const document = await parseDocument(kind, response);
     signal?.throwIfAborted();
+    if (
+      !document ||
+      document.userId !== accountId ||
+      document.revision !== revision + 1 ||
+      (base && document.id !== base.id)
+    )
+      throw new Error(t.failed);
     setDocs((current) => ({ ...current, [kind]: document }));
     return document;
   }
@@ -379,7 +398,7 @@ export function AccountSyncPanel({
         const saved = await put(
           kind,
           content,
-          remote?.revision ?? 0,
+          remote,
           mode === "merge" ? "merge" : "replace",
           signal,
         );
@@ -410,7 +429,7 @@ export function AccountSyncPanel({
         let content = local;
         if (mode === "merge") content = mergePayload(kind, remote.payload, local);
         if (mode === "spotify") content = spotifySelection(remote.payload, planner);
-        const saved = await put(kind, content, remote.revision, mode, signal);
+        const saved = await put(kind, content, remote, mode, signal);
         if (signal.aborted) return;
         if (mode === "merge") planner.merge(accountDocumentFields(kind, saved), planner);
       } else {
@@ -435,7 +454,7 @@ export function AccountSyncPanel({
     setStatus("");
     try {
       let plan = docs.plans;
-      if (!plan) plan = await put("plans", { attendance: planner.attendance }, 0);
+      if (!plan) plan = await put("plans", { attendance: planner.attendance });
       const response = await fetch("/api/share", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -461,7 +480,7 @@ export function AccountSyncPanel({
       // Preserve unsynchronized device selection first, under the same revision
       // checks as normal sync. A conflict aborts before calling the provider.
       const selection = spotifySelection(docs.collections?.payload, planner);
-      const saved = await put("collections", selection, docs.collections?.revision ?? 0, "spotify");
+      const saved = await put("collections", selection, docs.collections, "spotify");
       planner.merge(playlistSelection(saved.payload));
       const response = await fetch("/api/spotify/sync", {
         method: "POST",

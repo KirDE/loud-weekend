@@ -73,6 +73,8 @@ test("legacy names and canonical favorites read back once from explicit account 
         document: route.request().url().includes("/favorites")
           ? {
               id: "favorites",
+              userId: "fixture",
+              kind: "FAVORITES",
               revision: 1,
               updatedAt: "2026-01-01T00:00:00.000Z",
               payload: {
