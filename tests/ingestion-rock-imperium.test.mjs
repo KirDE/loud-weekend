@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
 import { fetchSource } from "../lib/ingestion/fetch.ts";
 import { evaluateCandidate } from "../lib/ingestion/policy.ts";
-import { envelopeKind } from "../lib/ingestion/adapters/rock-imperium.ts";
+import { envelopeKind, findRockImperiumProduct } from "../lib/ingestion/adapters/rock-imperium.ts";
 const fixture = (n) =>
   readFileSync(new URL(`./fixtures/rock-imperium/${n}.html`, import.meta.url), "utf8");
 const source = {
@@ -641,4 +641,95 @@ test("inert links cannot establish or contradict the live organizer-to-seller ro
   staged.documents[0].html = `<title>Rock Imperium Festival 2027</title>
     <section inert><h2 class="product-title"><a href="${product}">Abono Rock Imperium Festival 2027</a></h2></section>`;
   assert.equal(extract(staged).ticketStatus, undefined);
+});
+
+// Reduced from the official 2026-11-26 category: product-title moved onto the anchor.
+const anchorCategory = () =>
+  fixture("category")
+    .replace(/<h5[^>]*>\s*<a /g, '<a class="h3 product-title d-block" ')
+    .replace(/<\/a>\s*<\/h5>/g, "</a>");
+test("current anchor product headings retain unique ordinary-pass discovery", () => {
+  assert.equal(findRockImperiumProduct({ url: category, html: anchorCategory() }, 2027), product);
+  for (const wrapper of ["hidden", 'aria-hidden="true"', 'style="display:none"']) {
+    assert.equal(
+      findRockImperiumProduct(
+        { url: category, html: `<div ${wrapper}>${anchorCategory()}</div>` },
+        2027,
+      ),
+      undefined,
+    );
+  }
+  assert.equal(
+    findRockImperiumProduct(
+      { url: category, html: anchorCategory().replaceAll("2041-", "9999-") + anchorCategory() },
+      2027,
+    ),
+    undefined,
+  );
+  assert.equal(
+    findRockImperiumProduct(
+      {
+        url: category,
+        html: anchorCategory().replace("Abono Rock Imperium", "VIP Abono Rock Imperium"),
+      },
+      2027,
+    ),
+    undefined,
+  );
+});
+test("four-day title starts at the first day; invalid sequences cannot match a valid suffix", () => {
+  for (const [days, start, end] of [
+    ["1-2-3-4", "01", "04"],
+    ["29-30-31", "29", "31"],
+    ["2-3", "02", "03"],
+    ["1-3-4", undefined],
+    ["0-1-2-3", undefined],
+    ["30-31-32", undefined],
+    ["1-2-3-4-5-6-7-8", undefined],
+    ["4-3-2", undefined],
+  ]) {
+    const e = direct();
+    e.home = e.home.replace("2-3-4", days);
+    const c = extract(e);
+    assert.equal(c.startDate, start && `2027-07-${start}`);
+    assert.equal(c.endDate, end && `2027-07-${end}`);
+  }
+});
+test("four-day current anchor category fetches the ordinary product and keeps dates review-gated", async () => {
+  const pages = new Map([
+    [source.url, fixture("direct-home").replace("2-3-4", "1-2-3-4")],
+    [category, anchorCategory()],
+    [product, fixture("product")],
+  ]);
+  const requests = [];
+  const r = await fetchSource(source, {
+    maxAttempts: 1,
+    fetchImpl: async (url) => {
+      requests.push(url);
+      assert(pages.has(url));
+      return new Response(pages.get(url));
+    },
+  });
+  assert.deepEqual(requests, [...pages.keys()]);
+  const c = extractFestivalCandidate(await r.response.text(), source, "2026-11-26T18:44:40Z");
+  assert.equal(c.ticketStatus, "available");
+  assert.equal(c.startDate, "2027-07-01");
+  assert.equal(c.endDate, "2027-07-04");
+  assert.deepEqual(c.warnings, []);
+  assert.equal(c.lineup, undefined);
+  const review = evaluateCandidate(
+    {
+      slug: "rock-imperium",
+      editionYear: 2027,
+      headliners: [],
+      lineup: [],
+      status: "partial",
+      startDate: "2027-07-02",
+      endDate: "2027-07-04",
+      ticketStatus: "available",
+      ticketsUrl: source.url,
+    },
+    c,
+  );
+  assert(review.reviewReasons.length > 0);
 });

@@ -145,15 +145,20 @@ function generalPass(name: string, year: number): boolean {
   return new RegExp(`^Abono Rock Imperium Festival ${year}(?: \\(Cartagena\\))?$`, "i").test(name);
 }
 export function findRockImperiumProduct(document: PassDocument, year: number): string | undefined {
+  const $ = actionableMarkup(document.html);
   return unique(
-    [
-      ...actionableMarkup(document.html)
-        .html()
-        .matchAll(
-          /<h[1-6]\b[^>]*class=["'][^"']*\bproduct-title\b[^"']*["'][^>]*>([\s\S]*?)<\/h[1-6]>/gi,
-        ),
-    ].flatMap((m) =>
-      links(m[1]).flatMap(({ href, label }) => {
+    $(
+      "h1.product-title,h2.product-title,h3.product-title," +
+        "h4.product-title,h5.product-title,h6.product-title,a.product-title",
+    )
+      .toArray()
+      .flatMap((element) => {
+        const node = $(element);
+        return node.is("a[href]")
+          ? [{ href: node.attr("href") ?? "", label: text(node.text()) }]
+          : links($.html(element));
+      })
+      .flatMap(({ href, label }) => {
         const url = sellerUrl(href, document.url);
         return url &&
           generalPass(label, year) &&
@@ -168,7 +173,6 @@ export function findRockImperiumProduct(document: PassDocument, year: number): s
           ? [url.href]
           : [];
       }),
-    ),
   );
 }
 
@@ -308,15 +312,14 @@ export function extractRockImperiumCandidate(
     diciembre: 12,
     december: 12,
   };
-  const date = title(home).match(/\b(\d{1,2})-(\d{1,2})-(\d{1,2})\s+([a-z]+)\s+(20\d{2})\b/i);
-  const month = date && months[date[4].toLowerCase()];
-  if (date && month && Number(date[5]) === source.editionYear) {
-    const days = date.slice(1, 4).map(Number);
+  const date = title(home).match(/(?<![\d-])(\d{1,2}(?:-\d{1,2}){1,6})\s+([a-z]+)\s+(20\d{2})\b/i);
+  const month = date && months[date[2].toLowerCase()];
+  if (date && month && Number(date[3]) === source.editionYear) {
+    const days = date[1].split("-").map(Number);
     const maxDay = new Date(Date.UTC(source.editionYear, month, 0)).getUTCDate();
     if (
       days.every((d) => d >= 1 && d <= maxDay) &&
-      days[1] === days[0] + 1 &&
-      days[2] === days[1] + 1
+      days.every((d, i) => i === 0 || d === days[i - 1] + 1)
     ) {
       add(
         "startDate",
@@ -326,7 +329,7 @@ export function extractRockImperiumCandidate(
       );
       add(
         "endDate",
-        `${source.editionYear}-${String(month).padStart(2, "0")}-${String(days[2]).padStart(2, "0")}`,
+        `${source.editionYear}-${String(month).padStart(2, "0")}-${String(days.at(-1)).padStart(2, "0")}`,
         { url: source.url, html: home },
         title(home),
       );
