@@ -3,8 +3,9 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { parsePerformanceSelections, togglePerformanceSelection } from "@/lib/timetable-plan";
 
+import { timetablePlanChanged, timetablePlanKey } from "@/lib/timetable-plan-storage";
+
 const empty = "[]";
-const change = "festival-radar-timetable-plan-change";
 
 function read(key: string | null) {
   try {
@@ -15,7 +16,7 @@ function read(key: string | null) {
 }
 
 export function useTimetablePlan(slug?: string, year?: number) {
-  const key = slug && year ? `festival-radar-timetable-v1:${slug}:${year}` : null;
+  const key = slug && year ? timetablePlanKey(slug, year) : null;
   const [storageFailed, setStorageFailed] = useState(false);
   const subscribe = useCallback(
     (notify: () => void) => {
@@ -23,10 +24,10 @@ export function useTimetablePlan(slug?: string, year?: number) {
         if (event.key === key || event.key === null) notify();
       };
       window.addEventListener("storage", onStorage);
-      window.addEventListener(change, notify);
+      window.addEventListener(timetablePlanChanged, notify);
       return () => {
         window.removeEventListener("storage", onStorage);
-        window.removeEventListener(change, notify);
+        window.removeEventListener(timetablePlanChanged, notify);
       };
     },
     [key],
@@ -50,7 +51,7 @@ export function useTimetablePlan(slug?: string, year?: number) {
       if (next.length) localStorage.setItem(key, JSON.stringify(next));
       else localStorage.removeItem(key);
       setStorageFailed(false);
-      window.dispatchEvent(new Event(change));
+      window.dispatchEvent(new Event(timetablePlanChanged));
       return "updated";
     } catch {
       setStorageFailed(true);

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
 const key = "festival-radar-planner-v1";
@@ -196,4 +197,69 @@ test("undo merges the backup without removing selections made after reset", asyn
   await expect
     .poll(async () => (await state(page)).playlistFestivals.slice().sort())
     .toEqual(["synthetic-fest", "synthetic-south"]);
+});
+
+test("backup, reset and undo include edition running orders without writing the account", async ({
+  page,
+}) => {
+  const writes = await setup(page, true);
+  const current = "festival-radar-timetable-v1:synthetic-fest:2027";
+  const archive = "festival-radar-timetable-v1:synthetic-fest:2026";
+  const unrelated = "festival-radar-timetable-v1:settings";
+  await page.goto("/en/planner/");
+  await page.evaluate(
+    ({ current, archive, unrelated }) => {
+      localStorage.setItem(current, '["show-1"]');
+      localStorage.setItem(archive, '["archived-show"]');
+      localStorage.setItem(unrelated, "keep");
+    },
+    { current, archive, unrelated },
+  );
+  await page.getByRole("button", { name: copy.en.clear, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  const otherTab = await page.context().newPage();
+  await otherTab.goto("/en/planner/");
+  const saveOrder = (picks) =>
+    otherTab.evaluate(
+      ([key, picks]) => localStorage.setItem(key, JSON.stringify(picks)),
+      [current, picks],
+    );
+  const backupLink = dialog.getByRole("link", { name: copy.en.backup });
+  async function downloadOrders() {
+    const [download] = await Promise.all([page.waitForEvent("download"), backupLink.click()]);
+    return JSON.parse(await readFile(await download.path(), "utf8")).runningOrders;
+  }
+
+  await saveOrder(["show-1", "show-2"]);
+  expect(await downloadOrders()).toEqual({
+    [current]: ["show-1", "show-2"],
+    [archive]: ["archived-show"],
+  });
+  await saveOrder(["show-3"]);
+  const reset = dialog.getByRole("button", { name: copy.en.reset, exact: true });
+  await reset.click();
+  await expect(dialog.getByRole("alert")).toContainText("Running orders changed");
+  expect(await state(page)).toEqual(saved);
+  expect(await otherTab.evaluate((key) => localStorage.getItem(key), current)).toBe('["show-3"]');
+
+  expect(await downloadOrders()).toEqual({
+    [current]: ["show-3"],
+    [archive]: ["archived-show"],
+  });
+  await reset.click();
+  expect(
+    await page.evaluate(
+      (keys) => keys.map((key) => localStorage.getItem(key)),
+      [current, archive, unrelated],
+    ),
+  ).toEqual([null, null, "keep"]);
+  await page.evaluate((key) => localStorage.setItem(key, '["new-show"]'), current);
+  await page.getByRole("button", { name: copy.en.undo }).click();
+  expect(
+    await page.evaluate(
+      (keys) => keys.map((key) => localStorage.getItem(key)),
+      [current, archive, unrelated],
+    ),
+  ).toEqual(['["new-show","show-3"]', '["archived-show"]', "keep"]);
+  expect(writes()).toBe(0);
 });
