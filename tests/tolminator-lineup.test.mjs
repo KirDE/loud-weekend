@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { parserSource } from "./support/parser-source.ts";
 import { extractFestivalCandidate } from "../lib/ingestion/extract.ts";
+import { evaluateCandidate } from "../lib/ingestion/policy.ts";
 import { fetchSource } from "../lib/ingestion/fetch.ts";
 import {
   TOLMINATOR_HOME,
@@ -68,6 +69,7 @@ test("bounded collector follows only the official listing and rejects redirect/m
     },
   });
   assert.deepEqual(seen, [TOLMINATOR_HOME, TOLMINATOR_LINEUP]);
+  assert.equal(result.response.url, TOLMINATOR_HOME);
   assert.deepEqual(parse(await result.response.text()).lineup, names);
   await assert.rejects(
     fetchSource(source, { fetchImpl: async () => new Response("28 July - 1 August 2027") }),
@@ -84,5 +86,44 @@ test("bounded collector follows only the official listing and rejects redirect/m
       },
     }),
     /redirected/,
+  );
+});
+
+test("Tolminator additions require protected review while an unchanged replay is quiet", () => {
+  const candidate = parse(bundle());
+  const current = {
+    slug: "tolminator",
+    editionYear: 2027,
+    city: "Tolmin",
+    status: "partial",
+    ticketStatus: "unknown",
+    startDate: candidate.startDate,
+    endDate: candidate.endDate,
+    headliners: [],
+    lineup: [],
+  };
+  const initial = evaluateCandidate(current, candidate);
+  assert.equal(initial.publishable, false);
+  const additions = initial.changes.filter((x) => x.kind === "artist_added");
+  assert.equal(additions.length, names.length);
+  assert.ok(additions.every((x) => x.reviewRequired));
+  assert.ok(initial.reviewReasons.some((x) => x.includes("protected ingestion review")));
+  const saved = {
+    ...current,
+    headliners: names.slice(0, 2),
+    lineup: [...names.slice(2), "Prior Saved Act"],
+  };
+  const replay = evaluateCandidate(saved, candidate);
+  assert.deepEqual(replay.changes, []);
+  assert.deepEqual(replay.reviewReasons, []);
+  const extra =
+    '<a href="/en/band/future-act/"><img src="Tolminator2027_FUTURE.jpg"><h3>Future &amp; Act</h3></a>';
+  const later = evaluateCandidate(saved, parse(bundle(fixture + extra)));
+  assert.equal(later.publishable, false);
+  assert.deepEqual(
+    later.changes
+      .filter((x) => x.field === "lineup" || x.field === "headliners")
+      .map((x) => [x.kind, x.after, x.reviewRequired]),
+    [["artist_added", "Future & Act", true]],
   );
 });

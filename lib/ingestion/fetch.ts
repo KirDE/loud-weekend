@@ -331,17 +331,16 @@ async function fetchSourceWithoutTicketSupplement(
       if (!listing.response.ok) return { response: listing.response, attempts };
       if (listing.response.url && listing.response.url !== TOLMINATOR_LINEUP)
         throw new Error("Tolminator lineup redirected");
-      return {
-        response: new Response(
-          JSON.stringify({
-            kind: TOLMINATOR_DOCUMENTS,
-            home,
-            lineup: await boundedTicketText(listing.response),
-          }),
-          { headers: { "content-type": "application/json" } },
-        ),
-        attempts,
-      };
+      const response = new Response(
+        JSON.stringify({
+          kind: TOLMINATOR_DOCUMENTS,
+          home,
+          lineup: await boundedTicketText(listing.response),
+        }),
+        { headers: { "content-type": "application/json" } },
+      );
+      Object.defineProperty(response, "url", { value: source.url });
+      return { response, attempts };
     } catch (error) {
       const failure = error instanceof Error ? error : new Error(String(error));
       throw Object.assign(failure, {

@@ -148,15 +148,19 @@ export function diffFestival(current: Festival, candidate: FestivalCandidate): F
     announcement || candidate.artistListMode === "additive",
     ambiguous,
   );
-  // New Summer Punch artists require protected review, without provider work.
+  // New artists from these announcement adapters require protected review.
   // An unchanged additive replay must not generate another review.
-  if (["summer-punch", "area53"].includes(candidate.festivalSlug))
+  if (["summer-punch", "area53", "tolminator"].includes(candidate.festivalSlug))
     for (const change of changes) {
       if (change.kind === "artist_added" || change.kind === "headliner_added") {
         change.reviewRequired = true;
-        change.reason =
-          `${candidate.festivalSlug === "area53" ? "Area 53" : "Summer Punch"}` +
-          " additions require protected ingestion review";
+        const label =
+          candidate.festivalSlug === "area53"
+            ? "Area 53"
+            : candidate.festivalSlug === "tolminator"
+              ? "Tolminator"
+              : "Summer Punch";
+        change.reason = `${label} additions require protected ingestion review`;
       }
     }
   operationalChanges(changes, current, candidate);
