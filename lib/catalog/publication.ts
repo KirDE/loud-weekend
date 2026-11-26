@@ -1,21 +1,21 @@
+import { stockProofSources } from "../ingestion/adapters/stock-proof-sources.ts";
+import { publishCampingObservation, type CampingObservation } from "./camping-import.ts";
 import {
   publishOverviewObservation,
   type OverviewObservation,
 } from "./festival-overview-import.ts";
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
-import {
-  isTolminatorStockRoute,
-  matchesTolminatorStockEdition,
-} from "../ingestion/adapters/tolminator-stock.ts";
+import { admissionSources } from "../ingestion/adapters/admission-sources.ts";
 import { rosterFingerprint } from "./lineup-proof.ts";
-import { editionDateProblem } from "../domain/edition-dates.ts";
+import { editionDateProblem, isCalendarDate } from "../domain/edition-dates.ts";
 import { publishArrivalObservation, type ArrivalObservation } from "./arrival-import.ts";
 import {
   ticketSupplementUrl,
   ticketSupplementPurchaseUrl,
+  ticketSupplementScope,
+  ticketPublicationPolicy,
 } from "../ingestion/ticket-supplements.ts";
-import { isProvinssiAnnouncement, PROVINSSI_HOME } from "../ingestion/adapters/provinssi.ts";
 import { assertAdminArtistReviewAllowed } from "./admin-artist-review.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { isDownloadAnnouncement } from "../ingestion/adapters/download.ts";
@@ -488,10 +488,21 @@ async function applyFestivalChanges(
     }
     if (changed) changedFields.push(change.field);
   }
-  return { edition, changedFields: [...new Set(changedFields)] };
+  return {
+    edition,
+    resultingDates: {
+      startDate: proposed.has("startDate")
+        ? isoDate(dateOnly(proposed.get("startDate")))
+        : isoDate(edition.startDate),
+      endDate: proposed.has("endDate")
+        ? isoDate(dateOnly(proposed.get("endDate")))
+        : isoDate(edition.endDate),
+    },
+    changedFields: [...new Set(changedFields)],
+  };
 }
 
-async function createPublication(
+export async function createPublication(
   db: Database,
   input: {
     source: CatalogPublicationSource;
@@ -603,6 +614,77 @@ export async function publishIngestionResult(
           "Ingestion publication scope does not match the persisted festival, source and edition",
         );
       }
+      // Either a reviewed admission endpoint or a free-admission claim invokes
+      // the same proof contract, even if the caller strips its source identity.
+      const admissionRoutes = [input.result.sourceUrl, candidate.attempt.finalUrl];
+      const admissionSource = admissionSources.find(({ url }) => admissionRoutes.includes(url));
+      if (
+        admissionSource ||
+        observed.ticketStatus === "free" ||
+        stored.ticketStatus === "free" ||
+        input.result.changes.some(
+          ({ field, after }) => field === "ticketStatus" && after === "free",
+        )
+      ) {
+        const { sourceUrl, fetchedAt, festivalSlug } = input.result;
+        const at = Date.parse(fetchedAt);
+        const fields = admissionSource?.fields ?? (["ticketStatus"] as const);
+        const year = observed.observedEditionYears[0];
+        const valid =
+          candidate.attempt.finalUrl === sourceUrl &&
+          candidate.attempt.httpStatus === 200 &&
+          Number.isFinite(at) &&
+          year !== undefined &&
+          (candidate.sourceYear === null || year === candidate.sourceYear) &&
+          observed.ticketStatus === "free" &&
+          isDeepStrictEqual(stored, observed) &&
+          observed.fetchedAt === fetchedAt &&
+          observed.warnings.length === 0 &&
+          (!admissionSource ||
+            (admissionSource.url === sourceUrl &&
+              admissionSource.festivalSlug === festivalSlug &&
+              isCalendarDate(observed.startDate) &&
+              isCalendarDate(observed.endDate) &&
+              !editionDateProblem(year, observed.startDate, observed.endDate) &&
+              Object.keys(observed).every((key) =>
+                [
+                  "schemaVersion",
+                  "festivalSlug",
+                  "sourceUrl",
+                  "fetchedAt",
+                  "observedEditionYears",
+                  "warnings",
+                  "evidence",
+                  ...fields,
+                ].includes(key),
+              ))) &&
+          input.result.changes.every(({ field, after }) => {
+            const proofField = fields.find((key) => key === field);
+            return proofField ? same(after, observed[proofField]) : !admissionSource;
+          }) &&
+          fields.every((field) =>
+            observed.evidence.some(
+              (e) =>
+                e.field === field &&
+                e.sourceUrl === sourceUrl &&
+                Date.parse(e.observedAt) === at &&
+                e.excerpt?.trim() &&
+                candidate.evidence.some(
+                  (saved) =>
+                    saved.field === field &&
+                    saved.sourceUrl === e.sourceUrl &&
+                    saved.observedAt.getTime() === at &&
+                    saved.excerpt === e.excerpt &&
+                    saved.contentHash === createHash("sha256").update(e.excerpt!).digest("hex") &&
+                    same(saved.observedValue, observed[field]),
+                ),
+            ),
+          );
+        if (!valid)
+          throw new Error(
+            "Free admission publication requires matching persisted official edition evidence",
+          );
+      }
       const sourceId = `ingestion:${candidate.id}`;
       const existing = await db.catalogPublication.findUnique({
         where: { sourceId },
@@ -673,15 +755,15 @@ export async function publishIngestionResult(
       // Scope this stock-only guard to the product route, never the festival
       // slug: the primary homepage still publishes its independent date fields.
       // Durable route identities keep caller slug/source stripping fail-closed.
-      if (
-        [
-          input.result.sourceUrl,
-          candidate.attempt.requestedUrl,
-          candidate.attempt.finalUrl,
-          observed.sourceUrl,
-          stored.sourceUrl,
-        ].some(isTolminatorStockRoute)
-      ) {
+      const stockRoutes = [
+        input.result.sourceUrl,
+        candidate.attempt.requestedUrl,
+        candidate.attempt.finalUrl,
+        observed.sourceUrl,
+        stored.sourceUrl,
+      ];
+      const stockSource = stockProofSources.find(({ url }) => stockRoutes.includes(url));
+      if (stockSource) {
         const time = Date.parse(observed.fetchedAt);
         const allowed = new Set([
           "schemaVersion",
@@ -696,7 +778,7 @@ export async function publishIngestionResult(
         ]);
         const valid =
           [input.result.festivalSlug, candidate.festivalSlug, observed.festivalSlug].every((slug) =>
-            matchesTolminatorStockEdition(slug, observed.observedEditionYears),
+            stockSource.matchesEdition(slug, observed.observedEditionYears),
           ) &&
           [
             input.result.sourceUrl,
@@ -704,7 +786,7 @@ export async function publishIngestionResult(
             candidate.attempt.requestedUrl,
             candidate.attempt.finalUrl,
             observed.ticketsUrl,
-          ].every(isTolminatorStockRoute) &&
+          ].every((url) => url === stockSource.url) &&
           candidate.attempt.httpStatus === 200 &&
           isDeepStrictEqual(stored, observed) &&
           Object.keys(observed).every((key) => allowed.has(key)) &&
@@ -727,7 +809,7 @@ export async function publishIngestionResult(
             const proof = observed.evidence.filter((e) => e.field === field);
             return (
               proof.length === 1 &&
-              isTolminatorStockRoute(proof[0].sourceUrl) &&
+              proof[0].sourceUrl === stockSource.url &&
               proof[0].observedAt === observed.fetchedAt &&
               typeof proof[0].excerpt === "string" &&
               proof[0].excerpt.length > 0 &&
@@ -735,7 +817,7 @@ export async function publishIngestionResult(
               candidate.evidence.some(
                 (saved) =>
                   saved.field === field &&
-                  isTolminatorStockRoute(saved.sourceUrl) &&
+                  saved.sourceUrl === stockSource.url &&
                   saved.excerpt === proof[0].excerpt &&
                   saved.observedAt.getTime() === time &&
                   saved.contentHash ===
@@ -745,11 +827,15 @@ export async function publishIngestionResult(
             );
           });
         if (!valid)
-          throw new Error(
-            "Tolminator stock publication requires matching persisted ticket-only proof",
-          );
+          throw new Error("Stock publication requires matching persisted ticket-only proof");
       }
-      if (observed.ticketSupplement || stored.ticketSupplement) {
+      // Required ticket fields cannot bypass durable proof by omitting both markers.
+      const ticketPolicy = ticketPublicationPolicy(input.result.festivalSlug);
+      if (
+        observed.ticketSupplement ||
+        stored.ticketSupplement ||
+        input.result.changes.some(({ field }) => ticketPolicy?.requiredFields.includes(field))
+      ) {
         const registeredSource = {
           festivalSlug: input.result.festivalSlug,
           url: input.result.sourceUrl,
@@ -762,15 +848,17 @@ export async function publishIngestionResult(
         };
         const ticketUrl = ticketSupplementUrl(registeredSource);
         const purchaseUrl = ticketSupplementPurchaseUrl(registeredSource);
+        const scope = ticketSupplementScope(registeredSource);
         const provenance = {
           sourceUrl: input.result.sourceUrl,
           ticketUrl,
           editionYear: expectedYear,
+          ...(scope ? { scope } : {}),
         };
         const valid =
           ticketUrl &&
-          same(observed.ticketSupplement, provenance) &&
-          same(stored.ticketSupplement, provenance) &&
+          isDeepStrictEqual(observed.ticketSupplement, provenance) &&
+          isDeepStrictEqual(stored.ticketSupplement, provenance) &&
           candidate.festivalSlug === input.result.festivalSlug &&
           candidate.attempt.requestedUrl === input.result.sourceUrl &&
           observed.sourceUrl === input.result.sourceUrl &&
@@ -1073,46 +1161,19 @@ export async function publishIngestionResult(
         !verifiedDownloadAnnouncement
       )
         throw new Error("Download publication requires verified official announcement evidence");
-      const provinssiPublication = input.result.festivalSlug === "provinssi";
-      const verifiedProvinssiAnnouncement =
-        provinssiPublication &&
-        candidate.festivalSlug === "provinssi" &&
-        candidate.attempt.requestedUrl === PROVINSSI_HOME &&
-        input.result.sourceUrl === PROVINSSI_HOME &&
-        isProvinssiAnnouncement(input.result.candidate, applied.edition.year) &&
-        isProvinssiAnnouncement(
-          candidate.normalized as unknown as FestivalCandidate,
-          applied.edition.year,
-        ) &&
-        input.result.changes.every(
-          ({ field, kind }) =>
-            ["startDate", "endDate", "city", "lineup", "ticketsUrl", "status"].includes(field) &&
-            (field !== "lineup" || kind === "artist_added") &&
-            candidate.evidence.some(
-              (e) =>
-                e.field === field &&
-                e.sourceUrl === PROVINSSI_HOME &&
-                same(
-                  e.observedValue,
-                  (input.result.candidate as unknown as Record<string, unknown>)[field],
-                ),
-            ),
-        ) &&
-        ["startDate", "endDate", "city", "lineup", "ticketsUrl", "status"].every((field) =>
-          same(
-            (candidate.normalized as Record<string, unknown>)[field],
-            (input.result.candidate as unknown as Record<string, unknown>)[field],
-          ),
-        );
-      if (provinssiPublication && !verifiedProvinssiAnnouncement)
-        throw new Error(
-          "Provinssi publication requires matching persisted official addition evidence",
-        );
-      const provinssiLineup =
-        verifiedProvinssiAnnouncement &&
-        input.result.changes.some((c) => c.kind === "artist_added");
+      const ticketPrimaryProof = ticketPolicy?.validatePrimary?.({
+        result: input.result,
+        requestedUrl: candidate.attempt.requestedUrl,
+        candidateSlug: candidate.festivalSlug,
+        stored,
+        evidence: candidate.evidence,
+        edition: {
+          year: applied.edition.year,
+          ...applied.resultingDates,
+        },
+      });
       if (
-        (graspopLineup || verifiedDownloadAnnouncement || provinssiLineup) &&
+        (graspopLineup || verifiedDownloadAnnouncement || ticketPrimaryProof?.markPartial) &&
         applied.edition.completeness === "TBA"
       ) {
         await db.festivalEdition.update({
@@ -1123,7 +1184,7 @@ export async function publishIngestionResult(
           applied.changedFields.push("completeness");
       }
       const playlistRefreshDeferral =
-        verifiedProvinssiAnnouncement ||
+        ticketPrimaryProof?.deferPlaylistRefreshFor ||
         idaysLineup ||
         graspopLineup ||
         (downloadLineup && verifiedDownloadAnnouncement)
@@ -1131,13 +1192,8 @@ export async function publishIngestionResult(
               policy: "explicit-refresh-only",
               reason:
                 "Verified " +
-                (input.result.festivalSlug === "provinssi"
-                  ? "Provinssi"
-                  : downloadLineup
-                    ? "Download"
-                    : graspopLineup
-                      ? "Graspop"
-                      : "I-Days") +
+                (ticketPrimaryProof?.deferPlaylistRefreshFor ??
+                  (downloadLineup ? "Download" : graspopLineup ? "Graspop" : "I-Days")) +
                 " catalog additions do not authorize provider activity",
             }
           : undefined;
@@ -1266,6 +1322,22 @@ export async function publishAdminFestivalChange(
     actorLabel: input.actorLabel,
     fields: applied.changedFields,
     evidence: { adminChangeId: input.change.id, sourceEvidence: input.change.sourceEvidence },
+  });
+}
+
+export async function publishAgentCampingResolution(
+  db: Prisma.TransactionClient,
+  input: { sourceId: string; camping: CampingObservation; evidence: unknown },
+) {
+  if (!(await publishCampingObservation(db, input.camping))) return null;
+  return createPublication(db, {
+    source: CatalogPublicationSource.INGESTION,
+    sourceId: input.sourceId,
+    festivalSlug: input.camping.festivalSlug,
+    editionYear: input.camping.editionYear,
+    actorLabel: "OpenClaw import-conflict agent",
+    fields: ["camping"],
+    evidence: input.evidence,
   });
 }
 
