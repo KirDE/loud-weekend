@@ -1,4 +1,5 @@
 import type { Festival } from "./domain/festival.ts";
+import { editionOnHiatus } from "./edition-lifecycle.ts";
 import { festivalDateInterval } from "./festival-dates.ts";
 
 export function personalCalendar(
@@ -9,6 +10,7 @@ export function personalCalendar(
   const undated: Festival[] = [];
   for (const festival of festivals) {
     if (attendance[festival.slug] !== "going" && attendance[festival.slug] !== "maybe") continue;
+    if (editionOnHiatus(festival)) continue;
     const interval = festivalDateInterval(festival);
     if (interval) dated.push({ festival, ...interval });
     else undated.push(festival);

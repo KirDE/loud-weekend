@@ -87,6 +87,24 @@ test("offline page does not substitute data when the catalogue is missing or inv
   }
 });
 
+test("valid empty schedule is distinct from missing catalogue data", async () => {
+  const { status, catalog } = await render(
+    async () =>
+      new Response(
+        JSON.stringify({
+          schemaVersion: 1,
+          editionYear: 2027,
+          dataVersion: "festivals-2027-v1",
+          generatedAt: null,
+          timetableStatus: "not-published",
+          festivals: [],
+        }),
+      ),
+  );
+  assert.match(status.textContent, /No scheduled festivals/);
+  assert.equal(catalog.children[0].children.length, 0);
+});
+
 test("catalogue requests stay under the installation path and empty data is localized", async () => {
   const { status } = await render(
     async (url) => {

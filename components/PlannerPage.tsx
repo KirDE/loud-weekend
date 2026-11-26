@@ -7,8 +7,6 @@ import { useState } from "react";
 import { playlistDepths, type PlaylistDepth } from "@/lib/playlist-depth";
 import { playlistLineup } from "@/lib/playlist-selection";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
-import { festivalDateInterval } from "@/lib/festival-dates";
-import { calendarFile } from "@/lib/planning";
 import type { Festival } from "@/lib/domain/festival";
 import { useLocalPlanner, type Attendance } from "./LocalPlanner";
 import { PlannerReset } from "./PlannerReset";
@@ -16,7 +14,9 @@ import { AccountSyncPanel } from "./AccountSyncPanel";
 import { TripBudget } from "./TripBudget";
 import { PersonalCalendar } from "./PersonalCalendar";
 import { FestivalViews } from "./FestivalViews";
-import { useLanguage, type Language } from "./LanguageProvider";
+import { calendarEligible, calendarFile } from "@/lib/planning";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
+import { useLanguage, translate, type Language } from "./LanguageProvider";
 
 type PlannerLabels = {
   eyebrow: string;
@@ -250,7 +250,9 @@ export function PlannerPage({
   const planned = festivals.filter(
     (f) => p.favoriteFestivals.includes(f.slug) || p.attendance[f.slug],
   );
-  const selected = festivals.filter((f) => p.playlistFestivals.includes(f.slug));
+  const selected = festivals.filter(
+    (f) => p.playlistFestivals.includes(f.slug) && !editionOnHiatus(f),
+  );
   const candidates = playlistLineup(
     selected.map((festival) => festival.slug),
     lineups,
@@ -282,7 +284,7 @@ export function PlannerPage({
     p.setPlaylistExclusions([...next]);
   }
   const dated = planned
-    .filter((f) => festivalDateInterval(f))
+    .filter(calendarEligible)
     .sort((a, b) => a.startDate!.localeCompare(b.startDate!));
   async function createPlaylist() {
     sendProductEvent("PLAYLIST_START", language);
@@ -360,7 +362,11 @@ export function PlannerPage({
               {planned.map((f) => (
                 <article key={f.slug}>
                   <div>
-                    <small>{f.startDate || t.datesTba}</small>
+                    <small>
+                      {editionOnHiatus(f)
+                        ? translate(language, "editionHiatus")
+                        : f.startDate || t.datesTba}
+                    </small>
                     <Link href={`/festivals/${f.slug}/`}>
                       <strong>{f.name}</strong>
                     </Link>
@@ -379,9 +385,15 @@ export function PlannerPage({
                     }
                   >
                     <option value="">{t.noStatus}</option>
-                    <option value="going">{t.going}</option>
-                    <option value="maybe">{t.maybe}</option>
-                    <option value="not-going">{t.notGoing}</option>
+                    <option value="going" disabled={editionOnHiatus(f)}>
+                      {t.going}
+                    </option>
+                    <option value="maybe" disabled={editionOnHiatus(f)}>
+                      {t.maybe}
+                    </option>
+                    <option value="not-going" disabled={editionOnHiatus(f)}>
+                      {t.notGoing}
+                    </option>
                   </select>
                 </article>
               ))}

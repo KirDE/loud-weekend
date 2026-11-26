@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { festivalDateInterval, formatFestivalDateRange } from "@/lib/festival-dates";
 import { compareFestivalLineups } from "@/lib/festival-comparison";
 import { distanceKm, type Coordinates } from "@/lib/festival-discovery";
@@ -79,13 +80,15 @@ export function FestivalComparison({
           <tr>
             <th scope="row">{t("dates")}</th>
             {festivals.map((item) => (
-              <td key={item.slug}>{formatFestivalDateRange(item, locale, t("datesTba"))}</td>
+              <td key={item.slug}>
+                {formatFestivalDateRange(item, locale, t("datesTba"), t("editionHiatus"))}
+              </td>
             ))}
           </tr>
           <tr>
             <th scope="row">{t("comparisonDuration")}</th>
             {festivals.map((item) => {
-              const dates = festivalDateInterval(item);
+              const dates = editionOnHiatus(item) ? null : festivalDateInterval(item);
               const days = dates
                 ? (dates.end.valueOf() - dates.start.valueOf()) / 86_400_000 + 1
                 : null;

@@ -92,6 +92,31 @@ for (const [lang, sold, notSale, noPrice, fees] of [
     assert.deepEqual(item, before);
     assert.doesNotMatch(render(lang, festival), /ticketOfferSection/);
   });
+test("approved hiatus hides previously reviewed ticket tiers without changing the evidence", () => {
+  const item = {
+    ...festival,
+    editionYear: ticketOffers.editionYear,
+    ticketOffers,
+    editionLifecycle: {
+      festivalSlug: festival.slug,
+      editionYear: ticketOffers.editionYear,
+      lifecycle: "hiatus",
+      announcedReturnYear: null,
+      alternativeEvent: null,
+      sourceUrl: festival.officialUrl,
+      observedAt: ticketOffers.observedAt,
+      approvedAt: ticketOffers.observedAt,
+    },
+  };
+  const before = structuredClone(item);
+  for (const lang of ["en", "de", "ru"]) {
+    const html = render(lang, item);
+    assert.match(html, /data-ticket-status="hiatus"/);
+    assert.doesNotMatch(html, /ticketOfferSection/);
+  }
+  assert.deepEqual(item, before);
+});
+
 test("mixed tiers suppress unrelated global SEO stock without inventing a purchase offer", () => {
   for (const ticketStatus of ["available", "low", "sold_out", "unknown"]) {
     const item = {

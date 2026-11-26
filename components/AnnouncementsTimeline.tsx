@@ -27,8 +27,9 @@ export function AnnouncementsTimeline({
       label: displayRegion.of(countryCode) ?? country,
     }))
     .sort((a, b) => a.label.localeCompare(b.label, language));
-  const pageUrl = (page: number) => {
+  const pageUrl = (page: number, artist = filters.artist) => {
     const query = new URLSearchParams();
+    if (artist) query.set("artist", artist);
     if (filters.country) query.set("country", filters.country);
     if (filters.days) query.set("period", String(filters.days));
     if (page > 1) query.set("page", String(page));
@@ -39,11 +40,13 @@ export function AnnouncementsTimeline({
     <div className="detailPage editionHistory">
       <h1>{copy.timeline}</h1>
       <p>{copy.intro}</p>
+      {filters.artist && <Link href={pageUrl(1, "")}>{copy.clearArtist}</Link>}
       <form
         method="get"
         action={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}${path}`}
         className="lineupSort"
       >
+        {filters.artist && <input type="hidden" name="artist" value={filters.artist} />}
         <label>
           {copy.country}{" "}
           <select name="country" defaultValue={filters.country}>

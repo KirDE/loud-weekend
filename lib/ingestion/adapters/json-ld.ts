@@ -5,6 +5,7 @@ import { validateGenericLineup } from "../lineup-quality.ts";
 import { festivalDateInterval } from "../../festival-dates.ts";
 
 type JsonLd = Record<string, unknown>;
+type ScriptRecord = { record: JsonLd; scriptIndex: number };
 
 function records(value: unknown): JsonLd[] {
   if (Array.isArray(value)) return value.flatMap(records);
@@ -13,32 +14,132 @@ function records(value: unknown): JsonLd[] {
   return [record, ...records(record["@graph"])];
 }
 
-function eventRecords(html: string): { event: JsonLd; excerpt: string }[] {
-  const events: { event: JsonLd; excerpt: string }[] = [];
+function setMembers(value: unknown): unknown[] {
+  const values = Array.isArray(value) ? value : [value];
+  return values.flatMap((member) => {
+    if (!member || typeof member !== "object" || !Object.hasOwn(member, "@set")) return [member];
+    const members = (member as JsonLd)["@set"];
+    return Array.isArray(members) ? members : [members];
+  });
+}
+
+function* documentRecords(value: unknown): Generator<JsonLd> {
+  for (const record of records(value)) {
+    yield record;
+    // Included nodes are document-level descriptions, not timetable entries.
+    yield* documentRecords(record["@included"]);
+  }
+}
+
+function eventKey(record: JsonLd, sourceUrl: string, scriptIndex: number): string | undefined {
+  const id = record["@id"];
+  if (typeof id !== "string" || !id.trim()) return undefined;
+  // Named IDs can link across scripts; blank-node labels belong to one script.
+  if (id.startsWith("_:")) return `${scriptIndex}:${id}`;
+  try {
+    return new URL(id, sourceUrl).href;
+  } catch {
+    return undefined;
+  }
+}
+
+function reversedEventReferences(record: JsonLd, property: "superEvent" | "subEvent"): JsonLd[] {
+  const reverse = record["@reverse"];
+  if (!reverse || typeof reverse !== "object" || Array.isArray(reverse)) return [];
+  const properties = reverse as JsonLd;
+  return [property, `https://schema.org/${property}`, `http://schema.org/${property}`].flatMap(
+    (key) => setMembers(properties[key]).flatMap(records),
+  );
+}
+
+function eventRecords(html: string, sourceUrl: string) {
+  const events: ScriptRecord[] = [];
+  const splitRelations: ScriptRecord[] = [];
+  const reviewStatuses = new Map<string, string>();
+  const dateDescriptions = new Map<string, JsonLd[]>();
   const $ = load(html);
   $("template").remove();
-  for (const element of $("script[type]").toArray()) {
+  for (const [scriptIndex, element] of $("script[type]").toArray().entries()) {
     const script = $(element);
     if (script.attr("type")?.trim().toLowerCase() !== "application/ld+json") continue;
     const source = script.text().trim();
     if (!source) continue;
     try {
       const parsed = JSON.parse(source);
-      for (const record of records(parsed)) {
-        // A linked performance or side event is not evidence for its parent festival.
-        if (record.superEvent != null) continue;
+      for (const record of documentRecords(parsed)) {
+        const id = eventKey(record, sourceUrl, scriptIndex);
+        if (id) {
+          const status = eventStatusRequiringReview(record.eventStatus);
+          if (status) reviewStatuses.set(id, status);
+          if (record.startDate != null || record.endDate != null) {
+            const descriptions = dateDescriptions.get(id);
+            if (descriptions) descriptions.push(record);
+            else dateDescriptions.set(id, [record]);
+          }
+        }
         const types = Array.isArray(record["@type"]) ? record["@type"] : [record["@type"]];
         if (
-          types.some((type) => typeof type === "string" && type.toLowerCase().endsWith("event"))
+          types.some(
+            (type) =>
+              typeof type === "string" &&
+              (type.toLowerCase().endsWith("event") ||
+                /^(?:https?:\/\/schema\.org\/)?Festival$/i.test(type)),
+          )
         ) {
-          events.push({ event: record, excerpt: JSON.stringify(record).slice(0, 500) });
+          events.push({ record, scriptIndex });
+        } else if (
+          record.superEvent != null ||
+          record.subEvent != null ||
+          record["@reverse"] != null
+        ) {
+          splitRelations.push({ record, scriptIndex });
         }
       }
     } catch {
       continue;
     }
   }
-  return events;
+  // Bind relationship-only descriptions to known events using the same identity as their claims.
+  const eventIds = new Set(
+    events.map(({ record, scriptIndex }) => eventKey(record, sourceUrl, scriptIndex)),
+  );
+  const linkedDescriptions = splitRelations.filter(({ record, scriptIndex }) => {
+    const id = eventKey(record, sourceUrl, scriptIndex);
+    return id && eventIds.has(id);
+  });
+  const childrenToExclude = new Set<string | JsonLd>();
+  for (const { record, scriptIndex } of [...events, ...linkedDescriptions]) {
+    const id = eventKey(record, sourceUrl, scriptIndex);
+    // The inverse of subEvent points from a child to its parent.
+    const hasReverseParent = reversedEventReferences(record, "subEvent").some((parent) => {
+      const parentId = eventKey(parent, sourceUrl, scriptIndex);
+      return parentId && parentId !== id && eventIds.has(parentId);
+    });
+    if (record.superEvent != null || hasReverseParent) childrenToExclude.add(id ?? record);
+    // The inverse of superEvent points from a parent to its children.
+    const children = [
+      ...setMembers(record.subEvent).flatMap(records),
+      ...reversedEventReferences(record, "superEvent"),
+    ];
+    for (const child of children) {
+      const childId = eventKey(child, sourceUrl, scriptIndex);
+      if (childId && childId !== id) childrenToExclude.add(childId);
+    }
+  }
+  return {
+    events: events
+      .filter(({ record, scriptIndex }) => {
+        const id = eventKey(record, sourceUrl, scriptIndex);
+        return !childrenToExclude.has(id ?? record);
+      })
+      .map(({ record, scriptIndex }) => ({
+        event: record,
+        id: eventKey(record, sourceUrl, scriptIndex),
+        excerpt: JSON.stringify(record).slice(0, 500),
+      })),
+    reviewStatuses,
+    dateDescriptions,
+  };
 }
 
 function text(value: unknown): string | undefined {
@@ -48,7 +149,19 @@ function text(value: unknown): string | undefined {
   return undefined;
 }
 
-function eventDate(value: unknown): { day: string; instant?: number } | undefined {
+function eventStatusRequiringReview(value: unknown): string | undefined {
+  return setMembers(value)
+    .map((status) => {
+      const record = status as JsonLd | null | undefined;
+      const literal = record?.["@value"];
+      return text(record?.["@id"]) ?? text(typeof literal === "string" ? literal : status);
+    })
+    .find((status) => status && /cancelled|postponed|rescheduled|movedonline/i.test(status));
+}
+
+type EventDate = { day: string; instant?: number };
+
+function eventDate(value: unknown): EventDate | undefined {
   if (typeof value !== "string") return undefined;
   const valueText = value.trim();
   const plainDate = valueText.match(
@@ -63,6 +176,16 @@ function eventDate(value: unknown): { day: string; instant?: number } | undefine
     valueText.length > plainDate.length && /(?:z|[+-]\d{2}:?\d{2})$/i.test(valueText);
   return { day: plainDate, instant: hasOffset ? parsed : undefined };
 }
+
+function isReversed(start?: EventDate, end?: EventDate): boolean {
+  if (!start || !end) return false;
+  return (
+    !festivalDateInterval({ startDate: start.day, endDate: end.day }) ||
+    (start.instant !== undefined && end.instant !== undefined && end.instant < start.instant)
+  );
+}
+
+const reversedDateWarning = "JSON-LD Event end date precedes its start date";
 
 function city(location: unknown): string | undefined {
   if (!location || typeof location !== "object") return undefined;
@@ -140,20 +263,13 @@ export function extractJsonLdCandidate(
   source: FestivalSource,
   fetchedAt: string,
 ): FestivalCandidate {
-  const events = eventRecords(html).map((record) => ({
+  const { events: parsedEvents, reviewStatuses, dateDescriptions } = eventRecords(html, source.url);
+  const events = parsedEvents.map((record) => ({
     ...record,
     startDate: eventDate(record.event.startDate),
     endDate: eventDate(record.event.endDate),
   }));
-  const matches = events.filter(({ startDate, endDate }) => {
-    if (!startDate || !endDate) return true;
-    if (!festivalDateInterval({ startDate: startDate.day, endDate: endDate.day })) return false;
-    return (
-      startDate.instant === undefined ||
-      endDate.instant === undefined ||
-      endDate.instant >= startDate.instant
-    );
-  });
+  const matches = events.filter(({ startDate, endDate }) => !isReversed(startDate, endDate));
   const matching = matches.filter(({ startDate }) =>
     startDate?.day.startsWith(`${source.editionYear}-`),
   );
@@ -168,8 +284,7 @@ export function extractJsonLdCandidate(
     observedEditionYears: [],
   };
 
-  if (matches.length !== events.length)
-    candidate.warnings.push("JSON-LD Event end date precedes its start date");
+  if (matches.length !== events.length) candidate.warnings.push(reversedDateWarning);
   if (!selected) {
     if (!events.length) candidate.warnings.push("No JSON-LD Event was found");
     return candidate;
@@ -184,10 +299,47 @@ export function extractJsonLdCandidate(
     ticketStatus: ticketStatus(selected.event.offers),
     timetable: timetable(selected.event.subEvent),
   };
-  if (selected.event.startDate != null && fields.startDate === undefined)
-    candidate.warnings.push("JSON-LD Event contains an invalid start date");
-  if (selected.event.endDate != null && fields.endDate === undefined)
-    candidate.warnings.push("JSON-LD Event contains an invalid end date");
+  const selectedId = selected.id;
+  const descriptions = (selectedId && dateDescriptions.get(selectedId)) || [selected.event];
+  const claimedDates = descriptions.map(({ startDate, endDate }) => ({
+    startDate: eventDate(startDate),
+    endDate: eventDate(endDate),
+  }));
+  // Alternate claims can block publication but cannot supply the chosen fields or evidence.
+  const [latestStart, earliestEnd] = (
+    [
+      ["startDate", "start date"],
+      ["endDate", "end date"],
+    ] as const
+  ).map(([field, label]) => {
+    const days = new Set<string>();
+    let instant: number | undefined;
+    let invalid = false;
+    for (const [index, dates] of claimedDates.entries()) {
+      const date = dates[field];
+      if (date) {
+        days.add(date.day);
+        if (date.instant !== undefined) {
+          // Compare the latest start with the earliest end without pairing every description.
+          const extreme = field === "startDate" ? Math.max : Math.min;
+          instant = instant === undefined ? date.instant : extreme(instant, date.instant);
+        }
+      } else if (descriptions[index][field] != null) {
+        invalid = true;
+      }
+    }
+    if (invalid) candidate.warnings.push(`JSON-LD Event contains an invalid ${label}`);
+    if (days.size > 1) candidate.warnings.push(`Conflicting JSON-LD festival ${field} claims`);
+    const day = days.size === 1 ? days.values().next().value : undefined;
+    return day ? { day, instant } : undefined;
+  });
+  if (
+    matches.length === events.length &&
+    (isReversed(latestStart, earliestEnd) ||
+      claimedDates.some(({ startDate, endDate }) => isReversed(startDate, endDate)))
+  ) {
+    candidate.warnings.push(reversedDateWarning);
+  }
   const lineupQuality = validateGenericLineup(fields.lineup ?? []);
   fields.lineup = lineupQuality.names.length
     ? lineupQuality.names
@@ -223,11 +375,9 @@ export function extractJsonLdCandidate(
     }
   }
 
-  const eventStatus = selected.event.eventStatus;
-  const statuses = Array.isArray(eventStatus) ? eventStatus : [eventStatus];
-  const reviewStatus = statuses
-    .map((status) => text((status as JsonLd | null | undefined)?.["@id"]) ?? text(status))
-    .find((status) => status && /cancelled|postponed|rescheduled|movedonline/i.test(status));
+  const reviewStatus =
+    eventStatusRequiringReview(selected.event.eventStatus) ??
+    (selectedId ? reviewStatuses.get(selectedId) : undefined);
   if (reviewStatus)
     candidate.warnings.push(`Official event status requires review: ${reviewStatus}`);
   if (matching.length > 1)

@@ -55,9 +55,53 @@ test("conflicting HTML festival date metadata holds otherwise safe ticket update
       );
       assert.ok(result.changes.some((change) => change.field === "ticketsUrl"));
       assert.equal(result.publishable, false);
-      assert.ok(result.reviewReasons.includes(`Conflicting HTML festival ${role} date metadata`));
+      assert.ok(
+        result.reviewReasons.includes(`Conflicting HTML festival ${role} date declarations`),
+      );
     }
   }
+});
+
+test("conflicting marked HTML dates hold otherwise safe ticket updates", () => {
+  for (const [role, currentDate, competingDate] of [
+    ["start", current.startDate, "2027-07-29"],
+    ["end", current.endDate, "2027-08-01"],
+  ]) {
+    const field = `${role}Date`;
+    const preferred = `<meta property="event:${role}_time" content="${currentDate}">`;
+    const firstTime = `<time itemprop="${field}" datetime="${currentDate}">`;
+    const competing = `<time itemprop="${field}" datetime="${competingDate}"></time>`;
+    for (const [first, html] of [
+      [preferred, competing + preferred],
+      [firstTime, firstTime + "</time>" + competing],
+    ]) {
+      const candidate = extract(html + ticket);
+      const result = evaluateCandidate(current, candidate);
+      assert.equal(candidate[field], currentDate);
+      assert.equal(candidate.evidence.find((evidence) => evidence.field === field)?.excerpt, first);
+      assert.deepEqual(
+        result.changes.map((change) => change.field),
+        ["ticketsUrl"],
+      );
+      assert.equal(result.publishable, false);
+      assert.ok(
+        result.reviewReasons.includes(`Conflicting HTML festival ${role} date declarations`),
+      );
+    }
+  }
+});
+
+test("equivalent dates and unrelated time markers do not hold a ticket update", () => {
+  const html =
+    '<meta property="event:start_time" content="2027-07-28">' +
+    '<time itemprop="startDate" datetime="2027-07-28T23:30:00-02:00"></time>' +
+    '<time class="presale-start" datetime="2027-05-01"></time>' +
+    '<time class="weekend" datetime="2027-07-29"></time>' +
+    ticket;
+  const candidate = extract(html);
+  assert.equal(candidate.startDate, current.startDate);
+  assert.equal(candidate.endDate, undefined);
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
 });
 
 test("equivalent HTML festival date metadata does not block ticket updates", () => {
@@ -172,6 +216,334 @@ for (const [status, eventStatus] of [
   });
 }
 
+test("Schema.org Festival cancellation holds ticket changes for editorial review", () => {
+  const cancelled = "https://schema.org/EventCancelled";
+  for (const type of [
+    "Festival",
+    "https://schema.org/Festival",
+    ["Thing", "http://schema.org/Festival"],
+  ]) {
+    const event = { "@type": type, startDate: current.startDate, eventStatus: cancelled };
+    const candidate = extract(
+      `<script type="application/ld+json">${JSON.stringify(event)}</script>${ticket}`,
+    );
+    const result = evaluateCandidate(current, candidate);
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [`Official event status requires review: ${cancelled}`]);
+    assert.equal(
+      candidate.evidence.find(({ field }) => field === "startDate").excerpt,
+      JSON.stringify(event),
+    );
+  }
+});
+
+test("Schema.org Festival records still require current-edition and relationship proof", () => {
+  const festival = {
+    "@type": "Festival",
+    "@id": "#festival",
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/festival-tickets/" },
+  };
+  const archive = {
+    ...festival,
+    "@id": "#previous",
+    startDate: "2026-07-29",
+    offers: { url: "https://www.wacken.com/previous-tickets/" },
+  };
+  const sideEvent = {
+    "@type": "MusicEvent",
+    "@id": "#afterparty",
+    superEvent: { "@id": festival["@id"] },
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/afterparty-tickets/" },
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+
+  const candidate = extract(script([archive, sideEvent, festival]));
+  assert.equal(candidate.ticketsUrl, festival.offers.url);
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  assert.equal(evaluateCandidate(current, extract(script(archive) + ticket)).publishable, false);
+
+  for (const type of ["OtherFestival", "https://other.example/Festival"]) {
+    const unrelated = { ...archive, "@type": type };
+    assert.equal(evaluateCandidate(current, extract(script(unrelated) + ticket)).publishable, true);
+  }
+});
+
+test("a separate JSON-LD record for the selected event can put ticket changes on hold", () => {
+  const event = {
+    "@id": "#festival-2027",
+    "@type": "MusicEvent",
+    startDate: current.startDate,
+    eventStatus: "https://schema.org/EventScheduled",
+  };
+  const statusRecord = {
+    "@id": new URL(event["@id"], source.url).href,
+    eventStatus: { "@id": "https://schema.org/EventCancelled" },
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  for (const page of [
+    script({ "@graph": [event, statusRecord] }),
+    script(statusRecord) + script(event),
+    script({
+      "@graph": [
+        { ...event, "@id": "_:event" },
+        { ...statusRecord, "@id": "_:event" },
+      ],
+    }),
+  ]) {
+    const result = evaluateCandidate(current, extract(page + ticket));
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [
+      "Official event status requires review: https://schema.org/EventCancelled",
+    ]);
+  }
+  for (const [eventId, statusId] of [
+    [event["@id"], "#side-event"],
+    ["_:event", "_:event"],
+    [undefined, undefined],
+  ]) {
+    const page =
+      script({ ...event, "@id": eventId }) + script({ ...statusRecord, "@id": statusId });
+    assert.equal(evaluateCandidate(current, extract(page + ticket)).publishable, true);
+  }
+});
+
+test("JSON-LD status value objects preserve the editorial hold on ticket changes", () => {
+  const event = {
+    "@type": "MusicEvent",
+    "@id": "#festival-2027",
+    startDate: current.startDate,
+  };
+  const cancelled = "https://schema.org/EventCancelled";
+  const eventStatus = [{ "@value": "https://schema.org/EventScheduled" }, { "@value": cancelled }];
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const description = { "@id": event["@id"], eventStatus };
+
+  for (const page of [script({ ...event, eventStatus }), script(event) + script(description)]) {
+    const candidate = extract(page + ticket);
+    const result = evaluateCandidate(current, candidate);
+    assert.equal(candidate.startDate, current.startDate);
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [`Official event status requires review: ${cancelled}`]);
+  }
+
+  const unrelated = script(event) + script({ ...description, "@id": "#other" });
+  const scheduled = script({ ...event, eventStatus: eventStatus[0] });
+  for (const page of [unrelated, scheduled]) {
+    assert.equal(evaluateCandidate(current, extract(page + ticket)).publishable, true);
+  }
+});
+
+test("explicit JSON-LD status sets hold ticket changes only for the selected event", () => {
+  const event = {
+    "@type": "MusicEvent",
+    "@id": "#festival-2027",
+    startDate: current.startDate,
+  };
+  const cancelled = "https://schema.org/EventCancelled";
+  const scheduled = "https://schema.org/EventScheduled";
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+
+  for (const eventStatus of [
+    { "@set": { "@id": cancelled } },
+    { "@set": [scheduled, { "@value": cancelled }], "@index": "official" },
+    [scheduled, { "@set": [cancelled] }],
+  ]) {
+    const description = { "@id": event["@id"], eventStatus };
+    for (const page of [script({ ...event, eventStatus }), script(event) + script(description)]) {
+      const candidate = extract(page + ticket);
+      const result = evaluateCandidate(current, candidate);
+      assert.equal(candidate.startDate, current.startDate);
+      assert.deepEqual(
+        result.changes.map(({ field }) => field),
+        ["ticketsUrl"],
+      );
+      assert.equal(result.publishable, false);
+      assert.deepEqual(result.reviewReasons, [
+        `Official event status requires review: ${cancelled}`,
+      ]);
+    }
+    const unrelated = script(event) + script({ ...description, "@id": "#other" });
+    assert.equal(evaluateCandidate(current, extract(unrelated + ticket)).publishable, true);
+  }
+
+  for (const members of [[{ "@id": scheduled }], [], null]) {
+    const page = script({ ...event, eventStatus: { "@set": members } });
+    assert.equal(evaluateCandidate(current, extract(page + ticket)).publishable, true);
+  }
+});
+
+test("included JSON-LD descriptions hold ticket changes only when linked to the festival", () => {
+  const event = { "@type": "MusicEvent", "@id": "#festival-2027", startDate: current.startDate };
+  const cancelled = "https://schema.org/EventCancelled";
+  const description = { "@id": event["@id"], eventStatus: { "@id": cancelled } };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+
+  for (const page of [
+    script({ "@graph": [event], "@included": description }),
+    script(event) + script({ "@included": [description] }),
+  ]) {
+    const candidate = extract(page + ticket);
+    const result = evaluateCandidate(current, candidate);
+    assert.equal(candidate.startDate, current.startDate);
+    assert.equal(
+      candidate.evidence.find((item) => item.field === "startDate").excerpt,
+      JSON.stringify(event),
+    );
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [`Official event status requires review: ${cancelled}`]);
+  }
+
+  const unrelated = { "@graph": [event], "@included": [{ ...description, "@id": "#afterparty" }] };
+  const eventWithNestedOffer = { ...event, offers: { "@included": description } };
+  for (const value of [unrelated, eventWithNestedOffer]) {
+    assert.equal(evaluateCandidate(current, extract(script(value) + ticket)).publishable, true);
+  }
+});
+
+test("included JSON-LD relationship records keep side events out of festival proofs", () => {
+  const festival = {
+    "@type": "MusicEvent",
+    "@id": "#festival",
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/festival-tickets/" },
+  };
+  const sideEvent = {
+    "@type": "MusicEvent",
+    "@id": "#afterparty",
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/afterparty-tickets/" },
+  };
+  const document = {
+    "@graph": [sideEvent, festival],
+    "@included": [{ "@id": sideEvent["@id"], superEvent: { "@id": festival["@id"] } }],
+  };
+  const candidate = extract(
+    `<script type="application/ld+json">${JSON.stringify(document)}</script>`,
+  );
+  assert.equal(candidate.ticketsUrl, festival.offers.url);
+  assert.equal(candidate.timetable, undefined);
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
+});
+
+test("JSON-LD subEvent sets cannot supply side-event ticket evidence for a festival", () => {
+  const festival = {
+    "@type": "MusicEvent",
+    "@id": "#festival",
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/festival-tickets/" },
+  };
+  const sideEvent = {
+    "@type": "MusicEvent",
+    "@id": "#afterparty",
+    name: "Afterparty",
+    startDate: `${current.startDate}T21:00:00+02:00`,
+    offers: { url: "https://www.wacken.com/afterparty-tickets/" },
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const reference = { "@id": sideEvent["@id"] };
+
+  for (const [primary, extra] of [
+    [{ ...festival, subEvent: { "@set": reference } }, ""],
+    [
+      festival,
+      script({
+        "@id": festival["@id"],
+        subEvent: { "@set": [sideEvent], "@index": "related events" },
+      }),
+    ],
+  ]) {
+    const candidate = extract(script([sideEvent, primary]) + extra);
+    assert.equal(candidate.ticketsUrl, festival.offers.url);
+    assert.equal(candidate.timetable, undefined);
+    assert.equal(
+      candidate.evidence.find(({ field }) => field === "ticketsUrl").excerpt,
+      JSON.stringify(primary),
+    );
+    assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  }
+
+  const ambiguous = extract(
+    script([sideEvent, { ...festival, subEvent: { "@set": [{ "@id": "#other" }] } }]),
+  );
+  assert.equal(evaluateCandidate(current, ambiguous).publishable, false);
+});
+
+test("reversed JSON-LD event relationships preserve festival ticket proof", () => {
+  const festival = {
+    "@type": "Festival",
+    "@id": "#festival",
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/festival-tickets/" },
+  };
+  const afterparty = {
+    "@type": "MusicEvent",
+    "@id": "#afterparty",
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/afterparty-tickets/" },
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  for (const [primary, child, split] of [
+    [{ ...festival, "@reverse": { superEvent: { "@id": "#afterparty" } } }, afterparty],
+    [
+      festival,
+      afterparty,
+      {
+        "@id": "#afterparty",
+        "@reverse": { "https://schema.org/subEvent": [{ "@id": "#festival" }] },
+      },
+    ],
+    [
+      { ...festival, "@reverse": { "http://schema.org/superEvent": [{ "@id": "_:afterparty" }] } },
+      { ...afterparty, "@id": "_:afterparty" },
+    ],
+    [
+      festival,
+      { ...afterparty, "@id": undefined, "@reverse": { subEvent: { "@id": "#festival" } } },
+    ],
+  ]) {
+    const candidate = extract(script([child, primary]) + (split ? script(split) : ""));
+    assert.equal(candidate.ticketsUrl, festival.offers.url);
+    assert.equal(candidate.timetable, undefined);
+    assert.equal(
+      candidate.evidence.find(({ field }) => field === "ticketsUrl").excerpt,
+      JSON.stringify(primary),
+    );
+    assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  }
+
+  const blankChild = { ...afterparty, "@id": "_:afterparty" };
+  for (const page of [
+    script(blankChild) +
+      script({ ...festival, "@reverse": { superEvent: { "@id": "_:afterparty" } } }),
+    script([afterparty, { ...festival, "@reverse": { superEvent: { "@id": "#other" } } }]),
+    script([{ ...afterparty, "@reverse": { subEvent: { "@id": "#afterparty" } } }, festival]),
+    script([
+      afterparty,
+      { ...festival, "@reverse": { "https://other.example/superEvent": { "@id": "#afterparty" } } },
+    ]),
+  ]) {
+    assert.equal(evaluateCandidate(current, extract(page)).publishable, false);
+  }
+});
+
 test("scheduled JSON-LD events do not hold verified ticket changes", () => {
   const event = {
     "@type": "MusicEvent",
@@ -247,4 +619,193 @@ test("equivalent date claims and independently supplied missing dates still comb
   assert.equal(candidate.startDate, current.startDate);
   assert.equal(candidate.endDate, current.endDate);
   assert.equal(evaluateCandidate(current, candidate).publishable, true);
+});
+
+test("conflicting dates on the same JSON-LD event hold unrelated ticket changes", () => {
+  const event = {
+    "@type": "MusicEvent",
+    "@id": "#festival-2027",
+    startDate: current.startDate,
+    endDate: current.endDate,
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  for (const [field, competingDate] of [
+    ["startDate", "2027-07-29"],
+    ["endDate", "2027-08-01"],
+  ]) {
+    const other = { "@id": new URL(event["@id"], source.url).href, [field]: competingDate };
+    const blankEvent = { ...event, "@id": "_:festival" };
+    const pages = [
+      [script({ "@graph": [event, other] }), event],
+      [script(other) + script(event), event],
+      [script([blankEvent, { ...other, "@id": "_:festival" }]), blankEvent],
+    ];
+    for (const [page, selectedEvent] of pages) {
+      const candidate = extract(page + ticket);
+      const result = evaluateCandidate(current, candidate);
+      assert.equal(candidate[field], event[field]);
+      assert.equal(
+        candidate.evidence.find((item) => item.field === field).excerpt,
+        JSON.stringify(selectedEvent),
+      );
+      assert.deepEqual(
+        result.changes.map((change) => change.field),
+        ["ticketsUrl"],
+      );
+      assert.equal(result.publishable, false);
+      assert.deepEqual(result.reviewReasons, [`Conflicting JSON-LD festival ${field} claims`]);
+    }
+  }
+});
+
+test("equivalent or unbound JSON-LD dates do not hold verified tickets", () => {
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  for (const [eventId, otherId, otherDay] of [
+    ["#festival-2027", "#festival-2027", "2027-07-28T23:30:00-04:00"],
+    ["#festival-2027", "#afterparty", "2027-07-29"],
+    ["_:festival", "_:festival", "2027-07-29"],
+    ["#festival-2027", "#afterparty", "TBA"],
+    ["_:festival", "_:festival", "TBA"],
+    [undefined, undefined, "2027-07-29"],
+  ]) {
+    const page =
+      script({ "@type": "MusicEvent", "@id": eventId, startDate: current.startDate }) +
+      script({ "@id": otherId, startDate: otherDay });
+    const candidate = extract(page + ticket);
+    assert.deepEqual(candidate.warnings, []);
+    assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  }
+});
+
+test("malformed dates bound to the selected JSON-LD event hold ticket updates", () => {
+  const event = {
+    "@type": "MusicEvent",
+    "@id": "#festival-2027",
+    startDate: current.startDate,
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const blankEvent = { ...event, "@id": "_:festival" };
+  for (const [selected, page, field, warning] of [
+    [
+      event,
+      script(event) + script({ "@id": "#festival-2027", startDate: "2027-02-30" }),
+      "startDate",
+      "JSON-LD Event contains an invalid start date",
+    ],
+    [
+      blankEvent,
+      script([blankEvent, { "@id": "_:festival", endDate: "TBA" }]),
+      "endDate",
+      "JSON-LD Event contains an invalid end date",
+    ],
+  ]) {
+    const candidate = extract(page + ticket);
+    const result = evaluateCandidate(current, candidate);
+    assert.equal(candidate[field], selected[field]);
+    assert.equal(
+      candidate.evidence.find((item) => item.field === "startDate").excerpt,
+      JSON.stringify(selected),
+    );
+    assert.deepEqual(
+      result.changes.map((change) => change.field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [warning]);
+  }
+});
+
+test("reversed dates linked to the selected JSON-LD event hold ticket updates", () => {
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const event = {
+    "@type": "MusicEvent",
+    "@id": "#festival-2027",
+    startDate: current.startDate,
+  };
+  const blankEvent = { ...event, "@id": "_:festival" };
+  const reversedEnd = { "@id": event["@id"], endDate: "2027-07-27" };
+  const reversedInstants = {
+    "@id": event["@id"],
+    startDate: "2027-07-28T20:00:00+02:00",
+    endDate: "2027-07-28T17:30:00Z",
+  };
+  const pages = [
+    [event, script(event) + script(reversedEnd)],
+    [blankEvent, script([blankEvent, { ...reversedEnd, "@id": "_:festival" }])],
+    [event, script(event) + script(reversedInstants)],
+    [
+      { ...event, startDate: reversedInstants.startDate },
+      script({ ...event, startDate: reversedInstants.startDate }) +
+        script({ "@id": event["@id"], endDate: reversedInstants.endDate }),
+    ],
+  ];
+
+  for (const [selected, page] of pages) {
+    const candidate = extract(page + ticket);
+    const result = evaluateCandidate(current, candidate);
+    assert.equal(candidate.startDate, current.startDate);
+    assert.equal(candidate.endDate, undefined);
+    assert.equal(
+      candidate.evidence.find((item) => item.field === "startDate").excerpt,
+      JSON.stringify(selected),
+    );
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, ["JSON-LD Event end date precedes its start date"]);
+  }
+});
+
+test("ordered or unbound split JSON-LD dates do not hold ticket updates", () => {
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  for (const [id, otherId, endDate] of [
+    ["#festival-2027", "#festival-2027", "2027-07-31"],
+    ["#festival-2027", "#afterparty", "2027-07-27"],
+    ["_:festival", "_:festival", "2027-07-27"],
+  ]) {
+    const page =
+      script({ "@type": "MusicEvent", "@id": id, startDate: current.startDate }) +
+      script({ "@id": otherId, endDate });
+    const candidate = extract(page + ticket);
+    assert.equal(candidate.endDate, undefined);
+    assert.deepEqual(candidate.warnings, []);
+    assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  }
+});
+
+test("multiple offset-qualified claims cannot mask a reversed split JSON-LD interval", () => {
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const id = "#festival-2027";
+  const event = { "@type": "MusicEvent", "@id": id, startDate: current.startDate };
+  for (const [starts, ends, reversed] of [
+    [["18:00:00Z", "21:00:00+02:00"], ["18:30:00Z"], true],
+    [["18:30:00Z"], ["18:00:00Z", "21:00:00+02:00"], true],
+    [["18:00:00Z", "21:00:00+02:00"], ["19:00:00Z", "20:00:00Z"], false],
+  ]) {
+    const page =
+      script(event) +
+      script([
+        ...starts.map((time) => ({ "@id": id, startDate: `2027-07-28T${time}` })),
+        ...ends.map((time) => ({ "@id": id, endDate: `2027-07-28T${time}` })),
+      ]);
+    const candidate = extract(page + ticket);
+    const result = evaluateCandidate(current, candidate);
+    assert.equal(candidate.startDate, current.startDate);
+    assert.equal(candidate.endDate, undefined);
+    assert.equal(
+      candidate.evidence.find((item) => item.field === "startDate").excerpt,
+      JSON.stringify(event),
+    );
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, !reversed);
+    assert.deepEqual(
+      result.reviewReasons,
+      reversed ? ["JSON-LD Event end date precedes its start date"] : [],
+    );
+  }
 });

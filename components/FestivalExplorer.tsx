@@ -10,6 +10,7 @@ import type { Festival } from "@/lib/domain/festival";
 import { FestivalLocationMap } from "./FestivalLocationMap";
 import { FestivalLogo } from "./FestivalLogo";
 import { useLanguage } from "./LanguageProvider";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import {
   discoverySorts,
   sortDiscoveryFestivals,
@@ -177,13 +178,13 @@ export function FestivalExplorer({
   const filtered = useMemo(
     () =>
       festivals.filter((item) => {
-        const haystack = [item.name, item.country, item.city, ...item.headliners, ...item.lineup]
+        const haystack = [item.name, item.country, item.city, ...announcedArtists(item)]
           .join(" ")
           .toLowerCase();
         return (
           haystack.includes(query.toLowerCase()) &&
           (country === "all" || item.countryCode === country) &&
-          (!announcedOnly || hasAnnouncedLineup(item)) &&
+          (!announcedOnly || (!editionOnHiatus(item) && hasAnnouncedLineup(item))) &&
           (month === "all" || festivalOverlapsMonth(item, Number(month))) &&
           (!ticketsOnly || hasAvailableTickets(item)) &&
           matchesDiscoveryDates(item, dateFilters) &&
@@ -535,6 +536,7 @@ export function FestivalExplorer({
       )}
       <div className="festivalGrid" ref={gridRef}>
         {visible.slice(0, shownCount).map((item) => {
+          const hiatus = editionOnHiatus(item);
           const isSelected = selected.includes(item.slug);
           const previewArtists = lineupPreviewArtists(item);
           const artistCount = announcedArtists(item).length;
@@ -567,12 +569,16 @@ export function FestivalExplorer({
                 )}
                 <div className="cardTop">
                   <FestivalLogo slug={item.slug} name={item.name} />
-                  <span className={`status ${lineupStatus.tone}`}>{t(lineupStatus.label)}</span>
+                  <span className={`status ${hiatus ? "hiatus" : lineupStatus.tone}`}>
+                    {t(hiatus ? "editionHiatus" : lineupStatus.label)}
+                  </span>
                 </div>
                 {item.sourceDeprecated && (
                   <span className="status deprecated">{t("sourceDeprecated")}</span>
                 )}
-                <div className="date">{formatFestivalDateRange(item, locale, t("datesTba"))}</div>
+                <div className="date">
+                  {formatFestivalDateRange(item, locale, t("datesTba"), t("editionHiatus"))}
+                </div>
                 <h2>{item.name}</h2>
                 <div className="location">
                   {item.countryCode} ·{" "}
@@ -585,7 +591,11 @@ export function FestivalExplorer({
                 </div>
                 <div className="cardFoot">
                   <span>
-                    {artistCount ? `${artistCount} ${t("announcedActs")}` : t("followUpdates")}
+                    {hiatus
+                      ? t("editionHiatus")
+                      : artistCount
+                        ? `${artistCount} ${t("announcedActs")}`
+                        : t("followUpdates")}
                   </span>
                   <b>{t("explore")} →</b>
                 </div>

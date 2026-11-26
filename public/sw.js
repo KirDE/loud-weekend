@@ -179,7 +179,6 @@ function validCatalog(body) {
     body.dataVersion !== `festivals-${body.editionYear}-v1` ||
     body.generatedAt !== null ||
     !Array.isArray(body.festivals) ||
-    !body.festivals.length ||
     !body.festivals.every((festival) => catalogFestival(festival, validTimeZones))
   )
     return false;

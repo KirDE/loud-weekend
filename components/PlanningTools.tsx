@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import type { Festival } from "@/lib/domain/festival";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import { calendarUrls, similarFestivals } from "@/lib/planning";
 import { StageTimetable } from "./StageTimetable";
-import { useLanguage, type Language } from "./LanguageProvider";
+import { useLanguage, translate, type Language } from "./LanguageProvider";
 
 const copy: Record<
   Language,
@@ -88,6 +89,7 @@ export function PlanningTools({
 }) {
   const { language, locale } = useLanguage();
   const t = copy[language];
+  const hiatus = editionOnHiatus(item);
   const reasons = relatedCopy[language];
   const numbers = new Intl.NumberFormat(locale);
   const kilometers = new Intl.NumberFormat(locale, {
@@ -125,13 +127,15 @@ export function PlanningTools({
             </a>
           </>
         ) : (
-          <span>{t.pending}</span>
+          <span>{hiatus ? translate(language, "editionHiatus") : t.pending}</span>
         )}
         <a href={map} target="_blank" rel="noreferrer">
           {t.map}
         </a>
       </div>
-      <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
+      {!hiatus && (
+        <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
+      )}
       {similar.length > 0 && (
         <div className="recommendations">
           <h3>{reasons.title}</h3>

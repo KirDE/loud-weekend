@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { readApprovedEditionLifecycleInSnapshot } from "../ingestion/edition-lifecycle-proposal-store.ts";
 import {
   offlineTimetableSelect,
   offlineTimetableWhere,
@@ -9,6 +10,7 @@ import {
 // Only fields used by the public projection or its schedule validation are read.
 const offlineSelect = () =>
   ({
+    id: true,
     festival: { select: { slug: true, name: true } },
     startDate: true,
     endDate: true,
@@ -21,12 +23,16 @@ const offlineSelect = () =>
 type OfflineEdition = Prisma.FestivalEditionGetPayload<{
   select: ReturnType<typeof offlineSelect>;
 }>;
-type OfflineDatabase = Pick<PrismaClient, "festivalEdition">;
+type OfflineSnapshot = Pick<
+  Prisma.TransactionClient,
+  "festivalEdition" | "editionLifecycleProposalSnapshot"
+>;
+type OfflineDatabase = PrismaClient | OfflineSnapshot;
 const compare = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
 const dateOnly = (date: Date | null) => date?.toISOString().slice(0, 10) ?? null;
 
 export function projectOfflineCatalog(rows: readonly OfflineEdition[], editionYear: number) {
-  if (!rows.length || !Number.isInteger(editionYear) || editionYear < 1000 || editionYear > 9999)
+  if (!Number.isInteger(editionYear) || editionYear < 1000 || editionYear > 9999)
     throw new Error("Offline catalogue unavailable");
   const festivals = rows
     .map((row) => ({
@@ -62,18 +68,32 @@ export function projectOfflineCatalog(rows: readonly OfflineEdition[], editionYe
 
 export async function readOfflineCatalog(database?: OfflineDatabase) {
   const client = database ?? (await import("../db.ts")).db;
-  // A future announcement is not the active catalogue season until it is CURRENT.
-  const season = await client.festivalEdition.findFirst({
-    where: { recordState: "CURRENT" },
-    orderBy: { year: "desc" },
-    select: { year: true },
-  });
-  if (!season) throw new Error("Offline catalogue unavailable");
-  const rows = await client.festivalEdition.findMany({
-    where: { year: season.year, recordState: "CURRENT" },
-    select: offlineSelect(),
-  });
-  return projectOfflineCatalog(rows, season.year);
+  const read = async (tx: OfflineSnapshot) => {
+    // Future announcements do not determine the active catalogue season.
+    const season = await tx.festivalEdition.findFirst({
+      where: { recordState: "CURRENT" },
+      orderBy: { year: "desc" },
+      select: { year: true },
+    });
+    if (!season) throw new Error("Offline catalogue unavailable");
+    const rows = await tx.festivalEdition.findMany({
+      where: { year: season.year, recordState: "CURRENT" },
+      select: offlineSelect(),
+    });
+    if (!rows.length) throw new Error("Offline catalogue unavailable");
+    const scheduled = [];
+    for (const row of rows) {
+      // Approved historical notice, not fresh inventory. Pending/rejected do not
+      // suppress events; damaged latest/approved proof throws (HTTP 503).
+      if (await readApprovedEditionLifecycleInSnapshot(tx, row.id)) continue;
+      scheduled.push(row);
+    }
+    // A nonempty catalogue with every edition paused is a valid empty schedule.
+    return projectOfflineCatalog(scheduled, season.year);
+  };
+  return "$transaction" in client
+    ? client.$transaction(read, { isolationLevel: "RepeatableRead" })
+    : read(client);
 }
 
 export async function serveOfflineCatalog(

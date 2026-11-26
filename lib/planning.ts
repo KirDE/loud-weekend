@@ -1,10 +1,12 @@
 import type { Festival } from "./domain/festival.ts";
 import { discoveryFavoriteSlugs, type DiscoveryLineups } from "./discovery-sort.ts";
+import { editionOnHiatus } from "./edition-lifecycle.ts";
 import { festivalDateInterval } from "./festival-dates.ts";
 import { distanceKm, festivalGenres } from "./festival-discovery.ts";
+import { announcedArtists } from "./festival-lineup.ts";
 
 export function festivalArtists(item: Festival) {
-  return new Set([...item.headliners, ...item.lineup].map((artist) => artist.toLocaleLowerCase()));
+  return new Set(announcedArtists(item).map((artist) => artist.toLocaleLowerCase()));
 }
 
 export function lineupOverlap(items: Festival[]) {
@@ -27,6 +29,7 @@ export function similarFestivals(
   },
   limit = 3,
 ) {
+  if (editionOnHiatus(item)) return [];
   const collator = new Intl.Collator(options.locale, { sensitivity: "base" });
   const artistSlugs = options.lineups?.artistSlugsByFestival;
   const artists = new Set(artistSlugs?.[item.slug]);
@@ -34,7 +37,7 @@ export function similarFestivals(
   const favorites = discoveryFavoriteSlugs(options.favorites ?? [], options.lineups);
   const dates = festivalDateInterval(item);
   return festivals
-    .filter((candidate) => candidate.slug !== item.slug)
+    .filter((candidate) => candidate.slug !== item.slug && !editionOnHiatus(candidate))
     .map((festival) => {
       const candidateArtists = [...new Set(artistSlugs?.[festival.slug])];
       const shared = candidateArtists.filter((slug) => artists.has(slug)).length;
@@ -82,7 +85,8 @@ export function similarFestivals(
     .slice(0, limit);
 }
 
-function calendarDates(item: Pick<Festival, "startDate" | "endDate">) {
+function calendarDates(item: CalendarEvent) {
+  if (editionOnHiatus(item)) return null;
   const interval = festivalDateInterval(item);
   if (!interval) return null;
   const { start, end } = interval;
@@ -103,9 +107,22 @@ export function escapeIcs(value: string) {
     .replaceAll(/\r\n|\r|\n/g, "\\n");
 }
 
+/** Scheduled calendar eligibility, not a mutation of canonical date facts. */
+export function calendarEligible(item: CalendarEvent): boolean {
+  return calendarDates(item) !== null;
+}
+
 type CalendarEvent = Pick<
   Festival,
-  "slug" | "editionYear" | "name" | "city" | "country" | "officialUrl" | "startDate" | "endDate"
+  | "slug"
+  | "editionYear"
+  | "name"
+  | "city"
+  | "country"
+  | "officialUrl"
+  | "startDate"
+  | "endDate"
+  | "editionLifecycle"
 > & { calendarId?: string; calendarUpdatedAt?: string; updatedAt?: string };
 
 function foldCalendarLine(line: string) {

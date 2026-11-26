@@ -88,6 +88,7 @@ export const offlinePageCopy = {
     loading: "Loading saved festival data…",
     catalog: "Saved festivals",
     timetable: "Timetable not published",
+    empty: "No scheduled festivals in the saved catalogue. Reconnect to check for updates.",
     available: "Saved public festival and timetable data. Reconnect to check for updates.",
     unavailable:
       "No saved festival data is available. Open Loud Weekend online to save it for your next visit.",
@@ -99,6 +100,8 @@ export const offlinePageCopy = {
     loading: "Gespeicherte Festivaldaten werden geladen…",
     catalog: "Gespeicherte Festivals",
     timetable: "Spielplan nicht veröffentlicht",
+    empty:
+      "Keine geplanten Festivals im gespeicherten Katalog. Gehe online, um nach Updates zu suchen.",
     available:
       "Gespeicherte öffentliche Festivaldaten und Spielpläne. Gehe online, um nach Updates zu suchen.",
     unavailable:
@@ -111,6 +114,8 @@ export const offlinePageCopy = {
     loading: "Загрузка сохранённых данных фестивалей…",
     catalog: "Сохранённые фестивали",
     timetable: "Расписание не опубликовано",
+    empty:
+      "В сохранённом каталоге нет запланированных фестивалей. Подключитесь к интернету для обновления.",
     available:
       "Сохранённые общедоступные данные фестивалей и расписания. Подключитесь к интернету, чтобы проверить обновления.",
     unavailable:
@@ -129,7 +134,17 @@ export async function showOfflineCatalog(document, fetchCatalog, base, language)
     });
     if (!response.ok) throw new Error("Catalogue unavailable");
     const data = await response.json();
-    if (data.schemaVersion !== 1 || !Array.isArray(data.festivals) || !data.festivals.length)
+    if (
+      data.schemaVersion !== 1 ||
+      !Array.isArray(data.festivals) ||
+      (!data.festivals.length &&
+        (!Number.isInteger(data.editionYear) ||
+          data.editionYear < 1000 ||
+          data.editionYear > 9999 ||
+          data.dataVersion !== `festivals-${data.editionYear}-v1` ||
+          data.generatedAt !== null ||
+          data.timetableStatus !== "not-published"))
+    )
       throw new Error("Catalogue unavailable");
     const fragment = document.createDocumentFragment();
     for (const festival of data.festivals) {
@@ -162,7 +177,7 @@ export async function showOfflineCatalog(document, fetchCatalog, base, language)
       }
     }
     catalog.replaceChildren(fragment);
-    status.textContent = copy.available;
+    status.textContent = data.festivals.length ? copy.available : copy.empty;
   } catch {
     status.textContent = copy.unavailable;
   }

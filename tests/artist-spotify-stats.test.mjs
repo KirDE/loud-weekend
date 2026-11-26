@@ -325,9 +325,13 @@ test("repository projects serializable Spotify stats and suppresses a stale or u
     playlistLinks: [],
   };
   const repository = new DatabaseCatalogRepository({
-    artist: { findMany: async () => [f.artist] },
-    festivalEdition: { findMany: async () => [row] },
-    ticketOfferProposalSnapshot: { findMany: async () => [] },
+    $transaction: async (fn) =>
+      fn({
+        ticketOfferProposalSnapshot: { findMany: async () => [] },
+        editionLifecycleProposalSnapshot: { findFirst: async () => null },
+        artist: { findMany: async () => [f.artist] },
+        festivalEdition: { findMany: async () => [row] },
+      }),
   });
   let snapshot = await repository.read();
   assert.equal(snapshot.artists[0].spotifyStats.followers, 123);

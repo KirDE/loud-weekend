@@ -3,6 +3,7 @@ import { cache } from "react";
 import { localizedAlternates } from "./seo";
 import { socialPreviewMetadata } from "./social-preview";
 import { getCatalog } from "./catalog/repository";
+import { editionOnHiatus } from "./edition-lifecycle";
 import type { Festival } from "./domain/festival";
 import type { Language } from "./language-preference";
 
@@ -25,8 +26,10 @@ export const readArtistPage = cache(async (slug: string) => {
   const { artists, festivals, discoveryLineups } = await getCatalog();
   const artist = artists.find((item) => item.slug === slug);
   if (!artist) return null;
-  const appearances = festivals.filter((festival) =>
-    discoveryLineups.artistSlugsByFestival[festival.slug]?.includes(artist.slug),
+  const appearances = festivals.filter(
+    (festival) =>
+      !editionOnHiatus(festival) &&
+      discoveryLineups.artistSlugsByFestival[festival.slug]?.includes(artist.slug),
   );
   const legacySlugs = Object.fromEntries(
     Object.entries(discoveryLineups.legacyFavoriteSlugs).filter(([, slug]) => slug === artist.slug),

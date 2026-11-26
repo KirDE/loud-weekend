@@ -8,7 +8,7 @@ import {
   formatFestivalDateRange,
   monthIndex,
 } from "@/lib/festival-dates";
-import { calendarFile } from "@/lib/planning";
+import { calendarEligible, calendarFile } from "@/lib/planning";
 import { FestivalLocationMap } from "./FestivalLocationMap";
 import { useLanguage, type Language } from "./LanguageProvider";
 
@@ -112,9 +112,7 @@ export function FestivalViews({ festivals }: { festivals: Festival[] }) {
   const t = labels[language];
   const dated = useMemo(
     () =>
-      festivals
-        .filter((f) => festivalDateInterval(f))
-        .sort((a, b) => a.startDate!.localeCompare(b.startDate!)),
+      festivals.filter(calendarEligible).sort((a, b) => a.startDate!.localeCompare(b.startDate!)),
     [festivals],
   );
   const [selectedMonth, setSelectedMonth] = useState(() =>

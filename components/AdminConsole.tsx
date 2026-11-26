@@ -15,6 +15,8 @@ import { SubmissionEditionLink } from "./SubmissionEditionLink";
 import type { SubmissionEditionLink as LinkedEdition } from "@/lib/submission-edition-link";
 import { useLanguage, type Language, type AdminTranslationKey } from "./LanguageProvider";
 
+import { LifecycleReviewQueue } from "./LifecycleReviewQueue";
+
 type Section = "content" | "review" | "submissions" | "assets" | "diagnostics" | "audit";
 type Submission = {
   reference: string;
@@ -56,8 +58,14 @@ export function AdminConsole({
   submissions: initialSubmissions,
   editionOptions = [],
   sourceHealth = [],
+  lifecycleTargets = [],
   ticketOfferEditions = [],
 }: {
+  lifecycleTargets?: {
+    id: string;
+    year: number;
+    festival: { slug: string; officialUrl: string };
+  }[];
   ticketOfferEditions?: { id: string; year: number }[];
   festivals: Festival[];
   artists: EditableArtist[];
@@ -291,6 +299,16 @@ export function AdminConsole({
 
         {section === "review" && (
           <div className="reviewList">
+            {lifecycleTargets.map((target) => (
+              <LifecycleReviewQueue
+                key={target.id}
+                editionId={target.id}
+                year={target.year}
+                festivalSlug={target.festival.slug}
+                sourceUrl={target.festival.officialUrl}
+                locale={language}
+              />
+            ))}
             {ticketOfferEditions.map((edition) => (
               <TicketOfferReviewQueue
                 key={edition.id}

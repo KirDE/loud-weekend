@@ -1,8 +1,14 @@
 import { artistAliasIndex } from "./artist-aliases.ts";
 import type { Prisma } from "@prisma/client";
+import { readApprovedEditionLifecycleInSnapshot } from "../ingestion/edition-lifecycle-proposal-store.ts";
 import { db } from "../db.ts";
 import type { Language } from "../language-preference.ts";
-import { festivalPreviewDate, type PreviewCard, type PreviewKind } from "../social-preview.ts";
+import {
+  festivalPreviewDate,
+  festivalPreviewHiatus,
+  type PreviewCard,
+  type PreviewKind,
+} from "../social-preview.ts";
 
 type EditionScope = { id: string; year: number };
 
@@ -263,6 +269,7 @@ export async function readSocialPreview(
         select: {
           id: true,
           year: true,
+          recordState: true,
           startDate: true,
           endDate: true,
           festival: { select: { name: true } },
@@ -279,6 +286,17 @@ export async function readSocialPreview(
         },
       });
       if (!edition) return null;
+      if (edition.recordState === "CURRENT") {
+        const lifecycle = await readApprovedEditionLifecycleInSnapshot(tx, edition.id);
+        if (lifecycle?.lifecycle === "hiatus") {
+          return {
+            kind,
+            language,
+            name: edition.festival.name,
+            detail: festivalPreviewHiatus(edition.year, language),
+          };
+        }
+      }
       const evidence = new Set(edition.provenance.map(({ field }) => field));
       const date = (value: Date | null) => value?.toISOString().slice(0, 10);
       const startDate = date(edition.startDate);

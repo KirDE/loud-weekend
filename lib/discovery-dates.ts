@@ -1,5 +1,5 @@
+import { editionOnHiatus } from "./edition-lifecycle.ts";
 import { festivalDateInterval, parseFestivalDate } from "./festival-dates.ts";
-import type { Festival } from "./domain/festival.ts";
 
 export type DiscoveryDates = {
   dateFrom: string;
@@ -42,11 +42,11 @@ export function reversedDiscoveryDates({ dateFrom, dateTo }: DiscoveryDates) {
 }
 
 export function matchesDiscoveryDates(
-  festival: Pick<Festival, "startDate" | "endDate">,
+  festival: Parameters<typeof festivalDateInterval>[0],
   filters: DiscoveryDates,
 ) {
   if (!hasDiscoveryDates(filters)) return true;
-  if (reversedDiscoveryDates(filters)) return false;
+  if (editionOnHiatus(festival) || reversedDiscoveryDates(filters)) return false;
   const interval = festivalDateInterval(festival);
   if (!interval) return false;
 

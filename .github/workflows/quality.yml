@@ -94,6 +94,8 @@ jobs:
           AUTH_SECRET: google-integration-test-only-not-for-runtime
       - run: npm run test:integration
       - run: npm run test:admin:integration
+      # Lifecycle audit actors are intentionally retained; run immediately before reset.
+      - run: node --import tsx --test tests/edition-lifecycle-proposal-store.e2e.test.ts
       - run: npx prisma migrate reset --force
       - run: npm run test:seed
       - run: npm run typecheck

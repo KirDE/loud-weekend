@@ -99,3 +99,21 @@ export function observeRockEnSeineHiatus(
     excerpt: hiatusExcerpt(editionYear, announcedReturnYear),
   };
 }
+/** Reviewed source contract: all festival-specific proof expectations live here. */
+export const rockEnSeineLifecycleSource = {
+  parserVersion: "rock-en-seine-hiatus-v1",
+  sourceUrl: ROCK_EN_SEINE_HOME,
+  observe: observeRockEnSeineHiatus,
+  validate(proposal: unknown) {
+    const p = proposal as RockEnSeineHiatusProposal;
+    if (
+      p.festivalSlug !== "rock-en-seine" ||
+      p.lifecycle !== "hiatus" ||
+      p.announcedReturnYear !== p.editionYear + 1 ||
+      p.alternativeEvent !== "under_consideration" ||
+      p.sourceUrl !== ROCK_EN_SEINE_HOME ||
+      p.excerpt !== hiatusExcerpt(p.editionYear, p.announcedReturnYear)
+    )
+      fail();
+  },
+};

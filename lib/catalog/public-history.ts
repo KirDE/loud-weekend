@@ -42,6 +42,7 @@ export const ANNOUNCEMENTS_MAX_PAGE = 100;
 
 export type AnnouncementFilters = {
   country: string;
+  artist: string;
   days: 30 | 90 | null;
   page: number;
 };
@@ -52,6 +53,10 @@ export function announcementFilters(
   return {
     country:
       typeof query.country === "string" && /^[A-Z]{2}$/.test(query.country) ? query.country : "",
+    artist:
+      typeof query.artist === "string" && /^[a-z0-9-]{1,200}$/.test(query.artist)
+        ? query.artist
+        : "",
     days: query.period === "30" ? 30 : query.period === "90" ? 90 : null,
     page:
       typeof query.page === "string" && /^[1-9]\d{0,2}$/.test(query.page)
@@ -79,6 +84,11 @@ export async function readPublicAnnouncements(
   const period = filters.days
     ? Prisma.sql`AND publication."createdAt" >= ${new Date(Date.now() - filters.days * 86_400_000)}`
     : Prisma.empty;
+  const artist = filters.artist
+    ? Prisma.sql`AND publication."affectedArtistIds" @> ARRAY[
+        (SELECT id FROM "Artist" WHERE slug = ${filters.artist})
+      ]::text[]`
+    : Prisma.empty;
   const offset = (filters.page - 1) * ANNOUNCEMENTS_PAGE_SIZE;
   // Join exact edition identity before paginating; select only approved public facts.
   const [rows, countries] = await Promise.all([
@@ -90,7 +100,7 @@ export async function readPublicAnnouncements(
       JOIN "FestivalEdition" edition ON edition."festivalId" = festival.id AND edition.year = publication."editionYear"
       WHERE publication.fields && ARRAY[${Prisma.join(publicationFields)}]::text[]
       AND edition."recordState" IN ('CURRENT', 'ARCHIVED')
-      ${country} ${period}
+      ${country} ${period} ${artist}
       ORDER BY publication."createdAt" DESC, publication.id DESC
       LIMIT ${ANNOUNCEMENTS_PAGE_SIZE + 1} OFFSET ${offset}
     `,

@@ -20,8 +20,13 @@ export default async function AdminPage() {
     getCatalog(),
     listTicketOfferReviewEditions(db),
   ]);
+  const lifecycleTargets = await db.festivalEdition.findMany({
+    where: { recordState: "CURRENT", lifecycleProposals: { some: {} } },
+    select: { id: true, year: true, festival: { select: { slug: true, officialUrl: true } } },
+  });
   return (
     <AdminConsole
+      lifecycleTargets={lifecycleTargets}
       ticketOfferEditions={ticketOfferEditions}
       editionOptions={editions.map(({ slug, name, editionYear, recordState }) => ({
         slug,
