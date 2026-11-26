@@ -228,12 +228,13 @@ export function AccountSyncPanel({
     onBusyChange?.(value);
   }
   const syncHeaders = (accountId: string) => ({ "X-Sync-Account": accountId });
-  async function parseDocument(kind: Kind, response: Response) {
+  async function parseDocument(kind: Kind, response: Response, accountId: string) {
     const document = (await response.json().catch(() => null))?.document as
       (Document & { kind?: string; userId?: string }) | null | undefined;
     if (document === null) return null;
     if (
       !document ||
+      document.userId !== accountId ||
       typeof document.id !== "string" ||
       !document.id ||
       !Number.isSafeInteger(document.revision) ||
@@ -260,7 +261,7 @@ export function AccountSyncPanel({
       signal,
     });
     if (!response.ok) throw new Error(t.failed);
-    return parseDocument(kind, response);
+    return parseDocument(kind, response, accountId);
   }
 
   async function readDocuments(accountId: string, signal?: AbortSignal) {
@@ -332,14 +333,9 @@ export function AccountSyncPanel({
       throw new Error("conflict");
     }
     if (!response.ok) throw new Error(t.failed);
-    const document = await parseDocument(kind, response);
+    const document = await parseDocument(kind, response, accountId);
     signal?.throwIfAborted();
-    if (
-      !document ||
-      document.userId !== accountId ||
-      document.revision !== revision + 1 ||
-      (base && document.id !== base.id)
-    )
+    if (!document || document.revision !== revision + 1 || (base && document.id !== base.id))
       throw new Error(t.failed);
     setDocs((current) => ({ ...current, [kind]: document }));
     return document;
