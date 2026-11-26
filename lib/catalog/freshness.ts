@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 export function latestDate(values: Iterable<string | undefined>): string | undefined {
   let latest: string | undefined;
@@ -14,10 +14,7 @@ type SourceCheck = {
   stale: boolean;
 };
 
-export async function readFreshnessEvidence(
-  db: Pick<PrismaClient, "catalogPublication" | "$queryRaw">,
-  now: Date,
-) {
+export async function readFreshnessEvidence(db: Prisma.TransactionClient, now: Date) {
   const [publications, checks] = await Promise.all([
     db.catalogPublication.groupBy({
       by: ["festivalSlug", "editionYear"],

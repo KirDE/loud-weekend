@@ -1,8 +1,5 @@
 import { publicFestivalVenue } from "./festival-venues.ts";
-import {
-  readApprovedTicketOffers,
-  type ApprovedTicketOffersReader,
-} from "../ingestion/ticket-offer-proposal-store.ts";
+import { readApprovedTicketOffers } from "../ingestion/ticket-offer-proposal-store.ts";
 import type { PublicTicketOffers } from "../domain/ticket-offer-proposal.ts";
 import { timetableEntrySchema } from "../timetables.ts";
 import { cache } from "react";
@@ -12,7 +9,9 @@ import { uniqueFavoriteSlugs, type DiscoveryLineups } from "../discovery-sort.ts
 import { rosterFingerprint } from "./lineup-proof.ts";
 import { artistAliasIndex } from "./artist-aliases.ts";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
-import type { PrismaClient } from "@prisma/client";
+import { announcedArtists } from "../festival-lineup.ts";
+import { readApprovedEditionLifecycleInSnapshot } from "../ingestion/edition-lifecycle-proposal-store.ts";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import type { ArtistProfile } from "../domain/artist.ts";
 import type { FestivalEdition } from "../domain/edition.ts";
 import type { Festival, PlaylistStatus, TimetableEntry } from "../domain/festival.ts";
@@ -37,8 +36,7 @@ const dateOnly = (value: Date | null) => value?.toISOString().slice(0, 10);
 const instant = (value: Date | null) => value?.toISOString();
 const lower = <T extends string>(value: T) => value.toLocaleLowerCase() as Lowercase<T>;
 
-type CatalogReader = ApprovedTicketOffersReader &
-  Pick<PrismaClient, "festivalEdition" | "artist" | "catalogPublication" | "$queryRaw">;
+type CatalogReader = Pick<PrismaClient, "$transaction">;
 
 export class DatabaseCatalogRepository implements CatalogRepository {
   private readonly client: CatalogReader;
@@ -47,13 +45,20 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     this.client = client;
   }
 
-  async read({
-    includeFreshness = false,
-    requireTimetableEvidence = false,
-  }: CatalogReadOptions = {}): Promise<CatalogSnapshot> {
+  async read(options: CatalogReadOptions = {}): Promise<CatalogSnapshot> {
+    return this.client.$transaction((tx) => this.readInSnapshot(tx, options), {
+      isolationLevel: "RepeatableRead",
+    });
+  }
+
+  /** Read within a caller-owned RepeatableRead transaction. */
+  async readInSnapshot(
+    tx: Prisma.TransactionClient,
+    { includeFreshness = false, requireTimetableEvidence = false }: CatalogReadOptions = {},
+  ): Promise<CatalogSnapshot> {
     const now = new Date();
     const [editionRows, artistRows, freshnessEvidence] = await Promise.all([
-      this.client.festivalEdition.findMany({
+      tx.festivalEdition.findMany({
         include: {
           festival: true,
           venue: true,
@@ -80,7 +85,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         },
         orderBy: [{ year: "asc" }, { festival: { catalogOrder: "asc" } }],
       }),
-      this.client.artist.findMany({
+      tx.artist.findMany({
         include: {
           identities: { orderBy: { position: "asc" } },
           links: { orderBy: { position: "asc" } },
@@ -88,16 +93,23 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         },
         orderBy: { slug: "asc" },
       }),
-      includeFreshness ? readFreshnessEvidence(this.client, now) : undefined,
+      includeFreshness ? readFreshnessEvidence(tx, now) : undefined,
     ]);
     if (!editionRows.length || !artistRows.length)
       throw new Error("database catalogue is empty or incomplete");
 
+    const lifecycles = new Map<string, NonNullable<Festival["editionLifecycle"]>>();
+    for (const row of editionRows) {
+      if (row.recordState === "CURRENT") {
+        const notice = await readApprovedEditionLifecycleInSnapshot(tx, row.id);
+        if (notice) lifecycles.set(row.id, notice);
+      }
+    }
     const currentIds = editionRows
       .filter((row) => row.recordState === "CURRENT")
       .map((row) => row.id);
     const approvedTiers = new Map<string, PublicTicketOffers>();
-    for (const { editionId, proposal } of await readApprovedTicketOffers(this.client, currentIds)) {
+    for (const { editionId, proposal } of await readApprovedTicketOffers(tx, currentIds)) {
       const { editionYear, sourceUrl, observedAt, offers } = proposal;
       approvedTiers.set(editionId, {
         editionYear,
@@ -167,6 +179,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       const aliases = row.timetable.length ? artistAliasIndex(roster) : undefined;
       const rosterById = new Map(roster.map((artist) => [artist.id, artist.name]));
       return {
+        ...(lifecycles.has(row.id) ? { editionLifecycle: lifecycles.get(row.id)! } : {}),
         lineupDays: lineupDays.some(({ sourceUrl }) => sourceUrl) ? lineupDays : undefined,
         ...(freshnessEvidence && {
           freshness: {
@@ -264,7 +277,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     });
     const currentEditions = editions.filter(({ recordState }) => recordState === "current");
     const currentArtistNames = new Set(
-      currentEditions.flatMap(({ headliners, lineup }) => [...headliners, ...lineup]),
+      currentEditions.flatMap((edition) => announcedArtists(edition)),
     );
     const festivalsFromDatabase: Festival[] = currentEditions.map((edition) => {
       const {
@@ -372,16 +385,18 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         .filter((row) => row.recordState === "CURRENT")
         .map((row) => [
           row.festival.slug,
-          [
-            ...new Set(
-              row.lineup
-                .filter(
-                  ({ status, billing }) =>
-                    status === "ANNOUNCED" && (billing === "HEADLINER" || billing === "LINEUP"),
-                )
-                .map((entry) => entry.artist.slug),
-            ),
-          ],
+          lifecycles.has(row.id)
+            ? []
+            : [
+                ...new Set(
+                  row.lineup
+                    .filter(
+                      ({ status, billing }) =>
+                        status === "ANNOUNCED" && (billing === "HEADLINER" || billing === "LINEUP"),
+                    )
+                    .map((entry) => entry.artist.slug),
+                ),
+              ],
         ]),
     );
     const visibleSlugs = new Set(artists.map((artist) => artist.slug));

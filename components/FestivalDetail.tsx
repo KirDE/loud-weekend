@@ -22,6 +22,8 @@ import { FestivalArrival } from "./FestivalArrival";
 import { PlanningTools } from "./PlanningTools";
 import { PlaylistCoverageLabel } from "./PlaylistCoverageLabel";
 import type { PlaylistStatus } from "@/lib/domain/festival";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
+import { EditionLifecycleNotice } from "./EditionLifecycleNotice";
 import { formatFreshnessDate } from "@/lib/freshness-date";
 import { ticketPresentation } from "@/lib/tickets";
 import { festivalSetlistHistoryUrl } from "@/lib/setlist-history";
@@ -73,6 +75,7 @@ export function FestivalDetail({
       timeZone: "UTC",
     }).format(new Date(`${value}T12:00:00Z`));
   const setlistUrl = festivalSetlistHistoryUrl(item.slug);
+  const hiatus = editionOnHiatus(item);
   const tickets = ticketPresentation(item);
   const reviewedSpotify = item.reviewedPlaylistLinks?.spotify;
   const reviewedYoutube = item.reviewedPlaylistLinks?.youtube_music;
@@ -95,17 +98,22 @@ export function FestivalDetail({
           </div>
           <h1>{item.name}</h1>
           <p className="detailDate">
-            {dates && item.startDate
-              ? `${prettyDate(item.startDate)}` +
-                `${item.endDate && item.endDate !== item.startDate ? ` — ${prettyDate(item.endDate)}` : ""}`
-              : t("datesTba")}
+            {hiatus
+              ? t("editionHiatus")
+              : dates && item.startDate
+                ? `${prettyDate(item.startDate)}` +
+                  `${item.endDate && item.endDate !== item.startDate ? ` — ${prettyDate(item.endDate)}` : ""}`
+                : t("datesTba")}
           </p>
-          <span className={`status ${lineupStatus.tone}`}>{t(lineupStatus.label)}</span>
+          <span className={`status ${hiatus ? "hiatus" : lineupStatus.tone}`}>
+            {t(hiatus ? "editionHiatus" : lineupStatus.label)}
+          </span>
           {item.sourceDeprecated && (
             <span className="status deprecated">{t("sourceDeprecated")}</span>
           )}
         </div>
       </section>
+      <EditionLifecycleNotice item={item} />
       <section className="localActions">
         <FavoriteButton value={item.slug} />
         <select
@@ -119,9 +127,15 @@ export function FestivalDetail({
           }
         >
           <option value="">{t("setAttendance")}</option>
-          <option value="going">{t("going")}</option>
-          <option value="maybe">{t("maybe")}</option>
-          <option value="not-going">{t("notGoing")}</option>
+          <option value="going" disabled={hiatus}>
+            {t("going")}
+          </option>
+          <option value="maybe" disabled={hiatus}>
+            {t("maybe")}
+          </option>
+          <option value="not-going" disabled={hiatus}>
+            {t("notGoing")}
+          </option>
         </select>
         <Link href="/planner/">{t("openPlan")}</Link>
       </section>
@@ -209,76 +223,80 @@ export function FestivalDetail({
           </div>
         )}
       </div>
-      {item.ticketOffers && <FestivalTicketOffers value={item.ticketOffers} locale={language} />}
-      <FestivalOverview overview={overview} />
-      {item.editionYear && (
+      {!hiatus && item.ticketOffers && (
+        <FestivalTicketOffers value={item.ticketOffers} locale={language} />
+      )}
+      {!hiatus && <FestivalOverview overview={overview} />}
+      {!hiatus && item.editionYear && (
         <OfflineTripDownload
           key={`${item.slug}:${item.editionYear}`}
           slug={item.slug}
           year={item.editionYear}
         />
       )}
-      <section className="lineupSection">
-        <div className="sectionHeading">
-          <div>
-            <div className="eyebrow">{t("discoverBill")}</div>
-            <h2>{t("lineup2027")}</h2>
-          </div>
-          <span>
-            {artistCount} {t("announced")}
-          </span>
-        </div>
-        {item.headliners.length > 0 && (
-          <>
-            <h3>{t("headliners")}</h3>
-            <div className="headlinerGrid">
-              {item.headliners.map((artist) => (
-                <Link href={`/artists/${artistSlugs[artist]}/`} key={artist}>
-                  {artist}
-                  <span>{t("viewArtist")}</span>
-                </Link>
-              ))}
+      {!hiatus && (
+        <section className="lineupSection">
+          <div className="sectionHeading">
+            <div>
+              <div className="eyebrow">{t("discoverBill")}</div>
+              <h2>{t("lineup2027")}</h2>
             </div>
-          </>
-        )}
-        {!hasArtists && (
-          <div className="lineupEmpty">
-            <strong>{t("noArtists")}</strong>
-            <span>{t("noArtistsText")}</span>
+            <span>
+              {artistCount} {t("announced")}
+            </span>
           </div>
-        )}
-        {item.lineup.length > 0 && (
-          <>
-            <h3>{t(item.headliners.length > 0 ? "alsoAnnounced" : "announcedActs")}</h3>
-            <label className="lineupSort">
-              {t("lineupSort")}
-              <select
-                value={lineupSort}
-                onChange={(event) => setLineupSort(event.target.value as LineupSort)}
-              >
-                <option value="official">{t("lineupOfficial")}</option>
-                <option value="alphabetical">{t("lineupAlphabetical")}</option>
-                <option value="chronological">{t("lineupChronological")}</option>
-                <option value="popularity">{t("lineupPopularity")}</option>
-              </select>
-            </label>
-            <div className="lineupGrid">
-              {sortedLineup.map((artist) => (
-                <Link href={`/artists/${artistSlugs[artist]}/`} key={artist}>
-                  {artist}
-                </Link>
-              ))}
+          {item.headliners.length > 0 && (
+            <>
+              <h3>{t("headliners")}</h3>
+              <div className="headlinerGrid">
+                {item.headliners.map((artist) => (
+                  <Link href={`/artists/${artistSlugs[artist]}/`} key={artist}>
+                    {artist}
+                    <span>{t("viewArtist")}</span>
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
+          {!hasArtists && (
+            <div className="lineupEmpty">
+              <strong>{t("noArtists")}</strong>
+              <span>{t("noArtistsText")}</span>
             </div>
-          </>
-        )}
-        {item.lineupDays && (
-          <LineupByDay
-            key={`${item.slug}:${item.editionYear}`}
-            appearances={item.lineupDays}
-            publicArtistSlugs={lineupDayArtistSlugs}
-          />
-        )}
-      </section>
+          )}
+          {item.lineup.length > 0 && (
+            <>
+              <h3>{t(item.headliners.length > 0 ? "alsoAnnounced" : "announcedActs")}</h3>
+              <label className="lineupSort">
+                {t("lineupSort")}
+                <select
+                  value={lineupSort}
+                  onChange={(event) => setLineupSort(event.target.value as LineupSort)}
+                >
+                  <option value="official">{t("lineupOfficial")}</option>
+                  <option value="alphabetical">{t("lineupAlphabetical")}</option>
+                  <option value="chronological">{t("lineupChronological")}</option>
+                  <option value="popularity">{t("lineupPopularity")}</option>
+                </select>
+              </label>
+              <div className="lineupGrid">
+                {sortedLineup.map((artist) => (
+                  <Link href={`/artists/${artistSlugs[artist]}/`} key={artist}>
+                    {artist}
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
+          {item.lineupDays && (
+            <LineupByDay
+              key={`${item.slug}:${item.editionYear}`}
+              appearances={item.lineupDays}
+              publicArtistSlugs={lineupDayArtistSlugs}
+            />
+          )}
+        </section>
+      )}
       <PlanningTools
         item={item}
         festivals={festivals}

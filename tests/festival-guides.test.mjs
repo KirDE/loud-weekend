@@ -38,7 +38,22 @@ test("guide membership uses only current edition facts with complete date eviden
   ];
   const foreign = { ...edition, slug: "foreign", countryCode: "AT" };
   const short = { ...edition, slug: "short", endDate: "2027-07-04" };
-  const records = [edition, ...missing, split, foreign, short];
+  const paused = {
+    ...edition,
+    slug: "paused",
+    officialUrl: "https://festival.example.test/",
+    editionLifecycle: {
+      festivalSlug: "paused",
+      editionYear: 2027,
+      lifecycle: "hiatus",
+      announcedReturnYear: 2028,
+      alternativeEvent: "under_consideration",
+      sourceUrl: "https://festival.example.test/",
+      observedAt: "2026-11-22T18:56:40.000Z",
+      approvedAt: "2026-11-22T19:00:00.000Z",
+    },
+  };
+  const records = [edition, ...missing, split, foreign, short, paused];
   assert.deepEqual(
     selectGuideEditions("germany", records).map(({ slug }) => slug),
     ["split", "fixture", "short"],

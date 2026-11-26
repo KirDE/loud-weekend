@@ -15,7 +15,9 @@ export async function generateMetadata({
   return items.length
     ? {
         title: `Rock and metal festivals in ${items[0].country}`,
-        description: `Dates, lineups and official tickets for ${items.length} festivals in ${items[0].country}.`,
+        description:
+          `Official sources and edition information for ${items.length} festival ` +
+          `records in ${items[0].country}.`,
         alternates: { canonical: `/countries/${code.toLowerCase()}/` },
       }
     : {};

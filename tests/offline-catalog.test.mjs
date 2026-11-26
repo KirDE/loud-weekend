@@ -151,6 +151,7 @@ test("Offline query uses current-season public fields and fails closed", async (
     return { year: 2029 };
   };
   const database = {
+    editionLifecycleProposalSnapshot: { findFirst: async () => null },
     festivalEdition: {
       findFirst,
       findMany: async (args) => {
@@ -163,7 +164,13 @@ test("Offline query uses current-season public fields and fails closed", async (
   assert.equal(payload.editionYear, 2029);
   assert.equal(payload.dataVersion, "festivals-2029-v1");
   assert.deepEqual(query.where, { year: 2029, recordState: "CURRENT" });
-  assert.deepEqual(Object.keys(query.select), ["festival", "startDate", "endDate", "timetable"]);
+  assert.deepEqual(Object.keys(query.select), [
+    "id",
+    "festival",
+    "startDate",
+    "endDate",
+    "timetable",
+  ]);
   assert.deepEqual(query.select.timetable.where, {
     timeZone: { not: null },
     sourceUrl: { not: null },
@@ -176,7 +183,7 @@ test("Offline query uses current-season public fields and fails closed", async (
     },
   ]) {
     const response = await serveOfflineCatalog(request("*"), () =>
-      readOfflineCatalog({ festivalEdition: { findFirst, findMany } }),
+      readOfflineCatalog({ ...database, festivalEdition: { findFirst, findMany } }),
     );
     assert.equal(response.status, 503);
     assert.equal(response.headers.get("cache-control"), "no-store");
@@ -194,6 +201,7 @@ test("actual GET route reads DB on each call and never returns 304 during DB fai
   let reads = 0;
   const previous = globalThis.prisma;
   globalThis.prisma = {
+    editionLifecycleProposalSnapshot: { findFirst: async () => null },
     festivalEdition: {
       findFirst: async () => ({ year: 2027 }),
       findMany: async () => {

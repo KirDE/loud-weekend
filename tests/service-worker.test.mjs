@@ -668,6 +668,33 @@ test("redirected catalogue responses are rejected even with public headers", asy
   assert.equal(await cache.match(CATALOG_URL), undefined);
 });
 
+test("valid empty catalogue replaces the old schedule, revalidates, then survives offline", async () => {
+  const { cache, caches } = memoryCache();
+  await seed(cache);
+  const empty = { ...payload(), festivals: [] };
+  let phase = "replace";
+  const { listeners } = await loadWorker({
+    cachesImpl: caches,
+    fetchImpl: async (request) => {
+      if (phase === "offline") throw new TypeError("offline");
+      if (phase === "replace") {
+        assert.equal(request.headers.get("if-none-match"), `"${revisionA}"`);
+        return catalogReply(revisionB, { body: empty });
+      }
+      assert.equal(request.headers.get("if-none-match"), `"${revisionB}"`);
+      return catalogReply(revisionB, { status: 304 });
+    },
+  });
+  assert.deepEqual(await (await dispatch(listeners)).json(), empty);
+  assert.deepEqual(await (await cache.match(CATALOG_URL)).json(), empty);
+  phase = "revalidate";
+  assert.deepEqual(await (await dispatch(listeners)).json(), empty);
+  phase = "offline";
+  const offline = await dispatch(listeners);
+  assert.equal(offline.headers.get("etag"), `"${revisionB}"`);
+  assert.deepEqual(await offline.json(), empty);
+});
+
 test("public catalogue accepts a new season with a matching data version", async () => {
   const { cache, caches } = memoryCache();
   const body = { ...payload(), editionYear: 2029, dataVersion: "festivals-2029-v1" };

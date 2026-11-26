@@ -1,3 +1,4 @@
+import type { PublicEditionLifecycle } from "./edition-lifecycle-review.ts";
 import type { PublicTicketOffers } from "./ticket-offer-proposal.ts";
 import type { EditionFreshness } from "./freshness.ts";
 
@@ -54,6 +55,8 @@ export type Festival = {
   sourceDeprecatedAt?: string;
   status: "confirmed" | "partial" | "tba";
   editionYear?: number;
+  /** Approved factual notice; independent of canonical ticket/date fields. */
+  editionLifecycle?: PublicEditionLifecycle;
   completeness?: "complete" | "partial" | "tba";
   ticketStatus:
     | "available"

@@ -1,5 +1,7 @@
 import type { Festival } from "@/lib/domain/festival";
 
+import { editionOnHiatus } from "./edition-lifecycle.ts";
+
 export type LineupSort = "official" | "alphabetical" | "chronological" | "popularity";
 
 export function lineupDayProfileSlugs(
@@ -65,14 +67,16 @@ export function sortFestivalLineup(
     .map(({ name }) => name);
 }
 
-type FestivalLineup = { headliners: readonly string[]; lineup: readonly string[] };
+type FestivalLineup = { headliners: readonly string[]; lineup: readonly string[] } & Partial<
+  Pick<Festival, "slug" | "editionYear" | "officialUrl" | "editionLifecycle">
+>;
 
 export function announcedArtists(item: FestivalLineup) {
-  return [...item.headliners, ...item.lineup];
+  return editionOnHiatus(item) ? [] : [...item.headliners, ...item.lineup];
 }
 
 export function hasAnnouncedLineup(item: FestivalLineup) {
-  return item.headliners.length + item.lineup.length > 0;
+  return announcedArtists(item).length > 0;
 }
 
 // Published acts are evidence of announcements, not of a final roster.
@@ -84,5 +88,5 @@ export function lineupPresentation(item: FestivalLineup & Pick<Festival, "finalL
 }
 
 export function lineupPreviewArtists(item: FestivalLineup) {
-  return item.headliners.length > 0 ? item.headliners : item.lineup;
+  return editionOnHiatus(item) ? [] : item.headliners.length > 0 ? item.headliners : item.lineup;
 }

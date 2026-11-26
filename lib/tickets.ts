@@ -1,6 +1,8 @@
 import type { Festival } from "@/lib/domain/festival";
+import { editionOnHiatus } from "./edition-lifecycle.ts";
 
 type TicketLabel =
+  | "editionHiatus"
   | "ticketsInfo"
   | "ticketsFree"
   | "officialTickets"
@@ -11,12 +13,13 @@ type TicketLabel =
   | "ticketsUnavailable"
   | "ticketsUnknown";
 export type TicketPresentation = {
-  status: Festival["ticketStatus"];
+  status: Festival["ticketStatus"] | "hiatus";
   href?: string;
   label: TicketLabel;
 };
 
 export function ticketPresentation(item: Festival): TicketPresentation {
+  if (editionOnHiatus(item)) return { status: "hiatus", label: "editionHiatus" };
   // Free, unticketed admission has no purchase flow. Ancillary camping/VIP
   // ticket URLs must not become a misleading general-admission CTA.
   if (item.ticketStatus === "free")

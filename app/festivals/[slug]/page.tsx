@@ -11,7 +11,12 @@ import { socialPreviewMetadata } from "@/lib/social-preview";
 import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
 import { getCatalog } from "@/lib/catalog/repository";
-import { canonicalPath, festivalMusicEvent, localizedAlternates } from "@/lib/seo";
+import {
+  canonicalPath,
+  festivalDescription,
+  festivalMusicEvent,
+  localizedAlternates,
+} from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 export const dynamicParams = true;
@@ -33,7 +38,7 @@ export async function generateMetadata({
         canonical,
       )),
     title: festival.name,
-    description: `${festival.name}: dates, lineup, tickets, playlist and setlists.`,
+    description: festivalDescription(festival),
     alternates: { canonical, languages: localizedAlternates(canonical) },
   };
 }
@@ -59,10 +64,12 @@ export default async function FestivalPage({ params }: { params: Promise<{ slug:
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(event).replace(/</g, "\\u003c") }}
-      />
+      {event && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(event).replace(/</g, "\\u003c") }}
+        />
+      )}
       <FestivalDetail
         overview={overview}
         item={item}

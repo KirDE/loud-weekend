@@ -1,5 +1,6 @@
 "use client";
 
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import Link from "next/link";
 import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
@@ -17,6 +18,8 @@ export function ArtistDetail({
   appearances: Festival[];
 }) {
   const { language, locale, t } = useLanguage();
+  // Also protect direct consumers, not just the server route projection.
+  appearances = appearances.filter((festival) => !editionOnHiatus(festival));
   const festivalWord = appearances.length === 1 ? t("europeanFestival") : t("europeanFestivals");
   const sentence =
     language === "ru"

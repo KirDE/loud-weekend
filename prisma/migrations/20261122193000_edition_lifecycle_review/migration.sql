@@ -1,0 +1,9 @@
+CREATE TABLE "EditionLifecycleReviewDecision" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "snapshotId" TEXT NOT NULL UNIQUE REFERENCES "EditionLifecycleProposalSnapshot"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  "contentHash" CHAR(64) NOT NULL,
+  "decision" TEXT NOT NULL CHECK ("decision" IN ('approve', 'reject')),
+  "actorId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  "auditId" TEXT NOT NULL UNIQUE REFERENCES "AdminAuditEntry"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

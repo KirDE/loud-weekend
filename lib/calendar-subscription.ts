@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
+import { readApprovedEditionLifecycleInSnapshot } from "./ingestion/edition-lifecycle-proposal-store.ts";
 import { calendarFile } from "./planning.ts";
 
 export const calendarPrivateHeaders = {
@@ -34,7 +35,7 @@ const isoDate = (date: Date | null) => date?.toISOString().slice(0, 10);
 
 export async function readCalendarFeed(db: PrismaClient, key: string) {
   if (!/^[A-Za-z0-9_-]{43}$/.test(key)) return null;
-  // Read authorization, synced choices, and catalogue dates from the same snapshot.
+  // Read authorization, synced choices, dates and lifecycle evidence from the same snapshot.
   return db.$transaction(
     async (tx) => {
       const subscription = await tx.calendarSubscription.findUnique({
@@ -73,6 +74,7 @@ export async function readCalendarFeed(db: PrismaClient, key: string) {
           startDate: true,
           endDate: true,
           updatedAt: true,
+          _count: { select: { lifecycleProposals: true } },
           festival: {
             select: {
               slug: true,
@@ -86,10 +88,15 @@ export async function readCalendarFeed(db: PrismaClient, key: string) {
         },
         orderBy: [{ startDate: "asc" }, { id: "asc" }],
       });
-      const events = editions.map(({ festival, ...edition }) => {
+      const events: Parameters<typeof calendarFile>[0][number][] = [];
+      for (const edition of editions) {
+        const editionLifecycle = edition._count.lifecycleProposals
+          ? await readApprovedEditionLifecycleInSnapshot(tx, edition.id)
+          : null;
+        const { festival } = edition;
         const updatedAt =
           festival.updatedAt > edition.updatedAt ? festival.updatedAt : edition.updatedAt;
-        return {
+        events.push({
           slug: festival.slug,
           name: festival.name,
           city: festival.city ?? undefined,
@@ -100,8 +107,9 @@ export async function readCalendarFeed(db: PrismaClient, key: string) {
           endDate: isoDate(edition.endDate),
           calendarId: edition.id,
           calendarUpdatedAt: updatedAt.toISOString(),
-        };
-      });
+          editionLifecycle: editionLifecycle ?? undefined,
+        });
+      }
       return calendarFile(events);
     },
     { isolationLevel: "RepeatableRead" },

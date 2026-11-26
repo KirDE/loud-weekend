@@ -464,6 +464,13 @@ const translations = {
     sourceCheckStale: "Some source checks are overdue or have failed.",
     latestCatalogPublication: "Last catalogue change published",
     noMatches: "No matching festivals. Try a different artist or country.",
+    editionReturn: "Announced return",
+    editionAlternative: "A different event is only under consideration, not confirmed.",
+    editionHiatus: "Edition on hiatus",
+    editionHiatusExplanation:
+      "The organizer has announced a pause for this edition. Previous dates, " +
+      "lineups and ticket information do not describe a scheduled edition.",
+    lifecycleObserved: "Announcement checked",
     datesTba: "Dates TBA",
     tba: "TBA",
     confirmed: "confirmed",
@@ -687,6 +694,13 @@ const translations = {
     sourceCheckStale: "Einige Quellenprüfungen sind überfällig oder fehlgeschlagen.",
     latestCatalogPublication: "Letzte veröffentlichte Katalogänderung",
     noMatches: "Keine passenden Festivals. Versuche einen anderen Künstler oder ein anderes Land.",
+    editionReturn: "Angekündigte Rückkehr",
+    editionAlternative: "Eine andere Veranstaltung wird nur erwogen, sie ist nicht bestätigt.",
+    editionHiatus: "Festivalausgabe pausiert",
+    editionHiatusExplanation:
+      "Der Veranstalter hat eine Pause für diese Ausgabe angekündigt. " +
+      "Frühere Termine, Line-ups und Ticketangaben beschreiben keine geplante Ausgabe.",
+    lifecycleObserved: "Mitteilung geprüft",
     datesTba: "Termine offen",
     tba: "OFFEN",
     confirmed: "bestätigt",
@@ -917,6 +931,13 @@ const translations = {
     sourceCheckStale: "Некоторые источники давно не проверялись или проверка завершилась ошибкой.",
     latestCatalogPublication: "Последняя публикация изменений каталога",
     noMatches: "Ничего не найдено. Попробуйте другого артиста или страну.",
+    editionReturn: "Объявленное возвращение",
+    editionAlternative: "Другое мероприятие только рассматривается, а не подтверждено.",
+    editionHiatus: "Редакция фестиваля на паузе",
+    editionHiatusExplanation:
+      "Организатор объявил паузу этой редакции. Прежние даты, состав и " +
+      "сведения о билетах не описывают запланированную редакцию.",
+    lifecycleObserved: "Объявление проверено",
     datesTba: "Даты уточняются",
     tba: "УТОЧНЯЕТСЯ",
     confirmed: "подтверждено",

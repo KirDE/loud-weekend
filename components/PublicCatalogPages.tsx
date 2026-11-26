@@ -14,6 +14,8 @@ import { FestivalExplorer } from "./FestivalExplorer";
 import { EditionAttendance, SeasonCalendar } from "./SeasonPlan";
 import { SeasonNavigation } from "./SeasonNavigation";
 import { useLanguage } from "./LanguageProvider";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
+import { EditionLifecycleNotice } from "./EditionLifecycleNotice";
 
 // Public route bodies use the selected UI language; their server routes and SEO
 // metadata remain independent of the saved preference and unchanged.
@@ -181,6 +183,11 @@ function usePublicCopy() {
   return { t, date, dateTime, range, locale, translateLabel };
 }
 
+// Archived snapshots keep their captured facts; only the current edition carries a live notice.
+function currentEditionOnHiatus(item: FestivalEdition) {
+  return item.recordState === "current" && editionOnHiatus(item);
+}
+
 function EditionRow({
   item,
   archive = false,
@@ -191,6 +198,7 @@ function EditionRow({
   planning?: boolean;
 }) {
   const { t, range, translateLabel } = usePublicCopy();
+  const paused = !archive && currentEditionOnHiatus(item);
   const count = item.headliners.length + item.lineup.length;
   const summary =
     count === 0 ? t.noArtists : archive ? t.archivedArtists(count) : t.artistsRecorded(count);
@@ -201,8 +209,14 @@ function EditionRow({
           {item.name} {item.editionYear}
         </strong>
         <span>
-          {range(item)} · {summary}
-          {item.finalLineup && count > 0 ? " · " + translateLabel("finalLineup") : ""}
+          {paused ? (
+            translateLabel("editionHiatus")
+          ) : (
+            <>
+              {range(item)} · {summary}
+              {item.finalLineup && count > 0 ? " · " + translateLabel("finalLineup") : ""}
+            </>
+          )}
         </span>
       </div>
       <Link className="textLink" href={`/festivals/${item.slug}/${item.editionYear}/`}>
@@ -294,6 +308,7 @@ export function FestivalEditionContent({
   arrivalFacts?: readonly PublicArrivalFact[];
 }) {
   const { t, date, dateTime, range, translateLabel } = usePublicCopy();
+  const paused = currentEditionOnHiatus(item);
   const artists = [...item.headliners, ...item.lineup];
   const completeness = editionRecordCompleteness(item);
   const recordLabel = {
@@ -302,7 +317,9 @@ export function FestivalEditionContent({
     tba: t.pendingRecord,
   }[completeness];
   const recordTone = completeness === "complete" ? "confirmed" : completeness;
-  const lineup = lineupPresentation(item);
+  const lineup = lineupPresentation(
+    item.recordState === "current" ? item : { ...item, editionLifecycle: undefined },
+  );
   return (
     <div className="detailPage">
       <Link className="back" href={"/editions/" + item.editionYear + "/"}>
@@ -316,33 +333,37 @@ export function FestivalEditionContent({
           <h1>
             {item.name} {item.editionYear}
           </h1>
-          <p className="detailDate">{range(item)}</p>
-          <span className={"status " + recordTone}>{recordLabel}</span>
+          <p className="detailDate">{paused ? translateLabel("editionHiatus") : range(item)}</p>
+          {!paused && <span className={"status " + recordTone}>{recordLabel}</span>}
         </div>
       </section>
-      <section className="lineupSection">
-        <h2>{t.lineupStatus}</h2>
-        {artists.length > 0 && <p>{translateLabel(lineup.label)}</p>}
-        {artists.length ? (
-          <div className="lineupGrid">
-            {artists.map((artist) =>
-              artistSlugs[artist] ? (
-                <Link key={artist} href={`/artists/${artistSlugs[artist]}/`}>
-                  {artist}
-                </Link>
-              ) : (
-                <span key={artist}>{artist}</span>
-              ),
-            )}
-          </div>
-        ) : (
-          <div className="lineupEmpty">
-            <strong>{t.noArtists}</strong>
-            {item.recordState === "tracking" && <span>{t.trackingNotice}</span>}
-          </div>
-        )}
-      </section>
-      {item.timetable?.length ? (
+      {paused ? (
+        <EditionLifecycleNotice item={item} />
+      ) : (
+        <section className="lineupSection">
+          <h2>{t.lineupStatus}</h2>
+          {artists.length > 0 && <p>{translateLabel(lineup.label)}</p>}
+          {artists.length ? (
+            <div className="lineupGrid">
+              {artists.map((artist) =>
+                artistSlugs[artist] ? (
+                  <Link key={artist} href={`/artists/${artistSlugs[artist]}/`}>
+                    {artist}
+                  </Link>
+                ) : (
+                  <span key={artist}>{artist}</span>
+                ),
+              )}
+            </div>
+          ) : (
+            <div className="lineupEmpty">
+              <strong>{t.noArtists}</strong>
+              {item.recordState === "tracking" && <span>{t.trackingNotice}</span>}
+            </div>
+          )}
+        </section>
+      )}
+      {!paused && item.timetable?.length ? (
         <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
       ) : null}
       <FestivalArrival facts={arrivalFacts} />

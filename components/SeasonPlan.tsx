@@ -1,5 +1,6 @@
 "use client";
 
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import type { FestivalEdition } from "@/lib/domain/edition";
 import { hasSeasonCalendarDates } from "@/lib/catalog/seasons";
 import { calendarFile } from "@/lib/planning";
@@ -43,6 +44,7 @@ export function EditionAttendance({ item }: { item: FestivalEdition }) {
   const { language } = useLanguage();
   const t = labels[language];
   const planner = useLocalPlanner();
+  const hiatus = editionOnHiatus(item);
   return (
     <label className="seasonAttendance">
       {t.attendance}
@@ -59,9 +61,15 @@ export function EditionAttendance({ item }: { item: FestivalEdition }) {
         }
       >
         <option value="">{t.none}</option>
-        <option value="going">{t.going}</option>
-        <option value="maybe">{t.maybe}</option>
-        <option value="not-going">{t["not-going"]}</option>
+        <option value="going" disabled={hiatus}>
+          {t.going}
+        </option>
+        <option value="maybe" disabled={hiatus}>
+          {t.maybe}
+        </option>
+        <option value="not-going" disabled={hiatus}>
+          {t["not-going"]}
+        </option>
       </select>
     </label>
   );

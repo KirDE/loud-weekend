@@ -2260,8 +2260,10 @@ test("free admission survives ingestion/replay and stale rollback without ticket
     assert.equal(item.ticketStatus, "free");
     assert.equal(ticketPresentation(item).href, item.officialUrl);
     assert.equal(hasAvailableTickets(item), false);
-    assert.equal(festivalMusicEvent(item).isAccessibleForFree, true);
-    assert.equal(festivalMusicEvent(item).offers, undefined);
+    const event = festivalMusicEvent(item);
+    assert.ok(event);
+    assert.equal(event.isAccessibleForFree, true);
+    assert.equal(event.offers, undefined);
     assert.deepEqual(notificationEventsForChanges(item, value.changes, value.fetchedAt), []);
     const stored = await db.ingestionCandidate.findUniqueOrThrow({
       where: { attemptId: attempt.id },
@@ -2357,7 +2359,7 @@ test("explicit ticket states survive reviewed publication and canonical public r
       const linked = { ...item, ticketsUrl: "https://festival.example.test/tickets" };
       assert.equal(ticketPresentation(linked).status, status);
       assert.equal(
-        festivalMusicEvent(linked).offers?.availability === "https://schema.org/SoldOut",
+        festivalMusicEvent(linked)?.offers?.availability === "https://schema.org/SoldOut",
         status === "sold_out",
       );
       const stored = await db.catalogPublication.findUniqueOrThrow({
