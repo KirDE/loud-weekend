@@ -108,6 +108,7 @@ export function AccountMenu() {
   const t = copy[language];
   const google = googleCopy[language];
   const [user, setUser] = useState<User | null>(null);
+  const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const panelId = useId();
@@ -137,9 +138,27 @@ export function AccountMenu() {
           response.ok && setGoogleAvailable((await response.json()).available === true),
       )
       .catch(() => undefined);
-    fetch("/api/auth/me", { cache: "no-store" })
-      .then(async (response) => response.ok && setUser((await response.json()).user))
-      .catch(() => undefined);
+    const sessionCheck = new AbortController();
+    const { signal } = sessionCheck;
+    const timeout = window.setTimeout(() => {
+      sessionCheck.abort();
+      setReady(true);
+    }, 5_000);
+    fetch("/api/auth/me", { cache: "no-store", signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const { user } = await response.json();
+        if (!signal.aborted) setUser(user);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        window.clearTimeout(timeout);
+        if (!signal.aborted) setReady(true);
+      });
+    return () => {
+      window.clearTimeout(timeout);
+      sessionCheck.abort();
+    };
   }, []);
 
   function dismiss() {
@@ -229,9 +248,10 @@ export function AccountMenu() {
       setMode("login");
       setOpen(false);
       window.dispatchEvent(new CustomEvent("loud-weekend-signed-out"));
+      // Reload other account surfaces; device choices remain in local storage.
+      window.location.reload();
     } catch {
       setError(t.failed);
-    } finally {
       setBusy(false);
     }
   }
@@ -258,6 +278,7 @@ export function AccountMenu() {
         type="button"
         ref={trigger}
         className="accountButton"
+        disabled={!ready}
         aria-controls={open ? panelId : undefined}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}

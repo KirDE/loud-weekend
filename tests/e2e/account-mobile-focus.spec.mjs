@@ -12,7 +12,9 @@ for (const [lang, name] of Object.entries(accountNames)) {
       );
       await page.goto(`/${lang}/`);
       const trigger = page.getByRole("button", { name, exact: true });
+      await expect(trigger).toBeEnabled();
       await trigger.focus();
+      await expect(trigger).toBeFocused();
       await page.keyboard.press("Enter");
       const popover = page.getByRole("region", { name, exact: true });
       await expect(popover).toBeVisible();
@@ -34,3 +36,40 @@ for (const [lang, name] of Object.entries(accountNames)) {
       await expect(trigger).toBeFocused();
     });
 }
+
+test("a stalled session check does not trap the account disclosure", async ({ page }) => {
+  await page.route("**/api/auth/me", () => {
+    // Leave the session request unanswered so the client must time out.
+  });
+  const request = page.waitForRequest("**/api/auth/me");
+  await page.goto("/en/");
+  await request;
+  const trigger = page.getByRole("button", { name: "Account", exact: true });
+  await expect(trigger).toBeEnabled({ timeout: 10_000 });
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("region", { name: "Account", exact: true })).toBeVisible();
+});
+
+test("the account disclosure recovers from a stalled session check without AbortSignal.any", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Reflect.deleteProperty(AbortSignal, "any");
+  });
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  let sessionRequested = false;
+  await page.route("**/api/auth/me", () => {
+    sessionRequested = true;
+    // Leave the session request unanswered so readiness depends on the timeout.
+  });
+  await page.goto("/en/");
+  expect(await page.evaluate(() => typeof AbortSignal.any)).toBe("undefined");
+  const trigger = page.getByRole("button", { name: "Account", exact: true });
+  await expect(trigger).toBeEnabled({ timeout: 10_000 });
+  expect(sessionRequested).toBe(true);
+  await trigger.click();
+  await expect(page.getByRole("region", { name: "Account", exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
