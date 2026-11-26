@@ -328,6 +328,63 @@ test("explicit JSON-LD status sets hold ticket changes only for the selected eve
   }
 });
 
+test("included JSON-LD descriptions hold ticket changes only when linked to the festival", () => {
+  const event = { "@type": "MusicEvent", "@id": "#festival-2027", startDate: current.startDate };
+  const cancelled = "https://schema.org/EventCancelled";
+  const description = { "@id": event["@id"], eventStatus: { "@id": cancelled } };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+
+  for (const page of [
+    script({ "@graph": [event], "@included": description }),
+    script(event) + script({ "@included": [description] }),
+  ]) {
+    const candidate = extract(page + ticket);
+    const result = evaluateCandidate(current, candidate);
+    assert.equal(candidate.startDate, current.startDate);
+    assert.equal(
+      candidate.evidence.find((item) => item.field === "startDate").excerpt,
+      JSON.stringify(event),
+    );
+    assert.deepEqual(
+      result.changes.map(({ field }) => field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [`Official event status requires review: ${cancelled}`]);
+  }
+
+  const unrelated = { "@graph": [event], "@included": [{ ...description, "@id": "#afterparty" }] };
+  const eventWithNestedOffer = { ...event, offers: { "@included": description } };
+  for (const value of [unrelated, eventWithNestedOffer]) {
+    assert.equal(evaluateCandidate(current, extract(script(value) + ticket)).publishable, true);
+  }
+});
+
+test("included JSON-LD relationship records keep side events out of festival proofs", () => {
+  const festival = {
+    "@type": "MusicEvent",
+    "@id": "#festival",
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/festival-tickets/" },
+  };
+  const sideEvent = {
+    "@type": "MusicEvent",
+    "@id": "#afterparty",
+    startDate: current.startDate,
+    offers: { url: "https://www.wacken.com/afterparty-tickets/" },
+  };
+  const document = {
+    "@graph": [sideEvent, festival],
+    "@included": [{ "@id": sideEvent["@id"], superEvent: { "@id": festival["@id"] } }],
+  };
+  const candidate = extract(
+    `<script type="application/ld+json">${JSON.stringify(document)}</script>`,
+  );
+  assert.equal(candidate.ticketsUrl, festival.offers.url);
+  assert.equal(candidate.timetable, undefined);
+  assert.equal(evaluateCandidate(current, candidate).publishable, true);
+});
+
 test("scheduled JSON-LD events do not hold verified ticket changes", () => {
   const event = {
     "@type": "MusicEvent",
