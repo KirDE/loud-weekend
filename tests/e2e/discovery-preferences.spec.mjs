@@ -486,3 +486,46 @@ test("pull finds the first account document created after the planner opened", a
     .toEqual(latest);
   await expect(page.locator(".planList select")).toHaveValue("going", { timeout: 4000 });
 });
+
+test("merging into the account leaves a newer device edit intact", async ({ page }) => {
+  await page.addInitScript((key) => {
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, JSON.stringify({ attendance: { "synthetic-fest": "going" } }));
+    }
+  }, storageKey);
+  const credentials = {
+    email: `discovery-pending-merge-${randomUUID()}@example.test`,
+    password: "synthetic merge test password",
+  };
+  expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
+  await page.goto("/en/planner/");
+
+  const writeStarted = Promise.withResolvers();
+  const releaseWrite = Promise.withResolvers();
+  const pattern = "**/api/sync/plans*";
+  await page.route(pattern, async (route) => {
+    if (route.request().method() === "PUT") {
+      writeStarted.resolve();
+      await releaseWrite.promise;
+    }
+    await route.continue();
+  });
+  try {
+    await page.getByRole("button", { name: "Merge this device into my account" }).click();
+    await writeStarted.promise;
+    await page.locator(".planList select").selectOption("");
+    await expect
+      .poll(() =>
+        page.evaluate((key) => JSON.parse(localStorage.getItem(key)).attendance, storageKey),
+      )
+      .toEqual({});
+  } finally {
+    releaseWrite.resolve();
+  }
+  await expect(page.getByText("Everything is synchronized.")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate((key) => JSON.parse(localStorage.getItem(key)).attendance, storageKey),
+    )
+    .toEqual({});
+});

@@ -381,7 +381,7 @@ export function AccountSyncPanel({
           mode === "merge" ? "merge" : "replace",
         );
       }
-      if (mode === "merge") planner.merge(plannerFrom(next));
+      if (mode === "merge") planner.merge(plannerFrom(next), planner);
       setStatus(t.current);
     } catch (reason) {
       if (!(reason instanceof Error && reason.message === "conflict"))

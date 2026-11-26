@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
 import {
   legacyPlannerYear,
+  mergePlannerState,
   parsePlannerState,
   serializePlannerState,
   type Attendance,
@@ -53,7 +54,7 @@ const Context = createContext<
       setSavedFilters: (value: DiscoveryPreferences) => void;
       updateSavedFilters: (patch: Partial<DiscoveryPreferences>) => void;
       replaceFields: (value: Partial<PlannerState>, expected: PlannerState) => void;
-      merge: (value: Partial<PlannerState>) => void;
+      merge: (value: Partial<PlannerState>, expected?: PlannerState) => void;
       clear: (clearRelatedData: () => void) => void;
     })
   | null
@@ -164,33 +165,8 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           if (keys.some((key) => !Object.is(current[key], expected[key]))) return current;
           return { ...current, ...fields };
         }),
-      merge: (next: Partial<PlannerState>) =>
-        setState((current) => {
-          const tripBudgets = { ...next.tripBudgets, ...current.tripBudgets };
-          return {
-            favoriteFestivals: Array.from(
-              new Set([...current.favoriteFestivals, ...(next.favoriteFestivals || [])]),
-            ),
-            favoriteArtists: Array.from(
-              new Set([...current.favoriteArtists, ...(next.favoriteArtists || [])]),
-            ),
-            attendance: { ...next.attendance, ...current.attendance },
-            seasonAttendance: next.seasonAttendance
-              ? { ...next.seasonAttendance, ...current.seasonAttendance }
-              : current.seasonAttendance,
-            tripBudgets:
-              Object.keys(tripBudgets).length <= maxTripBudgets ? tripBudgets : current.tripBudgets,
-            playlistFestivals: Array.from(
-              new Set([...current.playlistFestivals, ...(next.playlistFestivals || [])]),
-            ),
-            playlistExcludedArtists:
-              next.playlistExcludedArtists ?? current.playlistExcludedArtists,
-            savedFilters: readDiscoveryPreferences({
-              ...current.savedFilters,
-              ...next.savedFilters,
-            }),
-          };
-        }),
+      merge: (next: Partial<PlannerState>, expected?: PlannerState) =>
+        setState((current) => mergePlannerState(current, next, expected)),
       clear: (clearRelatedData: () => void) => {
         const cleared: PlannerState = { ...emptyPlannerState, playlistExcludedArtists: [] };
         const previous = localStorage.getItem(plannerStorageKey);
