@@ -236,6 +236,9 @@ export function AccountMenu() {
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error(t.failed);
+      setUser(null);
+      setMode("login");
+      setOpen(false);
       window.dispatchEvent(new CustomEvent("loud-weekend-signed-out"));
       // Reload other account surfaces; device choices remain in local storage.
       window.location.reload();

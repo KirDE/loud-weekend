@@ -528,6 +528,12 @@ test("signing out removes the private account view but keeps device choices", as
   await expect.poll(selection).toHaveLength(1);
   const saved = await selection();
 
+  await page.evaluate(() => {
+    window.addEventListener("loud-weekend-signed-out", () => {
+      const count = Number(sessionStorage.getItem("signed-out-events") ?? 0);
+      sessionStorage.setItem("signed-out-events", String(count + 1));
+    });
+  });
   await page.locator(".accountButton").click();
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(
@@ -536,4 +542,5 @@ test("signing out removes the private account view but keeps device choices", as
   await expect(panel.getByRole("link", { name: "Synthetic private playlist" })).toHaveCount(0);
   await expect(choice).toBeChecked();
   expect(await selection()).toEqual(saved);
+  expect(await page.evaluate(() => sessionStorage.getItem("signed-out-events"))).toBe("1");
 });
