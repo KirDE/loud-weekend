@@ -47,3 +47,13 @@ No production seed or proof table supplies the seller dates. The adapter derives
 them from the public response and compares them with the independently parsed
 organizer dates before persisting the normal stock evidence. Missing or
 contradictory observations withhold the stock update.
+
+## Net unit-price repair (26 November 2026)
+
+Current public stock returns `unit_price` and `total` at EUR 214.00, with an
+explicit EUR 5.00 service cost and EUR 219.00 service-inclusive breakdown.
+Accept either net or gross item pricing only when unit equals total, the net
+breakdown equals the ordinary product base, and base plus fee equals gross.
+Evidence reports the gross amount. A real reduced fixture, changed-price tests,
+contradictory-price negatives and the canonical publication integration cover
+this format without relaxing edition/product/stock/provider safeguards.
