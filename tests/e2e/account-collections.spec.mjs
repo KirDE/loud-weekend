@@ -305,3 +305,92 @@ for (const [locale, t] of Object.entries(copy))
         .toEqual([]);
     },
   );
+
+test("Spotify import does not restore a selection removed while account sync is pending", async ({
+  page,
+}) => {
+  const date = "2026-11-17T22:00:00.000Z";
+  let replyToWrite, markWriteStarted;
+  const releaseWrite = new Promise((resolve) => {
+    replyToWrite = resolve;
+  });
+  const writeStarted = new Promise((resolve) => {
+    markWriteStarted = resolve;
+  });
+  let saved;
+  await page.route("**/api/auth/me**", (route) =>
+    route.fulfill({
+      json: {
+        user: {
+          id: userId,
+          email: "browser-collections@example.test",
+          emailVerified: true,
+          role: "USER",
+        },
+      },
+    }),
+  );
+  await page.route("**/api/sync/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "GET") return route.fulfill({ json: { document: null } });
+    saved = {
+      id: "collection",
+      userId,
+      kind: documentKinds.collections,
+      revision: 1,
+      updatedAt: date,
+      payload: request.postDataJSON().payload,
+    };
+    markWriteStarted();
+    await releaseWrite;
+    return route.fulfill({ json: { document: saved } });
+  });
+  await page.route("**/api/spotify/sync**", (route) =>
+    route.fulfill({
+      json: {
+        document: {
+          ...saved,
+          revision: 2,
+          payload: {
+            ...saved.payload,
+            spotify: { syncedAt: date, playlists: [] },
+          },
+        },
+      },
+    }),
+  );
+
+  await page.goto("/en/planner/");
+  const choice = page.locator(".playlistFestivalGrid input").first();
+  await choice.check();
+  const panel = page.locator(".accountSync");
+  await panel.getByRole("button", { name: copy.en.import, exact: true }).click();
+  await writeStarted;
+  try {
+    expect(saved.payload.playlistFestivals).toHaveLength(1);
+    await expect(choice).toBeDisabled();
+    // Simulate a queued edit without relaxing the production busy guard.
+    await choice.evaluate((input) => {
+      input.disabled = false;
+      input.click();
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => JSON.parse(localStorage.getItem("festival-radar-planner-v1")).playlistFestivals,
+        ),
+      )
+      .toEqual([]);
+  } finally {
+    replyToWrite();
+  }
+  await expect(panel.getByText(copy.en.last)).toBeVisible();
+  await expect(choice).not.toBeChecked();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem("festival-radar-planner-v1")).playlistFestivals,
+      ),
+    )
+    .toEqual([]);
+});

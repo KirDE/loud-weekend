@@ -493,7 +493,7 @@ export function AccountSyncPanel({
       // checks as normal sync. A conflict aborts before calling the provider.
       const selection = spotifySelection(docs.collections?.payload, planner);
       const saved = await put("collections", selection, docs.collections, "spotify");
-      planner.merge(playlistSelection(saved.payload));
+      planner.merge(playlistSelection(saved.payload), planner);
       const response = await fetch("/api/spotify/sync", {
         method: "POST",
         headers: { "content-type": "application/json" },
