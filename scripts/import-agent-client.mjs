@@ -176,6 +176,11 @@ async function main() {
       undefined,
       options.queue === "repairs" ? "repairs" : undefined,
     );
+  else if (command === "source-recheck")
+    result = await callAgent(config, "POST", {
+      ...(await privateJson(options.decision)),
+      operation: "source_recheck",
+    });
   else if (command === "repair-claim")
     result = await callAgent(config, "POST", {
       operation: "repair_claim",

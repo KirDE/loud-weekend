@@ -1,3 +1,4 @@
+import { tolminator } from "./tolminator.ts";
 import { area53 } from "./area53.ts";
 import { summerPunch } from "./summer-punch.ts";
 import { provinssi } from "./provinssi.ts";
@@ -748,16 +749,6 @@ function trees(html: string): AdapterResult | undefined {
   return {
     startDate: `${date[4]}-${month}-${pad(date[1])}`,
     endDate: `${date[4]}-${month}-${pad(date[2])}`,
-    excerpt: date[0],
-  };
-}
-
-function tolminator(html: string): AdapterResult | undefined {
-  const date = html.match(/(\d{1,2})\s+July\s*[-–—]\s*(\d{1,2})\s+August\s+(20\d{2})/i);
-  if (!date) return undefined;
-  return {
-    startDate: `${date[3]}-07-${pad(date[1])}`,
-    endDate: `${date[3]}-08-${pad(date[2])}`,
     excerpt: date[0],
   };
 }
