@@ -6,6 +6,7 @@ import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
 import type { ArtistProfile } from "@/lib/domain/artist";
 import { useLanguage } from "./LanguageProvider";
+import { publicHistoryCopy } from "@/lib/catalog/public-history-copy";
 import { ArtistFavoriteButton } from "./LocalPlanner";
 
 export function ArtistDetail({
@@ -85,6 +86,9 @@ export function ArtistDetail({
         )}
       </section>
       <div className="artistActions">
+        <Link href={`/${language}/announcements/?artist=${encodeURIComponent(artist.slug)}`}>
+          {publicHistoryCopy[language].artistTimeline}
+        </Link>
         {artist.links
           .filter((link) => link.verified)
           .map((link) => (

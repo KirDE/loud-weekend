@@ -1001,6 +1001,7 @@ model CatalogPublication {
   editionYear     Int
   actorLabel      String
   fields          String[]
+  affectedArtistIds String[]                 @default([])
   lineupChanged   Boolean                  @default(false)
   evidence        Json?
   createdAt       DateTime                 @default(now())
@@ -1009,6 +1010,7 @@ model CatalogPublication {
 
   @@index([festivalSlug, createdAt])
   @@index([source, createdAt])
+  @@index([affectedArtistIds], type: Gin)
 }
 
 model CatalogPlaylistRefresh {

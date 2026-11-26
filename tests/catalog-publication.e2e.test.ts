@@ -1,3 +1,4 @@
+import { announcementFilters, readPublicAnnouncements } from "../lib/catalog/public-history.ts";
 import { collectRoskildeStock } from "../lib/ingestion/adapters/roskilde-stock-transport.ts";
 import { ROSKILDE_PRODUCTS_URL } from "../lib/ingestion/adapters/roskilde-stock.ts";
 import { readCatalog } from "../lib/catalog/repository.ts";
@@ -389,6 +390,28 @@ test("commits catalog rows, candidate state, audit snapshot and playlist request
     },
   });
   assert.ok(lineup);
+  assert.deepEqual(publication.affectedArtistIds, [lineup.artistId]);
+  const [added, untouched] = await Promise.all([
+    readPublicAnnouncements(db, announcementFilters({ artist: createdArtists.at(-1) })),
+    readPublicAnnouncements(db, announcementFilters({ artist: "sample-artist" })),
+  ]);
+  assert.deepEqual(
+    added.entries.filter(({ slug }) => slug === "synthetic-fest"),
+    [
+      {
+        slug: "synthetic-fest",
+        year: publication.editionYear,
+        name: "Synthetic Fest",
+        officialUrl: value.sourceUrl,
+        publishedAt: publication.createdAt.toISOString(),
+        categories: ["lineup"],
+      },
+    ],
+  );
+  assert.equal(
+    untouched.entries.some(({ slug }) => slug === "synthetic-fest"),
+    false,
+  );
   const visible = (await readCatalog({ database: db })).festivals.find(
     (festival) => festival.slug === value.festivalSlug,
   );
@@ -520,7 +543,8 @@ test("admin roster edits preserve retained and cancelled rows without reinstatin
         .map(({ artist }) => artist.slug),
     );
     const reversed = [...activeBefore].reverse();
-    assert.ok(await edit(reversed.map(({ artist }) => artist.name)));
+    const reorder = await edit(reversed.map(({ artist }) => artist.name));
+    assert.deepEqual(reorder?.affectedArtistIds, []);
     const activeAfter = await db.lineupEntry.findMany({
       where: { editionId: cancelled.editionId, billing: "LINEUP", status: "ANNOUNCED" },
       orderBy: { position: "asc" },
@@ -530,7 +554,20 @@ test("admin roster edits preserve retained and cancelled rows without reinstatin
       reversed.map(({ id }) => id),
     );
     const remaining = reversed.filter(({ artist }) => artist.name !== names[0]);
-    assert.ok(await edit(remaining.map(({ artist }) => artist.name)));
+    const removal = await edit(remaining.map(({ artist }) => artist.name));
+    const removed = reversed.find(({ artist }) => artist.name === names[0]);
+    assert.ok(removed);
+    assert.deepEqual(removal?.affectedArtistIds, [removed.artistId]);
+    const removedHistory = await readPublicAnnouncements(
+      db,
+      announcementFilters({ artist: removed.artist.slug }),
+    );
+    assert.equal(removedHistory.entries.filter(({ slug }) => slug === "synthetic-fest").length, 2);
+    const unknown = await readPublicAnnouncements(
+      db,
+      announcementFilters({ artist: "unknown-fixture-artist" }),
+    );
+    assert.deepEqual(unknown.entries, []);
     const afterRemoval = await db.lineupEntry.findMany({
       where: { editionId: cancelled.editionId, billing: "LINEUP", status: "ANNOUNCED" },
       orderBy: { position: "asc" },

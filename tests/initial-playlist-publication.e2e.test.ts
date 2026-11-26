@@ -92,6 +92,20 @@ test("first reviewed lineup creates one native job; replays and later updates do
     facts: { ...value.facts, lineup: ["First Roster Artist", "Second Roster Artist"] },
   });
   assert.equal(later?.playlistRefreshRequested, false);
+  const secondArtist = await db.artist.findFirstOrThrow({
+    where: { name: "Second Roster Artist" },
+  });
+  assert.deepEqual(later?.affectedArtistIds, [secondArtist.id]);
+  const rebilled = await publish({
+    ...value,
+    sourceId: `reviewed:${randomUUID()}`,
+    facts: {
+      ...value.facts,
+      headliners: ["Second Roster Artist"],
+      lineup: ["First Roster Artist"],
+    },
+  });
+  assert.deepEqual(rebilled?.affectedArtistIds, [secondArtist.id]);
 });
 test("a delayed reviewed roster preserves the newer edition source timestamp", async () => {
   const edition = await shell();
