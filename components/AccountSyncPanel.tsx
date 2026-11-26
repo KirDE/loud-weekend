@@ -50,6 +50,7 @@ const labels = {
     season: "Attendance from other seasons stays private and is not included in public plan links.",
     migrate: "Merge this device into my account",
     replace: "Use account data on this device",
+    noAccountData: "No account data to use yet.",
     sync: "Sync now",
     syncing: "Syncing…",
     current: "Everything is synchronized.",
@@ -79,6 +80,7 @@ const labels = {
       "Teilnahmeangaben aus anderen Saisons bleiben privat und erscheinen nicht in öffentlichen Plan-Links.",
     migrate: "Dieses Gerät mit meinem Konto zusammenführen",
     replace: "Kontodaten auf diesem Gerät verwenden",
+    noAccountData: "Im Konto sind noch keine Daten gespeichert.",
     sync: "Jetzt synchronisieren",
     syncing: "Synchronisiere…",
     current: "Alles ist synchronisiert.",
@@ -107,6 +109,7 @@ const labels = {
     season: "Отметки об участии в других сезонах остаются личными и не видны по публичным ссылкам.",
     migrate: "Объединить данные устройства с аккаунтом",
     replace: "Использовать данные аккаунта на устройстве",
+    noAccountData: "В аккаунте пока нет сохранённых данных.",
     sync: "Синхронизировать",
     syncing: "Синхронизация…",
     current: "Всё синхронизировано.",
@@ -330,8 +333,12 @@ export function AccountSyncPanel({
       if (mode === "remote") {
         if (!user) throw new Error(t.failed);
         const latest = await readDocuments(user.id);
-        planner.replace(plannerFrom(latest));
         setDocs(latest);
+        if (!Object.keys(latest).length) {
+          setStatus(t.noAccountData);
+          return;
+        }
+        planner.replace(plannerFrom(latest));
         setStatus(t.current);
         return;
       }
@@ -487,10 +494,7 @@ export function AccountSyncPanel({
         <button disabled={busy || disabled} onClick={() => synchronize("merge")}>
           {t.migrate}
         </button>
-        <button
-          disabled={busy || disabled || !Object.keys(docs).length}
-          onClick={() => synchronize("remote")}
-        >
+        <button disabled={busy || disabled} onClick={() => synchronize("remote")}>
           {t.replace}
         </button>
         <button disabled={busy || disabled} onClick={() => synchronize()}>

@@ -438,3 +438,47 @@ test("taking a remote plan preserves attendance changed while the account read i
   const saved = await (await page.request.get(plansUrl)).json();
   expect(saved.document.payload.attendance).toEqual({ "synthetic-fest": "maybe" });
 });
+
+test("pull finds the first account document created after the planner opened", async ({ page }) => {
+  await page.addInitScript(
+    ({ key, filters }) => {
+      if (!localStorage.getItem(key)) {
+        localStorage.setItem(key, JSON.stringify({ savedFilters: filters }));
+      }
+    },
+    { key: storageKey, filters: activeFilters },
+  );
+  const credentials = {
+    email: `discovery-first-pull-${randomUUID()}@example.test`,
+    password: "synthetic filter test password",
+  };
+  expect((await page.request.post("/api/auth/register", { data: credentials })).status()).toBe(201);
+  await page.goto("/en/planner/");
+  const pull = page.getByRole("button", { name: "Use account data on this device", exact: true });
+
+  await expect(pull).toBeEnabled({ timeout: 4000 });
+  await pull.click();
+  await expect(page.getByText("No account data to use yet.")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate((key) => JSON.parse(localStorage.getItem(key)).savedFilters, storageKey),
+    )
+    .toEqual(activeFilters);
+
+  const latest = { ...activeFilters, origin: "berlin" };
+  expect(
+    (
+      await page.request.put("/api/sync/saved-filters/", {
+        headers: { origin: new URL(page.url()).origin },
+        data: { revision: 0, payload: { savedFilters: latest } },
+      })
+    ).status(),
+  ).toBe(201);
+  await pull.click();
+  await expect(page.getByText("Everything is synchronized.")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate((key) => JSON.parse(localStorage.getItem(key)).savedFilters, storageKey),
+    )
+    .toEqual(latest);
+});
