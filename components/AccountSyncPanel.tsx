@@ -319,7 +319,14 @@ export function AccountSyncPanel({
         if (!me.ok) throw new Error(t.failed);
         const { user: account } = await me.json();
         if (signal.aborted) return;
-        if (!account?.id) throw new Error(t.failed);
+        if (
+          typeof account?.id !== "string" ||
+          !account.id.trim() ||
+          typeof account.email !== "string" ||
+          !account.email.trim()
+        ) {
+          throw new Error(t.failed);
+        }
         setUser({ ...account, signal });
         const documents = await readDocuments(account.id, signal);
         if (signal.aborted) return;
@@ -550,8 +557,11 @@ export function AccountSyncPanel({
       <section className="plannerSection accountSync">
         <h2>{t.title}</h2>
         <p>{t.local}</p>
-        <strong>{t.login}</strong>
-        {baseline === "failed" && <p role="status">{status}</p>}
+        {baseline === "ready" ? (
+          <strong>{t.login}</strong>
+        ) : (
+          <p role="status">{syncing ? t.syncing : status}</p>
+        )}
         {retryButton}
       </section>
     );

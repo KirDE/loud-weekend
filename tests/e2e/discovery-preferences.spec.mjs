@@ -686,7 +686,7 @@ test("an invalid account write acknowledgement cannot replace device choices", a
     name: "Merge this device into my account",
     exact: true,
   });
-  const favoritesRoute = "**/api/sync/favorites*";
+  const favoritesRoute = /\/api\/sync\/favorites\/?$/;
   const validNext = { ...document, revision: document.revision + 1 };
   const invalidDocuments = [
     { ...validNext, payload: { favoriteFestivals: [false] } },
@@ -695,12 +695,16 @@ test("an invalid account write acknowledgement cannot replace device choices", a
     document,
   ];
   for (const invalid of invalidDocuments) {
+    const rejectedWrite = page.waitForResponse(
+      (response) => favoritesRoute.test(response.url()) && response.request().method() === "PUT",
+    );
     await page.route(favoritesRoute, (route) =>
       route.request().method() === "PUT"
         ? route.fulfill({ json: { document: invalid } })
         : route.continue(),
     );
     await merge.click();
+    expect(await (await rejectedWrite).json()).toEqual({ document: invalid });
     await expect(page.getByText("Sync failed. Reconnect and try again.")).toBeVisible();
     await expect
       .poll(() =>
