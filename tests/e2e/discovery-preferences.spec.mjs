@@ -443,7 +443,10 @@ test("pull finds the first account document created after the planner opened", a
   await page.addInitScript(
     ({ key, filters }) => {
       if (!localStorage.getItem(key)) {
-        localStorage.setItem(key, JSON.stringify({ savedFilters: filters }));
+        localStorage.setItem(
+          key,
+          JSON.stringify({ savedFilters: filters, attendance: { "synthetic-fest": "going" } }),
+        );
       }
     },
     { key: storageKey, filters: activeFilters },
@@ -481,4 +484,5 @@ test("pull finds the first account document created after the planner opened", a
       page.evaluate((key) => JSON.parse(localStorage.getItem(key)).savedFilters, storageKey),
     )
     .toEqual(latest);
+  await expect(page.locator(".planList select")).toHaveValue("going", { timeout: 4000 });
 });
