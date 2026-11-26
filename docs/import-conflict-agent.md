@@ -225,3 +225,25 @@ provenance and publication together.
 Onboarding acceptance must verify BOTH catalogue publication and its durable
 provider hand-off (or record a concrete exclusion). A published website alone
 is not proof of complete festival onboarding or of provider completion.
+
+## Exact-source observation after a reviewed parser deployment
+
+Authenticated GET `?mode=source&sourceId=<id>` returns `{issue: ...}` for only
+that source, or `{issue: null}` when no review/failure/manual case exists. It
+issues no capability and does not claim or reset a case. Use it before `claim`
+instead of scanning unrelated inbox entries. Existing claim/lease gates apply.
+
+A healthy dates-only source may have no issue and not be due until tomorrow.
+After a parser repair is reviewed, deployed and verified, `source-recheck
+--decision <private JSON> --config <private config>` requests one normal due-worker
+observation. Decision fields are `sourceId`, `editionId`, `editionYear`,
+`sourceUrl` (the effective configured fetch URL), `parserKey` and the exact
+currently deployed full `commit`. The server rejects a
+stale/non-current binding, any existing actionable case, active importer lease,
+or source failure. This is not a backoff reset, a manual importer or publication.
+The serializable audited request only makes the bound source due and clears its
+conditional-fetch validators. It preserves all configuration/history and enqueues
+no provider work. Identical requests return the original receipt without making
+the source due again. The normal worker creates a candidate/event; re-read the
+exact source and use its ordinary protected claim/review/resolve path. Never
+publish an unclaimed candidate or infer a successful import from the request.

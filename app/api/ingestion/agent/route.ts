@@ -1,3 +1,4 @@
+import { sourceRecheckInput, requestSourceRecheck } from "@/lib/ingestion/source-recheck";
 import { verifyDispatchEvent, drainImportEvents } from "@/lib/ingestion/import-events";
 import {
   validDispatchEvent,
@@ -9,6 +10,7 @@ import { db } from "@/lib/db";
 import { agentAuthorized, ImportAgentError } from "@/lib/ingestion/agent-contract";
 import {
   listAgentIssues,
+  inspectSource,
   claimAgentIssue,
   resolveAgentIssue,
   releaseAgentIssue,
@@ -30,6 +32,7 @@ const headers = {
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,160}$/);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const requestSchema = z.discriminatedUnion("operation", [
+  sourceRecheckInput,
   z
     .object({
       operation: z.literal("repair_retarget"),
@@ -108,6 +111,10 @@ export async function GET(request: Request) {
   if (!agentAuthorized(request)) return reply({ error: "Unauthorized" }, 401);
   try {
     const mode = new URL(request.url).searchParams.get("mode");
+    if (mode === "source") {
+      const sourceId = id.parse(new URL(request.url).searchParams.get("sourceId"));
+      return reply({ issue: await inspectSource(db, sourceId) });
+    }
     if (mode === "event") {
       const raw = new URL(request.url).searchParams.get("event") ?? "";
       if (raw.length > 2048) return reply({ error: "Invalid event" }, 400);
@@ -152,6 +159,8 @@ export async function POST(request: Request) {
     }
     const parsed = requestSchema.safeParse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
     if (!parsed.success) return reply({ error: "Invalid agent request" }, 400);
+    if (parsed.data.operation === "source_recheck")
+      return reply(await requestSourceRecheck(db, parsed.data));
     if (parsed.data.operation === "repair_retarget")
       return reply(
         await configureParserRepairSource(
