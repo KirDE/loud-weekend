@@ -87,6 +87,10 @@ export const decisionSchema = z
     action: z.enum(["apply", "dismiss", "retry", "needs_user"]),
     reason: z.string().trim().min(10).max(2000),
     facts: factsSchema.optional(),
+    camping: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     arrival: z
       .string()
       .regex(/^[a-f0-9]{64}$/)
@@ -122,12 +126,20 @@ export const decisionSchema = z
         code: "custom",
         message: "Arrival approval must reference only the persisted observation",
       });
+    if (
+      v.camping &&
+      (v.action !== "apply" || v.facts || v.source || v.evidence.length || v.arrival || v.overview)
+    )
+      c.addIssue({
+        code: "custom",
+        message: "Camping approval must reference only the persisted observation",
+      });
     if (v.overview && (v.action !== "apply" || v.facts || v.source || v.evidence.length))
       c.addIssue({
         code: "custom",
         message: "Overview approval must reference only the persisted observation",
       });
-    if (v.action === "apply" && !v.evidence.length && !v.arrival && !v.overview)
+    if (v.action === "apply" && !v.evidence.length && !v.arrival && !v.overview && !v.camping)
       c.addIssue({
         code: "custom",
         message: "Apply requires official evidence",

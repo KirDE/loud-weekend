@@ -2,6 +2,7 @@
 
 import { CalendarSubscription } from "./CalendarSubscription";
 import { useEffect, useState } from "react";
+import { z } from "zod";
 import { readTripBudgets } from "@/lib/trip-budget";
 import { readDiscoveryPreferences } from "@/lib/discovery-preferences";
 import { readCollections, mergeCollections } from "@/lib/collections";
@@ -11,7 +12,8 @@ import { emptyPlannerState, type PlannerState, useLocalPlanner } from "./LocalPl
 type Kind =
   "favorites" | "collections" | "saved-filters" | "plans" | "season-attendance" | "budgets";
 type Document = { id: string; payload: unknown; revision: number; updatedAt: string };
-type Conflict = { kind: Kind; local: unknown; remote: Document };
+type ConflictMode = "replace" | "merge" | "spotify";
+type Conflict = { kind: Kind; remote: Document; mode: ConflictMode };
 const kinds: Kind[] = [
   "favorites",
   "collections",
@@ -20,6 +22,27 @@ const kinds: Kind[] = [
   "season-attendance",
   "budgets",
 ];
+const favoritesPayload = z.object({
+  favoriteFestivals: z.array(z.string()).optional(),
+  favoriteArtists: z.array(z.string()).optional(),
+});
+const plansPayload = z.object({
+  attendance: z.record(z.string(), z.enum(["going", "maybe", "not-going"])).optional(),
+});
+const savedFiltersPayload = z.object({
+  savedFilters: z
+    .object({
+      query: z.string(),
+      country: z.string(),
+      announcedOnly: z.boolean(),
+      month: z.string(),
+      ticketsOnly: z.boolean(),
+      genre: z.string(),
+      origin: z.string(),
+      maxDistance: z.string(),
+    })
+    .partial(),
+});
 const labels = {
   en: {
     title: "Account sync",
@@ -112,6 +135,13 @@ function playlistSelection(value: unknown) {
   const { playlistFestivals, playlistExcludedArtists } = readCollections(value);
   return { playlistFestivals, playlistExcludedArtists };
 }
+function spotifySelection(remote: unknown, planner: ReturnType<typeof useLocalPlanner>) {
+  const collections = readCollections(remote);
+  return {
+    ...mergeCollections(collections, { playlistFestivals: planner.playlistFestivals }),
+    playlistExcludedArtists: planner.playlistExcludedArtists ?? collections.playlistExcludedArtists,
+  };
+}
 function payloads(p: ReturnType<typeof useLocalPlanner>): Record<Kind, unknown> {
   return {
     favorites: { favoriteFestivals: p.favoriteFestivals, favoriteArtists: p.favoriteArtists },
@@ -126,15 +156,20 @@ function payloads(p: ReturnType<typeof useLocalPlanner>): Record<Kind, unknown> 
   };
 }
 function plannerFrom(documents: Partial<Record<Kind, Document>>): PlannerState {
-  const value = (kind: Kind) => (documents[kind]?.payload || {}) as Partial<PlannerState>;
+  const favorites = documents.favorites?.payload as z.infer<typeof favoritesPayload> | undefined;
+  const plans = documents.plans?.payload as z.infer<typeof plansPayload> | undefined;
+  const filters = documents["saved-filters"]?.payload as { savedFilters?: unknown } | undefined;
+  const season = documents["season-attendance"];
   return {
-    ...emptyPlannerState,
-    ...value("favorites"),
+    favoriteFestivals: favorites?.favoriteFestivals ?? emptyPlannerState.favoriteFestivals,
+    favoriteArtists: favorites?.favoriteArtists ?? emptyPlannerState.favoriteArtists,
+    attendance: plans?.attendance ?? emptyPlannerState.attendance,
     ...playlistSelection(documents.collections?.payload),
-    savedFilters: readDiscoveryPreferences(value("saved-filters").savedFilters),
-    ...value("plans"),
-    seasonAttendance: documents["season-attendance"]
-      ? readSeasonAttendance(value("season-attendance").seasonAttendance)
+    savedFilters: readDiscoveryPreferences(filters?.savedFilters),
+    seasonAttendance: season
+      ? readSeasonAttendance(
+          (season.payload as { seasonAttendance?: unknown } | null)?.seasonAttendance,
+        )
       : undefined,
     tripBudgets: readTripBudgets(documents.budgets?.payload),
   };
@@ -170,7 +205,7 @@ export function AccountSyncPanel({
   const planner = useLocalPlanner();
   const { language, locale } = useLanguage();
   const t = labels[language];
-  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; email: string; signal: AbortSignal } | null>(null);
   const [docs, setDocs] = useState<Partial<Record<Kind, Document>>>({});
   const [busy, setBusyState] = useState(false);
   const [status, setStatus] = useState("");
@@ -201,11 +236,16 @@ export function AccountSyncPanel({
       throw new Error(t.failed);
     }
     if (kind === "collections" && document) readCollections(document.payload);
-    if (kind === "saved-filters" && document) {
-      const filters = (document.payload as { savedFilters?: unknown } | null)?.savedFilters;
-      if (!filters || typeof filters !== "object" || Array.isArray(filters))
-        throw new Error(t.failed);
-    }
+    if (kind === "favorites" && document && !favoritesPayload.safeParse(document.payload).success)
+      throw new Error(t.failed);
+    if (kind === "plans" && document && !plansPayload.safeParse(document.payload).success)
+      throw new Error(t.failed);
+    if (
+      kind === "saved-filters" &&
+      document &&
+      !savedFiltersPayload.safeParse(document.payload).success
+    )
+      throw new Error(t.failed);
     return document;
   }
 
@@ -221,7 +261,10 @@ export function AccountSyncPanel({
   useEffect(() => {
     let active: AbortController | undefined;
     async function load() {
-      active?.abort();
+      if (active) {
+        active.abort();
+        setBusy(false);
+      }
       const { signal } = (active = new AbortController());
       setUser(null);
       setDocs({});
@@ -235,7 +278,7 @@ export function AccountSyncPanel({
         const documents = await readDocuments(account.id, signal);
         if (signal.aborted) return;
         setDocs(documents);
-        setUser(account);
+        setUser({ ...account, signal });
       } catch {
         if (!signal.aborted) setStatus(t.failed);
       }
@@ -250,22 +293,32 @@ export function AccountSyncPanel({
       window.removeEventListener("loud-weekend-signed-out", listener);
     };
   }, []);
-  async function put(kind: Kind, payload: unknown, revision: number) {
+  async function put(
+    kind: Kind,
+    payload: unknown,
+    revision: number,
+    mode: ConflictMode = "replace",
+    signal?: AbortSignal,
+  ) {
     if (!user) throw new Error(t.failed);
+    signal?.throwIfAborted();
     const accountId = user.id;
     const response = await fetch(`/api/sync/${kind}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ payload, revision, accountId }),
+      signal,
     });
     if (response.status === 409) {
-      const latest = await readDocument(kind, accountId);
+      const latest = await readDocument(kind, accountId, signal);
+      signal?.throwIfAborted();
       if (!latest) throw new Error(t.failed);
-      setConflict({ kind, local: payload, remote: latest });
+      setConflict({ kind, remote: latest, mode });
       throw new Error("conflict");
     }
     if (!response.ok) throw new Error(t.failed);
     const { document } = (await response.json()) as { document: Document };
+    signal?.throwIfAborted();
     setDocs((current) => ({ ...current, [kind]: document }));
     return document;
   }
@@ -292,7 +345,12 @@ export function AccountSyncPanel({
           mode === "merge" && next[kind]
             ? mergePayload(kind, next[kind]!.payload, local[kind])
             : local[kind];
-        next[kind] = await put(kind, content, next[kind]?.revision ?? 0);
+        next[kind] = await put(
+          kind,
+          content,
+          next[kind]?.revision ?? 0,
+          mode === "merge" ? "merge" : "replace",
+        );
       }
       if (mode === "merge") planner.merge(plannerFrom(next));
       setStatus(t.current);
@@ -305,14 +363,23 @@ export function AccountSyncPanel({
   }
 
   async function resolve(useLocal: boolean) {
-    if (!conflict) return;
+    if (!user || user.signal.aborted || !conflict) return;
+    const { id: accountId, signal } = user;
     setBusy(true);
     try {
-      const { kind, local, remote } = conflict;
+      const { kind, remote, mode } = conflict;
       if (useLocal) {
-        await put(kind, local, remote.revision);
+        const local = payloads(planner)[kind];
+        let content = local;
+        if (mode === "merge") content = mergePayload(kind, remote.payload, local);
+        if (mode === "spotify") content = spotifySelection(remote.payload, planner);
+        await put(kind, content, remote.revision, mode, signal);
+        if (signal.aborted) return;
       } else {
-        const state = plannerFrom({ [kind]: remote });
+        const latest = await readDocument(kind, accountId, signal);
+        if (signal.aborted) return;
+        if (!latest || latest.id !== remote.id) throw new Error(t.failed);
+        const state = plannerFrom({ [kind]: latest });
         const fields = {
           favorites: {
             favoriteFestivals: state.favoriteFestivals,
@@ -327,15 +394,16 @@ export function AccountSyncPanel({
           "season-attendance": { seasonAttendance: state.seasonAttendance },
           budgets: { tripBudgets: state.tripBudgets },
         };
-        planner.replaceFields(fields[kind]);
-        setDocs((current) => ({ ...current, [kind]: remote }));
+        planner.replaceFields(fields[kind], planner);
+        setDocs((current) => ({ ...current, [kind]: latest }));
       }
       setConflict(null);
       setStatus(t.resolved);
     } catch (reason) {
-      setStatus(reason instanceof Error ? reason.message : t.failed);
+      if (!signal.aborted && !(reason instanceof Error && reason.message === "conflict"))
+        setStatus(t.failed);
     } finally {
-      setBusy(false);
+      if (!signal.aborted) setBusy(false);
     }
   }
 
@@ -369,13 +437,8 @@ export function AccountSyncPanel({
     try {
       // Preserve unsynchronized device selection first, under the same revision
       // checks as normal sync. A conflict aborts before calling the provider.
-      const remoteCollections = readCollections(docs.collections?.payload);
-      const selection = {
-        ...mergeCollections(remoteCollections, { playlistFestivals: planner.playlistFestivals }),
-        playlistExcludedArtists:
-          planner.playlistExcludedArtists ?? remoteCollections.playlistExcludedArtists,
-      };
-      const saved = await put("collections", selection, docs.collections?.revision ?? 0);
+      const selection = spotifySelection(docs.collections?.payload, planner);
+      const saved = await put("collections", selection, docs.collections?.revision ?? 0, "spotify");
       planner.merge(playlistSelection(saved.payload));
       const response = await fetch("/api/spotify/sync", {
         method: "POST",
@@ -386,7 +449,7 @@ export function AccountSyncPanel({
         if (!user) throw new Error(t.failed);
         const document = await readDocument("collections", user.id);
         if (!document) throw new Error(t.failed);
-        setConflict({ kind: "collections", local: selection, remote: document });
+        setConflict({ kind: "collections", remote: document, mode: "spotify" });
         setStatus(t.conflict);
         return;
       }

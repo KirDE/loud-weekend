@@ -17,6 +17,7 @@ export function DiscoverySearch({
   artists,
   inputRef,
   onChange,
+  onSubmit,
 }: {
   query: string;
   ready: boolean;
@@ -24,6 +25,7 @@ export function DiscoverySearch({
   artists?: readonly SuggestionArtist[];
   inputRef: RefObject<HTMLInputElement | null>;
   onChange: (query: string) => void;
+  onSubmit?: () => void;
 }) {
   const { t, locale } = useLanguage();
   const [open, setOpen] = useState(false);
@@ -87,6 +89,15 @@ export function DiscoverySearch({
         aria-label={t("filterSearch")}
         value={query}
         onFocus={() => setOpen(true)}
+        onKeyDown={(event) => {
+          if (
+            event.key === "Enter" &&
+            !event.repeat &&
+            !event.nativeEvent.isComposing &&
+            query.trim()
+          )
+            onSubmit?.();
+        }}
         onClick={() => setOpen(true)}
         onChange={(event) => {
           setOpen(true);
