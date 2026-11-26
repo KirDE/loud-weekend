@@ -290,6 +290,7 @@ export function AccountSyncPanel({
     >;
   }
 
+  const [baseline, setBaseline] = useState<"loading" | "ready" | "failed">("loading");
   useEffect(() => {
     let active: AbortController | undefined;
     async function load() {
@@ -298,6 +299,7 @@ export function AccountSyncPanel({
         setBusy(false);
       }
       const { signal } = (active = new AbortController());
+      setBaseline("loading");
       setUser(null);
       setDocs({});
       setConflict(null);
@@ -305,18 +307,28 @@ export function AccountSyncPanel({
       setStatus("");
       try {
         const me = await fetch("/api/auth/me", { cache: "no-store", signal });
-        if (!me.ok) return;
-        const { user: account } = (await me.json()) as { user: { id: string; email: string } };
+        if (signal.aborted) return;
+        if (me.status === 401) {
+          setBaseline("ready");
+          return;
+        }
+        if (!me.ok) throw new Error(t.failed);
+        const { user: account } = await me.json();
+        if (signal.aborted) return;
+        if (!account?.id) throw new Error(t.failed);
+        setUser({ ...account, signal });
         const documents = await readDocuments(account.id, signal);
         if (signal.aborted) return;
         setDocs(documents);
-        setUser({ ...account, signal });
+        setBaseline("ready");
       } catch {
-        if (!signal.aborted) setStatus(t.failed);
+        if (signal.aborted) return;
+        setBaseline("failed");
+        setStatus(t.failed);
       }
     }
-    void load();
     const listener = () => void load();
+    void load();
     window.addEventListener("loud-weekend-authenticated", listener);
     window.addEventListener("loud-weekend-signed-out", listener);
     return () => {
@@ -517,31 +529,34 @@ export function AccountSyncPanel({
   }
   const imported = readCollections(docs.collections?.payload).spotify;
 
+  const syncing = busy || baseline === "loading";
+  const actionsDisabled = busy || disabled || baseline !== "ready";
   if (!user)
     return (
       <section className="plannerSection accountSync">
         <h2>{t.title}</h2>
         <p>{t.local}</p>
-        <strong>{status || t.login}</strong>
+        <strong>{t.login}</strong>
+        {baseline === "failed" && <p role="status">{status}</p>}
       </section>
     );
   return (
-    <section className="plannerSection accountSync" aria-busy={busy}>
+    <section className="plannerSection accountSync" aria-busy={syncing}>
       <div className="sectionHeading">
         <div>
           <div className="eyebrow">{user.email}</div>
           <h2>{t.title}</h2>
         </div>
-        <span aria-live="polite">{busy ? t.syncing : status}</span>
+        <span aria-live="polite">{syncing ? t.syncing : status}</span>
       </div>
       <div className="syncActions">
-        <button disabled={busy || disabled} onClick={() => synchronize("merge")}>
+        <button disabled={actionsDisabled} onClick={() => synchronize("merge")}>
           {t.migrate}
         </button>
-        <button disabled={busy || disabled} onClick={() => synchronize("remote")}>
+        <button disabled={actionsDisabled} onClick={() => synchronize("remote")}>
           {t.replace}
         </button>
-        <button disabled={busy || disabled} onClick={() => synchronize()}>
+        <button disabled={actionsDisabled} onClick={() => synchronize()}>
           {t.sync}
         </button>
       </div>
@@ -550,10 +565,10 @@ export function AccountSyncPanel({
         <div className="syncConflict" role="alert">
           <strong>{t.conflict}</strong>
           <div>
-            <button disabled={busy || disabled} onClick={() => resolve(true)}>
+            <button disabled={actionsDisabled} onClick={() => resolve(true)}>
               {t.keepLocal}
             </button>
-            <button disabled={busy || disabled} onClick={() => resolve(false)}>
+            <button disabled={actionsDisabled} onClick={() => resolve(false)}>
               {t.keepRemote}
             </button>
           </div>
@@ -571,7 +586,7 @@ export function AccountSyncPanel({
               onChange={(event) => setExpiry(event.target.value)}
             />
           </label>
-          <button disabled={busy || disabled} onClick={share}>
+          <button disabled={actionsDisabled} onClick={share}>
             {t.share}
           </button>
           {shareUrl && (
@@ -594,7 +609,7 @@ export function AccountSyncPanel({
           <a className="outlineButton" href="/api/spotify/connect">
             {t.connect}
           </a>
-          <button disabled={busy || disabled} onClick={spotifySync}>
+          <button disabled={actionsDisabled} onClick={spotifySync}>
             {t.import}
           </button>
           {imported ? (
