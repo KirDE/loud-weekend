@@ -79,6 +79,7 @@ const labels = {
     empty: "No imported playlists yet.",
     tracks: "tracks",
     failed: "Sync failed. Reconnect and try again.",
+    retry: "Retry account sync setup",
     login: "Sign in from the Account menu to enable cross-device sync.",
   },
   de: {
@@ -109,6 +110,7 @@ const labels = {
     empty: "Noch keine Playlists importiert.",
     tracks: "Titel",
     failed: "Synchronisierung fehlgeschlagen. Neu verbinden und erneut versuchen.",
+    retry: "Konto-Synchronisierung erneut einrichten",
     login: "Im Konto-Menü anmelden, um geräteübergreifend zu synchronisieren.",
   },
   ru: {
@@ -139,6 +141,7 @@ const labels = {
     empty: "Плейлисты ещё не импортированы.",
     tracks: "треков",
     failed: "Ошибка синхронизации. Переподключитесь и повторите.",
+    retry: "Повторить настройку синхронизации",
     login: "Войдите через меню аккаунта, чтобы включить синхронизацию между устройствами.",
   },
 } as const;
@@ -291,6 +294,7 @@ export function AccountSyncPanel({
   }
 
   const [baseline, setBaseline] = useState<"loading" | "ready" | "failed">("loading");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   useEffect(() => {
     let active: AbortController | undefined;
     async function load() {
@@ -336,7 +340,7 @@ export function AccountSyncPanel({
       window.removeEventListener("loud-weekend-authenticated", listener);
       window.removeEventListener("loud-weekend-signed-out", listener);
     };
-  }, []);
+  }, [loadAttempt]);
   async function put(
     kind: Kind,
     payload: unknown,
@@ -529,6 +533,16 @@ export function AccountSyncPanel({
   }
   const imported = readCollections(docs.collections?.payload).spotify;
 
+  function retryBaseline() {
+    setBaseline("loading");
+    setLoadAttempt((attempt) => attempt + 1);
+  }
+
+  const retryButton = baseline === "failed" && (
+    <button disabled={busy || disabled} onClick={retryBaseline}>
+      {t.retry}
+    </button>
+  );
   const syncing = busy || baseline === "loading";
   const actionsDisabled = busy || disabled || baseline !== "ready";
   if (!user)
@@ -538,6 +552,7 @@ export function AccountSyncPanel({
         <p>{t.local}</p>
         <strong>{t.login}</strong>
         {baseline === "failed" && <p role="status">{status}</p>}
+        {retryButton}
       </section>
     );
   return (
@@ -550,6 +565,7 @@ export function AccountSyncPanel({
         <span aria-live="polite">{syncing ? t.syncing : status}</span>
       </div>
       <div className="syncActions">
+        {retryButton}
         <button disabled={actionsDisabled} onClick={() => synchronize("merge")}>
           {t.migrate}
         </button>
