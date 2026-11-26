@@ -1,3 +1,8 @@
+import {
+  isTolminatorSource,
+  TOLMINATOR_LINEUP,
+  TOLMINATOR_DOCUMENTS,
+} from "./adapters/tolminator.ts";
 import { alcatrazPrimaryUrl } from "./alcatraz-ticket-stock.ts";
 import { validateBarcelonaFetch } from "./adapters/barcelona-banner.ts";
 import { RFP_STOCK, reduceRfpStockDocument } from "./rfp-ticket-stock.ts";
@@ -302,6 +307,47 @@ async function fetchSourceWithoutTicketSupplement(
     )
       throw new Error("Official artist listing changed its configured identity");
     return initial;
+  }
+  if (initial.response.ok && isTolminatorSource(source)) {
+    let attempts = initial.attempts;
+    try {
+      if (
+        source.fetchUrl ||
+        source.followLinkPattern ||
+        (initial.response.url && initial.response.url !== source.url)
+      )
+        throw new Error("Tolminator source identity changed");
+      const home = await boundedTicketText(initial.response);
+      const linked = [...home.matchAll(/<a\b[^>]*href=["']([^"']+)["']/gi)].some((m) => {
+        try {
+          return new URL(m[1], source.url).href === TOLMINATOR_LINEUP;
+        } catch {
+          return false;
+        }
+      });
+      if (!linked) throw new Error("Tolminator official lineup link missing");
+      const listing = await fetchWithRetry(TOLMINATOR_LINEUP, "error");
+      attempts += listing.attempts;
+      if (!listing.response.ok) return { response: listing.response, attempts };
+      if (listing.response.url && listing.response.url !== TOLMINATOR_LINEUP)
+        throw new Error("Tolminator lineup redirected");
+      return {
+        response: new Response(
+          JSON.stringify({
+            kind: TOLMINATOR_DOCUMENTS,
+            home,
+            lineup: await boundedTicketText(listing.response),
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+        attempts,
+      };
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      throw Object.assign(failure, {
+        attempts: attempts + Number((failure as Error & { attempts?: number }).attempts ?? 0),
+      });
+    }
   }
   if (initial.response.ok && isFullRewind(source)) {
     let attempts = initial.attempts;
