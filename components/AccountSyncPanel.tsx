@@ -254,6 +254,23 @@ export function AccountSyncPanel({
     return document;
   }
 
+  async function readWriteAcknowledgement(
+    kind: Kind,
+    response: Response,
+    accountId: string,
+    base?: Document,
+  ) {
+    if (!response.ok) throw new Error(t.failed);
+    const document = await parseDocument(kind, response, accountId);
+    if (
+      !document ||
+      document.revision !== (base?.revision ?? 0) + 1 ||
+      (base && document.id !== base.id)
+    )
+      throw new Error(t.failed);
+    return document;
+  }
+
   async function readDocument(kind: Kind, accountId: string, signal?: AbortSignal) {
     const response = await fetch("/api/sync/" + kind, {
       cache: "no-store",
@@ -332,11 +349,8 @@ export function AccountSyncPanel({
       setConflict({ kind, remote: latest, mode });
       throw new Error("conflict");
     }
-    if (!response.ok) throw new Error(t.failed);
-    const document = await parseDocument(kind, response, accountId);
+    const document = await readWriteAcknowledgement(kind, response, accountId, base);
     signal?.throwIfAborted();
-    if (!document || document.revision !== revision + 1 || (base && document.id !== base.id))
-      throw new Error(t.failed);
     setDocs((current) => ({ ...current, [kind]: document }));
     return document;
   }
@@ -469,6 +483,8 @@ export function AccountSyncPanel({
     }
   }
   async function spotifySync() {
+    if (!user) return;
+    const accountId = user.id;
     setBusy(true);
     setStatus("");
     setConflict(null);
@@ -484,17 +500,14 @@ export function AccountSyncPanel({
         body: JSON.stringify({ revision: saved.revision }),
       });
       if (response.status === 409) {
-        if (!user) throw new Error(t.failed);
-        const document = await readDocument("collections", user.id);
+        const document = await readDocument("collections", accountId);
         if (!document) throw new Error(t.failed);
         setConflict({ kind: "collections", remote: document, mode: "spotify" });
         setStatus(t.conflict);
         return;
       }
-      const body = await response.json();
-      if (!response.ok) throw new Error(t.failed);
-      readCollections(body.document.payload);
-      setDocs((value) => ({ ...value, collections: body.document }));
+      const document = await readWriteAcknowledgement("collections", response, accountId, saved);
+      setDocs((value) => ({ ...value, collections: document }));
       setStatus(t.current);
     } catch (reason) {
       if (!(reason instanceof Error && reason.message === "conflict")) setStatus(t.failed);

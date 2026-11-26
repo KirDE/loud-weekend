@@ -75,7 +75,8 @@ for (const [locale, t] of Object.entries(copy))
       let waitForCollectionSave;
       let failImport = false,
         conflictNext = false,
-        importRevisionConflict = false;
+        importRevisionConflict = false,
+        invalidImport = true;
       await context.route("**/api/auth/me**", (route) =>
         route.fulfill({
           json: {
@@ -142,6 +143,14 @@ for (const [locale, t] of Object.entries(copy))
         }
         if (route.request().postDataJSON().revision !== previous.revision)
           return route.fulfill({ status: 409, json: { error: "conflict" } });
+        if (invalidImport) {
+          invalidImport = false;
+          return route.fulfill({
+            json: {
+              document: { ...previous, payload: { ...previous.payload, spotify: imported } },
+            },
+          });
+        }
         docs.collections = {
           ...previous,
           revision: previous.revision + 1,
@@ -172,6 +181,9 @@ for (const [locale, t] of Object.entries(copy))
       await page.goto("/" + locale + "/planner/");
       const panel = page.locator(".accountSync"),
         link = panel.getByRole("link", { name: "Synthetic retained playlist" });
+      await panel.getByRole("button", { name: t.import, exact: true }).click();
+      await expect(panel).toHaveAttribute("aria-busy", "false");
+      await expect(link).toHaveCount(0);
       await panel.getByRole("button", { name: t.import, exact: true }).click();
       await expect(link).toBeVisible();
       await expect(panel.getByRole("heading", { name: t.saved })).toBeVisible();
