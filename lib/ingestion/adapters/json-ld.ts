@@ -5,6 +5,7 @@ import { validateGenericLineup } from "../lineup-quality.ts";
 import { festivalDateInterval } from "../../festival-dates.ts";
 
 type JsonLd = Record<string, unknown>;
+type ScriptRecord = { record: JsonLd; scriptIndex: number };
 
 function records(value: unknown): JsonLd[] {
   if (Array.isArray(value)) return value.flatMap(records);
@@ -25,12 +26,23 @@ function eventId(record: JsonLd, sourceUrl: string): string | undefined {
   }
 }
 
+function relationshipId(
+  record: JsonLd,
+  sourceUrl: string,
+  scriptIndex: number,
+): string | undefined {
+  const id = eventId(record, sourceUrl);
+  // Named IDs can link across scripts; blank-node labels belong to one script.
+  return id?.startsWith("_:") ? `${scriptIndex}:${id}` : id;
+}
+
 function eventRecords(html: string, sourceUrl: string) {
-  const events: JsonLd[] = [];
+  const events: ScriptRecord[] = [];
+  const splitRelations: ScriptRecord[] = [];
   const reviewStatuses = new Map<string, string>();
   const $ = load(html);
   $("template").remove();
-  for (const element of $("script[type]").toArray()) {
+  for (const [scriptIndex, element] of $("script[type]").toArray().entries()) {
     const script = $(element);
     if (script.attr("type")?.trim().toLowerCase() !== "application/ld+json") continue;
     const source = script.text().trim();
@@ -48,29 +60,37 @@ function eventRecords(html: string, sourceUrl: string) {
         if (
           types.some((type) => typeof type === "string" && type.toLowerCase().endsWith("event"))
         ) {
-          events.push(record);
+          events.push({ record, scriptIndex });
+        } else if (record.superEvent != null || record.subEvent != null) {
+          splitRelations.push({ record, scriptIndex });
         }
       }
     } catch {
       continue;
     }
   }
-  // A child can be independently defined in another script, with only the parent linking it.
+  // Named events can have separate descriptions containing only their relationships.
+  const eventIds = new Set(events.map(({ record }) => eventId(record, sourceUrl)));
+  const linkedDescriptions = splitRelations.filter(({ record }) => {
+    const id = eventId(record, sourceUrl);
+    return id && !id.startsWith("_:") && eventIds.has(id);
+  });
   const childIds = new Set<string>();
-  for (const event of events) {
-    const parentId = eventId(event, sourceUrl);
-    for (const child of records(event.subEvent)) {
-      const childId = eventId(child, sourceUrl);
+  for (const { record, scriptIndex } of [...events, ...linkedDescriptions]) {
+    const parentId = relationshipId(record, sourceUrl, scriptIndex);
+    if (parentId && record.superEvent != null) childIds.add(parentId);
+    for (const child of records(record.subEvent)) {
+      const childId = relationshipId(child, sourceUrl, scriptIndex);
       if (childId && childId !== parentId) childIds.add(childId);
     }
   }
   return {
     events: events
-      .filter((event) => {
-        const id = eventId(event, sourceUrl);
-        return event.superEvent == null && (!id || !childIds.has(id));
+      .filter(({ record, scriptIndex }) => {
+        const id = relationshipId(record, sourceUrl, scriptIndex);
+        return record.superEvent == null && (!id || !childIds.has(id));
       })
-      .map((event) => ({ event, excerpt: JSON.stringify(event).slice(0, 500) })),
+      .map(({ record }) => ({ event: record, excerpt: JSON.stringify(record).slice(0, 500) })),
     reviewStatuses,
   };
 }

@@ -303,3 +303,66 @@ test("a parent subEvent reference excludes its separately defined side event", (
   assert.equal(archived.lineup, undefined);
   assert.match(archived.warnings.join("; "), /does not match catalogue edition 2027/);
 });
+
+test("separate descriptions of a named event cannot hide its side-event link", () => {
+  const { superEvent, ...child } = sideShow;
+  const show = { ...child, "@id": "https://festival.example/#afterparty" };
+  const edition = {
+    "@id": "https://festival.example/#edition",
+    "@type": "MusicEvent",
+    startDate: "2027-07-01",
+    offers: { url: "https://tickets.example/fest", availability: "SoldOut" },
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  for (const relation of [
+    { "@id": "#afterparty", superEvent },
+    { "@id": "#edition", subEvent: { "@id": "#afterparty" } },
+  ]) {
+    for (const html of [
+      script({ "@graph": [show, relation, edition] }),
+      script(relation) + script({ "@graph": [show, edition] }),
+    ]) {
+      const candidate = extractJsonLdCandidate(html, source, "2026-08-28T21:00:00Z");
+      assert.equal(candidate.startDate, "2027-07-01");
+      assert.equal(candidate.ticketsUrl, "https://tickets.example/fest");
+      assert.equal(candidate.ticketStatus, "sold_out");
+      assert.equal(candidate.lineup, undefined);
+      assert.deepEqual(candidate.warnings, []);
+      assert.ok(candidate.evidence.every(({ excerpt }) => !excerpt.includes("afterparty")));
+    }
+  }
+
+  const unbound = extractJsonLdCandidate(
+    script([edition, { "@id": "#unrelated", subEvent: { "@id": "#edition" } }]),
+    source,
+    "2026-08-28T21:00:00Z",
+  );
+  assert.equal(unbound.ticketsUrl, "https://tickets.example/fest");
+});
+
+test("split subEvent links scope blank nodes to their own script", () => {
+  const show = {
+    "@type": "MusicEvent",
+    "@id": "_:show",
+    startDate: "2027-07-02",
+    offers: { availability: "InStock" },
+  };
+  const parent = {
+    "@type": "MusicEvent",
+    "@id": "#edition",
+    startDate: "2026-07-01",
+    offers: { availability: "SoldOut" },
+  };
+  const relation = { "@id": "#edition", subEvent: { "@id": "_:show" } };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const extract = (html) => extractJsonLdCandidate(html, source, "2026-08-28T21:00:00Z");
+
+  const separateScripts = extract(script([parent, relation]) + script(show));
+  assert.equal(separateScripts.startDate, "2027-07-02");
+  assert.equal(separateScripts.ticketStatus, "available");
+  assert.deepEqual(separateScripts.warnings, []);
+
+  const sharedScript = extract(script([parent, relation, show]));
+  assert.equal(sharedScript.startDate, "2026-07-01");
+  assert.equal(sharedScript.ticketStatus, "sold_out");
+});
