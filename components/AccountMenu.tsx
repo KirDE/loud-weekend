@@ -138,10 +138,19 @@ export function AccountMenu() {
           response.ok && setGoogleAvailable((await response.json()).available === true),
       )
       .catch(() => undefined);
-    fetch("/api/auth/me", { cache: "no-store" })
-      .then(async (response) => response.ok && setUser((await response.json()).user))
+    const sessionCheck = new AbortController();
+    const signal = AbortSignal.any([sessionCheck.signal, AbortSignal.timeout(5_000)]);
+    fetch("/api/auth/me", { cache: "no-store", signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const { user } = await response.json();
+        if (!signal.aborted) setUser(user);
+      })
       .catch(() => undefined)
-      .finally(() => setReady(true));
+      .finally(() => {
+        if (!sessionCheck.signal.aborted) setReady(true);
+      });
+    return () => sessionCheck.abort();
   }, []);
 
   function dismiss() {
