@@ -379,6 +379,8 @@ test("equivalent or unbound JSON-LD dates do not hold verified tickets", () => {
     ["#festival-2027", "#festival-2027", "2027-07-28T23:30:00-04:00"],
     ["#festival-2027", "#afterparty", "2027-07-29"],
     ["_:festival", "_:festival", "2027-07-29"],
+    ["#festival-2027", "#afterparty", "TBA"],
+    ["_:festival", "_:festival", "TBA"],
     [undefined, undefined, "2027-07-29"],
   ]) {
     const page =
@@ -387,5 +389,43 @@ test("equivalent or unbound JSON-LD dates do not hold verified tickets", () => {
     const candidate = extract(page + ticket);
     assert.deepEqual(candidate.warnings, []);
     assert.equal(evaluateCandidate(current, candidate).publishable, true);
+  }
+});
+
+test("malformed dates bound to the selected JSON-LD event hold ticket updates", () => {
+  const event = {
+    "@type": "MusicEvent",
+    "@id": "#festival-2027",
+    startDate: current.startDate,
+  };
+  const script = (value) => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+  const blankEvent = { ...event, "@id": "_:festival" };
+  for (const [selected, page, field, warning] of [
+    [
+      event,
+      script(event) + script({ "@id": "#festival-2027", startDate: "2027-02-30" }),
+      "startDate",
+      "JSON-LD Event contains an invalid start date",
+    ],
+    [
+      blankEvent,
+      script([blankEvent, { "@id": "_:festival", endDate: "TBA" }]),
+      "endDate",
+      "JSON-LD Event contains an invalid end date",
+    ],
+  ]) {
+    const candidate = extract(page + ticket);
+    const result = evaluateCandidate(current, candidate);
+    assert.equal(candidate[field], selected[field]);
+    assert.equal(
+      candidate.evidence.find((item) => item.field === "startDate").excerpt,
+      JSON.stringify(selected),
+    );
+    assert.deepEqual(
+      result.changes.map((change) => change.field),
+      ["ticketsUrl"],
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.reviewReasons, [warning]);
   }
 });
