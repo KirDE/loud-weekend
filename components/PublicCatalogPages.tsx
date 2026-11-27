@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { hasSeasonCalendarDates } from "@/lib/catalog/seasons";
+import { calendarEligible, calendarFile } from "@/lib/planning";
 import { editionRecordCompleteness } from "@/lib/edition-status";
 import { festivalDateInterval } from "@/lib/festival-dates";
 import { lineupPresentation } from "@/lib/festival-lineup";
@@ -32,6 +34,7 @@ const copy = {
     datesTba: "Dates TBA",
     archivedArtists: (n: number) => n + " archived artists",
     openEdition: "Open edition →",
+    editionCalendar: "Download edition calendar (.ics)",
     editionYear: "EDITION YEAR",
     editionHeading: (year: number) => year + " festival editions",
     records: (n: number) =>
@@ -78,6 +81,7 @@ const copy = {
     datesTba: "Termine offen",
     archivedArtists: (n: number) => n + " archivierte Künstler",
     openEdition: "Ausgabe öffnen →",
+    editionCalendar: "Ausgabekalender herunterladen (.ics)",
     editionYear: "AUSGABEJAHR",
     editionHeading: (year: number) => "Festivalausgaben " + year,
     records: (n: number) =>
@@ -128,6 +132,7 @@ const copy = {
     datesTba: "Даты уточняются",
     archivedArtists: (n: number) => "Артистов в архиве: " + n,
     openEdition: "Открыть выпуск →",
+    editionCalendar: "Скачать календарь выпуска (.ics)",
     editionYear: "ГОД ВЫПУСКА",
     editionHeading: (year: number) => "Выпуски фестивалей " + year + " года",
     records: (n: number) =>
@@ -309,6 +314,7 @@ export function FestivalEditionContent({
 }) {
   const { t, date, dateTime, range, translateLabel } = usePublicCopy();
   const paused = currentEditionOnHiatus(item);
+  const downloadable = !paused && hasSeasonCalendarDates(item) && calendarEligible(item);
   const artists = [...item.headliners, ...item.lineup];
   const completeness = editionRecordCompleteness(item);
   const recordLabel = {
@@ -335,6 +341,17 @@ export function FestivalEditionContent({
           </h1>
           <p className="detailDate">{paused ? translateLabel("editionHiatus") : range(item)}</p>
           {!paused && <span className={"status " + recordTone}>{recordLabel}</span>}
+          {downloadable && (
+            <p>
+              <a
+                className="textLink"
+                href={`data:text/calendar;charset=utf-8,${encodeURIComponent(calendarFile([item]))}`}
+                download={`${item.slug}-${item.editionYear}.ics`}
+              >
+                {t.editionCalendar}
+              </a>
+            </p>
+          )}
         </div>
       </section>
       {paused ? (
