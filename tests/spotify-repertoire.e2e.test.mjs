@@ -12,6 +12,18 @@ import { festivalSpotifyArtists } from "../lib/catalog/selection-artists.ts";
 
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db = createPrismaClient();
+// Shared disposable DB fixture: this is not a production cutover.
+test.before(async () => {
+  await db.operationalState.upsert({
+    where: { key: "spotify-track-policy-migration:v1" },
+    create: {
+      key: "spotify-track-policy-migration:v1",
+      payload: { schemaVersion: 1, ready: true },
+    },
+    update: {},
+  });
+});
+
 test.after(() => db.$disconnect());
 for (const single of [false, true])
   test(
@@ -333,4 +345,46 @@ test("DB-owned restrictions publish atomically and reach both canonical entrypoi
     await db.artist.delete({ where: { id: artist.id } });
     // Append-only audit remains in the disposable DB, removed with its container.
   }
+});
+
+test("real cutover blocks discovery and rolls activation back when audit fails", async () => {
+  const { activateArtistTrackPolicyMigration } =
+    await import("../lib/catalog/artist-track-policy-repository.ts");
+  const { TRACK_POLICY_MIGRATION_KEY: key } = await import("../lib/catalog/spotify-repertoire.ts");
+  await db.operationalState.deleteMany({ where: { key } });
+  const input = {
+    actorLabel: "test",
+    evidence: "Synthetic legacy disposition review",
+    sourceUrls: ["https://example.test/review"],
+    requiredPolicies: [],
+  };
+  await assert.rejects(
+    festivalSpotifyArtists(db, ["Synthetic"]),
+    /migration has not been verified/,
+  );
+  const broken = {
+    $transaction: (fn, options) =>
+      db.$transaction(
+        (tx) =>
+          fn({
+            operationalState: tx.operationalState,
+            adminAuditEntry: {
+              create: () => {
+                throw new Error("synthetic cutover audit failure");
+              },
+            },
+          }),
+        options,
+      ),
+  };
+  await assert.rejects(
+    activateArtistTrackPolicyMigration(broken, input, true),
+    /cutover audit failure/,
+  );
+  assert.equal(await db.operationalState.findUnique({ where: { key } }), null);
+  assert.equal((await activateArtistTrackPolicyMigration(db, input)).applied, false);
+  assert.equal(await db.operationalState.findUnique({ where: { key } }), null);
+  assert.equal((await activateArtistTrackPolicyMigration(db, input, true)).applied, true);
+  assert.equal((await activateArtistTrackPolicyMigration(db, input, true)).applied, false);
+  assert.deepEqual((await festivalSpotifyArtists(db, ["Unknown"])).spotifyTrackPolicies, {});
 });

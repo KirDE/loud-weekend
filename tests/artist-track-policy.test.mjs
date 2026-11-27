@@ -4,7 +4,10 @@ import {
   spotifyTrackPoliciesForArtists,
   trackPolicyKey,
 } from "../lib/catalog/spotify-repertoire.ts";
-import { publishArtistTrackPolicy } from "../lib/catalog/artist-track-policy-repository.ts";
+import {
+  activateArtistTrackPolicyMigration,
+  publishArtistTrackPolicy,
+} from "../lib/catalog/artist-track-policy-repository.ts";
 import { selectionArtists, festivalSpotifyArtists } from "../lib/catalog/selection-artists.ts";
 
 const policy = {
@@ -24,13 +27,18 @@ const artist = {
   identities: [],
   links: [],
 };
+const ready = {
+  key: "spotify-track-policy-migration:v1",
+  payload: { schemaVersion: 1, ready: true },
+};
 function fixture(rows = []) {
   const audit = [];
   const db = {
     artist: { findMany: async () => [artist], findUnique: async () => artist },
     festivalEdition: { findFirst: async () => ({ id: "edition" }) },
     operationalState: {
-      findMany: async ({ where }) => rows.filter((r) => where.key.in.includes(r.key)),
+      findMany: async ({ where }) =>
+        typeof where.key === "string" ? [ready] : rows.filter((r) => where.key.in.includes(r.key)),
       findUnique: async ({ where }) => rows.find((r) => r.key === where.key) ?? null,
       create: async ({ data }) => rows.push(data),
     },
@@ -96,4 +104,36 @@ test("audited preview/apply/replay/conflict and missing edition reject without w
   db.festivalEdition.findFirst = async () => null;
   await assert.rejects(publishArtistTrackPolicy(db, input, true), /current edition/);
   assert.equal(rows.length, 1);
+});
+
+test("cutover blocks both discovery entrypoints before readiness, including malformed markers", async () => {
+  const { db } = fixture();
+  for (const rows of [[], [{ ...ready, payload: { schemaVersion: 1, ready: false } }]]) {
+    db.operationalState.findMany = async () => rows;
+    await assert.rejects(selectionArtists(db, ["Billing"]), /migration has not been verified/);
+    await assert.rejects(
+      festivalSpotifyArtists(db, ["Billing"]),
+      /migration has not been verified/,
+    );
+  }
+});
+test("cutover verifies required policies, audits once and previews without activating", async () => {
+  const { db, rows, audit } = fixture();
+  const input = {
+    actorLabel: "fixture",
+    evidence: "Reviewed synthetic legacy dispositions",
+    sourceUrls: ["https://example.test/review"],
+    requiredPolicies: [{ key: trackPolicyKey("act"), policy }],
+  };
+  await assert.rejects(
+    activateArtistTrackPolicyMigration(db, input, true),
+    /missing or conflicting/,
+  );
+  assert.equal(audit.length, 0);
+  rows.push({ key: trackPolicyKey("act"), payload: policy });
+  assert.equal((await activateArtistTrackPolicyMigration(db, input)).applied, false);
+  assert.equal(rows.length, 1);
+  assert.equal((await activateArtistTrackPolicyMigration(db, input, true)).applied, true);
+  assert.equal((await activateArtistTrackPolicyMigration(db, input, true)).applied, false);
+  assert.equal(audit.length, 1);
 });

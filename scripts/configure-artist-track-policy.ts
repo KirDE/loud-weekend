@@ -1,9 +1,15 @@
 import { db } from "../lib/db.ts";
-import { publishArtistTrackPolicy } from "../lib/catalog/artist-track-policy-repository.ts";
+import {
+  activateArtistTrackPolicyMigration,
+  publishArtistTrackPolicy,
+} from "../lib/catalog/artist-track-policy-repository.ts";
 
 const args = process.argv.slice(2);
-if (args.length > 1 || (args.length === 1 && args[0] !== "--apply"))
-  throw new Error("Only --apply is supported");
+if (
+  args.some((arg) => !["--apply", "--activate"].includes(arg)) ||
+  new Set(args).size !== args.length
+)
+  throw new Error("Only --apply and --activate are supported");
 try {
   const parts: Buffer[] = [];
   let size = 0;
@@ -13,7 +19,10 @@ try {
     parts.push(part);
   }
   const value = JSON.parse(Buffer.concat(parts).toString("utf8"));
-  console.log(JSON.stringify(await publishArtistTrackPolicy(db, value, args.includes("--apply"))));
+  const publish = args.includes("--activate")
+    ? activateArtistTrackPolicyMigration
+    : publishArtistTrackPolicy;
+  console.log(JSON.stringify(await publish(db, value, args.includes("--apply"))));
 } finally {
   await db.$disconnect();
 }

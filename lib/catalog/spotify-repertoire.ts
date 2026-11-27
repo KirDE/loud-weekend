@@ -161,3 +161,17 @@ export async function spotifyTrackPoliciesForArtists(
   }
   return result;
 }
+
+// A structural cutover gate: no artist names or historical policy facts live here.
+export const TRACK_POLICY_MIGRATION_KEY = "spotify-track-policy-migration:v1";
+export const trackPolicyMigrationSchema = z
+  .object({ schemaVersion: z.literal(1), ready: z.literal(true) })
+  .strict();
+export async function requireTrackPolicyMigration(db: Pick<PrismaClient, "operationalState">) {
+  const rows = await db.operationalState.findMany({ where: { key: TRACK_POLICY_MIGRATION_KEY } });
+  const row = rows.find((value) => value.key === TRACK_POLICY_MIGRATION_KEY);
+  if (!row || !trackPolicyMigrationSchema.safeParse(row.payload).success)
+    throw new Error(
+      "Artist track policy migration has not been verified; new discovery is blocked",
+    );
+}

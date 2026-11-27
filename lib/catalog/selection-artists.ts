@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
 import {
+  requireTrackPolicyMigration,
   spotifyRepertoiresForArtists,
   spotifyTrackPoliciesForArtists,
   type RepertoireEdition,
@@ -31,6 +32,7 @@ export async function selectionArtists(
   names: string[],
   edition?: RepertoireEdition,
 ): Promise<SelectionArtist[]> {
+  await requireTrackPolicyMigration(db);
   const rows = await db.artist.findMany({
     select: {
       id: true,

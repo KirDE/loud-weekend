@@ -316,7 +316,17 @@ test("festival export preserves canonical aliases and only verified agreeing pro
   };
   const db = {
     artist: { findMany: async () => [row] },
-    operationalState: { findMany: async () => [] },
+    operationalState: {
+      findMany: async ({ where }) =>
+        typeof where.key === "string"
+          ? [
+              {
+                key: "spotify-track-policy-migration:v1",
+                payload: { schemaVersion: 1, ready: true },
+              },
+            ]
+          : [],
+    },
   };
   assert.deepEqual(await festivalSpotifyArtists(db, ["Billing Alias"]), {
     aliases: { "Billing Alias": "Canonical" },
@@ -347,7 +357,17 @@ test("canonical festival names retain accepted aliases without a provider pin", 
         },
       ],
     },
-    operationalState: { findMany: async () => [] },
+    operationalState: {
+      findMany: async ({ where }) =>
+        typeof where.key === "string"
+          ? [
+              {
+                key: "spotify-track-policy-migration:v1",
+                payload: { schemaVersion: 1, ready: true },
+              },
+            ]
+          : [],
+    },
   };
   const exported = await festivalSpotifyArtists(db, ["Canonical"]);
   assert.deepEqual(exported.acceptedPrimaryNames, { Canonical: ["Canonical", "Accepted Alias"] });
@@ -378,7 +398,17 @@ test("festival accepted labels exclude names owned by another canonical or archi
         },
       ],
     },
-    operationalState: { findMany: async () => [] },
+    operationalState: {
+      findMany: async ({ where }) =>
+        typeof where.key === "string"
+          ? [
+              {
+                key: "spotify-track-policy-migration:v1",
+                payload: { schemaVersion: 1, ready: true },
+              },
+            ]
+          : [],
+    },
   };
   const exported = await festivalSpotifyArtists(db, ["Ghost Alias"]);
   assert.deepEqual(exported.acceptedPrimaryNames, { "Ghost Alias": ["Old Ghost", "Ghost Alias"] });
