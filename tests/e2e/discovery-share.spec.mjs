@@ -70,6 +70,9 @@ for (const [locale, t] of Object.entries(labels)) {
       }, storageKey);
       const attributedLink = new URL(link);
       attributedLink.searchParams.set("ref", "festival-guide");
+      attributedLink.searchParams.append("matchArtist", "second-artist");
+      attributedLink.searchParams.append("matchArtist", "sample-artist");
+      attributedLink.searchParams.set("artistMatch", "any");
       await recipient.goto(attributedLink.href);
       const recipientSearch = recipient.locator(".search input");
       await expect(recipientSearch).toHaveValue("Synthetic Fest");
