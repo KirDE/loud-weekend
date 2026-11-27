@@ -222,6 +222,41 @@ test("published days and stages can be filtered without hiding cancellations or 
     await planPage.reload();
     await expect(runningOrder.getByText(/First Fixture · Fourth stage.*Cancelled/)).toBeVisible();
     await expect(runningOrder.getByText("Verified overlap:", { exact: false })).toHaveCount(0);
+    // Keep the saved cancellation manageable even when its stage is filtered out.
+    await timetable.getByRole("combobox", { name: "Timetable stage" }).selectOption("Second stage");
+    await runningOrder
+      .getByRole("button", { name: "Remove cancelled performance: First Fixture" })
+      .click();
+    await expect(timetable.locator("#stage-timetable-heading")).toBeFocused();
+    await expect(runningOrder.getByText(/First Fixture/)).toHaveCount(0);
+    await expect(runningOrder.getByText(/Overlap Fixture/)).toBeVisible();
+
+    // A saved ID missing from the published timetable never becomes a fabricated entry.
+    const storageKey = "festival-radar-timetable-v1:synthetic-west:2027";
+    await planPage.evaluate((key) => {
+      const saved = JSON.parse(localStorage.getItem(key));
+      localStorage.setItem(key, JSON.stringify([...saved, "fixture:unlisted"]));
+    }, storageKey);
+    await planPage.reload();
+    for (const [lang, removeUnlisted] of [
+      ["de", "Nicht gelistete Auftritte entfernen"],
+      ["ru", "Убрать выступления не из расписания"],
+      ["en", "Remove unlisted performances"],
+    ]) {
+      await planPage.locator(".languagePicker select").selectOption(lang);
+      await expect(planPage.getByRole("button", { name: removeUnlisted })).toBeVisible();
+      await expect(planPage.getByText("fixture:unlisted", { exact: false })).toHaveCount(0);
+    }
+    await runningOrder.getByRole("button", { name: "Remove unlisted performances" }).click();
+    await expect(
+      runningOrder.getByRole("button", { name: "Remove unlisted performances" }),
+    ).toHaveCount(0);
+    await expect(runningOrder.getByText(/Overlap Fixture/)).toBeVisible();
+    await planPage.reload();
+    await expect(
+      runningOrder.getByRole("button", { name: "Remove unlisted performances" }),
+    ).toHaveCount(0);
+    await expect(runningOrder.getByText(/Overlap Fixture/)).toBeVisible();
     await runningOrder.getByRole("button", { name: "Clear running order" }).click();
     await expect(runningOrder).toHaveCount(0);
     await planPage.reload();
