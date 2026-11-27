@@ -317,7 +317,7 @@ test("worker retries before schedule gate and publishes only after persisting co
   const compact = source.replace(/\s+/g, "");
   const firstPublication = compact.indexOf("awaitpublishArtistEnrichment(db,store)");
   const scheduleGate = compact.indexOf("if(store.payload?.nextRunAt");
-  const lastSave = compact.lastIndexOf("awaitstore.save({cache,result,");
+  const lastSave = compact.lastIndexOf("awaitcheckpoint(complete)");
   const lastPublication = compact.lastIndexOf("awaitpublishArtistEnrichment(db,store)");
   for (const position of [firstPublication, scheduleGate, lastSave, lastPublication]) {
     assert.ok(position >= 0, "required worker step is present");
@@ -482,6 +482,38 @@ test("a checkpoint result without cache bypasses its daily gate and obtains prov
   assert.ok(
     db.state.audits[0].metadata.reviews.some((r) => r.reason === "missing_provider_search"),
   );
+});
+
+test("a scheduled refresh publishes the new provider evidence, not the prior cache", async () => {
+  const db = database();
+  db.state.payload = {
+    cache: { synthetic: { count: 0, artists: [] } },
+    work: { fingerprint: "previous-run", completed: ["synthetic"], complete: true },
+    nextRunAt: "2026-10-05T00:00:00.000Z",
+  };
+  const freshSearch = fixture().search;
+  const requestedNames = [];
+  const result = await runEnrichment(
+    workerOptions(db, async (name) => {
+      requestedNames.push(name);
+      return freshSearch;
+    }),
+  );
+  assert.deepEqual(requestedNames, ["Synthetic Artist"]);
+  assert.equal(result.complete, true);
+  assert.deepEqual(db.state.payload.cache.synthetic, freshSearch);
+  assert.deepEqual(db.state.payload.publication.reviews, []);
+  assert.equal(db.state.artists[0].identities.length, 1);
+
+  const snapshot = structuredClone(db.state);
+  await runEnrichment(
+    workerOptions(db, async (name) => {
+      requestedNames.push(name);
+      return freshSearch;
+    }),
+  );
+  assert.deepEqual(requestedNames, ["Synthetic Artist"]);
+  assert.deepEqual(db.state, snapshot);
 });
 
 test("unsafe and oversized checkpoint evidence fails closed without writes", async () => {

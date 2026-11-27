@@ -1,17 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { hasSeasonCalendarDates } from "@/lib/catalog/seasons";
+import { calendarEligible, calendarFile } from "@/lib/planning";
 import { editionRecordCompleteness } from "@/lib/edition-status";
 import { festivalDateInterval } from "@/lib/festival-dates";
 import { lineupPresentation } from "@/lib/festival-lineup";
 import { StageTimetable } from "./StageTimetable";
+import { LineupByDay } from "./LineupByDay";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { FestivalEdition } from "@/lib/domain/edition";
-import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
+import type { PublicArrivalFact, PublicCampingFact } from "@/lib/domain/festival";
 import { FestivalArrival } from "./FestivalArrival";
-import type { PublicCampingFact } from "@/lib/catalog/camping-facts";
 import { FestivalCamping } from "./FestivalCamping";
+import { FestivalTicketOffers } from "./FestivalTicketOffers";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { EditionAttendance, SeasonCalendar } from "./SeasonPlan";
 import { SeasonNavigation } from "./SeasonNavigation";
@@ -34,6 +37,7 @@ const copy = {
     datesTba: "Dates TBA",
     archivedArtists: (n: number) => n + " archived artists",
     openEdition: "Open edition →",
+    editionCalendar: "Download edition calendar (.ics)",
     editionYear: "EDITION YEAR",
     editionHeading: (year: number) => year + " festival editions",
     records: (n: number) =>
@@ -80,6 +84,7 @@ const copy = {
     datesTba: "Termine offen",
     archivedArtists: (n: number) => n + " archivierte Künstler",
     openEdition: "Ausgabe öffnen →",
+    editionCalendar: "Ausgabekalender herunterladen (.ics)",
     editionYear: "AUSGABEJAHR",
     editionHeading: (year: number) => "Festivalausgaben " + year,
     records: (n: number) =>
@@ -130,6 +135,7 @@ const copy = {
     datesTba: "Даты уточняются",
     archivedArtists: (n: number) => "Артистов в архиве: " + n,
     openEdition: "Открыть выпуск →",
+    editionCalendar: "Скачать календарь выпуска (.ics)",
     editionYear: "ГОД ВЫПУСКА",
     editionHeading: (year: number) => "Выпуски фестивалей " + year + " года",
     records: (n: number) =>
@@ -303,16 +309,20 @@ export function EditionYearContent({
 export function FestivalEditionContent({
   item,
   artistSlugs = {},
+  lineupDayArtistSlugs = [],
   arrivalFacts = [],
   campingFacts = [],
 }: {
   item: FestivalEdition;
   artistSlugs?: Readonly<Record<string, string>>;
+  lineupDayArtistSlugs?: readonly string[];
   arrivalFacts?: readonly PublicArrivalFact[];
   campingFacts?: readonly PublicCampingFact[];
 }) {
   const { t, date, dateTime, range, translateLabel } = usePublicCopy();
+  const { language } = useLanguage();
   const paused = currentEditionOnHiatus(item);
+  const downloadable = !paused && hasSeasonCalendarDates(item) && calendarEligible(item);
   const artists = [...item.headliners, ...item.lineup];
   const completeness = editionRecordCompleteness(item);
   const recordLabel = {
@@ -339,6 +349,17 @@ export function FestivalEditionContent({
           </h1>
           <p className="detailDate">{paused ? translateLabel("editionHiatus") : range(item)}</p>
           {!paused && <span className={"status " + recordTone}>{recordLabel}</span>}
+          {downloadable && (
+            <p>
+              <a
+                className="textLink"
+                href={`data:text/calendar;charset=utf-8,${encodeURIComponent(calendarFile([item]))}`}
+                download={`${item.slug}-${item.editionYear}.ics`}
+              >
+                {t.editionCalendar}
+              </a>
+            </p>
+          )}
         </div>
       </section>
       {paused ? (
@@ -365,8 +386,16 @@ export function FestivalEditionContent({
               {item.recordState === "tracking" && <span>{t.trackingNotice}</span>}
             </div>
           )}
+          {item.recordState === "current" && item.lineupDays?.length ? (
+            <LineupByDay appearances={item.lineupDays} publicArtistSlugs={lineupDayArtistSlugs} />
+          ) : null}
         </section>
       )}
+      {item.recordState === "current" &&
+        !paused &&
+        item.ticketOffers?.editionYear === item.editionYear && (
+          <FestivalTicketOffers value={item.ticketOffers} locale={language} />
+        )}
       {!paused && item.timetable?.length ? (
         <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
       ) : null}

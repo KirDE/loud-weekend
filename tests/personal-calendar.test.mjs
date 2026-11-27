@@ -53,3 +53,28 @@ test("reports all pairs when three selected festivals overlap, independent of ca
     ],
   );
 });
+
+test("subscription revisions keep a stable UID and expose their actual modification timestamp", () => {
+  const before = {
+    ...festival("a", "2027-07-01", "2027-07-02"),
+    calendarId: "stable-edition",
+    calendarUpdatedAt: "2026-11-26T12:00:00.000Z",
+  };
+  const after = {
+    ...before,
+    startDate: "2027-07-02",
+    calendarUpdatedAt: "2026-11-27T14:21:00.000Z",
+  };
+  const poll = new Date("2026-11-28T12:00:00Z");
+  assert.equal(calendarFile([before]), calendarFile([before], poll));
+  assert.match(calendarFile([before], poll), /UID:stable-edition@festival-radar/);
+  assert.match(calendarFile([after], poll), /UID:stable-edition@festival-radar/);
+  assert.match(calendarFile([before], poll), /LAST-MODIFIED:20261126T120000Z/);
+  const revised = calendarFile([after], poll);
+  assert.match(revised, /LAST-MODIFIED:20261127T142100Z/);
+  assert.match(revised, /DTSTART;VALUE=DATE:20270702/);
+  assert.doesNotMatch(
+    calendarFile([{ ...before, calendarUpdatedAt: "invalid" }], poll),
+    /LAST-MODIFIED/,
+  );
+});

@@ -298,9 +298,9 @@ for (const language of ["en", "de", "ru"] as const) {
 }
 
 for (const [language, labels] of Object.entries({
-  en: ["Artists reported", "Verified coverage unavailable"],
-  de: ["Erfasste Künstler", "Keine verifizierten Angaben zur Abdeckung"],
-  ru: ["Указано артистов", "Подтверждённый охват неизвестен"],
+  en: ["Artists reported", "Verified coverage unavailable", "Partial coverage"],
+  de: ["Erfasste Künstler", "Keine verifizierten Angaben zur Abdeckung", "Teilweise Abdeckung"],
+  ru: ["Указано артистов", "Подтверждённый охват неизвестен", "Частичный охват"],
 } as const)) {
   test(`playlist coverage reports provider-specific stored counts and times in ${language}`, () => {
     const spotifyUrl = "https://open.spotify.com/playlist/1234567890123456789012";
@@ -330,11 +330,19 @@ for (const [language, labels] of Object.entries({
           </LocalPlannerProvider>
         </LanguageProvider>,
       );
+    const partial = { ...youtubeMusic, verified: { matchedArtists: 8, eligibleArtists: 110 } };
     const html = render({ spotify, youtubeMusic });
     const spotifyCard = html.split(`href="${spotifyUrl}"`)[1].split("</a>")[0];
     const youtubeCard = html.split(`href="${youtubeMusicUrl}"`)[1].split("</a>")[0];
     assert.ok(spotifyCard.includes(`${labels[0]}: 110`));
     assert.ok(spotifyCard.includes(spotify.recordedAt));
+    assert.ok(spotifyCard.includes(labels[1]), "reported totals do not prove coverage");
+    const verifiedCard = render({ spotify, youtubeMusic: partial })
+      .split(`href="${youtubeMusicUrl}"`)[1]
+      .split("</a>")[0];
+    assert.ok(verifiedCard.includes(labels[2]));
+    assert.ok(verifiedCard.includes("8 / 110"));
+    assert.ok(!verifiedCard.includes(labels[1]));
     assert.ok(youtubeCard.includes(`${labels[0]}: 8`));
     assert.ok(youtubeCard.includes(youtubeMusic.recordedAt));
     const missingYoutubeCoverage = render({ spotify })

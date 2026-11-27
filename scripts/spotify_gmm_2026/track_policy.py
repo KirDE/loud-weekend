@@ -6,30 +6,9 @@ from collections import Counter
 import unicodedata
 from html import unescape
 
-GLOBAL_EXCLUDES = {
-    "DJ Carl",
-    "DJ Nathachelet",
-    "VJ Set",
-    "AmÆzing Snäke",
-    "Deaftones",
-    "Chop Suey",
-    "Korn Again",
-    "Powerslave",
-    "Ultimate Ozzy",
-    "Slip-NOT",
-    "Thrash Attack",
-    "Rock The Fox",
-    "Pablo Honey",
-    "Snaggletooth",
-    "St. Jimmy's",
-    "Spouky Kids",
-    "DJ Curo",
-    "DJ Crash",
-    "NIN UK",
-    "ROLR",
-}
 KEYWORDS_EXCLUDE = ["dj ", " karaoke", " tribute", " cover band", " aftershow", " party set"]
-TRIBUTE_NAME_HINTS = {"again", "not", "ozzy", "pistols", "attack"}
+
+TRIBUTE_NAME_HINTS = {"again", "not", "attack"}
 
 MIN_TRACK_MS = 90_000
 NON_SONG_TITLE_HINTS = {"intro", "outro", "interlude", "overture"}
@@ -37,22 +16,29 @@ BAD_VERSION_DESCRIPTOR_HINTS = {
     "karaoke",
     "orchestral",
     "piano",
-    "queen alien",
-    "saltatio mortis",
     "unplugged",
 }
-STRICT_ARTIST_ONLY_FALLBACK = {"Tom Morello"}
-LIVE_REPERTOIRE_PRIMARY_ARTISTS = {
-    "Tom Morello": {"Tom Morello", "Rage Against The Machine", "Audioslave", "Prophets Of Rage"},
-}
-BLOCKED_PRIMARY_ARTIST_PREFIXES = {"of"}
-BLOCKED_PRIMARY_ARTIST_MATCHES = {
-    "Phantom": {"Phantom Planet"},
-}
-
 FEATURE_CLAUSE_RE = re.compile(r"(?:[-(\[]\s*)?\b(feat|featuring|ft)\b.*$", re.I)
 
-SPECIAL_ARTIST_INCLUDE = {}
+def validate_track_policy(value):
+    if value is None:
+        return {}
+    fields = {"schemaVersion", "excluded", "reviewedOriginal", "blockedPrimaryNames", "blockedVersionHints"}
+    if not isinstance(value, dict) or set(value) - {"strictPrimary"} != fields:
+        raise ValueError("Invalid track policy")
+    if type(value["schemaVersion"]) is not int or value["schemaVersion"] != 1:
+        raise ValueError("Invalid track policy version")
+    if any(type(value[k]) is not bool for k in ("excluded", "reviewedOriginal")):
+        raise ValueError("Invalid track policy flags")
+    if "strictPrimary" in value and type(value["strictPrimary"]) is not bool:
+        raise ValueError("Invalid strict primary policy")
+    for field in ("blockedPrimaryNames", "blockedVersionHints"):
+        values = value[field]
+        if not isinstance(values, list) or len(values) > 100 or any(
+            not isinstance(v, str) or not v.strip() or len(v) > 200 for v in values
+        ):
+            raise ValueError("Invalid track policy restrictions")
+    return value
 
 
 def clean_name(text: str) -> str:
@@ -77,7 +63,7 @@ def simplify_name(name: str) -> str:
     lowered = re.sub(r"\[[^\]]*\]", " ", lowered)
     lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
     lowered = re.sub(
-        r"\b(the|a|an|of|and|feat|featuring|with|official|band|chaos|ad)\b", " ", lowered
+        r"\b(the|a|an|of|and|feat|featuring|with|official|band)\b", " ", lowered
     )
     return " ".join(lowered.split())
 
@@ -104,12 +90,8 @@ def looks_like_tribute(name: str, *, reviewed_identity: bool = False) -> bool:
     # tribute/cover/karaoke/DJ labels and curated exclusions remain separate.
     if reviewed_identity:
         return False
-    # The original act is not a tribute merely because its name contains
-    # 'attack'. Keep explicit tribute keywords and every other exclusion.
-    if lowered.strip() == "massive attack":
-        return False
     tokens = set(simplify_name(name).split())
-    return any(token in tokens for token in TRIBUTE_NAME_HINTS if len(tokens) <= 3)
+    return len(tokens) <= 3 and bool(tokens & TRIBUTE_NAME_HINTS)
 
 
 def canonical_track_key(name: str) -> str:
@@ -156,22 +138,6 @@ def track_version_penalty(track: dict) -> int:
     return penalty
 
 
-def artist_family_match(query_artist: str, track: dict) -> bool:
-    allowed = SPECIAL_ARTIST_INCLUDE.get(query_artist)
-    if not allowed:
-        return True
-    track_artists = {artist["name"] for artist in track.get("artists", [])}
-    return bool(track_artists & allowed)
-
-
-def live_repertoire_primary_match(query_artist: str, track: dict) -> bool:
-    allowed = LIVE_REPERTOIRE_PRIMARY_ARTISTS.get(query_artist)
-    if not allowed:
-        return False
-    primary_artist = track["artists"][0]["name"] if track.get("artists") else ""
-    return simplify_name(primary_artist) in {simplify_name(artist) for artist in allowed}
-
-
 def accepted_credit_key(name: str) -> str:
     # Match the global ownership fence: punctuation and word order stay significant.
     return unicodedata.normalize("NFKC", name).strip().lower()
@@ -187,21 +153,8 @@ def identity_tokens(name: str) -> Counter:
 
 
 def primary_artist_matches_query(query_artist: str, track: dict) -> bool:
-    if live_repertoire_primary_match(query_artist, track):
-        return True
     primary_artist = track["artists"][0]["name"] if track.get("artists") else ""
-    blocked_artists = BLOCKED_PRIMARY_ARTIST_MATCHES.get(query_artist, set())
-    if simplify_name(primary_artist) in {simplify_name(artist) for artist in blocked_artists}:
-        return False
     query_base = setlist_lookup_name(query_artist)
-    raw_query_tokens = re.findall(r"[a-z0-9]+", query_artist.lower())
-    raw_primary_tokens = re.findall(r"[a-z0-9]+", primary_artist.lower())
-    if (
-        len(raw_query_tokens) == 1
-        and len(raw_primary_tokens) > 1
-        and raw_primary_tokens[0] in BLOCKED_PRIMARY_ARTIST_PREFIXES
-    ):
-        return False
     query_tokens = simplify_name(query_base).split()
     primary_tokens = simplify_name(primary_artist).split()
     if len(query_tokens) == 1 and len(primary_tokens) > 1 and query_tokens[0] != primary_tokens[0]:
@@ -225,9 +178,19 @@ def should_skip_track_for_artist(
     *,
     verified_primary_artist_id: str | None = None,
     accepted_primary_names: tuple[str, ...] = (),
+    track_policy: dict | None = None,
 ) -> str | None:
+    policy = validate_track_policy(track_policy)
+    if policy.get("excluded"):
+        return "excluded_artist"
     title = (track.get("name") or "").lower()
     primary_artist = track["artists"][0]["name"] if track.get("artists") else ""
+    if accepted_credit_key(primary_artist) in {
+        accepted_credit_key(name) for name in policy.get("blockedPrimaryNames", [])
+    }:
+        return "primary_artist_mismatch"
+    if "version" in title and any(h.casefold() in title for h in policy.get("blockedVersionHints", [])):
+        return "bad_version"
     # Only an exact canonical/accepted alias credit selects an alternate policy query.
     # This is not fuzzy alias containment and never overrides a verified provider ID.
     for accepted in accepted_primary_names:
@@ -243,24 +206,10 @@ def should_skip_track_for_artist(
         if not verified_primary_artist_id or primary_id != verified_primary_artist_id:
             return "primary_artist_mismatch"
     else:
-        strict_artist = next(
-            (
-                artist
-                for artist in (lineup_artist, query_artist)
-                if artist in STRICT_ARTIST_ONLY_FALLBACK
-            ),
-            None,
-        )
-        if (
-            strict_artist
-            and not live_repertoire_primary_match(strict_artist, track)
-            and simplify_name(primary_artist) != simplify_name(strict_artist)
-        ):
+        if policy.get("strictPrimary") and accepted_credit_key(primary_artist) != accepted_credit_key(query_artist):
             return "strict_primary_artist_required"
         if not primary_artist_matches_query(query_artist, track):
             return "primary_artist_mismatch"
-        if not artist_family_match(query_artist, track):
-            return "artist_family_mismatch"
     if track_version_penalty(track) >= 2:
         return "bad_version"
     if 'from "' in title or "from (" in title:

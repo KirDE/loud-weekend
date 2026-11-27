@@ -4,6 +4,7 @@ const categories = {
   dates: ["startDate", "endDate", "dateLabel"],
   lineup: ["lineup", "headliners", "lineupDays"],
   tickets: ["ticketsUrl", "ticketStatus"],
+  status: ["status"],
   timetable: ["timetable"],
 } as const;
 

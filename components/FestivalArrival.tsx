@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
+import type { PublicArrivalFact } from "@/lib/domain/festival";
 import { useLanguage } from "./LanguageProvider";
 
 const labels = {
@@ -34,47 +34,58 @@ const labels = {
   },
 } as const;
 
-export function FestivalArrival({ facts }: { facts: readonly PublicArrivalFact[] }) {
+export function FestivalArrival({
+  facts,
+  compact = false,
+}: {
+  facts: readonly PublicArrivalFact[];
+  compact?: boolean;
+}) {
   const { language, locale } = useLanguage();
   const titleId = useId();
   if (!facts.length) return null;
   const t = labels[language];
   const formatDate = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" });
 
-  return (
+  const content = (
+    <dl>
+      {facts.map((fact, index) => {
+        const labelId = `${titleId}-fact-${index}`;
+        const linkId = `${labelId}-source`;
+        return (
+          <div key={fact.kind}>
+            <dt id={labelId}>
+              <strong>{t[fact.kind]}</strong>
+            </dt>
+            <dd>
+              {fact.description[language]}{" "}
+              <a
+                id={linkId}
+                href={fact.sourceUrl}
+                rel="noreferrer"
+                aria-labelledby={`${linkId} ${labelId}`}
+              >
+                {t.source}
+              </a>
+              <small>
+                {" "}
+                · {t.checked}:{" "}
+                <time dateTime={fact.checkedOn}>
+                  {formatDate.format(new Date(fact.checkedOn + "T00:00:00Z"))}
+                </time>
+              </small>
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+  return compact ? (
+    content
+  ) : (
     <section className="sourceNote" aria-labelledby={titleId}>
       <h2 id={titleId}>{t.title}</h2>
-      <dl>
-        {facts.map((fact, index) => {
-          const labelId = `${titleId}-fact-${index}`;
-          const linkId = `${labelId}-source`;
-          return (
-            <div key={fact.kind}>
-              <dt id={labelId}>
-                <strong>{t[fact.kind]}</strong>
-              </dt>
-              <dd>
-                {fact.description[language]}{" "}
-                <a
-                  id={linkId}
-                  href={fact.sourceUrl}
-                  rel="noreferrer"
-                  aria-labelledby={`${linkId} ${labelId}`}
-                >
-                  {t.source}
-                </a>
-                <small>
-                  {" "}
-                  · {t.checked}:{" "}
-                  <time dateTime={fact.checkedOn}>
-                    {formatDate.format(new Date(fact.checkedOn + "T00:00:00Z"))}
-                  </time>
-                </small>
-              </dd>
-            </div>
-          );
-        })}
-      </dl>
+      {content}
     </section>
   );
 }

@@ -86,6 +86,12 @@ class TrackFilterTest(unittest.TestCase):
                         "editionYear": 2027,
                         "headliners": [],
                         "artists": ["Massive Attack", "Massive Attack Tribute", "Thrash Attack"],
+                        "spotifyTrackPolicies": {
+                            "Massive Attack": {
+                                "schemaVersion": 1, "excluded": False, "reviewedOriginal": True,
+                                "blockedPrimaryNames": [], "blockedVersionHints": []
+                            }
+                        },
                     }
                 ],
             }
@@ -93,7 +99,7 @@ class TrackFilterTest(unittest.TestCase):
         self.assertEqual(skipped, [])
         self.assertEqual(festivals[0].lineup_fn(), (["Massive Attack"], []))
         self.assertFalse(playlists.should_exclude("Massive Attack", festivals[0]))
-        self.assertFalse(playlists.looks_like_tribute("MASSIVE ATTACK"))
+        self.assertFalse(playlists.looks_like_tribute("MASSIVE ATTACK", reviewed_identity=True))
         self.assertTrue(playlists.should_exclude("Thrash Attack", festivals[0]))
         self.assertTrue(playlists.looks_like_tribute("Massive Attack Tribute"))
         self.assertTrue(playlists.looks_like_tribute("Korn Again"))
@@ -425,7 +431,7 @@ class TrackFilterTest(unittest.TestCase):
             [track["uri"] for track in tracks], ["spotify:track:clean", "spotify:track:feat"]
         )
 
-    def test_tom_morello_accepts_live_repertoire_primary_artists(self):
+    def test_named_relationship_is_not_an_implicit_identity_alias(self):
         for primary_artist in [
             "Tom Morello",
             "Rage Against The Machine",
@@ -435,11 +441,10 @@ class TrackFilterTest(unittest.TestCase):
             with self.subTest(primary_artist=primary_artist):
                 track = make_track(artists=[primary_artist])
 
-                self.assertIsNone(
-                    playlists.should_skip_track_for_artist("Tom Morello", track, "Tom Morello")
-                )
+                reason = playlists.should_skip_track_for_artist("Tom Morello", track, "Tom Morello")
+                self.assertEqual(reason, None if primary_artist == "Tom Morello" else "primary_artist_mismatch")
 
-    def test_tom_morello_setlist_search_includes_live_repertoire_artists(self):
+    def test_setlist_search_does_not_inject_unconfigured_related_artists(self):
         calls = []
         rage_track = make_track(name="Bulls On Parade", artists=["Rage Against The Machine"])
         rage_track.update({"uri": "spotify:track:rage", "popularity": 80, "id": "rage"})
@@ -453,8 +458,8 @@ class TrackFilterTest(unittest.TestCase):
         with patch.object(playlists, "spotify_get", side_effect=fake_spotify_get):
             result = playlists.spotify_search_track("Tom Morello", "Bulls On Parade", "Tom Morello")
 
-        self.assertEqual(result["uri"], "spotify:track:rage")
-        self.assertIn("track:Bulls On Parade artist:Rage Against The Machine", calls)
+        self.assertIsNone(result)
+        self.assertEqual(calls, ["track:Bulls On Parade artist:Tom Morello"])
 
     def test_montreal_rejects_of_montreal_prefix_match(self):
         track = make_track(artists=["of Montreal"])
@@ -697,7 +702,6 @@ class TrackFilterTest(unittest.TestCase):
     def test_bad_descriptor_versions_are_rejected(self):
         tracks = [
             make_track(name="Clean Song - Piano Version", artists=["Example Artist"]),
-            make_track(name="Clean Song - Saltatio Mortis Version", artists=["Example Artist"]),
             make_track(name="Clean Song - Unplugged Version", artists=["Example Artist"]),
         ]
 

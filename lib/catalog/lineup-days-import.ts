@@ -73,7 +73,7 @@ export async function importLineupDays(db: PrismaClient, document: unknown, chec
         editionArtists.set(allocation.artist.slug, allocation.artistId);
       const existing = new Map(edition.lineupDays.map((record) => [record.artistId, record]));
       const seen = new Set<string>();
-      let changed = 0;
+      const changedArtistIds: string[] = [];
       for (const entry of input.entries) {
         const artistId = editionArtists.get(entry.artistSlug);
         if (!artistId || seen.has(artistId))
@@ -118,7 +118,7 @@ export async function importLineupDays(db: PrismaClient, document: unknown, chec
           throw new Error("A changed allocation requires a newer official observation");
         }
 
-        changed++;
+        changedArtistIds.push(artistId);
         if (checkOnly) continue;
         const allocation = {
           dates: dates.map(toDate),
@@ -147,6 +147,7 @@ export async function importLineupDays(db: PrismaClient, document: unknown, chec
           },
         });
       }
+      const changed = changedArtistIds.length;
       if (!checkOnly && changed > 0) {
         await tx.catalogPublication.create({
           data: {
@@ -156,6 +157,7 @@ export async function importLineupDays(db: PrismaClient, document: unknown, chec
             editionYear: edition.year,
             actorLabel: "reviewed-lineup-days-import",
             fields: ["lineupDays"],
+            affectedArtistIds: changedArtistIds.sort(),
             evidence: { sourceUrl: source.href, observedAt: observedAt.toISOString(), changed },
           },
         });

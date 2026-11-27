@@ -142,6 +142,34 @@ test("actual reviewer approval→catalogue EN/DE/RU desktop and mobile, offline 
       ).toBe(true);
     }
   }
+  await page.setViewportSize({ width: 320, height: 800 });
+  const qualityCopy = {
+    en: ["Published coverage", "Source checks", /Editions on hiatus are excluded/],
+    de: ["Veröffentlichte Abdeckung", "Quellenprüfungen", /Pausierende Ausgaben zählen/],
+    ru: ["Опубликованные данные", "Проверка источников", /Выпуски на паузе учитываются/],
+  };
+  const currentCount = await db.festivalEdition.count({ where: { recordState: "CURRENT" } });
+  await page.goto("/en/data-quality/");
+  const languagePicker = page.locator("footer").getByRole("combobox");
+  for (const [lang, [coverageLabel, sourceLabel, explanation]] of Object.entries(qualityCopy)) {
+    await languagePicker.selectOption(lang);
+    await expect(page.locator("html")).toHaveAttribute("lang", lang);
+    await expect(page.getByText(explanation)).toBeVisible();
+    const section = (name) =>
+      page.locator("section").filter({ has: page.getByRole("heading", { name }) });
+    await expect(section(coverageLabel).locator("dd").first()).toHaveText(
+      new RegExp(` / ${currentCount - 1}$`),
+    );
+    await expect(section(sourceLabel).locator("dd").first()).toHaveText(
+      new RegExp(` / ${currentCount}$`),
+    );
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  }
+  await languagePicker.selectOption("en");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await page.setViewportSize({ width: 390, height: 900 });
   // Retained saved selection must not export or submit the paused roster.
   await page.addInitScript(() =>
     localStorage.setItem(
