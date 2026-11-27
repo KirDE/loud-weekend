@@ -7,6 +7,12 @@ const expected = {
   ru: "Объявленные выступления",
 };
 
+const festivalActs = {
+  en: "Announced acts",
+  de: "Angekündigte Acts",
+  ru: "Объявленные артисты",
+};
+
 for (const [language, phrase] of Object.entries(expected)) {
   test(`canonical artist and festival markup comes from the current catalogue (${language})`, async ({
     page,
@@ -41,5 +47,22 @@ for (const [language, phrase] of Object.entries(expected)) {
     await expect(page.locator(".detailHero .eyebrow")).toHaveText(`DE · ${locality}`);
     expect(event.performer).toContainEqual({ "@type": "MusicGroup", name: "Sample Artist" });
     expect(event.offers).toBeUndefined();
+    const festivalDescription = page.locator('meta[name="description"]');
+    await expect(festivalDescription).toHaveAttribute("content", /Synthetic Fest 2027/);
+    await expect(festivalDescription).toHaveAttribute("content", new RegExp(locality));
+    await expect(festivalDescription).toHaveAttribute(
+      "content",
+      new RegExp(`${festivalActs[language]}: Sample Artist`),
+    );
+    await expect(canonical).toHaveAttribute(
+      "href",
+      `${site}/${language}/festivals/synthetic-fest/`,
+    );
+    for (const alternate of Object.keys(expected)) {
+      await expect(page.locator(`link[rel="alternate"][hreflang="${alternate}"]`)).toHaveAttribute(
+        "href",
+        `${site}/${alternate}/festivals/synthetic-fest/`,
+      );
+    }
   });
 }

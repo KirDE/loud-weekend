@@ -1,4 +1,4 @@
-import { festivalDateInterval } from "./festival-dates.ts";
+import { festivalDateInterval, formatFestivalDateRange } from "./festival-dates.ts";
 import { announcedArtists } from "./festival-lineup.ts";
 import type { Festival } from "@/lib/domain/festival";
 
@@ -63,7 +63,13 @@ export function festivalMusicEvent(item: Festival, language?: string) {
   };
 }
 
-/** Descriptive metadata must not promote old scheduled facts for a paused edition. */
+const festivalDescriptionCopy = {
+  en: { announced: "Announced acts", fallback: "Festival information on Loud Weekend." },
+  de: { announced: "Angekündigte Acts", fallback: "Festivalinfos auf Loud Weekend." },
+  ru: { announced: "Объявленные артисты", fallback: "Информация о фестивале на Loud Weekend." },
+};
+
+/** Use only the public edition projection, never facts retained for a paused edition. */
 export function festivalDescription(item: Festival, language: "en" | "de" | "ru" = "en") {
   if (editionOnHiatus(item)) {
     const descriptions = {
@@ -73,5 +79,22 @@ export function festivalDescription(item: Festival, language: "en" | "de" | "ru"
     };
     return descriptions[language];
   }
-  return `${item.name} ${item.editionYear ?? 2027}: dates, lineup, tickets, playlist and setlists.`;
+  const title = item.editionYear ? `${item.name} ${item.editionYear}` : item.name;
+  const location = [item.city?.trim(), item.country?.trim()].filter(Boolean).join(", ");
+  const dates = formatFestivalDateRange(item, language, "");
+  const artists = [
+    ...new Set(
+      announcedArtists(item)
+        .map((name) => name.trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, 3);
+  const copy = festivalDescriptionCopy[language];
+  const facts = [
+    location,
+    dates,
+    artists.length ? `${copy.announced}: ${new Intl.ListFormat(language).format(artists)}` : "",
+  ].filter(Boolean);
+
+  return facts.length ? `${title} · ${facts.join(" · ")}.` : `${title} · ${copy.fallback}`;
 }
