@@ -10,6 +10,7 @@ import { getCatalog } from "@/lib/catalog/repository";
 import { canonicalPath } from "@/lib/seo";
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
+import { lineupDayProfileSlugs } from "@/lib/festival-lineup";
 
 type Params = Promise<{ slug: string; year: string }>;
 
@@ -55,6 +56,7 @@ export default async function FestivalEditionPage({ params }: { params: Params }
         arrivalFacts={arrivalFacts}
         artistSlugs={artistSlugs}
         overview={overview}
+        lineupDayArtistSlugs={lineupDayProfileSlugs(item.lineupDays, artists)}
       />
       <EditionHistory entries={history} officialUrl={item.officialUrl} />
     </>

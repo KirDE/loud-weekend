@@ -167,6 +167,18 @@ for (const locale of ["en", "de", "ru"]) {
     assert.doesNotMatch(empty, /dateTime="2027-08-25"/);
     assert.doesNotMatch(payload(empty), /BEGIN:VEVENT/);
   });
+  test(`planning downloads use the edition year rather than the current season in ${locale}`, () => {
+    const item = { ...active, editionYear: 2028, startDate: "2028-07-03", endDate: "2028-07-05" };
+    const html = render(locale, h(PlanningTools, { item, festivals: [] }));
+    assert.match(html, /download="other-event-2028\.ics"/);
+    assert.match(html, /download="other-event-apple-calendar-2028\.ics"/);
+    assert.match(payload(html), /UID:other-event-2028@festival-radar/);
+    const withoutYear = render(
+      locale,
+      h(PlanningTools, { item: { ...item, editionYear: undefined }, festivals: [] }),
+    );
+    assert.match(withoutYear, /download="other-event\.ics"/);
+  });
   test(`actual planning tools suppress calendar/timetable and do not promise a pending date in ${locale}`, () => {
     const html = render(locale, h(PlanningTools, { item: paused, festivals: [paused, active] }));
     assert.ok(html.includes(language.translate(locale, "editionHiatus")));

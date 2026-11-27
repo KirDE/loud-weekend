@@ -9,6 +9,8 @@ import { compareFestivalLineups } from "@/lib/festival-comparison";
 import { distanceKm, type Coordinates } from "@/lib/festival-discovery";
 import { shareableFavoriteSlugs } from "@/lib/discovery-share";
 import { ticketPresentation } from "@/lib/tickets";
+import { FestivalCamping } from "./FestivalCamping";
+import { FestivalArrival } from "./FestivalArrival";
 import { useLanguage } from "./LanguageProvider";
 
 export function FestivalComparisonTicket({ item }: { item: Festival }) {
@@ -125,13 +127,25 @@ export function FestivalComparison({
           <tr>
             <th scope="row">{t("comparisonCamping")}</th>
             {festivals.map((item) => (
-              <td key={item.slug}>{t("comparisonUnknown")}</td>
+              <td key={item.slug}>
+                {!editionOnHiatus(item) && item.comparisonTripFacts?.camping.length ? (
+                  <FestivalCamping facts={item.comparisonTripFacts.camping} compact />
+                ) : (
+                  t("comparisonUnknown")
+                )}
+              </td>
             ))}
           </tr>
           <tr>
             <th scope="row">{t("comparisonTransport")}</th>
             {festivals.map((item) => (
-              <td key={item.slug}>{t("comparisonUnknown")}</td>
+              <td key={item.slug}>
+                {!editionOnHiatus(item) && item.comparisonTripFacts?.arrival.length ? (
+                  <FestivalArrival facts={item.comparisonTripFacts.arrival} compact />
+                ) : (
+                  t("comparisonUnknown")
+                )}
+              </td>
             ))}
           </tr>
           <tr>

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  budgetTicketReference,
   budgetTotal,
   initialBudget,
   parseBudgetCost,
@@ -61,4 +62,44 @@ test("sync accepts only bounded, edition-scoped private estimates", () => {
   ]) {
     assert.equal(tripBudgetsSchema.safeParse({ [key]: budget }).success, false);
   }
+});
+
+test("budget references require a single priced ordinary full pass for the selected edition", () => {
+  const offer = {
+    key: "test-pass",
+    kind: "full_pass",
+    status: "not_on_sale",
+    price: { amountMinor: 14599, currency: "EUR", fees: "unknown" },
+    saleDateText: null,
+  };
+  const published = {
+    editionYear: 2027,
+    sourceUrl: "https://organiser.example.test/tickets",
+    observedAt: "2026-11-23T12:00:00.000Z",
+    offers: [offer, { ...offer, key: "day-test", kind: "day_pass" }],
+  };
+  const festival = { editionYear: 2027, ticketStatus: "unknown", ticketOffers: published };
+  assert.deepEqual(budgetTicketReference(festival), {
+    price: offer.price,
+    sourceUrl: published.sourceUrl,
+    observedAt: published.observedAt,
+  });
+  for (const f of [
+    undefined,
+    { ...festival, editionYear: 2028 },
+    { ...festival, ticketOffers: undefined },
+    { ...festival, editionLifecycle: { lifecycle: "hiatus" } },
+    ...["sold_out", "sales_ended", "free", "unavailable"].map((ticketStatus) => ({
+      ...festival,
+      ticketStatus,
+    })),
+    ...[
+      [published.offers[1]],
+      [offer, { ...offer, key: "second-pass" }],
+      [{ ...offer, price: null }],
+      [{ ...offer, status: "sold_out" }],
+      [{ ...offer, price: { ...offer.price, amountMinor: -1 } }],
+    ].map((offers) => ({ ...festival, ticketOffers: { ...published, offers } })),
+  ])
+    assert.equal(budgetTicketReference(f), undefined);
 });

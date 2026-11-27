@@ -51,7 +51,7 @@ test.beforeAll(async () => {
         sourceId: `${fixture}tickets`,
         festivalSlug: slug,
         editionYear: 2027,
-        fields: ["ticketStatus"],
+        fields: ["ticketStatus", "status"],
         createdAt: new Date("2026-10-09T08:00:00Z"),
       },
       {
@@ -113,6 +113,13 @@ for (const [language, [title, dates, tickets]] of Object.entries(locales)) {
     const history = page.getByRole("region", { name: title });
     await expect(history.getByRole("listitem")).toHaveCount(2);
     await expect(history.getByRole("listitem").nth(0)).toContainText(tickets);
+    await expect(history.getByRole("listitem").nth(0)).toContainText(
+      {
+        en: "Edition status updated",
+        de: "Status der Ausgabe aktualisiert",
+        ru: "Статус выпуска обновлён",
+      }[language],
+    );
     await expect(history.getByRole("listitem").nth(1)).toContainText(dates);
     await expect(history.locator("time").nth(0)).toHaveAttribute(
       "datetime",

@@ -91,7 +91,16 @@ export function discoveryFromQuery(
 }
 
 export function removeDiscoveryQuery(url: URL) {
-  const fields = [shareMarker, ...textFields, ...flags, "radius", "q", "artist"];
+  const fields = [
+    shareMarker,
+    ...textFields,
+    ...flags,
+    "radius",
+    "q",
+    "artist",
+    "matchArtist",
+    "artistMatch",
+  ];
   for (const field of fields) url.searchParams.delete(field);
   removeDateQuery(url);
 }
