@@ -158,6 +158,11 @@ class SelectionPolicyTest(unittest.TestCase):
                     }
                 ],
             }
+            if name.casefold() in {"ultimate ozzy", "korn again"}:
+                row["trackPolicy"] = {
+                    "schemaVersion": 1, "excluded": True, "reviewedOriginal": False,
+                    "blockedPrimaryNames": [], "blockedVersionHints": [],
+                }
             with self.subTest(name=name):
                 self.assertEqual(
                     selection.select_selection_tracks({"artists": [row]}),

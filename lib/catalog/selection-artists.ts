@@ -1,6 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
-import { spotifyRepertoiresForArtists, type RepertoireEdition } from "./spotify-repertoire.ts";
+import {
+  spotifyRepertoiresForArtists,
+  spotifyTrackPoliciesForArtists,
+  type RepertoireEdition,
+} from "./spotify-repertoire.ts";
 import { deduplicateArtists, type SelectionArtist } from "../selection-playlist.ts";
 
 type IdentityRow = {
@@ -45,6 +49,7 @@ export async function selectionArtists(
     ).values(),
   ];
   const profiles = await spotifyRepertoiresForArtists(db, matched, edition);
+  const policies = await spotifyTrackPoliciesForArtists(db, matched, edition);
   return matches.map(({ requestedName, artist }) => ({
     requestedName,
     name: artist?.name ?? requestedName,
@@ -55,6 +60,7 @@ export async function selectionArtists(
           .map((m) => m.requestedName)
       : [],
     spotifyId: artist ? verifiedSpotifyArtistId(artist) : null,
+    ...(artist && policies[artist.name] ? { trackPolicy: policies[artist.name] } : {}),
     ...(artist && profiles[artist.name] ? { repertoire: profiles[artist.name] } : {}),
   }));
 }
@@ -82,6 +88,9 @@ export async function festivalSpotifyArtists(
     ),
     spotifyArtistIds: Object.fromEntries(
       artists.filter((a) => a.spotifyId).map((a) => [a.requestedName, a.spotifyId]),
+    ),
+    spotifyTrackPolicies: Object.fromEntries(
+      artists.filter((a) => a.trackPolicy).map((a) => [a.requestedName, a.trackPolicy]),
     ),
     spotifyRepertoireProfiles: Object.fromEntries(
       artists.filter((a) => a.repertoire).map((a) => [a.requestedName, a.repertoire]),

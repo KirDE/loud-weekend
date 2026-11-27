@@ -115,3 +115,49 @@ export async function spotifyRepertoiresForArtists(
   }
   return result;
 }
+
+// Orthogonal selection restrictions, resolved through the SAME canonical artist
+// and edition context as aliases/identities/repertoire. Never a name resolver.
+export const spotifyTrackPolicySchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    excluded: z.boolean(),
+    strictPrimary: z.boolean().optional(),
+    reviewedOriginal: z.boolean(),
+    blockedPrimaryNames: z.array(z.string().trim().min(1).max(200)).max(100),
+    blockedVersionHints: z.array(z.string().trim().min(1).max(200)).max(100),
+  })
+  .strict();
+export type SpotifyTrackPolicy = z.infer<typeof spotifyTrackPolicySchema>;
+export function trackPolicyKey(slug: string, edition?: RepertoireEdition) {
+  return edition
+    ? "spotify-track-policy-edition:" + repertoireScopeKey(edition) + slug
+    : "spotify-track-policy:" + slug;
+}
+export async function spotifyTrackPoliciesForArtists(
+  db: Pick<PrismaClient, "operationalState">,
+  artists: { slug: string; name: string }[],
+  edition?: RepertoireEdition,
+): Promise<Record<string, SpotifyTrackPolicy>> {
+  if (!artists.length) return {};
+  const rows = await db.operationalState.findMany({
+    where: {
+      key: {
+        in: artists.flatMap((a) => [
+          trackPolicyKey(a.slug),
+          ...(edition ? [trackPolicyKey(a.slug, edition)] : []),
+        ]),
+      },
+    },
+  });
+  const result: Record<string, SpotifyTrackPolicy> = {};
+  for (const artist of artists) {
+    const row =
+      (edition && rows.find((r) => r.key === trackPolicyKey(artist.slug, edition))) ||
+      rows.find((r) => r.key === trackPolicyKey(artist.slug));
+    if (!row) continue;
+    if (Object.hasOwn(result, artist.name)) throw new Error("Ambiguous track policy artist name");
+    result[artist.name] = spotifyTrackPolicySchema.parse(row.payload);
+  }
+  return result;
+}

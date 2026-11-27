@@ -3,7 +3,7 @@
 from __future__ import annotations
 import re
 from track_policy import (
-    GLOBAL_EXCLUDES,
+    validate_track_policy,
     looks_like_tribute,
     canonical_track_key,
     should_skip_track_for_artist,
@@ -13,7 +13,6 @@ from track_policy import (
 )
 from spotify_repertoire import validate_profile, eligible_track
 
-EXCLUDED_NAMES = frozenset(name.casefold() for name in GLOBAL_EXCLUDES)
 ID = re.compile(r"^[A-Za-z0-9]{22}$")
 TRACKS_PER_ARTIST = {"quick": 1, "preview": 4, "deep": 8}
 
@@ -45,10 +44,13 @@ def select_selection_tracks(value):
                 raise ValueError("Mismatched repertoire binding")
         elif identity is not None and not ID.fullmatch(str(identity)):
             raise ValueError("Invalid reviewed artist identity")
+        policy = validate_track_policy(row.get("trackPolicy"))
         if (
-            name.casefold() in EXCLUDED_NAMES
+            policy.get("excluded")
             or looks_like_tribute(
-                name, reviewed_identity=profile is not None or identity is not None
+                name, reviewed_identity=(
+                    bool(policy.get("reviewedOriginal")) or profile is not None or identity is not None
+                )
             )
             or (profile is None and identity is None)
         ):
@@ -89,10 +91,14 @@ def select_selection_tracks(value):
                     or not eligible_track(profile, track)
                     or is_short_or_non_song(track)
                     or track_version_penalty(track) >= 2
+                    or should_skip_track_for_artist(
+                        name, track, verified_primary_artist_id=artists[0]["id"],
+                        track_policy=policy or None
+                    )
                 ):
                     continue
             elif artists[0]["id"] != identity or should_skip_track_for_artist(
-                name, track, name, verified_primary_artist_id=identity
+                name, track, name, verified_primary_artist_id=identity, track_policy=policy or None
             ):
                 continue
             eligible.append(track)

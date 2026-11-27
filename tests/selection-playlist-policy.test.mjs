@@ -235,7 +235,17 @@ test("reviewed original identities bypass vague tribute-name hints but not expli
   }
   for (const name of ["Ultimate Ozzy", "ultimate ozzy", "Korn Again", "Tribute to Example"]) {
     const m = mock({ [id("G")]: [track("t", "Eligible studio song", [["G", name]])] });
-    await assert.rejects(run([artist(name, "G")], m), /could not resolve/);
+    const trackPolicy =
+      name === "Tribute to Example"
+        ? undefined
+        : {
+            schemaVersion: 1,
+            excluded: true,
+            reviewedOriginal: false,
+            blockedPrimaryNames: [],
+            blockedVersionHints: [],
+          };
+    await assert.rejects(run([artist(name, "G", { trackPolicy })], m), /could not resolve/);
     assert.equal(writes(m).length, 0);
   }
 });
@@ -313,6 +323,7 @@ test("festival export preserves canonical aliases and only verified agreeing pro
     acceptedPrimaryNames: { "Billing Alias": ["Canonical", "Billing Alias"] },
     spotifyArtistIds: { "Billing Alias": id("A") },
     spotifyRepertoireProfiles: {},
+    spotifyTrackPolicies: {},
   });
   row.links[0].verified = false;
   assert.deepEqual((await festivalSpotifyArtists(db, ["Billing Alias"])).spotifyArtistIds, {});

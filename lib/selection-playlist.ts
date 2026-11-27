@@ -3,7 +3,9 @@ import type { PlaylistDepth } from "./playlist-depth.ts";
 import { executePlaylistJson } from "./catalog/python-playlist-rpc.ts";
 import {
   spotifyRepertoireSchema,
+  spotifyTrackPolicySchema,
   type SpotifyRepertoireProfile,
+  type SpotifyTrackPolicy,
 } from "./catalog/spotify-repertoire.ts";
 
 export type SelectionArtist = {
@@ -12,6 +14,7 @@ export type SelectionArtist = {
   slug: string | null;
   spotifyId: string | null;
   repertoire?: SpotifyRepertoireProfile;
+  trackPolicy?: SpotifyTrackPolicy;
   acceptedPrimaryNames?: string[];
 };
 export type SpotifyRequest = (url: string, init?: RequestInit) => Promise<Response>;
@@ -44,6 +47,10 @@ async function selectionPool(
   request: SpotifyRequest,
   headers: Record<string, string>,
 ) {
+  const policy = artist.trackPolicy
+    ? spotifyTrackPolicySchema.parse(artist.trackPolicy)
+    : undefined;
+  if (policy?.excluded) return [];
   const profile = artist.repertoire ? spotifyRepertoireSchema.parse(artist.repertoire) : undefined;
   if (!profile && !artist.spotifyId) return [];
   if (profile && (!artist.slug || !profile.artistSlugs.includes(artist.slug)))

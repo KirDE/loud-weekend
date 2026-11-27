@@ -16,18 +16,12 @@ import requests
 from spotify_auth import auth_headers
 from spotify_repertoire import validate_profile, select_tracks as select_repertoire_tracks
 from track_policy import (
-    GLOBAL_EXCLUDES,
     KEYWORDS_EXCLUDE,
-    TRIBUTE_NAME_HINTS,
     MIN_TRACK_MS,
     NON_SONG_TITLE_HINTS,
     BAD_VERSION_DESCRIPTOR_HINTS,
-    STRICT_ARTIST_ONLY_FALLBACK,
-    LIVE_REPERTOIRE_PRIMARY_ARTISTS,
-    BLOCKED_PRIMARY_ARTIST_PREFIXES,
-    BLOCKED_PRIMARY_ARTIST_MATCHES,
     FEATURE_CLAUSE_RE,
-    SPECIAL_ARTIST_INCLUDE,
+    validate_track_policy,
     clean_name,
     simplify_name,
     token_overlap,
@@ -37,8 +31,6 @@ from track_policy import (
     is_feat_track,
     is_short_or_non_song,
     track_version_penalty,
-    artist_family_match,
-    live_repertoire_primary_match,
     primary_artist_matches_query,
     accepted_credit_key,
     should_skip_track_for_artist,
@@ -98,6 +90,7 @@ class Festival:
     extra_excludes: set[str] | None = None
     edition_year: int | None = None
     spotify_repertoire_profiles: dict[str, dict] | None = None
+    spotify_track_policies: dict[str, dict] | None = None
 
 
 def load_report_mbid_cache(report_dir: Path) -> dict[str, str]:
@@ -206,11 +199,12 @@ def spotify_get(url, params=None):
 
 
 def should_exclude(name: str, festival: Festival) -> bool:
-    if name in GLOBAL_EXCLUDES:
+    policy = validate_track_policy((festival.spotify_track_policies or {}).get(name))
+    if policy.get("excluded"):
         return True
     if festival.extra_excludes and name in festival.extra_excludes:
         return True
-    return looks_like_tribute(name)
+    return looks_like_tribute(name, reviewed_identity=policy.get("reviewedOriginal", False))
 
 
 def fetch_graspop():
@@ -463,14 +457,12 @@ def extract_recent_songs(setlists):
 
 
 def spotify_search_track(artist, track, lineup_artist: str | None = None, *,
-                         verified_primary_artist_id=None, accepted_primary_names=()):
-    cache_key = (artist, track, lineup_artist, verified_primary_artist_id, tuple(accepted_primary_names))
+                         verified_primary_artist_id=None, accepted_primary_names=(), track_policy=None):
+    cache_key = (artist, track, lineup_artist, verified_primary_artist_id, tuple(accepted_primary_names),
+                 json.dumps(track_policy, sort_keys=True))
     if cache_key in TRACK_SEARCH_CACHE:
         return TRACK_SEARCH_CACHE[cache_key]
     search_artists = list(dict.fromkeys([artist, *accepted_primary_names]))
-    for allowed_artist in sorted(LIVE_REPERTOIRE_PRIMARY_ARTISTS.get(lineup_artist or artist, ())):
-        if simplify_name(allowed_artist) != simplify_name(artist):
-            search_artists.append(allowed_artist)
     items = []
     seen_item_ids = set()
     for search_artist in search_artists:
@@ -491,7 +483,7 @@ def spotify_search_track(artist, track, lineup_artist: str | None = None, *,
     for item in items:
         skip_reason = should_skip_track_for_artist(
             artist, item, lineup_artist, verified_primary_artist_id=verified_primary_artist_id,
-            accepted_primary_names=accepted_primary_names
+            accepted_primary_names=accepted_primary_names, track_policy=track_policy
         )
         if skip_reason:
             continue
@@ -503,8 +495,6 @@ def spotify_search_track(artist, track, lineup_artist: str | None = None, *,
             else 0.0
         )
         if simplify_name(artist) in [simplify_name(candidate) for candidate in artist_names]:
-            match_score += 1.0
-        if live_repertoire_primary_match(lineup_artist or artist, item):
             match_score += 1.0
         title_key = canonical_track_key(item.get("name", ""))
         title_score = 1.0 if title_key == target_key else token_overlap(track, item.get("name", ""))
@@ -694,6 +684,7 @@ def build_playlist(
         query_artist = aliases.get(artist, artist)
         setlist_artist = setlist_lookup_name(query_artist)
         spotify_artist_id = spotify_artist_ids.get(artist)
+        track_policy = (festival.spotify_track_policies or {}).get(artist)
         accepted_names = tuple((festival.accepted_primary_names or {}).get(artist, []))
         forced_mbid = (festival.mbids or {}).get(artist)
         selected = []
@@ -718,7 +709,10 @@ def build_playlist(
                 song_counts,
                 spotify_get,
                 canonical_track_key,
-                is_short_or_non_song,
+                lambda t: bool(should_skip_track_for_artist(
+                    query_artist, t, verified_primary_artist_id=(t.get("artists") or [{}])[0].get("id", ""),
+                    track_policy=track_policy
+                )),
                 track_version_penalty,
                 seen_uris,
                 seen_song_keys,
@@ -739,7 +733,7 @@ def build_playlist(
                         ):
                             track = spotify_search_track(
                                 setlist_artist, song, artist, verified_primary_artist_id=spotify_artist_id,
-                                accepted_primary_names=accepted_names
+                                accepted_primary_names=accepted_names, track_policy=track_policy
                             )
                             if not track:
                                 choice_log.append(
@@ -752,7 +746,7 @@ def build_playlist(
                                 continue
                             skip_reason = should_skip_track_for_artist(
                                 query_artist, track, artist, verified_primary_artist_id=spotify_artist_id,
-                                accepted_primary_names=accepted_names
+                                accepted_primary_names=accepted_names, track_policy=track_policy
                             )
                             if skip_reason:
                                 choice_log.append(
@@ -832,7 +826,7 @@ def build_playlist(
                                 continue
                             skip_reason = should_skip_track_for_artist(
                                 query_artist, track, artist, verified_primary_artist_id=spotify_artist_id,
-                                accepted_primary_names=accepted_names
+                                accepted_primary_names=accepted_names, track_policy=track_policy
                             )
                             if skip_reason:
                                 choice_log.append(
@@ -992,7 +986,16 @@ def parse_canonical_festivals(catalog):
                 f"edition mismatch for {slug}: {entry.get('editionYear')} != {season}; no playlists mutated"
             )
         artists = list(dict.fromkeys([*entry.get("headliners", []), *entry.get("artists", [])]))
-        eligible = [artist for artist in artists if artist and not looks_like_tribute(artist)]
+        policies = entry.get("spotifyTrackPolicies", {})
+        if not isinstance(policies, dict) or any(name not in artists for name in policies):
+            raise ValueError("Track policy must name a lineup act")
+        for policy in policies.values():
+            validate_track_policy(policy)
+        eligible = [artist for artist in artists if artist and not (
+            policies.get(artist, {}).get("excluded") or looks_like_tribute(
+                artist, reviewed_identity=policies.get(artist, {}).get("reviewedOriginal", False)
+            )
+        )]
         if not eligible:
             skipped.append({"slug": slug, "edition_year": season, "reason": "empty_lineup"})
             continue
@@ -1012,6 +1015,7 @@ def parse_canonical_festivals(catalog):
                 lineup_fn=lambda artists=eligible, headliners=headliners: (artists, headliners),
                 edition_year=season,
                 spotify_repertoire_profiles=profiles,
+                spotify_track_policies=policies,
                 aliases=entry.get("aliases", {}),
                 accepted_primary_names=entry.get("acceptedPrimaryNames", {}),
                 spotify_artist_ids=entry.get("spotifyArtistIds", {}),

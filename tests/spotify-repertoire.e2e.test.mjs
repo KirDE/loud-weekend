@@ -229,3 +229,108 @@ test("audited edition configuration rejects unannounced/archive scope and cannot
     await db.artist.delete({ where: { id: artist.id } });
   }
 });
+
+test("DB-owned restrictions publish atomically and reach both canonical entrypoints", async () => {
+  const { publishArtistTrackPolicy } =
+    await import("../lib/catalog/artist-track-policy-repository.ts");
+  const { selectionArtists } = await import("../lib/catalog/selection-artists.ts");
+  const { trackPolicyKey } = await import("../lib/catalog/spotify-repertoire.ts");
+  const slug = "test-track-policy-" + randomUUID();
+  const artist = await db.artist.create({
+    data: {
+      slug,
+      name: slug,
+      aliases: [slug + " billing"],
+      genres: [],
+      topTracks: [],
+      recentSetlists: [],
+      freshness: {},
+      identityState: "UNRESOLVED",
+    },
+  });
+  const policy = {
+    schemaVersion: 1,
+    excluded: true,
+    reviewedOriginal: false,
+    strictPrimary: true,
+    blockedPrimaryNames: [],
+    blockedVersionHints: [],
+  };
+  const input = {
+    slug,
+    policy,
+    actorLabel: "test",
+    evidence: "Synthetic verification",
+    sourceUrls: ["https://example.test/evidence"],
+  };
+  const audits = () => db.adminAuditEntry.count({ where: { resourceKey: slug } });
+  try {
+    await publishArtistTrackPolicy(db, input);
+    assert.equal(
+      await db.operationalState.findUnique({ where: { key: trackPolicyKey(slug) } }),
+      null,
+    );
+    assert.equal(await audits(), 0);
+    // Fail inside the real serializable transaction after insertion: it must roll back.
+    const broken = {
+      $transaction: (fn, options) =>
+        db.$transaction(
+          (tx) =>
+            fn({
+              artist: tx.artist,
+              operationalState: tx.operationalState,
+              adminAuditEntry: {
+                create: () => {
+                  throw new Error("synthetic audit failure");
+                },
+              },
+            }),
+          options,
+        ),
+    };
+    await assert.rejects(publishArtistTrackPolicy(broken, input, true), /synthetic audit failure/);
+    assert.equal(
+      await db.operationalState.findUnique({ where: { key: trackPolicyKey(slug) } }),
+      null,
+    );
+    assert.equal(await audits(), 0);
+    await publishArtistTrackPolicy(db, input, true);
+    const stored = await db.operationalState.findUniqueOrThrow({
+      where: { key: trackPolicyKey(slug) },
+    });
+    assert.deepEqual(stored.payload, policy);
+    assert.equal(await audits(), 1);
+    await publishArtistTrackPolicy(db, input, true);
+    assert.deepEqual(await db.operationalState.findUnique({ where: { key: stored.key } }), stored);
+    assert.equal(await audits(), 1);
+    await assert.rejects(
+      publishArtistTrackPolicy(
+        db,
+        {
+          ...input,
+          policy: { ...policy, excluded: false },
+        },
+        true,
+      ),
+      /conflict/,
+    );
+    assert.deepEqual((await selectionArtists(db, [slug + " billing"]))[0].trackPolicy, policy);
+    assert.deepEqual((await festivalSpotifyArtists(db, [slug])).spotifyTrackPolicies[slug], policy);
+    assert.deepEqual(await db.artist.findUniqueOrThrow({ where: { id: artist.id } }), artist);
+    await assert.rejects(
+      publishArtistTrackPolicy(
+        db,
+        {
+          ...input,
+          edition: { festivalSlug: slug, editionYear: 2027 },
+        },
+        true,
+      ),
+      /current edition/,
+    );
+  } finally {
+    await db.operationalState.deleteMany({ where: { key: { contains: slug } } });
+    await db.artist.delete({ where: { id: artist.id } });
+    // Append-only audit remains in the disposable DB, removed with its container.
+  }
+});
