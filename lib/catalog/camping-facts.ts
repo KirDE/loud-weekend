@@ -1,15 +1,5 @@
-import type { EditionCampingField, PrismaClient } from "@prisma/client";
-import type { Festival } from "../domain/festival.ts";
-
-type Source = { sourceUrl: string; checkedOn: string };
-export type PublicCampingFact = Source &
-  (
-    | { field: "arrival"; earliestDate: string }
-    | {
-        field: Exclude<EditionCampingField, "arrival">;
-        description: Record<"en" | "de" | "ru", string>;
-      }
-  );
+import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Festival, PublicCampingFact } from "../domain/festival.ts";
 
 export function campingSourceHost(value: string): string | undefined {
   try {
@@ -22,9 +12,28 @@ export function campingSourceHost(value: string): string | undefined {
   }
 }
 
+export const campingFactSelect = {
+  editionYear: true,
+  organizerHost: true,
+  countryCode: true,
+  city: true,
+  field: true,
+  descriptionEn: true,
+  descriptionDe: true,
+  descriptionRu: true,
+  earliestDate: true,
+  sourceUrl: true,
+  checkedOn: true,
+} satisfies Prisma.EditionCampingFactSelect;
+type CampingRow = Prisma.EditionCampingFactGetPayload<{ select: typeof campingFactSelect }>;
+type CampingEdition = Pick<
+  Festival,
+  "slug" | "editionYear" | "city" | "countryCode" | "officialUrl"
+>;
+
 export async function readCampingFacts(
   db: PrismaClient,
-  item: Pick<Festival, "slug" | "editionYear" | "city" | "countryCode" | "officialUrl">,
+  item: CampingEdition,
 ): Promise<PublicCampingFact[]> {
   const organizerHost = campingSourceHost(item.officialUrl);
   if (!organizerHost || !item.city || item.editionYear === undefined) return [];
@@ -45,20 +54,28 @@ export async function readCampingFacts(
         },
       },
     },
-    select: {
-      field: true,
-      descriptionEn: true,
-      descriptionDe: true,
-      descriptionRu: true,
-      earliestDate: true,
-      sourceUrl: true,
-      checkedOn: true,
-    },
+    select: campingFactSelect,
     orderBy: { field: "asc" },
   });
+  return publicCampingFacts(item, rows);
+}
+
+export function publicCampingFacts(
+  item: CampingEdition,
+  rows: readonly CampingRow[],
+): PublicCampingFact[] {
+  const organizerHost = campingSourceHost(item.officialUrl);
+  if (!organizerHost || !item.city || item.editionYear === undefined) return [];
   const facts: PublicCampingFact[] = [];
   for (const row of rows) {
-    if (campingSourceHost(row.sourceUrl) !== organizerHost) continue;
+    if (!(
+      row.editionYear === item.editionYear &&
+      row.countryCode === item.countryCode &&
+      row.city === item.city &&
+      row.organizerHost === organizerHost &&
+      campingSourceHost(row.sourceUrl) === organizerHost
+    ))
+      continue;
     const source = {
       sourceUrl: row.sourceUrl,
       checkedOn: row.checkedOn.toISOString().slice(0, 10),

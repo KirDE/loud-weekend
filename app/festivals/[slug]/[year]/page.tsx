@@ -8,6 +8,7 @@ import { FestivalEditionContent } from "@/components/PublicCatalogPages";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
 import { getCatalog } from "@/lib/catalog/repository";
 import { canonicalPath } from "@/lib/seo";
+import { lineupDayProfileSlugs } from "@/lib/festival-lineup";
 
 type Params = Promise<{ slug: string; year: string }>;
 
@@ -43,7 +44,12 @@ export default async function FestivalEditionPage({ params }: { params: Params }
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
     <>
-      <FestivalEditionContent item={item} arrivalFacts={arrivalFacts} artistSlugs={artistSlugs} />
+      <FestivalEditionContent
+        item={item}
+        arrivalFacts={arrivalFacts}
+        artistSlugs={artistSlugs}
+        lineupDayArtistSlugs={lineupDayProfileSlugs(item.lineupDays, artists)}
+      />
       <EditionHistory entries={history} officialUrl={item.officialUrl} />
     </>
   );

@@ -43,6 +43,7 @@ export function OriginSearch({ onPick }: { onPick: (place: CustomOrigin) => void
   const { language, locale } = useLanguage();
   const copy = labels[language];
   const inputRef = useRef<HTMLInputElement>(null);
+  const pendingSearch = useRef<AbortController | null>(null);
   const [selection, setSelection] = useState<CustomOrigin | null>(null);
   const [query, setQuery] = useState("");
   const [places, setPlaces] = useState<Place[]>([]);
@@ -50,17 +51,22 @@ export function OriginSearch({ onPick }: { onPick: (place: CustomOrigin) => void
   const regions = new Intl.DisplayNames([locale], { type: "region" });
 
   async function search() {
+    if (pendingSearch.current) return;
+    const controller = new AbortController();
+    pendingSearch.current = controller;
     setSelection(null);
     setStatus("searching");
     setPlaces([]);
     try {
       const response = await fetch("/api/locations/search/", {
         method: "POST",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, countryCode: null }),
       });
       if (!response.ok) throw new Error();
       const result = await response.json();
+      if (controller.signal.aborted) return;
       if (
         result.available !== true ||
         !Array.isArray(result.places) ||
@@ -72,7 +78,9 @@ export function OriginSearch({ onPick }: { onPick: (place: CustomOrigin) => void
       setPlaces(result.places);
       setStatus(result.places.length ? "idle" : "empty");
     } catch {
-      setStatus("error");
+      if (!controller.signal.aborted) setStatus("error");
+    } finally {
+      if (pendingSearch.current === controller) pendingSearch.current = null;
     }
   }
 
@@ -98,8 +106,13 @@ export function OriginSearch({ onPick }: { onPick: (place: CustomOrigin) => void
             minLength={2}
             maxLength={80}
             value={query}
-            disabled={status === "searching"}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              pendingSearch.current?.abort();
+              pendingSearch.current = null;
+              setQuery(event.target.value);
+              setPlaces([]);
+              setStatus("idle");
+            }}
           />
         </label>
         <button type="submit" className="outlineButton" disabled={status === "searching"}>

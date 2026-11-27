@@ -1,3 +1,4 @@
+import type { EditionArrivalKind, EditionCampingField } from "@prisma/client";
 import type { PublicEditionLifecycle } from "./edition-lifecycle-review.ts";
 import type { PublicTicketOffers } from "./ticket-offer-proposal.ts";
 import type { EditionFreshness } from "./freshness.ts";
@@ -31,6 +32,20 @@ export type LineupDayAppearance = {
   cancelled: boolean;
   sourceUrl?: string;
   observedAt?: string;
+};
+
+type TripFactSource = { sourceUrl: string; checkedOn: string };
+type TripFactDescription = Record<"en" | "de" | "ru", string>;
+
+export type PublicCampingFact = TripFactSource &
+  (
+    | { field: "arrival"; earliestDate: string }
+    | { field: Exclude<EditionCampingField, "arrival">; description: TripFactDescription }
+  );
+
+export type PublicArrivalFact = TripFactSource & {
+  kind: EditionArrivalKind;
+  description: TripFactDescription;
 };
 
 export type Festival = {
@@ -71,6 +86,7 @@ export type Festival = {
   genres: string[];
   coordinates?: { latitude: number; longitude: number };
   venue?: FestivalVenue;
+  comparisonTripFacts?: { camping: PublicCampingFact[]; arrival: PublicArrivalFact[] };
   timetable?: TimetableEntry[];
   lineupDays?: LineupDayAppearance[];
 };

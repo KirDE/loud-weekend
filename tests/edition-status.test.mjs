@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "esbuild";
 import { socialPreviewMetadata } from "../lib/social-preview.ts";
+import { lineupDayProfileSlugs } from "../lib/festival-lineup.ts";
 import { editionRecordCompleteness } from "../lib/edition-status.ts";
 import { EditionHistory } from "../components/EditionHistory.tsx";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
@@ -56,6 +57,7 @@ function loadPage(editions, artists = []) {
         throw new Error("NEXT_NOT_FOUND");
       },
     },
+    "@/lib/festival-lineup": { lineupDayProfileSlugs },
     "@/lib/social-preview": { socialPreviewMetadata },
     "@/lib/catalog/arrival-facts": { readArrivalFacts: async () => [] },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
