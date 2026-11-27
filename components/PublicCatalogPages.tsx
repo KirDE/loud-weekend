@@ -10,6 +10,7 @@ import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { FestivalEdition } from "@/lib/domain/edition";
 import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
 import { FestivalArrival } from "./FestivalArrival";
+import { FestivalTicketOffers } from "./FestivalTicketOffers";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { EditionAttendance, SeasonCalendar } from "./SeasonPlan";
 import { SeasonNavigation } from "./SeasonNavigation";
@@ -308,6 +309,7 @@ export function FestivalEditionContent({
   arrivalFacts?: readonly PublicArrivalFact[];
 }) {
   const { t, date, dateTime, range, translateLabel } = usePublicCopy();
+  const { language } = useLanguage();
   const paused = currentEditionOnHiatus(item);
   const artists = [...item.headliners, ...item.lineup];
   const completeness = editionRecordCompleteness(item);
@@ -363,6 +365,11 @@ export function FestivalEditionContent({
           )}
         </section>
       )}
+      {item.recordState === "current" &&
+        !paused &&
+        item.ticketOffers?.editionYear === item.editionYear && (
+          <FestivalTicketOffers value={item.ticketOffers} locale={language} />
+        )}
       {!paused && item.timetable?.length ? (
         <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
       ) : null}
