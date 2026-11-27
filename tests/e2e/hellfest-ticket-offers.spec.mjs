@@ -68,6 +68,17 @@ test.beforeAll(async () => {
     },
   });
   editionId = edition.id;
+  await db.festivalEdition.create({
+    data: {
+      festivalId,
+      year: 2026,
+      status: "CONFIRMED",
+      ticketStatus: "UNKNOWN",
+      recordState: "ARCHIVED",
+      completeness: "COMPLETE",
+      sourceUpdatedAt: new Date(),
+    },
+  });
   await stageHellfestOffers(db, {
     editionId,
     html,
@@ -115,6 +126,11 @@ test("real session review publishes independent tiers; EN/DE/RU desktop and mobi
   test.setTimeout(180_000);
   await page.goto("/en/festivals/hellfest/");
   await expect(page.getByRole("heading", { level: 1, name: "Synthetic Hellfest" })).toBeVisible();
+  await expect(page.locator(".ticketOfferSection")).toHaveCount(0);
+  await page.goto("/festivals/hellfest/2027/");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Synthetic Hellfest 2027" }),
+  ).toBeVisible();
   await expect(page.locator(".ticketOfferSection")).toHaveCount(0);
   expect((await page.request.get(`/api/admin/ticket-offers/editions/${editionId}`)).status()).toBe(
     403,
@@ -177,5 +193,22 @@ test("real session review publishes independent tiers; EN/DE/RU desktop and mobi
       await noOverflow(page);
     }
     await offers.screenshot({ path: testInfo.outputPath(`public-${locale}-390.png`) });
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.goto("/festivals/hellfest/2027/");
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Synthetic Hellfest 2027" }),
+    ).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", locale);
+    await expect(offers.locator("[data-tier-kind=full_pass]")).toContainText(labels[locale][3]);
+    await expect(offers.locator("[data-tier-kind=day_pass]")).toContainText(labels[locale][4]);
+    await expect(offers).toContainText(labels[locale][5]);
+    await expect(offers.locator("a")).toHaveAttribute("href", "https://hellfest.fr/");
+    await expect(offers.locator("time")).toHaveAttribute("datetime", /^\d{4}-\d\d-\d\dT/);
+    await noOverflow(page);
   }
+  await page.goto("/festivals/hellfest/2026/");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Synthetic Hellfest 2026" }),
+  ).toBeVisible();
+  await expect(page.locator(".ticketOfferSection")).toHaveCount(0);
 });
