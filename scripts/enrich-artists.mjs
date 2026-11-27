@@ -199,15 +199,7 @@ export async function runEnrichment({
     await checkpoint();
   }
   const complete = artists.every(({ slug }) => completed.has(slug));
-  const result = { schemaVersion: 1, generatedAt, source: "musicbrainz", profiles, manualReview };
-  const { result: _previousResult, ...retained } = state;
-  await store.save({
-    cache,
-    result,
-    ...retained,
-    work: { fingerprint, completed: [...completed], complete },
-    nextRunAt: complete ? new Date(now().getTime() + 86_400_000).toISOString() : null,
-  });
+  await checkpoint(complete);
   const publication = await publishArtistEnrichment(db, store);
   return {
     artists: artists.length,
