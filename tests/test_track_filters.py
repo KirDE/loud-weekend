@@ -248,6 +248,37 @@ class TrackFilterTest(unittest.TestCase):
                 "Canonical", track["name"], accepted_primary_names=names), track)
             self.assertIsNone(playlists.spotify_search_track("Canonical", track["name"]))
 
+    def test_discovery_report_carries_alias_to_youtube_policy(self):
+        import youtube_music_transfer as transfer
+        festival = playlists.Festival(
+            key="synthetic", display_name="Synthetic", playlist_name="Synthetic", description="",
+            lineup_fn=lambda: (["Cavalera"], []),
+            accepted_primary_names={"Cavalera": ["Cavalera", "Cavalera Conspiracy"]},
+        )
+        track = make_track(name="Clean Song", artists=["Cavalera Conspiracy"])
+        track["uri"] = "spotify:track:synthetic"
+        with (
+            patch.object(playlists, "search_artist_mbid", return_value=None),
+            patch.object(playlists, "get_followers", return_value=1),
+            patch.object(playlists, "spotify_top_tracks", return_value=({}, [track])),
+            patch("builtins.print"),
+        ):
+            report = playlists.build_playlist(festival, "synthetic", persist_report=False)
+        self.assertEqual(report["report"][0]["accepted_primary_names"],
+                         ["Cavalera", "Cavalera Conspiracy"])
+        query = transfer.parse_report_tracks(report)[0]
+        candidate = {"title": "Clean Song", "videoId": "synthetic", "resultType": "song",
+                     "duration_seconds": 180, "artists": [{"name": "Cavalera Conspiracy"}]}
+        self.assertIsNotNone(transfer.youtube_candidate_score(query, candidate))
+
+    def test_accepted_alias_does_not_accept_reordered_words(self):
+        self.assertEqual(playlists.should_skip_track_for_artist(
+            "Canonical", make_track(artists=["Hate Love"]),
+            accepted_primary_names=("Love Hate",)), "primary_artist_mismatch")
+        self.assertIsNone(playlists.should_skip_track_for_artist(
+            "Canonical", make_track(artists=["Love Hate"]),
+            accepted_primary_names=("Love Hate",)))
+
     def test_conjunction_equivalence_and_exact_accepted_alias(self):
         for query, primary in [("Simon & Garfunkel", "Simon and Garfunkel"),
                                ("Simon and Garfunkel", "Simon & Garfunkel")]:

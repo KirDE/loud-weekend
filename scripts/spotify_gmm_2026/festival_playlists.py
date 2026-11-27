@@ -867,6 +867,7 @@ def build_playlist(
             {
                 "artist": artist,
                 "query_artist": query_artist,
+                "accepted_primary_names": list(accepted_names),
                 "followers": None if profile else followers.get(artist, 0),
                 **({"repertoire_profile": profile["key"]} if profile else {}),
                 "source": source,

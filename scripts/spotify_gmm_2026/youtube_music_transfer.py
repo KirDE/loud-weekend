@@ -66,6 +66,7 @@ def parse_report_tracks(report: dict) -> list[dict]:
                 {
                     "lineup_artist": lineup_artist,
                     "query_artist": query_artist,
+                    "accepted_primary_names": entry.get("accepted_primary_names", []),
                     "artist": artist,
                     "title": title,
                     "label": label,
@@ -100,7 +101,10 @@ def youtube_candidate_score(query: dict, candidate: dict) -> tuple | None:
         return None
 
     track = youtube_candidate_to_track(candidate)
-    skip_reason = should_skip_track_for_artist(query["query_artist"], track, query["lineup_artist"])
+    skip_reason = should_skip_track_for_artist(
+        query["query_artist"], track, query["lineup_artist"],
+        accepted_primary_names=tuple(query.get("accepted_primary_names", [])),
+    )
     if skip_reason:
         return None
     if youtube_version_penalty(query["title"], candidate.get("title") or "") > 0:

@@ -72,3 +72,9 @@ exact accepted-name primary credit selects that alias for policy evaluation;
 fuzzy containment is never alias evidence, and verified provider IDs still win.
 Identity counters normalize `&`/`and` equivalently without removing meaningful
 stop words or repeated words.
+Accepted names are filtered against all canonical/alias owners, including archived
+rows; a shared label is never accepted as an identity. A colliding canonical
+name also cannot replace the unique requested billing alias as the search query.
+Exact alias matching preserves normalized word order. New frozen reports retain
+the accepted names for YouTube parsing and candidate policy; existing frozen
+reports without this evidence are not retroactively relabeled or rewritten.

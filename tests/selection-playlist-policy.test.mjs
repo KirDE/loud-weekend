@@ -342,3 +342,35 @@ test("canonical festival names retain accepted aliases without a provider pin", 
   assert.deepEqual(exported.acceptedPrimaryNames, { Canonical: ["Canonical", "Accepted Alias"] });
   assert.deepEqual(exported.spotifyArtistIds, {});
 });
+
+test("festival accepted labels exclude names owned by another canonical or archived row", async () => {
+  const db = {
+    artist: {
+      findMany: async () => [
+        {
+          id: "one",
+          slug: "one",
+          name: "Ghost",
+          aliases: ["Ghost Alias"],
+          identityState: "UNRESOLVED",
+          identities: [],
+          links: [],
+        },
+        {
+          id: "two",
+          slug: "two",
+          name: "Other",
+          aliases: ["Ghost"],
+          identityState: "UNRESOLVED",
+          identities: [],
+          links: [],
+        },
+      ],
+    },
+    operationalState: { findMany: async () => [] },
+  };
+  const exported = await festivalSpotifyArtists(db, ["Ghost Alias"]);
+  assert.deepEqual(exported.acceptedPrimaryNames, { "Ghost Alias": ["Ghost Alias"] });
+  assert.deepEqual(exported.aliases, { "Ghost Alias": "Ghost Alias" });
+  assert.deepEqual(exported.spotifyArtistIds, {});
+});
