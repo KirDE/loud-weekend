@@ -183,20 +183,41 @@ export function StageTimetable({
   const removeSelections = (ids: string[]) => {
     if (plan.remove(ids)) timetableHeading.current?.focus();
   };
-  if (!entries?.length)
-    return (
-      <div className="timetable timetableEmpty">
-        <strong>{t.title}</strong>
-        <span>{t.empty}</span>
-      </div>
-    );
   const selected = orderPerformanceSelections(
-    entries.filter(
+    (entries ?? []).filter(
       (entry) => entry.sourcePerformanceId && plan.selected.includes(entry.sourcePerformanceId),
     ),
   );
   const listedIds = new Set(selected.map(({ sourcePerformanceId }) => sourcePerformanceId));
   const unlisted = plan.selected.filter((id) => !listedIds.has(id));
+  const storageAlert = plan.storageFailed && <p role="alert">{planner.storageFailed}</p>;
+  const unlistedRecovery = unlisted.length > 0 && (
+    <div>
+      <p>{planner.unavailable}</p>
+      <button type="button" onClick={() => removeSelections(unlisted)}>
+        {planner.removeUnavailable}
+      </button>
+    </div>
+  );
+  if (!entries?.length)
+    return (
+      <section className="timetable timetableEmpty" aria-labelledby="stage-timetable-heading">
+        <div>
+          <strong id="stage-timetable-heading" ref={timetableHeading} tabIndex={-1}>
+            {t.title}
+          </strong>{" "}
+          <span>{t.empty}</span>
+          {storageAlert}
+          {unlistedRecovery && (
+            <section className="timetablePlan" aria-label={planner.title}>
+              <h3>{planner.title}</h3>
+              <p>{planner.local}</p>
+              {unlistedRecovery}
+            </section>
+          )}
+        </div>
+      </section>
+    );
   const { conflicts: overlaps, incomplete } = assessPerformanceSelections(selected);
   const calendar = slug && year ? runningOrderCalendar(selected, slug, year) : null;
   const dates = [...new Set(entries.map(({ date }) => date))].sort();
@@ -267,7 +288,7 @@ export function StageTimetable({
           </select>
         </label>
       </div>
-      {plan.storageFailed && <p role="alert">{planner.storageFailed}</p>}
+      {storageAlert}
       {plan.selected.length > 0 && (
         <section className="timetablePlan" aria-label={planner.title}>
           <h3>{planner.title}</h3>
@@ -300,14 +321,7 @@ export function StageTimetable({
               })}
             </ul>
           )}
-          {unlisted.length > 0 && (
-            <div>
-              <p>{planner.unavailable}</p>
-              <button type="button" onClick={() => removeSelections(unlisted)}>
-                {planner.removeUnavailable}
-              </button>
-            </div>
-          )}
+          {unlistedRecovery}
           {overlaps.length > 0 && (
             <div role="status">
               {overlaps.map(([left, right]) => (

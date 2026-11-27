@@ -363,7 +363,7 @@ export function FestivalEditionContent({
           )}
         </section>
       )}
-      {!paused && item.timetable?.length ? (
+      {!paused ? (
         <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
       ) : null}
       <FestivalArrival facts={arrivalFacts} />

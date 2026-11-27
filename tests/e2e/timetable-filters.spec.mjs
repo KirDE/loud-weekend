@@ -261,6 +261,62 @@ test("published days and stages can be filtered without hiding cancellations or 
     await expect(runningOrder).toHaveCount(0);
     await planPage.reload();
     await expect(runningOrder).toHaveCount(0);
+
+    // With only one published performance, losing that last row must not strand a saved ID.
+    const lastId = "fixture:set-3";
+    const editionScope = { editionId: edition.id };
+    await db.timetablePerformance.deleteMany({
+      where: {
+        ...editionScope,
+        OR: [{ sourcePerformanceId: { not: lastId } }, { sourcePerformanceId: null }],
+      },
+    });
+    await planPage.reload();
+    const lastToggle = timetable.getByRole("button", {
+      name: "Save to running order: Overlap Fixture",
+    });
+    await lastToggle.click();
+    await expect(lastToggle).toHaveAttribute("aria-pressed", "true");
+    const otherEditionKey = "festival-radar-timetable-v1:synthetic-west:2026";
+    await planPage.evaluate(
+      (key) => localStorage.setItem(key, '["fixture:other-year"]'),
+      otherEditionKey,
+    );
+    await db.timetablePerformance.deleteMany({ where: editionScope });
+    await planPage.reload();
+    await expect(timetable.getByText(/No verified timetable is published yet/)).toBeVisible();
+    const remove = runningOrder.getByRole("button", { name: "Remove unlisted performances" });
+    await expect(remove).toBeVisible();
+    await expect(runningOrder.getByText(/Overlap Fixture|fixture:set-3/)).toHaveCount(0);
+    await expect(runningOrder.getByRole("link", { name: /Download running order/ })).toHaveCount(0);
+    await planPage.evaluate((key) => {
+      const original = Storage.prototype.removeItem;
+      Storage.prototype.removeItem = function (candidate) {
+        if (candidate === key) {
+          Storage.prototype.removeItem = original;
+          throw new Error("Fixture storage failure");
+        }
+        return original.call(this, candidate);
+      };
+    }, storageKey);
+    await remove.click();
+    await expect(timetable.getByRole("alert")).toHaveText(
+      "This browser could not save the running order.",
+    );
+    await expect(remove).toBeFocused();
+    expect(await planPage.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(
+      '["fixture:set-3"]',
+    );
+    await remove.click();
+    await expect(timetable.locator("#stage-timetable-heading")).toBeFocused();
+    await expect(timetable.getByRole("alert")).toHaveCount(0);
+    await expect(runningOrder).toHaveCount(0);
+    expect(await planPage.evaluate((key) => localStorage.getItem(key), storageKey)).toBeNull();
+    expect(await planPage.evaluate((key) => localStorage.getItem(key), otherEditionKey)).toBe(
+      '["fixture:other-year"]',
+    );
+    await planPage.reload();
+    await expect(runningOrder).toHaveCount(0);
   } finally {
     await savedContext?.close();
     if (importedEditionId)
