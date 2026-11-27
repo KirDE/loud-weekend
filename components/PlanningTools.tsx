@@ -16,7 +16,8 @@ const copy: Record<
     download: string;
     apple: string;
     pending: string;
-    map: string;
+    venueMap: string;
+    cityMap: string;
     shared: (count: number) => string;
   }
 > = {
@@ -26,7 +27,8 @@ const copy: Record<
     download: "Download .ics",
     apple: "Add to Apple Calendar",
     pending: "Calendar export unlocks when dates are announced.",
-    map: "Open European map ↗",
+    venueMap: "Find the venue on OpenStreetMap ↗",
+    cityMap: "Find the city on OpenStreetMap ↗",
     shared: (count) => `${count} shared act${count === 1 ? "" : "s"}`,
   },
   de: {
@@ -35,7 +37,8 @@ const copy: Record<
     download: ".ics herunterladen",
     apple: "Zu Apple Kalender hinzufügen",
     pending: "Der Kalenderexport ist verfügbar, sobald die Termine bekannt sind.",
-    map: "Europakarte öffnen ↗",
+    venueMap: "Festivalgelände auf OpenStreetMap suchen ↗",
+    cityMap: "Stadt auf OpenStreetMap suchen ↗",
     shared: (count) => `${count} gemeinsame Künstler`,
   },
   ru: {
@@ -44,7 +47,8 @@ const copy: Record<
     download: "Скачать .ics",
     apple: "Добавить в Apple Calendar",
     pending: "Экспорт в календарь появится после объявления дат.",
-    map: "Открыть карту Европы ↗",
+    venueMap: "Найти площадку на OpenStreetMap ↗",
+    cityMap: "Найти город на OpenStreetMap ↗",
     shared: (count) => `Общих артистов: ${count}`,
   },
 };
@@ -78,11 +82,13 @@ const relatedCopy = {
 
 export function PlanningTools({
   item,
+  venueAddress,
   festivals,
   discoveryLineups,
   favorites,
 }: {
   item: Festival;
+  venueAddress?: string;
   festivals: Festival[];
   discoveryLineups?: DiscoveryLineups;
   favorites?: readonly string[];
@@ -98,8 +104,15 @@ export function PlanningTools({
     unitDisplay: "short",
   });
   const calendar = calendarUrls(item);
-  const location = [item.city, item.country].filter(Boolean).join(", ");
-  const map = `https://www.openstreetmap.org/search?query=${encodeURIComponent(location)}`;
+  const venue = hiatus ? undefined : item.venue;
+  const address = hiatus ? undefined : venueAddress?.trim();
+  const location = address || (item.city?.trim() && `${item.city.trim()}, ${item.country}`);
+  const mapRoot = "https://www.openstreetmap.org";
+  const map = venue
+    ? `${mapRoot}/?mlat=${venue.latitude}&mlon=${venue.longitude}#map=17/${venue.latitude}/${venue.longitude}`
+    : location
+      ? `${mapRoot}/search?query=${encodeURIComponent(location)}`
+      : null;
   const similar = similarFestivals(item, festivals, {
     lineups: discoveryLineups,
     favorites,
@@ -129,9 +142,11 @@ export function PlanningTools({
         ) : (
           <span>{hiatus ? translate(language, "editionHiatus") : t.pending}</span>
         )}
-        <a href={map} target="_blank" rel="noreferrer">
-          {t.map}
-        </a>
+        {map && (
+          <a href={map} target="_blank" rel="noreferrer">
+            {venue || address ? t.venueMap : t.cityMap}
+          </a>
+        )}
       </div>
       {!hiatus && (
         <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
