@@ -303,8 +303,10 @@ test("validated edition camping facts are accessible in every locale", async ({ 
     expect(sitemapAfter.get(sitemapKey)).toEqual({
       ...sitemapBefore.get(sitemapKey),
       festival: publication.createdAt.toISOString(),
+      edition: publication.createdAt.toISOString(),
     });
     expect(sitemapAfter.get(sitemapKey).festival).not.toBe(sitemapBefore.get(sitemapKey).festival);
+    expect(sitemapAfter.get(sitemapKey).edition).not.toBe(sitemapBefore.get(sitemapKey).edition);
     for (const [key, timestamp] of sitemapBefore) {
       if (key !== sitemapKey) expect(sitemapAfter.get(key)).toEqual(timestamp);
     }
