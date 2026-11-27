@@ -49,9 +49,14 @@ and artist/track counts match the production API response.
 
 ## Artist-name containment is not identity proof
 
-The primary-artist safeguard rejects strict token containment in either direction
+The primary-artist safeguard rejects strict token-multiset containment in either direction
+before dropping stop words (so repeated tokens and meaningful prefixes remain distinct)
 (e.g. a short act name versus an unrelated longer artist name). Reviewed aliases
-must be resolved by the catalogue before this check; raw fuzzy containment cannot
+are resolved by the shared canonical selection boundary in both the catalogue exporter
+and native provider worker. Verified Spotify IDs require the existing LINKED identity
+and agreeing verified provider link; they are carried through parsing, cached search
+and top-track filtering, with exact primary-ID checks overriding display names.
+Raw fuzzy containment cannot
 substitute for an alias. Case, punctuation and featuring-clause normalization and
 explicit live-repertoire bindings remain supported.
 

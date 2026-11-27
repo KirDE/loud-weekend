@@ -52,3 +52,22 @@ export async function selectionArtists(
     ...(artist && profiles[artist.name] ? { repertoire: profiles[artist.name] } : {}),
   }));
 }
+
+/** Same canonical/verified identity boundary for both festival discovery entrypoints. */
+export async function festivalSpotifyArtists(
+  db: Pick<PrismaClient, "artist" | "operationalState">,
+  names: string[],
+) {
+  const artists = await selectionArtists(db, names);
+  return {
+    aliases: Object.fromEntries(
+      artists.filter((a) => a.slug).map((a) => [a.requestedName, a.name]),
+    ),
+    spotifyArtistIds: Object.fromEntries(
+      artists.filter((a) => a.spotifyId).map((a) => [a.requestedName, a.spotifyId]),
+    ),
+    spotifyRepertoireProfiles: Object.fromEntries(
+      artists.filter((a) => a.repertoire).map((a) => [a.requestedName, a.repertoire]),
+    ),
+  };
+}

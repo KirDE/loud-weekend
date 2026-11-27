@@ -181,6 +181,29 @@ class TrackFilterTest(unittest.TestCase):
 
         self.assertIsNone(playlists.should_skip_track_for_artist("Anna Grey", track))
 
+    def test_catalog_identity_survives_parse_and_search_rejects_wrong_primary_id(self):
+        provider_id = "A" * 22
+        _, festivals, _ = playlists.parse_canonical_festivals({
+            "season": 2027, "festivals": [{
+                "slug": "synthetic", "name": "Synthetic", "editionYear": 2027,
+                "artists": ["Canonical Alias"], "aliases": {"Canonical Alias": "Canonical Name"},
+                "spotifyArtistIds": {"Canonical Alias": provider_id},
+            }],
+        })
+        self.assertEqual(festivals[0].spotify_artist_ids, {"Canonical Alias": provider_id})
+        self.assertEqual(festivals[0].aliases, {"Canonical Alias": "Canonical Name"})
+        good = make_track(artists=["Different Provider Display"])
+        good["artists"][0]["id"] = provider_id
+        wrong = make_track(artists=["Canonical Name"])
+        wrong["artists"][0]["id"] = "B" * 22
+        wrong["id"] = "different-track"
+        playlists.TRACK_SEARCH_CACHE.clear()
+        with patch.object(playlists, "spotify_get", return_value={"tracks": {"items": [wrong, good]}}):
+            actual = playlists.spotify_search_track(
+                "Canonical Name", "Song", verified_primary_artist_id=provider_id
+            )
+        self.assertEqual(actual, good)
+
     def test_alias_must_be_resolved_before_primary_artist_matching(self):
         track = make_track(artists=["Cavalera Conspiracy"])
 
@@ -190,7 +213,9 @@ class TrackFilterTest(unittest.TestCase):
         self.assertIsNone(playlists.should_skip_track_for_artist("Cavalera Conspiracy", track))
 
     def test_rejects_different_artists_extending_the_lineup_name(self):
-        for query, primary in [("The Stone", "The Stone Roses"), ("Tired", "Tired Radio")]:
+        for query, primary in [("The Stone", "The Stone Roses"), ("Tired", "Tired Radio"),
+                               ("Talk", "Talk Talk"), ("Duran", "Duran Duran"),
+                               ("of Montreal", "Montreal"), ("Montreal", "of Montreal")]:
             with self.subTest(query=query, primary=primary):
                 self.assertEqual(
                     playlists.should_skip_track_for_artist(query, make_track(artists=[primary])),

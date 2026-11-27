@@ -6,7 +6,7 @@ import {
   SelectionPlaylistRateLimit,
   SelectionPlaylistWriteUnconfirmed,
 } from "../lib/selection-playlist.ts";
-import { matchSelectionArtists } from "../lib/catalog/selection-artists.ts";
+import { festivalSpotifyArtists, matchSelectionArtists } from "../lib/catalog/selection-artists.ts";
 import { parsePlannerState, serializePlannerState } from "../lib/planner-storage.ts";
 
 const id = (letter) => letter.repeat(22);
@@ -290,4 +290,32 @@ test("Spotify quota before creation is distinct from an uncertain track write", 
     constructor: SelectionPlaylistWriteUnconfirmed,
   });
   assert.equal(writes(select).length, 2);
+});
+
+test("festival export preserves canonical aliases and only verified agreeing provider IDs", async () => {
+  const row = {
+    id: "synthetic",
+    slug: "synthetic",
+    name: "Canonical",
+    aliases: ["Billing Alias"],
+    identityState: "LINKED",
+    identities: [{ provider: "spotify", externalId: id("A") }],
+    links: [
+      { source: "spotify", verified: true, url: "https://open.spotify.com/artist/" + id("A") },
+    ],
+  };
+  const db = {
+    artist: { findMany: async () => [row] },
+    operationalState: { findMany: async () => [] },
+  };
+  assert.deepEqual(await festivalSpotifyArtists(db, ["Billing Alias"]), {
+    aliases: { "Billing Alias": "Canonical" },
+    spotifyArtistIds: { "Billing Alias": id("A") },
+    spotifyRepertoireProfiles: {},
+  });
+  row.links[0].verified = false;
+  assert.deepEqual((await festivalSpotifyArtists(db, ["Billing Alias"])).spotifyArtistIds, {});
+  row.links[0].verified = true;
+  row.links[0].url = "https://open.spotify.com/artist/" + id("B");
+  assert.deepEqual((await festivalSpotifyArtists(db, ["Billing Alias"])).spotifyArtistIds, {});
 });

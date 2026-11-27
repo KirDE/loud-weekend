@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import re
+from collections import Counter
 import unicodedata
 from html import unescape
 
@@ -193,7 +194,9 @@ def primary_artist_matches_query(query_artist: str, track: dict) -> bool:
         return False
     # Containment in another artist name is not identity evidence.
     # Resolve reviewed aliases through query_base before applying this guard.
-    if set(query_tokens) < set(primary_tokens) or set(primary_tokens) < set(query_tokens):
+    query_identity = Counter(re.findall(r"[^\W_]+", unicodedata.normalize("NFKC", query_base).casefold()))
+    primary_identity = Counter(re.findall(r"[^\W_]+", unicodedata.normalize("NFKC", primary_artist).casefold()))
+    if query_identity < primary_identity or primary_identity < query_identity:
         return False
     overlap = token_overlap(query_base, primary_artist)
     if len(query_tokens) > 1 and len(primary_tokens) > 1 and overlap <= 0.5:
