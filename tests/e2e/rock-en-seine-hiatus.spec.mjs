@@ -38,6 +38,14 @@ test.beforeAll(async () => {
         sourceUpdatedAt: new Date(),
         startDate: new Date("2027-08-25"),
         endDate: new Date("2027-08-29"),
+        provenance: {
+          create: {
+            field: "dates",
+            url,
+            note: "Synthetic previously verified dates",
+            checkedAt: new Date(),
+          },
+        },
       },
     })
   ).id;
@@ -89,10 +97,27 @@ test("actual reviewer approval→catalogue EN/DE/RU desktop and mobile, offline 
   page,
   context,
 }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      "festival-radar-planner-v1",
+      JSON.stringify({
+        favoriteFestivals: [],
+        favoriteArtists: [],
+        attendance: { "rock-en-seine": "going" },
+        playlistFestivals: ["rock-en-seine", "synthetic-fest"],
+      }),
+    ),
+  );
+  await page.goto("/en/editions/2027/");
+  const seasonCalendar = page.locator('a[download="loud-weekend-2027-plan.ics"]');
+  await expect(seasonCalendar).toHaveCount(1);
+  expect(decodeURIComponent(await seasonCalendar.getAttribute("href"))).toContain(
+    "UID:rock-en-seine-2027@festival-radar",
+  );
   // Pending never publishes a hiatus.
   await page.goto("/en/festivals/rock-en-seine/");
   await expect(
-    page.locator("section.sourceNote").filter({ has: page.locator("time") }),
+    page.locator("section.sourceNote[aria-label]").filter({ has: page.locator("time") }),
   ).toHaveCount(0);
   const token = randomBytes(32).toString("base64url");
   await db.session.create({
@@ -126,7 +151,9 @@ test("actual reviewer approval→catalogue EN/DE/RU desktop and mobile, offline 
     await page.setViewportSize({ width, height: 900 });
     for (const locale of ["en", "de", "ru"]) {
       await page.goto(`/${locale}/festivals/rock-en-seine/`);
-      const notice = page.locator("section.sourceNote").filter({ has: page.locator("time") });
+      const notice = page
+        .locator("section.sourceNote[aria-label]")
+        .filter({ has: page.locator("time") });
       await expect(notice).toContainText("2028");
       await expect(notice.locator("time")).toHaveAttribute(
         "datetime",
@@ -142,18 +169,15 @@ test("actual reviewer approval→catalogue EN/DE/RU desktop and mobile, offline 
       ).toBe(true);
     }
   }
+  for (const locale of ["en", "de", "ru"]) {
+    await page.goto(`/${locale}/editions/2027/`);
+    const pausedAttendance = page.getByRole("combobox", { name: /Rock en Seine 2027$/ });
+    await expect(pausedAttendance).toBeEnabled();
+    await expect(pausedAttendance).toHaveValue("going");
+    await expect(pausedAttendance.locator('option[value="going"]')).toBeDisabled();
+    await expect(seasonCalendar).toHaveCount(0);
+  }
   // Retained saved selection must not export or submit the paused roster.
-  await page.addInitScript(() =>
-    localStorage.setItem(
-      "festival-radar-planner-v1",
-      JSON.stringify({
-        favoriteFestivals: [],
-        favoriteArtists: [],
-        attendance: { "rock-en-seine": "going" },
-        playlistFestivals: ["rock-en-seine", "synthetic-fest"],
-      }),
-    ),
-  );
   let submitted;
   await page.route("**/api/spotify/selection-playlist", async (route) => {
     submitted = route.request().postDataJSON();
