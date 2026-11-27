@@ -91,6 +91,7 @@ class Festival:
     lineup_fn: Callable[[], tuple[list[str], list[str]]]
     existing_playlist_id: str | None = None
     aliases: dict[str, str] | None = None
+    accepted_primary_names: dict[str, list[str]] | None = None
     spotify_artist_ids: dict[str, str] | None = None
     mbids: dict[str, str] | None = None
     extra_excludes: set[str] | None = None
@@ -460,11 +461,12 @@ def extract_recent_songs(setlists):
     return counts
 
 
-def spotify_search_track(artist, track, lineup_artist: str | None = None):
-    cache_key = (artist, track, lineup_artist)
+def spotify_search_track(artist, track, lineup_artist: str | None = None, *,
+                         verified_primary_artist_id=None, accepted_primary_names=()):
+    cache_key = (artist, track, lineup_artist, verified_primary_artist_id, tuple(accepted_primary_names))
     if cache_key in TRACK_SEARCH_CACHE:
         return TRACK_SEARCH_CACHE[cache_key]
-    search_artists = [artist]
+    search_artists = list(dict.fromkeys([artist, *accepted_primary_names]))
     for allowed_artist in sorted(LIVE_REPERTOIRE_PRIMARY_ARTISTS.get(lineup_artist or artist, ())):
         if simplify_name(allowed_artist) != simplify_name(artist):
             search_artists.append(allowed_artist)
@@ -486,12 +488,16 @@ def spotify_search_track(artist, track, lineup_artist: str | None = None):
     best_tuple = None
     target_key = canonical_track_key(track)
     for item in items:
-        skip_reason = should_skip_track_for_artist(artist, item, lineup_artist)
+        skip_reason = should_skip_track_for_artist(
+            artist, item, lineup_artist, verified_primary_artist_id=verified_primary_artist_id,
+            accepted_primary_names=accepted_primary_names
+        )
         if skip_reason:
             continue
         artist_names = [a["name"] for a in item.get("artists", [])]
-        match_score = (
-            max(token_overlap(artist, candidate) for candidate in artist_names)
+        match_score = 1.0 if verified_primary_artist_id else (
+            max(token_overlap(name, candidate)
+                for name in [artist, *accepted_primary_names] for candidate in artist_names)
             if artist_names
             else 0.0
         )
@@ -673,6 +679,7 @@ def build_playlist(
         query_artist = aliases.get(artist, artist)
         setlist_artist = setlist_lookup_name(query_artist)
         spotify_artist_id = spotify_artist_ids.get(artist)
+        accepted_names = tuple((festival.accepted_primary_names or {}).get(artist, []))
         forced_mbid = (festival.mbids or {}).get(artist)
         selected = []
         source = "spotify-fallback"
@@ -715,7 +722,10 @@ def build_playlist(
                         for song, play_count in sorted(
                             recent_song_counts.items(), key=lambda item: (-item[1], item[0].lower())
                         ):
-                            track = spotify_search_track(setlist_artist, song, artist)
+                            track = spotify_search_track(
+                                setlist_artist, song, artist, verified_primary_artist_id=spotify_artist_id,
+                                accepted_primary_names=accepted_names
+                            )
                             if not track:
                                 choice_log.append(
                                     {
@@ -725,7 +735,10 @@ def build_playlist(
                                     }
                                 )
                                 continue
-                            skip_reason = should_skip_track_for_artist(query_artist, track, artist)
+                            skip_reason = should_skip_track_for_artist(
+                                query_artist, track, artist, verified_primary_artist_id=spotify_artist_id,
+                                accepted_primary_names=accepted_names
+                            )
                             if skip_reason:
                                 choice_log.append(
                                     {
@@ -774,7 +787,10 @@ def build_playlist(
                 errors.append(f"setlist lookup failed: {exc}")
 
             if len(selected) < 5:
-                fallback_names = list(dict.fromkeys([query_artist, artist]))
+                fallback_names = (
+                    [query_artist] if spotify_artist_id
+                    else list(dict.fromkeys([query_artist, artist, *accepted_names]))
+                )
                 for fallback_name in fallback_names:
                     try:
                         _, tracks = spotify_top_tracks(
@@ -782,9 +798,10 @@ def build_playlist(
                         )
                         for track in tracks:
                             artist_names = [a["name"] for a in track.get("artists", [])]
-                            if (
+                            if not spotify_artist_id and (
                                 max(
-                                    token_overlap(query_artist, candidate)
+                                    token_overlap(name, candidate)
+                                    for name in [query_artist, *accepted_names]
                                     for candidate in artist_names
                                 )
                                 < 0.45
@@ -798,7 +815,10 @@ def build_playlist(
                                     }
                                 )
                                 continue
-                            skip_reason = should_skip_track_for_artist(query_artist, track, artist)
+                            skip_reason = should_skip_track_for_artist(
+                                query_artist, track, artist, verified_primary_artist_id=spotify_artist_id,
+                                accepted_primary_names=accepted_names
+                            )
                             if skip_reason:
                                 choice_log.append(
                                     {
@@ -850,6 +870,7 @@ def build_playlist(
             {
                 "artist": artist,
                 "query_artist": query_artist,
+                "accepted_primary_names": list(accepted_names),
                 "followers": None if profile else followers.get(artist, 0),
                 **({"repertoire_profile": profile["key"]} if profile else {}),
                 "source": source,
@@ -976,6 +997,9 @@ def parse_canonical_festivals(catalog):
                 lineup_fn=lambda artists=eligible, headliners=headliners: (artists, headliners),
                 edition_year=season,
                 spotify_repertoire_profiles=profiles,
+                aliases=entry.get("aliases", {}),
+                accepted_primary_names=entry.get("acceptedPrimaryNames", {}),
+                spotify_artist_ids=entry.get("spotifyArtistIds", {}),
                 existing_playlist_id=(entry.get("playlistUrl") or "").rstrip("/").split("/")[-1]
                 or None,
             )

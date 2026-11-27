@@ -77,6 +77,20 @@ class YouTubeMusicTransferTest(unittest.TestCase):
         self.assertEqual(len(tracks), 1)
         self.assertEqual(tracks[0]["title"], "Song - 2024 Remaster")
 
+    def test_accepted_alias_survives_frozen_report_and_candidate_filter(self):
+        report = {"report": [{"artist": "Cavalera", "query_artist": "Cavalera",
+            "accepted_primary_names": ["Cavalera", "Cavalera Conspiracy"],
+            "tracks": ["Cavalera Conspiracy - Clean Song"]}]}
+        query = transfer.parse_report_tracks(report)[0]
+        candidate = {"title": "Clean Song", "videoId": "video-id", "resultType": "song",
+            "duration_seconds": 180, "artists": [{"name": "Cavalera Conspiracy"}]}
+        self.assertIsNotNone(transfer.youtube_candidate_score(query, candidate))
+        candidate["artists"] = [{"name": "Cavalera Conspiracy Extra"}]
+        self.assertIsNone(transfer.youtube_candidate_score(query, candidate))
+        del report["report"][0]["accepted_primary_names"]
+        candidate["artists"] = [{"name": "Cavalera Conspiracy"}]
+        self.assertIsNone(transfer.youtube_candidate_score(transfer.parse_report_tracks(report)[0], candidate))
+
     def test_candidate_score_accepts_clean_song_match(self):
         query = {
             "artist": "Example Artist",

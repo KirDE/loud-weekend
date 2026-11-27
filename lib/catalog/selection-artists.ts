@@ -48,7 +48,41 @@ export async function selectionArtists(
     requestedName,
     name: artist?.name ?? requestedName,
     slug: artist?.slug ?? null,
+    acceptedPrimaryNames: artist
+      ? matchSelectionArtists(rows, [artist.name, ...artist.aliases])
+          .filter((m) => m.artist?.id === artist.id)
+          .map((m) => m.requestedName)
+      : [],
     spotifyId: artist ? verifiedSpotifyArtistId(artist) : null,
     ...(artist && profiles[artist.name] ? { repertoire: profiles[artist.name] } : {}),
   }));
+}
+
+/** Same canonical/verified identity boundary for both festival discovery entrypoints. */
+export async function festivalSpotifyArtists(
+  db: Pick<PrismaClient, "artist" | "operationalState">,
+  names: string[],
+) {
+  const artists = await selectionArtists(db, names);
+  return {
+    aliases: Object.fromEntries(
+      artists
+        .filter((a) => a.slug)
+        .map((a) => [
+          a.requestedName,
+          a.acceptedPrimaryNames?.some((name) => key(name) === key(a.name))
+            ? a.name
+            : a.requestedName,
+        ]),
+    ),
+    acceptedPrimaryNames: Object.fromEntries(
+      artists.filter((a) => a.slug).map((a) => [a.requestedName, a.acceptedPrimaryNames ?? []]),
+    ),
+    spotifyArtistIds: Object.fromEntries(
+      artists.filter((a) => a.spotifyId).map((a) => [a.requestedName, a.spotifyId]),
+    ),
+    spotifyRepertoireProfiles: Object.fromEntries(
+      artists.filter((a) => a.repertoire).map((a) => [a.requestedName, a.repertoire]),
+    ),
+  };
 }

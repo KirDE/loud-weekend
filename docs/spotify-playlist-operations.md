@@ -46,3 +46,41 @@ retrying.
 
 After a refresh, open each affected festival page and confirm the Spotify link
 and artist/track counts match the production API response.
+
+## Artist-name containment is not identity proof
+
+The primary-artist safeguard rejects strict token-multiset containment in either direction
+before dropping stop words (so repeated tokens and meaningful prefixes remain distinct)
+(e.g. a short act name versus an unrelated longer artist name). Reviewed aliases
+are resolved by the shared canonical selection boundary in both the catalogue exporter
+and native provider worker. Verified Spotify IDs require the existing LINKED identity
+and agreeing verified provider link; they are carried through parsing, cached search
+and top-track filtering, with exact primary-ID checks overriding display names.
+Raw fuzzy containment cannot
+substitute for an alias. Case, punctuation and featuring-clause normalization and
+explicit live-repertoire bindings remain supported.
+
+This policy only changes future discovery. Frozen plans and unknown provider
+operations remain immutable. Reconcile the existing generation, preserve its
+year-scoped URL, and use the audited scoped refresh path after deployment for an
+affected plan; never blindly replay or rewrite the old plan.
+
+Canonical-name festival exports also carry `acceptedPrimaryNames` from persisted
+canonical names/aliases, including unresolved provider identities. Discovery
+retains this set through parsing, search caching and fallback filtering. Only an
+exact accepted-name primary credit selects that alias for policy evaluation;
+fuzzy containment is never alias evidence, and verified provider IDs still win.
+Identity counters normalize `&`/`and` equivalently without removing meaningful
+stop words or repeated words.
+Accepted names are filtered against all canonical/alias owners, including archived
+rows; a shared label is never accepted as an identity. A colliding canonical
+name also cannot replace the unique requested billing alias as the search query.
+Exact alias matching preserves normalized word order. New frozen reports retain
+the accepted names for YouTube parsing and candidate policy; existing frozen
+reports without this evidence are not retroactively relabeled or rewritten.
+Exact accepted-credit equality uses the same NFKC/trim/lowercase key as global
+ownership resolution, retaining punctuation. Normalized token counters are only
+for containment checks, not accepted-alias identity. If the canonical label
+collides, the search keeps the actual requested billing alias, not the first
+stored alternate alias. Pinned Spotify top tracks are requested once per act,
+even when fewer than five eligible tracks remain and multiple aliases exist.

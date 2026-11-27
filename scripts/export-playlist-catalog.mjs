@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { readCatalog } from "../lib/catalog/repository.ts";
 import { db } from "../lib/db.ts";
-import { spotifyRepertoiresForArtists } from "../lib/catalog/spotify-repertoire.ts";
+import { festivalSpotifyArtists } from "../lib/catalog/selection-artists.ts";
 
 const snapshot = await readCatalog();
 const festivals = snapshot.festivals.map((festival) => ({
@@ -31,11 +31,7 @@ const catalog = {
   })),
 };
 for (const festival of catalog.festivals) {
-  const names = new Set(festival.artists);
-  festival.spotifyRepertoireProfiles = await spotifyRepertoiresForArtists(
-    db,
-    snapshot.artists.filter((a) => names.has(a.name)),
-  );
+  Object.assign(festival, await festivalSpotifyArtists(db, festival.artists));
 }
 await mkdir(path.dirname(output), { recursive: true });
 await writeFile(output, `${JSON.stringify(catalog, null, 2)}\n`);

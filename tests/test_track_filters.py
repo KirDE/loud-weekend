@@ -181,10 +181,142 @@ class TrackFilterTest(unittest.TestCase):
 
         self.assertIsNone(playlists.should_skip_track_for_artist("Anna Grey", track))
 
-    def test_accepts_alias_primary_artist_match(self):
+    def test_catalog_identity_survives_parse_and_search_rejects_wrong_primary_id(self):
+        provider_id = "A" * 22
+        _, festivals, _ = playlists.parse_canonical_festivals({
+            "season": 2027, "festivals": [{
+                "slug": "synthetic", "name": "Synthetic", "editionYear": 2027,
+                "artists": ["Canonical Alias"], "aliases": {"Canonical Alias": "Canonical Name"},
+                "spotifyArtistIds": {"Canonical Alias": provider_id},
+            }],
+        })
+        self.assertEqual(festivals[0].spotify_artist_ids, {"Canonical Alias": provider_id})
+        self.assertEqual(festivals[0].aliases, {"Canonical Alias": "Canonical Name"})
+        good = make_track(artists=["Different Provider Display"])
+        good["artists"][0]["id"] = provider_id
+        wrong = make_track(artists=["Canonical Name"])
+        wrong["artists"][0]["id"] = "B" * 22
+        wrong["id"] = "different-track"
+        playlists.TRACK_SEARCH_CACHE.clear()
+        with patch.object(playlists, "spotify_get", return_value={"tracks": {"items": [wrong, good]}}):
+            actual = playlists.spotify_search_track(
+                "Canonical Name", "Song", verified_primary_artist_id=provider_id
+            )
+        self.assertEqual(actual, good)
+
+    def test_alias_must_be_resolved_before_primary_artist_matching(self):
         track = make_track(artists=["Cavalera Conspiracy"])
 
-        self.assertIsNone(playlists.should_skip_track_for_artist("Cavalera", track))
+        self.assertEqual(
+            playlists.should_skip_track_for_artist("Cavalera", track), "primary_artist_mismatch"
+        )
+        self.assertIsNone(playlists.should_skip_track_for_artist("Cavalera Conspiracy", track))
+
+    def test_rejects_different_artists_extending_the_lineup_name(self):
+        for query, primary in [("The Stone", "The Stone Roses"), ("Tired", "Tired Radio"),
+                               ("Talk", "Talk Talk"), ("Duran", "Duran Duran"),
+                               ("of Montreal", "Montreal"), ("Montreal", "of Montreal")]:
+            with self.subTest(query=query, primary=primary):
+                self.assertEqual(
+                    playlists.should_skip_track_for_artist(query, make_track(artists=[primary])),
+                    "primary_artist_mismatch",
+                )
+
+    def test_accepts_exact_short_names_and_reviewed_aliases(self):
+        pairs = [("The Stone", "The Stone"), ("Tired", "Tired"),
+                 ("Cavalera Conspiracy", "Cavalera Conspiracy")]
+        for query, primary in pairs:
+            with self.subTest(query=query, primary=primary):
+                self.assertIsNone(
+                    playlists.should_skip_track_for_artist(query, make_track(artists=[primary]))
+                )
+
+    def test_canonical_alias_survives_parse_search_and_cache_boundary(self):
+        _, festivals, _ = playlists.parse_canonical_festivals({
+            "season": 2027, "festivals": [{
+                "slug": "synthetic", "name": "Synthetic", "editionYear": 2027,
+                "artists": ["Canonical"],
+                "acceptedPrimaryNames": {"Canonical": ["Canonical", "Accepted Alias"]},
+            }],
+        })
+        names = tuple(festivals[0].accepted_primary_names["Canonical"])
+        track = make_track(artists=["Accepted Alias"])
+        playlists.TRACK_SEARCH_CACHE.clear()
+        with patch.object(playlists, "spotify_get", return_value={"tracks": {"items": [track]}}):
+            self.assertIsNone(playlists.spotify_search_track("Canonical", track["name"]))
+            self.assertEqual(playlists.spotify_search_track(
+                "Canonical", track["name"], accepted_primary_names=names), track)
+            self.assertIsNone(playlists.spotify_search_track("Canonical", track["name"]))
+
+    def test_discovery_report_carries_alias_to_youtube_policy(self):
+        import youtube_music_transfer as transfer
+        festival = playlists.Festival(
+            key="synthetic", display_name="Synthetic", playlist_name="Synthetic", description="",
+            lineup_fn=lambda: (["Cavalera"], []),
+            accepted_primary_names={"Cavalera": ["Cavalera", "Cavalera Conspiracy"]},
+        )
+        track = make_track(name="Clean Song", artists=["Cavalera Conspiracy"])
+        track["uri"] = "spotify:track:synthetic"
+        with (
+            patch.object(playlists, "search_artist_mbid", return_value=None),
+            patch.object(playlists, "get_followers", return_value=1),
+            patch.object(playlists, "spotify_top_tracks", return_value=({}, [track])),
+            patch("builtins.print"),
+        ):
+            report = playlists.build_playlist(festival, "synthetic", persist_report=False)
+        self.assertEqual(report["report"][0]["accepted_primary_names"],
+                         ["Cavalera", "Cavalera Conspiracy"])
+        query = transfer.parse_report_tracks(report)[0]
+        candidate = {"title": "Clean Song", "videoId": "synthetic", "resultType": "song",
+                     "duration_seconds": 180, "artists": [{"name": "Cavalera Conspiracy"}]}
+        self.assertIsNotNone(transfer.youtube_candidate_score(query, candidate))
+
+    def test_accepted_alias_uses_exact_global_owner_normalization(self):
+        self.assertEqual(playlists.should_skip_track_for_artist(
+            "Canonical", make_track(artists=["A B"]),
+            accepted_primary_names=("A-B",)), "primary_artist_mismatch")
+        self.assertIsNone(playlists.should_skip_track_for_artist(
+            "Canonical", make_track(artists=["a-b"]), accepted_primary_names=("A-B",)))
+
+    def test_verified_id_top_tracks_is_requested_once_even_with_aliases_and_short_results(self):
+        provider_id = "A" * 22
+        festival = playlists.Festival(
+            key="synthetic", display_name="Synthetic", playlist_name="Synthetic", description="",
+            lineup_fn=lambda: (["Billing Alias"], []), aliases={"Billing Alias": "Canonical"},
+            accepted_primary_names={"Billing Alias": ["Canonical", "Billing Alias", "Another Alias"]},
+            spotify_artist_ids={"Billing Alias": provider_id},
+        )
+        track = make_track(name="Clean Song", artists=["Canonical"])
+        track["uri"] = "spotify:track:synthetic"
+        track["artists"][0]["id"] = provider_id
+        with (
+            patch.object(playlists, "search_artist_mbid", return_value=None),
+            patch.object(playlists, "get_followers", return_value=1),
+            patch.object(playlists, "spotify_top_tracks", return_value=({}, [track])) as top_tracks,
+            patch("builtins.print"),
+        ):
+            report = playlists.build_playlist(festival, "synthetic", persist_report=False)
+        self.assertEqual(report["track_count"], 1)
+        top_tracks.assert_called_once_with("Canonical", 10, artist_id=provider_id)
+
+    def test_accepted_alias_does_not_accept_reordered_words(self):
+        self.assertEqual(playlists.should_skip_track_for_artist(
+            "Canonical", make_track(artists=["Hate Love"]),
+            accepted_primary_names=("Love Hate",)), "primary_artist_mismatch")
+        self.assertIsNone(playlists.should_skip_track_for_artist(
+            "Canonical", make_track(artists=["Love Hate"]),
+            accepted_primary_names=("Love Hate",)))
+
+    def test_conjunction_equivalence_and_exact_accepted_alias(self):
+        for query, primary in [("Simon & Garfunkel", "Simon and Garfunkel"),
+                               ("Simon and Garfunkel", "Simon & Garfunkel")]:
+            self.assertIsNone(playlists.should_skip_track_for_artist(query, make_track(artists=[primary])))
+        self.assertIsNone(playlists.should_skip_track_for_artist(
+            "Canonical", make_track(artists=["Accepted Alias"]),
+            accepted_primary_names=("Canonical", "Accepted Alias")))
+        self.assertEqual(playlists.should_skip_track_for_artist(
+            "Canonical", make_track(artists=["Accepted Alias Extra"]),
+            accepted_primary_names=("Canonical", "Accepted Alias")), "primary_artist_mismatch")
 
     def test_blocks_known_bad_primary_artist_prefix_match(self):
         track = make_track(artists=["Phantom Planet"])

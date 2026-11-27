@@ -14,7 +14,7 @@ import {
   YOUTUBE_URL,
 } from "../lib/catalog/youtube-playlist-queue.ts";
 import { executePlaylistJson } from "../lib/catalog/python-playlist-rpc.ts";
-import { spotifyRepertoiresForArtists } from "../lib/catalog/spotify-repertoire.ts";
+import { festivalSpotifyArtists } from "../lib/catalog/selection-artists.ts";
 import {
   runProviderWorker,
   requestedProviders,
@@ -67,10 +67,7 @@ try {
         if (!plan) {
           stage = "spotify_discovery";
           const names = new Set([...festival.headliners, ...festival.lineup]);
-          const profiles = await spotifyRepertoiresForArtists(
-            db,
-            snapshot.artists.filter((a) => names.has(a.name)),
-          );
+          const identities = await festivalSpotifyArtists(db, [...names]);
           plan = (await discoverSpotifyChunk(
             db,
             claim,
@@ -79,7 +76,7 @@ try {
               festivals: [
                 {
                   ...festival,
-                  spotifyRepertoireProfiles: profiles,
+                  ...identities,
                   artists: [...names],
                   playlistUrl: url,
                 },
