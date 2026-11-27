@@ -3,26 +3,37 @@ import { createHash } from "node:crypto";
 import { INGESTION_SCHEMA_VERSION } from "../types.ts";
 import type { FestivalCandidate, FestivalSource } from "../types.ts";
 
+/** Keep source-specific locale policy out of the generic transport. */
+export function hellfestHomepageHeaders(source: FestivalSource): Record<string, string> {
+  if (!isHellfestHomepage(source)) return {};
+  // The root negotiates locale; /en is an explicit route and must not be silently rewritten.
+  return new URL(source.url).pathname === "/" ? { "accept-language": "fr-FR,fr;q=0.9" } : {};
+}
+
+function isHellfestHomepage(source: FestivalSource): boolean {
+  if (source.festivalSlug !== "hellfest" || !source.strategies.includes("html_fallback"))
+    return false;
+  const url = new URL(source.url);
+  return (
+    url.origin === "https://hellfest.fr" &&
+    /^\/(?:en|fr)?\/?$/.test(url.pathname) &&
+    !url.search &&
+    !url.hash &&
+    !url.username &&
+    !url.password &&
+    !source.fetchUrl &&
+    !source.followLinkPattern
+  );
+}
+
 /** Current homepage cards, not archived news or the entire hydration artist database. */
 export function extractHellfestLineup(
   html: string,
   source: FestivalSource,
   fetchedAt: string,
 ): FestivalCandidate | undefined {
-  if (source.festivalSlug !== "hellfest" || !source.strategies.includes("html_fallback"))
-    return undefined;
+  if (!isHellfestHomepage(source)) return undefined;
   const url = new URL(source.url);
-  if (
-    url.origin !== "https://hellfest.fr" ||
-    !/^\/(?:en|fr)?\/?$/.test(url.pathname) ||
-    url.search ||
-    url.hash ||
-    url.username ||
-    url.password ||
-    source.fetchUrl ||
-    source.followLinkPattern
-  )
-    return undefined;
   const $ = load(html);
   const payload = $("script#__NUXT_DATA__").text();
   $("script,style,template,noscript,nav,footer,[hidden],[aria-hidden='true']").remove();
@@ -76,7 +87,7 @@ export function extractHellfestLineup(
       invalid = true;
       return;
     }
-    const match = u.pathname.match(/^\/(?:en|fr)\/artist\/([a-z0-9-]+)\/?$/);
+    const match = u.pathname.match(/^\/(?:artiste|(?:en|fr)\/artist)\/([a-z0-9-]+)\/?$/);
     if (u.origin !== url.origin || u.search || u.hash || u.username || u.password || !match) {
       invalid = true;
       return;

@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: '.node-version'
+          node-version-file: ".node-version"
           cache: npm
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -111,7 +111,9 @@ jobs:
             test -z "$IMPORT_AGENT_SECRET" || printf 'IMPORT_AGENT_SECRET=%q\n' "$IMPORT_AGENT_SECRET"
             test -z "$IMPORT_EVENTS_SSH_TARGET" || printf 'IMPORT_EVENTS_SSH_TARGET=%q\n' "$IMPORT_EVENTS_SSH_TARGET"
             test -z "$IMPORT_EVENTS_SSH_KEY_B64" || printf 'IMPORT_EVENTS_SSH_KEY_B64=%q\n' "$IMPORT_EVENTS_SSH_KEY_B64"
-            test -z "$IMPORT_EVENTS_KNOWN_HOSTS" || printf 'IMPORT_EVENTS_KNOWN_HOSTS=%q\n' "$IMPORT_EVENTS_KNOWN_HOSTS"
+            if test -n "$IMPORT_EVENTS_KNOWN_HOSTS"; then
+              printf 'IMPORT_EVENTS_KNOWN_HOSTS_B64=%s\n' "$(printf '%s' "$IMPORT_EVENTS_KNOWN_HOSTS" | base64 -w0)"
+            fi
             printf 'ANALYTICS_OPERATOR_TOKEN=%q\n' "$ANALYTICS_OPERATOR_TOKEN"
             printf 'ANALYTICS_RETENTION_TOKEN=%q\n' "$ANALYTICS_RETENTION_TOKEN"
             printf 'ANALYTICS_RETENTION_DAYS=%q\n' "$ANALYTICS_RETENTION_DAYS"

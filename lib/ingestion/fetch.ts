@@ -1,3 +1,4 @@
+import { hellfestHomepageHeaders } from "./adapters/hellfest-lineup.ts";
 import {
   isTolminatorSource,
   TOLMINATOR_LINEUP,
@@ -139,6 +140,7 @@ async function fetchSourceWithoutTicketSupplement(
             "user-agent":
               "LoudWeekendBot/1.1 (+https://loudweekend.eu/; public festival-data monitor)",
             ...source.headers,
+            ...hellfestHomepageHeaders(source),
             ...requestHeaders,
           },
         });
