@@ -172,6 +172,11 @@ def live_repertoire_primary_match(query_artist: str, track: dict) -> bool:
     return simplify_name(primary_artist) in {simplify_name(artist) for artist in allowed}
 
 
+def accepted_credit_key(name: str) -> str:
+    # Match the global ownership fence: punctuation and word order stay significant.
+    return unicodedata.normalize("NFKC", name).strip().lower()
+
+
 def identity_words(name: str) -> tuple[str, ...]:
     normalized = unicodedata.normalize("NFKC", unescape(name)).casefold().replace("&", " and ")
     return tuple(re.findall(r"[^\W_]+", normalized))
@@ -226,7 +231,7 @@ def should_skip_track_for_artist(
     # Only an exact canonical/accepted alias credit selects an alternate policy query.
     # This is not fuzzy alias containment and never overrides a verified provider ID.
     for accepted in accepted_primary_names:
-        if identity_words(accepted) == identity_words(primary_artist):
+        if accepted_credit_key(accepted) == accepted_credit_key(primary_artist):
             query_artist = accepted
             break
     if is_short_or_non_song(track):

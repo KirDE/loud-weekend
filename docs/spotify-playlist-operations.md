@@ -78,3 +78,9 @@ name also cannot replace the unique requested billing alias as the search query.
 Exact alias matching preserves normalized word order. New frozen reports retain
 the accepted names for YouTube parsing and candidate policy; existing frozen
 reports without this evidence are not retroactively relabeled or rewritten.
+Exact accepted-credit equality uses the same NFKC/trim/lowercase key as global
+ownership resolution, retaining punctuation. Normalized token counters are only
+for containment checks, not accepted-alias identity. If the canonical label
+collides, the search keeps the actual requested billing alias, not the first
+stored alternate alias. Pinned Spotify top tracks are requested once per act,
+even when fewer than five eligible tracks remain and multiple aliases exist.

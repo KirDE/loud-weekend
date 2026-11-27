@@ -68,7 +68,12 @@ export async function festivalSpotifyArtists(
     aliases: Object.fromEntries(
       artists
         .filter((a) => a.slug)
-        .map((a) => [a.requestedName, a.acceptedPrimaryNames?.[0] ?? a.requestedName]),
+        .map((a) => [
+          a.requestedName,
+          a.acceptedPrimaryNames?.some((name) => key(name) === key(a.name))
+            ? a.name
+            : a.requestedName,
+        ]),
     ),
     acceptedPrimaryNames: Object.fromEntries(
       artists.filter((a) => a.slug).map((a) => [a.requestedName, a.acceptedPrimaryNames ?? []]),

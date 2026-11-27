@@ -351,7 +351,7 @@ test("festival accepted labels exclude names owned by another canonical or archi
           id: "one",
           slug: "one",
           name: "Ghost",
-          aliases: ["Ghost Alias"],
+          aliases: ["Old Ghost", "Ghost Alias"],
           identityState: "UNRESOLVED",
           identities: [],
           links: [],
@@ -370,7 +370,7 @@ test("festival accepted labels exclude names owned by another canonical or archi
     operationalState: { findMany: async () => [] },
   };
   const exported = await festivalSpotifyArtists(db, ["Ghost Alias"]);
-  assert.deepEqual(exported.acceptedPrimaryNames, { "Ghost Alias": ["Ghost Alias"] });
+  assert.deepEqual(exported.acceptedPrimaryNames, { "Ghost Alias": ["Old Ghost", "Ghost Alias"] });
   assert.deepEqual(exported.aliases, { "Ghost Alias": "Ghost Alias" });
   assert.deepEqual(exported.spotifyArtistIds, {});
 });

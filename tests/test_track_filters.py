@@ -271,6 +271,34 @@ class TrackFilterTest(unittest.TestCase):
                      "duration_seconds": 180, "artists": [{"name": "Cavalera Conspiracy"}]}
         self.assertIsNotNone(transfer.youtube_candidate_score(query, candidate))
 
+    def test_accepted_alias_uses_exact_global_owner_normalization(self):
+        self.assertEqual(playlists.should_skip_track_for_artist(
+            "Canonical", make_track(artists=["A B"]),
+            accepted_primary_names=("A-B",)), "primary_artist_mismatch")
+        self.assertIsNone(playlists.should_skip_track_for_artist(
+            "Canonical", make_track(artists=["a-b"]), accepted_primary_names=("A-B",)))
+
+    def test_verified_id_top_tracks_is_requested_once_even_with_aliases_and_short_results(self):
+        provider_id = "A" * 22
+        festival = playlists.Festival(
+            key="synthetic", display_name="Synthetic", playlist_name="Synthetic", description="",
+            lineup_fn=lambda: (["Billing Alias"], []), aliases={"Billing Alias": "Canonical"},
+            accepted_primary_names={"Billing Alias": ["Canonical", "Billing Alias", "Another Alias"]},
+            spotify_artist_ids={"Billing Alias": provider_id},
+        )
+        track = make_track(name="Clean Song", artists=["Canonical"])
+        track["uri"] = "spotify:track:synthetic"
+        track["artists"][0]["id"] = provider_id
+        with (
+            patch.object(playlists, "search_artist_mbid", return_value=None),
+            patch.object(playlists, "get_followers", return_value=1),
+            patch.object(playlists, "spotify_top_tracks", return_value=({}, [track])) as top_tracks,
+            patch("builtins.print"),
+        ):
+            report = playlists.build_playlist(festival, "synthetic", persist_report=False)
+        self.assertEqual(report["track_count"], 1)
+        top_tracks.assert_called_once_with("Canonical", 10, artist_id=provider_id)
+
     def test_accepted_alias_does_not_accept_reordered_words(self):
         self.assertEqual(playlists.should_skip_track_for_artist(
             "Canonical", make_track(artists=["Hate Love"]),

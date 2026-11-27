@@ -787,7 +787,10 @@ def build_playlist(
                 errors.append(f"setlist lookup failed: {exc}")
 
             if len(selected) < 5:
-                fallback_names = list(dict.fromkeys([query_artist, artist, *accepted_names]))
+                fallback_names = (
+                    [query_artist] if spotify_artist_id
+                    else list(dict.fromkeys([query_artist, artist, *accepted_names]))
+                )
                 for fallback_name in fallback_names:
                     try:
                         _, tracks = spotify_top_tracks(
