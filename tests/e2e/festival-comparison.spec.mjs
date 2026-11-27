@@ -79,10 +79,16 @@ test("comparison displays only matching public trip facts in every locale", asyn
       recordState: "CURRENT",
       festival: { slug: { in: ["synthetic-fest", "synthetic-west"] } },
     },
-    select: { id: true, year: true, festival: { select: { slug: true, countryCode: true } } },
+    select: {
+      id: true,
+      year: true,
+      festival: { select: { slug: true, countryCode: true, city: true } },
+    },
   });
   const current = rows.find(({ festival }) => festival.slug === "synthetic-fest");
   const west = rows.find(({ festival }) => festival.slug === "synthetic-west");
+  // Earlier editorial scenarios can publish a new city for the shared catalogue fixture.
+  expect(current?.festival.city).toBeTruthy();
   const source = {
     organizerHost: "festival.example.test",
     checkedOn: new Date("2026-11-01"),
@@ -102,7 +108,7 @@ test("comparison displays only matching public trip facts in every locale", asyn
           editionId: current.id,
           editionYear: current.year,
           countryCode: current.festival.countryCode,
-          city: "Sample City",
+          city: current.festival.city,
           field: "arrival",
           earliestDate: new Date("2027-06-09"),
           sourceUrl: campingUrl,
