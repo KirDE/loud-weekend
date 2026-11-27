@@ -98,6 +98,7 @@ export function PlanningTools({
     unitDisplay: "short",
   });
   const calendar = calendarUrls(item);
+  const yearSuffix = item.editionYear ? `-${item.editionYear}` : "";
   const location = [item.city, item.country].filter(Boolean).join(", ");
   const map = `https://www.openstreetmap.org/search?query=${encodeURIComponent(location)}`;
   const similar = similarFestivals(item, festivals, {
@@ -116,13 +117,13 @@ export function PlanningTools({
       <div className="planningActions">
         {calendar ? (
           <>
-            <a href={calendar.ics} download={`${item.slug}-2027.ics`}>
+            <a href={calendar.ics} download={`${item.slug}${yearSuffix}.ics`}>
               {t.download}
             </a>
             <a href={calendar.google} target="_blank" rel="noreferrer">
               Google Calendar ↗
             </a>
-            <a href={calendar.apple} download={`${item.slug}-apple-calendar-2027.ics`}>
+            <a href={calendar.apple} download={`${item.slug}-apple-calendar${yearSuffix}.ics`}>
               {t.apple}
             </a>
           </>
