@@ -1,3 +1,4 @@
+import type { Festival } from "./domain/festival.ts";
 import { z } from "zod";
 
 export const budgetCurrencies = [
@@ -49,6 +50,33 @@ export function parseBudgetCost(value: string): number | undefined {
   const [major, minor = ""] = value.trim().split(/[.,]/);
   const total = Number(major) * 100 + Number(minor.padEnd(2, "0"));
   return total <= maxCents ? total : undefined;
+}
+
+/** A reference from the approved public projection, never proof of stock or a checkout total. */
+export function budgetTicketReference(festival: Festival | undefined) {
+  const published = festival?.ticketOffers;
+  if (
+    !published ||
+    published.editionYear !== festival.editionYear ||
+    festival.editionLifecycle?.lifecycle === "hiatus" ||
+    ["free", "sold_out", "sales_ended", "unavailable"].includes(festival.ticketStatus)
+  )
+    return undefined;
+
+  const fullPasses = published.offers.filter(({ kind }) => kind === "full_pass");
+  if (fullPasses.length !== 1) return undefined;
+  const [offer] = fullPasses;
+  if (
+    offer.status === "sold_out" ||
+    !offer.price ||
+    !cents.safeParse(offer.price.amountMinor).success
+  )
+    return undefined;
+  return {
+    price: offer.price,
+    sourceUrl: published.sourceUrl,
+    observedAt: published.observedAt,
+  };
 }
 
 export function budgetTotal(plan: TripBudget): number | undefined {
