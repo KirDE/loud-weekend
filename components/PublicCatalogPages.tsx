@@ -10,7 +10,7 @@ import { StageTimetable } from "./StageTimetable";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { FestivalEdition } from "@/lib/domain/edition";
-import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
+import type { PublicArrivalFact } from "@/lib/domain/festival";
 import { FestivalArrival } from "./FestivalArrival";
 import { FestivalTicketOffers } from "./FestivalTicketOffers";
 import { FestivalExplorer } from "./FestivalExplorer";
