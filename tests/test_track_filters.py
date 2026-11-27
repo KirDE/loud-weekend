@@ -231,6 +231,34 @@ class TrackFilterTest(unittest.TestCase):
                     playlists.should_skip_track_for_artist(query, make_track(artists=[primary]))
                 )
 
+    def test_canonical_alias_survives_parse_search_and_cache_boundary(self):
+        _, festivals, _ = playlists.parse_canonical_festivals({
+            "season": 2027, "festivals": [{
+                "slug": "synthetic", "name": "Synthetic", "editionYear": 2027,
+                "artists": ["Canonical"],
+                "acceptedPrimaryNames": {"Canonical": ["Canonical", "Accepted Alias"]},
+            }],
+        })
+        names = tuple(festivals[0].accepted_primary_names["Canonical"])
+        track = make_track(artists=["Accepted Alias"])
+        playlists.TRACK_SEARCH_CACHE.clear()
+        with patch.object(playlists, "spotify_get", return_value={"tracks": {"items": [track]}}):
+            self.assertIsNone(playlists.spotify_search_track("Canonical", track["name"]))
+            self.assertEqual(playlists.spotify_search_track(
+                "Canonical", track["name"], accepted_primary_names=names), track)
+            self.assertIsNone(playlists.spotify_search_track("Canonical", track["name"]))
+
+    def test_conjunction_equivalence_and_exact_accepted_alias(self):
+        for query, primary in [("Simon & Garfunkel", "Simon and Garfunkel"),
+                               ("Simon and Garfunkel", "Simon & Garfunkel")]:
+            self.assertIsNone(playlists.should_skip_track_for_artist(query, make_track(artists=[primary])))
+        self.assertIsNone(playlists.should_skip_track_for_artist(
+            "Canonical", make_track(artists=["Accepted Alias"]),
+            accepted_primary_names=("Canonical", "Accepted Alias")))
+        self.assertEqual(playlists.should_skip_track_for_artist(
+            "Canonical", make_track(artists=["Accepted Alias Extra"]),
+            accepted_primary_names=("Canonical", "Accepted Alias")), "primary_artist_mismatch")
+
     def test_blocks_known_bad_primary_artist_prefix_match(self):
         track = make_track(artists=["Phantom Planet"])
 

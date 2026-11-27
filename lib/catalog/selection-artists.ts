@@ -48,6 +48,7 @@ export async function selectionArtists(
     requestedName,
     name: artist?.name ?? requestedName,
     slug: artist?.slug ?? null,
+    aliases: artist?.aliases ?? [],
     spotifyId: artist ? verifiedSpotifyArtistId(artist) : null,
     ...(artist && profiles[artist.name] ? { repertoire: profiles[artist.name] } : {}),
   }));
@@ -62,6 +63,9 @@ export async function festivalSpotifyArtists(
   return {
     aliases: Object.fromEntries(
       artists.filter((a) => a.slug).map((a) => [a.requestedName, a.name]),
+    ),
+    acceptedPrimaryNames: Object.fromEntries(
+      artists.filter((a) => a.slug).map((a) => [a.requestedName, [a.name, ...(a.aliases ?? [])]]),
     ),
     spotifyArtistIds: Object.fromEntries(
       artists.filter((a) => a.spotifyId).map((a) => [a.requestedName, a.spotifyId]),

@@ -172,6 +172,11 @@ def live_repertoire_primary_match(query_artist: str, track: dict) -> bool:
     return simplify_name(primary_artist) in {simplify_name(artist) for artist in allowed}
 
 
+def identity_tokens(name: str) -> Counter:
+    normalized = unicodedata.normalize("NFKC", unescape(name)).casefold().replace("&", " and ")
+    return Counter(re.findall(r"[^\W_]+", normalized))
+
+
 def primary_artist_matches_query(query_artist: str, track: dict) -> bool:
     if live_repertoire_primary_match(query_artist, track):
         return True
@@ -194,8 +199,8 @@ def primary_artist_matches_query(query_artist: str, track: dict) -> bool:
         return False
     # Containment in another artist name is not identity evidence.
     # Resolve reviewed aliases through query_base before applying this guard.
-    query_identity = Counter(re.findall(r"[^\W_]+", unicodedata.normalize("NFKC", query_base).casefold()))
-    primary_identity = Counter(re.findall(r"[^\W_]+", unicodedata.normalize("NFKC", primary_artist).casefold()))
+    query_identity = identity_tokens(query_base)
+    primary_identity = identity_tokens(primary_artist)
     if query_identity < primary_identity or primary_identity < query_identity:
         return False
     overlap = token_overlap(query_base, primary_artist)
@@ -210,9 +215,16 @@ def should_skip_track_for_artist(
     lineup_artist: str | None = None,
     *,
     verified_primary_artist_id: str | None = None,
+    accepted_primary_names: tuple[str, ...] = (),
 ) -> str | None:
     title = (track.get("name") or "").lower()
     primary_artist = track["artists"][0]["name"] if track.get("artists") else ""
+    # Only an exact canonical/accepted alias credit selects an alternate policy query.
+    # This is not fuzzy alias containment and never overrides a verified provider ID.
+    for accepted in accepted_primary_names:
+        if identity_tokens(accepted) == identity_tokens(primary_artist):
+            query_artist = accepted
+            break
     if is_short_or_non_song(track):
         return "too_short_or_non_song"
     # An exact reviewed primary ID is identity evidence. Fuzzy display-name

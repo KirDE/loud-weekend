@@ -12,6 +12,7 @@ export type SelectionArtist = {
   slug: string | null;
   spotifyId: string | null;
   repertoire?: SpotifyRepertoireProfile;
+  aliases?: string[];
 };
 export type SpotifyRequest = (url: string, init?: RequestInit) => Promise<Response>;
 

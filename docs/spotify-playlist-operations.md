@@ -64,3 +64,11 @@ This policy only changes future discovery. Frozen plans and unknown provider
 operations remain immutable. Reconcile the existing generation, preserve its
 year-scoped URL, and use the audited scoped refresh path after deployment for an
 affected plan; never blindly replay or rewrite the old plan.
+
+Canonical-name festival exports also carry `acceptedPrimaryNames` from persisted
+canonical names/aliases, including unresolved provider identities. Discovery
+retains this set through parsing, search caching and fallback filtering. Only an
+exact accepted-name primary credit selects that alias for policy evaluation;
+fuzzy containment is never alias evidence, and verified provider IDs still win.
+Identity counters normalize `&`/`and` equivalently without removing meaningful
+stop words or repeated words.

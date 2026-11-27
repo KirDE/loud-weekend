@@ -310,6 +310,7 @@ test("festival export preserves canonical aliases and only verified agreeing pro
   };
   assert.deepEqual(await festivalSpotifyArtists(db, ["Billing Alias"]), {
     aliases: { "Billing Alias": "Canonical" },
+    acceptedPrimaryNames: { "Billing Alias": ["Canonical", "Billing Alias"] },
     spotifyArtistIds: { "Billing Alias": id("A") },
     spotifyRepertoireProfiles: {},
   });
@@ -318,4 +319,26 @@ test("festival export preserves canonical aliases and only verified agreeing pro
   row.links[0].verified = true;
   row.links[0].url = "https://open.spotify.com/artist/" + id("B");
   assert.deepEqual((await festivalSpotifyArtists(db, ["Billing Alias"])).spotifyArtistIds, {});
+});
+
+test("canonical festival names retain accepted aliases without a provider pin", async () => {
+  const db = {
+    artist: {
+      findMany: async () => [
+        {
+          id: "x",
+          slug: "x",
+          name: "Canonical",
+          aliases: ["Accepted Alias"],
+          identityState: "UNRESOLVED",
+          identities: [],
+          links: [],
+        },
+      ],
+    },
+    operationalState: { findMany: async () => [] },
+  };
+  const exported = await festivalSpotifyArtists(db, ["Canonical"]);
+  assert.deepEqual(exported.acceptedPrimaryNames, { Canonical: ["Canonical", "Accepted Alias"] });
+  assert.deepEqual(exported.spotifyArtistIds, {});
 });
