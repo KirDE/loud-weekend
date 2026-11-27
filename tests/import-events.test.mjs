@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   validDispatchEvent,
+  knownHostsText,
   sendImportEvent,
   transportConfigured,
 } from "../lib/ingestion/import-event-transport.mjs";
@@ -89,4 +90,14 @@ test("probe, stale and inaccessible events invoke no model; repeated accepted ev
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("known-host pin separators survive shell-escaped deployment env without weakening the pin", () => {
+  const pin = "example.test ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFixture";
+  assert.equal(knownHostsText(pin), pin + "\n");
+  assert.equal(knownHostsText(pin.replaceAll(" ", "\\ ")), pin + "\n");
+  assert.equal(
+    knownHostsText("other.test ssh-ed25519 DifferentKey"),
+    "other.test ssh-ed25519 DifferentKey\n",
+  );
 });
