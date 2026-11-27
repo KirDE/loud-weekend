@@ -84,3 +84,10 @@ for containment checks, not accepted-alias identity. If the canonical label
 collides, the search keeps the actual requested billing alias, not the first
 stored alternate alias. Pinned Spotify top tracks are requested once per act,
 even when fewer than five eligible tracks remain and multiple aliases exist.
+
+Artist discovery makes one additional bounded fielded search when the first five
+generic results contain no exact credit. Exact NFKC/trim/case-normalized names
+outrank fuzzy punctuation matches, and every unpinned candidate must pass the same
+primary-name safeguard before its top tracks or follower count can be used.
+This is discovery only, not a canonical identity publication or provider pin;
+verified IDs, accepted aliases and reviewed repertoire retain their existing paths.
