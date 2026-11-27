@@ -110,3 +110,61 @@ test("new Hellfest artists require protected review; unchanged and partial repla
   assert.ok(later.reviewReasons.length);
   assert.equal(later.changes.filter((x) => x.kind === "artist_added").length, 1);
 });
+
+const french = readFileSync(
+  new URL("./fixtures/official-markup/hellfest-homepage-fr-2027.html", import.meta.url),
+  "utf8",
+);
+test("current French homepage /artiste cards retain all literal text and logo identities", () => {
+  const c = parse(french);
+  assert.equal(c.lineup.length, 87);
+  assert.deepEqual(new Set(c.lineup), new Set(parse().lineup));
+  assert.deepEqual(c.warnings, []);
+  assert.equal(c.artistListMode, "additive");
+  assert.equal(c.headliners, undefined);
+  assert.equal(c.ticketStatus, undefined);
+  const next = '<a class="home__bands-artist-name" href="/artiste/future-act">Future Act</a>';
+  assert.equal(
+    parse(french.replace('<a href="/artiste/gojira"', next + '<a href="/artiste/gojira"')).lineup
+      .length,
+    88,
+  );
+  for (const doc of [
+    french.replaceAll("2027", "2026"),
+    french.replace("/artiste/gojira", "https://evil.test/artiste/gojira"),
+    french.replace("/artiste/gojira", "/news/gojira"),
+  ]) {
+    assert.equal(parse(doc).lineup, undefined);
+    assert.ok(parse(doc).warnings.length);
+  }
+});
+
+test("registered collector requests French only for exact trusted negotiating homepage", async () => {
+  const { fetchSource } = await import("../lib/ingestion/fetch.ts");
+  const { hellfestHomepageHeaders } = await import("../lib/ingestion/adapters/hellfest-lineup.ts");
+  for (const config of [
+    { ...source, festivalSlug: "other" },
+    { ...source, url: "https://evil.test/" },
+    { ...source, url: "https://hellfest.fr/en" },
+    { ...source, url: "https://hellfest.fr/?archive=1" },
+    { ...source, fetchUrl: "https://hellfest.fr/en" },
+    { ...source, followLinkPattern: "lineup" },
+  ])
+    assert.deepEqual(hellfestHomepageHeaders(config), {});
+  let calls = 0;
+  const result = await fetchSource(source, {
+    maxAttempts: 1,
+    fetchImpl: async (url, init) => {
+      calls++;
+      assert.equal(url, source.url);
+      assert.equal(init.headers["accept-language"], "fr-FR,fr;q=0.9");
+      const r = new Response(french, { headers: { "content-type": "text/html" } });
+      Object.defineProperty(r, "url", { value: source.url });
+      return r;
+    },
+  });
+  assert.equal(calls, 1);
+  const c = parse(await result.response.text());
+  assert.equal(c.lineup.length, 87);
+  assert.deepEqual(c.warnings, []);
+});
