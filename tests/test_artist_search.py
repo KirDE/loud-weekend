@@ -60,6 +60,28 @@ class ArtistSearchTest(unittest.TestCase):
         ]):
             self.assertEqual(playlists.spotify_search_artist("Ember-North"), exact)
 
+    def test_exact_unicode_and_all_stop_word_credits_retain_followers(self):
+        for name in ("Тихий Север", "夜の光", "The The"):
+            with self.subTest(name=name):
+                exact = {"id": "intended", "name": name, "followers": {"total": 23}}
+                unrelated = {"id": "other", "name": "別の音"}
+                with patch.object(playlists, "spotify_get", return_value={
+                    "artists": {"items": [unrelated, exact]},
+                }) as get:
+                    self.assertEqual(playlists.spotify_search_artist(name), exact)
+                    self.assertEqual(playlists.get_followers(name), 23)
+                get.assert_called_once()
+
+    def test_fielded_search_retains_exact_unicode_without_accepting_other_unicode(self):
+        exact = {"id": "intended", "name": "夜の光"}
+        unrelated = {"id": "other", "name": "別の音"}
+        with patch.object(playlists, "spotify_get", side_effect=[
+            {"artists": {"items": [unrelated]}},
+            {"artists": {"items": [unrelated, exact]}},
+        ]) as get:
+            self.assertEqual(playlists.spotify_search_artist(exact["name"]), exact)
+        self.assertEqual(get.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

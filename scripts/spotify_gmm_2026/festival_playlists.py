@@ -553,10 +553,11 @@ def spotify_search_artist(name):
     best_score = 0.0
     for item in items:
         candidate = item.get("name", "")
-        if not primary_artist_matches_query(name, {"artists": [{"name": candidate}]}):
+        exact_credit = accepted_credit_key(name) == accepted_credit_key(candidate)
+        if not exact_credit and not primary_artist_matches_query(name, {"artists": [{"name": candidate}]}):
             continue
         score = token_overlap(name, candidate)
-        if accepted_credit_key(name) == accepted_credit_key(candidate):
+        if exact_credit:
             score += 2.0
         elif simplify_name(name) == simplify_name(candidate):
             score += 1.0

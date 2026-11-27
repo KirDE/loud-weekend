@@ -87,7 +87,8 @@ even when fewer than five eligible tracks remain and multiple aliases exist.
 
 Artist discovery makes one additional bounded fielded search when the first five
 generic results contain no exact credit. Exact NFKC/trim/case-normalized names
-outrank fuzzy punctuation matches, and every unpinned candidate must pass the same
-primary-name safeguard before its top tracks or follower count can be used.
+outrank fuzzy punctuation matches. Exact credits are accepted before the fuzzy
+token predicate, including non-Latin and all-stop-word names; other unpinned
+candidates must pass the primary-name safeguard before top tracks or follower counts.
 This is discovery only, not a canonical identity publication or provider pin;
 verified IDs, accepted aliases and reviewed repertoire retain their existing paths.
