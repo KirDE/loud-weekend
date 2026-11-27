@@ -7,6 +7,7 @@ import {
   budgetCountFields,
   budgetCurrencies,
   budgetKey,
+  budgetTicketReference,
   budgetTotal,
   initialBudget,
   parseBudgetCost,
@@ -29,6 +30,12 @@ const labels = {
     nights: "Nights",
     days: "Days",
     ticket: "Ticket per person",
+    reference: "Published full-pass price",
+    referenceNote: "Fees unknown. This price does not confirm availability.",
+    source: "Official source",
+    checked: "Checked",
+    usePrice: "Use price in estimate",
+    currencyMismatch: "To copy this amount, select its currency.",
     travel: "Travel for the group",
     lodging: "Lodging per night",
     camping: "Camping per night",
@@ -59,6 +66,12 @@ const labels = {
     nights: "Nächte",
     days: "Tage",
     ticket: "Ticket pro Person",
+    reference: "Veröffentlichter Festivalpass-Preis",
+    referenceNote: "Gebühren unbekannt. Der Preis bestätigt keine Verfügbarkeit.",
+    source: "Offizielle Quelle",
+    checked: "Geprüft",
+    usePrice: "Preis in Schätzung übernehmen",
+    currencyMismatch: "Wähle zum Übernehmen die Währung des Preises.",
     travel: "Anreise für die Gruppe",
     lodging: "Unterkunft pro Nacht",
     camping: "Camping pro Nacht",
@@ -90,6 +103,12 @@ const labels = {
     nights: "Ночей",
     days: "Дней",
     ticket: "Билет на человека",
+    reference: "Опубликованная цена полного абонемента",
+    referenceNote: "Сборы неизвестны. Цена не подтверждает наличие билетов.",
+    source: "Официальный источник",
+    checked: "Проверено",
+    usePrice: "Подставить цену в расчёт",
+    currencyMismatch: "Чтобы подставить цену, выберите её валюту.",
     travel: "Дорога на группу",
     lodging: "Жильё за ночь",
     camping: "Кемпинг за ночь",
@@ -133,6 +152,7 @@ function BudgetForm({
   onRemove,
   status,
   clearStatus,
+  ticketReference,
 }: {
   stored: Estimate | undefined;
   t: Copy;
@@ -140,6 +160,7 @@ function BudgetForm({
   onSave: (estimate: Estimate) => boolean;
   status: string;
   clearStatus: () => void;
+  ticketReference: ReturnType<typeof budgetTicketReference>;
   onRemove: () => void;
 }) {
   const [error, setError] = useState("");
@@ -147,9 +168,12 @@ function BudgetForm({
   const [currency, setCurrency] = useState(stored?.currency ?? initialBudget.currency);
   const notice = useId();
   const form = useRef<HTMLFormElement>(null);
+  const ticketInput = useRef<HTMLInputElement>(null);
+  const [ticketBlank, setTicketBlank] = useState(stored?.ticket === undefined);
   useEffect(() => {
     form.current?.reset();
     setPreview(stored);
+    setTicketBlank(stored?.ticket === undefined);
     setCurrency(stored?.currency ?? initialBudget.currency);
   }, [stored]);
   const estimate = stored ?? initialBudget;
@@ -178,6 +202,7 @@ function BudgetForm({
       onChange={(event) => {
         setError("");
         clearStatus();
+        setTicketBlank(!ticketInput.current?.value.trim());
         setPreview(read(event.currentTarget));
       }}
       onSubmit={(event) => {
@@ -220,6 +245,7 @@ function BudgetForm({
             {t[field]}
             <input
               name={field}
+              ref={field === "ticket" ? ticketInput : undefined}
               inputMode="decimal"
               maxLength={10}
               defaultValue={estimate[field] === undefined ? "" : (estimate[field] / 100).toFixed(2)}
@@ -227,6 +253,52 @@ function BudgetForm({
           </label>
         ))}
       </div>
+      {ticketReference && (
+        <div>
+          <p>
+            {t.reference}:{" "}
+            <strong>
+              {new Intl.NumberFormat(locale, {
+                style: "currency",
+                currency: ticketReference.price.currency,
+              }).format(ticketReference.price.amountMinor / 100)}
+            </strong>
+            {" · "}
+            <a href={ticketReference.sourceUrl} target="_blank" rel="noreferrer">
+              {t.source}
+            </a>
+            {" · "}
+            {t.checked}:{" "}
+            <time dateTime={ticketReference.observedAt}>
+              {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
+                new Date(ticketReference.observedAt),
+              )}
+            </time>
+          </p>
+          <p>{t.referenceNote}</p>
+          {currency !== ticketReference.price.currency ? (
+            <p>{t.currencyMismatch}</p>
+          ) : ticketBlank ? (
+            <button
+              className="outlineButton"
+              type="button"
+              onClick={() => {
+                const input = ticketInput.current;
+                const element = form.current;
+                if (!input || !element || input.value.trim()) return;
+                input.value = (ticketReference.price.amountMinor / 100).toFixed(2);
+                setTicketBlank(false);
+                setError("");
+                clearStatus();
+                setPreview(read(element));
+                input.focus();
+              }}
+            >
+              {t.usePrice}
+            </button>
+          ) : null}
+        </div>
+      )}
       <p id={notice}>{t.missing}</p>
       <p>
         {t.total}: <output>{preview ? money(locale, preview, t.none) : "—"}</output>
@@ -291,6 +363,12 @@ export function TripBudget({ festivals }: { festivals: Festival[] }) {
         <BudgetForm
           key={selected}
           stored={planner.tripBudgets[selected]}
+          ticketReference={budgetTicketReference(
+            festivals.find(
+              (festival) =>
+                available(festival) && budgetKey(festival.slug, festival.editionYear) === selected,
+            ),
+          )}
           t={t}
           locale={locale}
           status={status}
