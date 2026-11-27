@@ -70,6 +70,7 @@ for (const [lang, labels] of Object.entries({
     await input.press("Enter");
     await expect(page.getByRole("button", { name: /Stuttgart/ })).toBeVisible();
     await input.fill("Munsing");
+    await expect(page.getByRole("button", { name: /Stuttgart/ })).toHaveCount(0);
     await page.getByRole("button", { name: labels[2] }).click();
     await expect(page.getByRole("button", { name: /Münsingen/ })).toBeVisible();
     await input.fill("72525");
@@ -114,4 +115,52 @@ test("search uses same-origin POST and distinguishes missing index from no match
     data: { ...data, countryCode: "ZZ" },
   });
   expect(unavailable.status()).toBe(503);
+});
+
+test("editing a pending search keeps keyboard focus and ignores the superseded response", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 760 });
+  let release;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const requests = [];
+  await page.route("**/api/locations/search/", async (route) => {
+    const { query } = route.request().postDataJSON();
+    requests.push(query);
+    if (query !== "Stuttgart") return route.continue();
+    const response = await route.fetch();
+    await held;
+    await route.fulfill({ response });
+  });
+  await page.goto("/en/");
+  const panel = page.locator(".originSearch");
+  await panel.getByText("Find another origin", { exact: true }).click();
+  const input = panel.getByRole("searchbox", { name: "City or postal code" });
+  await expect
+    .poll(() =>
+      input.evaluate((element) =>
+        Object.keys(element).some((key) => key.startsWith("__reactProps")),
+      ),
+    )
+    .toBe(true);
+  await input.fill("Stuttgart");
+  try {
+    await input.press("Enter");
+    await expect(panel.getByRole("status")).toHaveText("Searching…");
+    await expect(input).toBeFocused();
+    await expect.poll(() => requests).toEqual(["Stuttgart"]);
+    await input.fill("72525");
+    await expect(panel.getByRole("status")).toHaveText("");
+    expect(requests).toEqual(["Stuttgart"]);
+    await input.press("Enter");
+    await expect(panel.getByRole("button", { name: /Münsingen, 72525/ })).toBeVisible();
+  } finally {
+    release();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  }
+  expect(requests).toEqual(["Stuttgart", "72525"]);
+  await expect(panel.getByRole("button", { name: /Stuttgart/ })).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: /Münsingen, 72525/ })).toBeVisible();
 });

@@ -104,6 +104,7 @@ export function PlanningTools({
     unitDisplay: "short",
   });
   const calendar = calendarUrls(item);
+  const yearSuffix = item.editionYear ? `-${item.editionYear}` : "";
   const venue = hiatus ? undefined : item.venue;
   const address = hiatus ? undefined : venueAddress?.trim();
   const location = address || (item.city?.trim() && `${item.city.trim()}, ${item.country}`);
@@ -129,13 +130,13 @@ export function PlanningTools({
       <div className="planningActions">
         {calendar ? (
           <>
-            <a href={calendar.ics} download={`${item.slug}-2027.ics`}>
+            <a href={calendar.ics} download={`${item.slug}${yearSuffix}.ics`}>
               {t.download}
             </a>
             <a href={calendar.google} target="_blank" rel="noreferrer">
               Google Calendar ↗
             </a>
-            <a href={calendar.apple} download={`${item.slug}-apple-calendar-2027.ics`}>
+            <a href={calendar.apple} download={`${item.slug}-apple-calendar${yearSuffix}.ics`}>
               {t.apple}
             </a>
           </>

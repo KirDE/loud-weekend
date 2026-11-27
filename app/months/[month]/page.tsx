@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: { params: Promise<{ month: st
 }
 export default async function MonthPage({ params }: { params: Promise<{ month: string }> }) {
   const month = (await params).month;
-  const { festivals, discoveryLineups } = await getCatalog();
+  const { festivals, discoveryLineups } = await getCatalog({ includeComparisonTripFacts: true });
   const items = festivals.filter(
     (item) => /^\d{2}$/.test(month) && festivalOverlapsMonth(item, Number(month)),
   );

@@ -249,7 +249,7 @@ for (const locale of ["en", "de", "ru"]) {
     const description = festivalDescription(paused, locale);
     assert.match(description, /Rock en Seine 2027/);
     assert.doesNotMatch(description, /2028|2027-08-25|tickets|lineup|setlists/);
-    assert.match(festivalDescription(active, locale), /dates, lineup, tickets/);
+    assert.match(festivalDescription(active, locale), /Active Festival 2027.*Sample Artist/);
   });
 }
 

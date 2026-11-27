@@ -35,7 +35,7 @@ test("public catalogue routes resolve fresh data at request time", async () => {
   assert.match(homeLoader, /getHomeCatalog\s*=\s*cache\(async\s*\(\)\s*=>\s*\{/);
   assert.match(
     homeLoader,
-    /const catalogue = await getCatalog\(\{\s*includeFreshness:\s*true\s*\}\)/,
+    /const catalogue = await getCatalog\(\{\s*includeFreshness:\s*true,\s*includeComparisonTripFacts:\s*true\s*\}\)/,
   );
 });
 

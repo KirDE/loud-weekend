@@ -68,6 +68,7 @@ test("data quality aggregates only current records and excludes stale/invalid ev
   );
   assert.deepEqual(tally, {
     total: 4,
+    hiatus: 0,
     dates: 2,
     lineup: 2,
     tickets: 2,
@@ -151,4 +152,36 @@ test("schedule coverage requires the same official source host as reviewed impor
     now,
   );
   assert.equal(tally.timetable, 1);
+});
+
+test("published hiatus excludes retained facts from coverage but not source health", () => {
+  const paused = {
+    ...festival,
+    slug: "synthetic-paused",
+    editionYear: 2027,
+    editionLifecycle: {
+      festivalSlug: "synthetic-paused",
+      editionYear: 2027,
+      lifecycle: "hiatus",
+      announcedReturnYear: null,
+      alternativeEvent: null,
+      sourceUrl: festival.officialUrl,
+      observedAt: checkedAt,
+      approvedAt: checkedAt,
+    },
+  };
+  const mixed = summarizeDataQuality({ festivals: [festival, paused], editions: [] }, now);
+  assert.equal(mixed.total, 2);
+  assert.equal(mixed.checked, 2);
+  assert.equal(mixed.dates, 1);
+  assert.equal(mixed.lineup, 1);
+  assert.equal(mixed.tickets, 1);
+  assert.equal(mixed.timetable, 1);
+  assert.equal(mixed.hiatus, 1);
+
+  const allPaused = summarizeDataQuality({ festivals: [paused], editions: [] }, now);
+  assert.equal(allPaused.hiatus, allPaused.total);
+  assert.equal(allPaused.dates, 0);
+  assert.equal(allPaused.tickets, 0);
+  assert.equal(allPaused.timetable, 0);
 });

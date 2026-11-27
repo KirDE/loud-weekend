@@ -1,8 +1,10 @@
 import { announcementFilters, readPublicAnnouncements } from "../lib/catalog/public-history.ts";
 import { collectRoskildeStock } from "../lib/ingestion/adapters/roskilde-stock-transport.ts";
 import { ROSKILDE_PRODUCTS_URL } from "../lib/ingestion/adapters/roskilde-stock.ts";
+import { TRACK_POLICY_MIGRATION_KEY } from "../lib/catalog/spotify-repertoire.ts";
 import { readCatalog } from "../lib/catalog/repository.ts";
 import { createPrismaClient } from "../lib/prisma-client.mjs";
+import { Prisma } from "@prisma/client";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
@@ -852,7 +854,21 @@ test("leased publication rejects an expired or reclaimed worker before catalog w
 test("production Node exports playlist input from the committed database catalog", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "catalog-playlist-export-"));
   const output = path.join(directory, "catalog.json");
+  const previous = await db.operationalState.findUnique({
+    where: { key: TRACK_POLICY_MIGRATION_KEY },
+  });
   try {
+    await db.operationalState.deleteMany({ where: { key: TRACK_POLICY_MIGRATION_KEY } });
+    await assert.rejects(
+      execute(process.execPath, ["scripts/export-playlist-catalog.mjs", output], {
+        env: process.env,
+      }),
+      /Artist track policy migration has not been verified/,
+    );
+    // Disposable test readiness only, never a production cutover or seed.
+    await db.operationalState.create({
+      data: { key: TRACK_POLICY_MIGRATION_KEY, payload: { schemaVersion: 1, ready: true } },
+    });
     const execution = await execute(
       process.execPath,
       ["scripts/export-playlist-catalog.mjs", output],
@@ -871,6 +887,11 @@ test("production Node exports playlist input from the committed database catalog
       ),
     );
   } finally {
+    await db.operationalState.deleteMany({ where: { key: TRACK_POLICY_MIGRATION_KEY } });
+    if (previous)
+      await db.operationalState.create({
+        data: { ...previous, payload: previous.payload ?? Prisma.JsonNull },
+      });
     await rm(directory, { recursive: true, force: true });
   }
 });

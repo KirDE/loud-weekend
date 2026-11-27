@@ -10,6 +10,18 @@ const db = createPrismaClient(),
   suffix = randomUUID(),
   created: string[] = [],
   keys: string[] = [];
+// Shared disposable DB fixture: this is not a production cutover.
+test.before(async () => {
+  await db.operationalState.upsert({
+    where: { key: "spotify-track-policy-migration:v1" },
+    create: {
+      key: "spotify-track-policy-migration:v1",
+      payload: { schemaVersion: 1, ready: true },
+    },
+    update: {},
+  });
+});
+
 const providerId = () => randomUUID().replaceAll("-", "").slice(0, 22);
 async function artist(name: string, verified = false, alias: string[] = []) {
   const id = providerId(),

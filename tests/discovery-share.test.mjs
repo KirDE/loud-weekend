@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   discoveryFromQuery,
   discoveryShareQuery,
+  removeDiscoveryQuery,
   shareableFavoriteSlugs,
 } from "../lib/discovery-share.ts";
 import { defaultDiscoveryPreferences } from "../lib/discovery-preferences.ts";
@@ -90,4 +91,21 @@ test("a private origin and filters that depend on it do not enter a shared URL",
     ...defaultDiscoveryPreferences,
     country: "DE",
   });
+});
+
+test("clearing a shared snapshot removes every serialized filter but keeps unrelated URL state", () => {
+  const query = discoveryShareQuery(
+    {
+      ...defaultDiscoveryPreferences,
+      query: "metal",
+      artistSelection: ["sample-artist", "second-artist"],
+      artistMatch: "any",
+      dateFrom: "2027-06-12",
+      sort: "favorites",
+    },
+    ["sample-artist"],
+  );
+  const url = new URL(`https://example.test/de/?${query}&ref=guide&ref=map#results`);
+  removeDiscoveryQuery(url);
+  assert.equal(url.href, "https://example.test/de/?ref=guide&ref=map#results");
 });

@@ -1,6 +1,7 @@
 "use client";
 
-import type { PublicCampingFact } from "@/lib/catalog/camping-facts";
+import { useId } from "react";
+import type { PublicCampingFact } from "@/lib/domain/festival";
 import { useLanguage } from "./LanguageProvider";
 
 const copy = {
@@ -39,8 +40,15 @@ const copy = {
   },
 };
 
-export function FestivalCamping({ facts }: { facts: readonly PublicCampingFact[] }) {
+export function FestivalCamping({
+  facts,
+  compact = false,
+}: {
+  facts: readonly PublicCampingFact[];
+  compact?: boolean;
+}) {
   const { language, locale } = useLanguage();
+  const titleId = useId();
   if (!facts.length) return null;
   const t = copy[language];
   const formatter = new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: "UTC" });
@@ -52,9 +60,8 @@ export function FestivalCamping({ facts }: { facts: readonly PublicCampingFact[]
     if (group) group.push(fact);
     else groups.set(key, [fact]);
   }
-  return (
-    <section className="sourceNote" aria-labelledby="camping-facts-title">
-      <h2 id="camping-facts-title">{t.title}</h2>
+  const content = (
+    <>
       {Array.from(groups, ([key, group]) => (
         <div key={key}>
           <dl>
@@ -83,6 +90,14 @@ export function FestivalCamping({ facts }: { facts: readonly PublicCampingFact[]
           </p>
         </div>
       ))}
+    </>
+  );
+  return compact ? (
+    content
+  ) : (
+    <section className="sourceNote" aria-labelledby={titleId}>
+      <h2 id={titleId}>{t.title}</h2>
+      {content}
     </section>
   );
 }
