@@ -14,7 +14,7 @@ Only the private local client configuration contains the token; use mode 0600.
 Example shape (never commit the real file):
 
 ```json
-{"baseUrl":"https://loudweekend.eu","token":"<private generated secret>"}
+{ "baseUrl": "https://loudweekend.eu", "token": "<private generated secret>" }
 ```
 
 GET lists at most ten **ready** cases, with an exact catalog/source/attempt snapshot.
@@ -40,6 +40,8 @@ A deliberate agent retry follows the existing backoff, never a generic health lo
 
 Transport uses optional production secrets `IMPORT_EVENTS_SSH_TARGET`,
 `IMPORT_EVENTS_SSH_KEY_B64` and `IMPORT_EVENTS_KNOWN_HOSTS` (pinned host key).
+Deploy serializes the known-host secret as `IMPORT_EVENTS_KNOWN_HOSTS_B64` to preserve
+multiline and hashed pins in Node env files; raw legacy pins remain supported during rollout.
 The private key is decoded only into a temporary0600 file; SSH uses BatchMode,
 strict known-host verification, no forwarding, and a fixed command. Keep these
 secrets out of the repository. All three unset disables sending but retains events.

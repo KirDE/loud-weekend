@@ -1,4 +1,6 @@
 import test from "node:test";
+import { execFileSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -100,4 +102,44 @@ test("known-host pin separators survive shell-escaped deployment env without wea
     knownHostsText("other.test ssh-ed25519 DifferentKey"),
     "other.test ssh-ed25519 DifferentKey\n",
   );
+});
+
+test("deployment roundtrips multiline, hashed and metacharacter pins through Node env-file", async () => {
+  const workflow = await readFile(
+    new URL("../.github/workflows/deploy.yml", import.meta.url),
+    "utf8",
+  );
+  const serialize = workflow
+    .split("\n")
+    .find((line) => line.includes("printf 'IMPORT_EVENTS_KNOWN_HOSTS_B64="));
+  assert.ok(serialize);
+  const pin =
+    "|1|hash=|salt= ssh-ed25519 AAAAFixture comment's $value `literal`\n" +
+    "[example.test]:2222 ssh-rsa AAAAOther\n";
+  const dir = await mkdtemp(path.join(tmpdir(), "known-host-env-"));
+  try {
+    const envText = execFileSync("bash", ["-c", serialize], {
+      env: { ...process.env, IMPORT_EVENTS_KNOWN_HOSTS: pin },
+      encoding: "utf8",
+    });
+    const envPath = path.join(dir, "pins.env");
+    await writeFile(envPath, envText, { mode: 0o600 });
+    const encoded = execFileSync(
+      process.execPath,
+      ["--env-file=" + envPath, "-p", "process.env.IMPORT_EVENTS_KNOWN_HOSTS_B64"],
+      { encoding: "utf8" },
+    ).trim();
+    assert.equal(knownHostsText(undefined, encoded), pin + "\n");
+    assert.equal(knownHostsText("stale legacy pin", encoded), pin + "\n");
+    assert.equal(
+      transportConfigured({
+        IMPORT_EVENTS_SSH_TARGET: "user@example.test",
+        IMPORT_EVENTS_SSH_KEY_B64: "fixture",
+        IMPORT_EVENTS_KNOWN_HOSTS_B64: encoded,
+      }),
+      true,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
