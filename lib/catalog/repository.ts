@@ -1,3 +1,5 @@
+import { arrivalFactSelect, publicArrivalFacts } from "./arrival-facts.ts";
+import { campingFactSelect, publicCampingFacts } from "./camping-facts.ts";
 import { publicFestivalVenue } from "./festival-venues.ts";
 import { readApprovedTicketOffers } from "../ingestion/ticket-offer-proposal-store.ts";
 import type { PublicTicketOffers } from "../domain/ticket-offer-proposal.ts";
@@ -26,7 +28,11 @@ export type CatalogSnapshot = Readonly<{
   discoveryLineups: DiscoveryLineups;
   freshness: CatalogFreshness;
 }>;
-type CatalogReadOptions = { includeFreshness?: boolean; requireTimetableEvidence?: boolean };
+type CatalogReadOptions = {
+  includeFreshness?: boolean;
+  requireTimetableEvidence?: boolean;
+  includeComparisonTripFacts?: boolean;
+};
 
 export interface CatalogRepository {
   read(): Promise<CatalogSnapshot>;
@@ -54,7 +60,11 @@ export class DatabaseCatalogRepository implements CatalogRepository {
   /** Read within a caller-owned RepeatableRead transaction. */
   async readInSnapshot(
     tx: Prisma.TransactionClient,
-    { includeFreshness = false, requireTimetableEvidence = false }: CatalogReadOptions = {},
+    {
+      includeFreshness = false,
+      requireTimetableEvidence = false,
+      includeComparisonTripFacts = false,
+    }: CatalogReadOptions = {},
   ): Promise<CatalogSnapshot> {
     const now = new Date();
     const [editionRows, artistRows, freshnessEvidence] = await Promise.all([
@@ -62,6 +72,10 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         include: {
           festival: true,
           venue: true,
+          ...(includeComparisonTripFacts && {
+            arrivalFacts: { select: arrivalFactSelect, orderBy: { kind: "asc" } },
+            campingFacts: { select: campingFactSelect, orderBy: { field: "asc" } },
+          }),
           sources: { where: { enabled: true }, select: { deprecatedAt: true } },
           lineup: {
             include: { artist: true },
@@ -279,6 +293,20 @@ export class DatabaseCatalogRepository implements CatalogRepository {
     const currentArtistNames = new Set(
       currentEditions.flatMap((edition) => announcedArtists(edition)),
     );
+    const tripFactsBySlug = new Map<string, NonNullable<Festival["comparisonTripFacts"]>>();
+    if (includeComparisonTripFacts) {
+      for (const row of editionRows) {
+        if (row.recordState !== "CURRENT" || lifecycles.has(row.id)) continue;
+        const item = {
+          ...row.festival,
+          city: row.festival.city ?? undefined,
+          editionYear: row.year,
+        };
+        const camping = publicCampingFacts(item, row.campingFacts);
+        const arrival = publicArrivalFacts(item, row.arrivalFacts);
+        if (camping.length || arrival.length) tripFactsBySlug.set(item.slug, { camping, arrival });
+      }
+    }
     const festivalsFromDatabase: Festival[] = currentEditions.map((edition) => {
       const {
         recordState: _recordState,
@@ -288,6 +316,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       } = edition;
       return {
         ...festival,
+        comparisonTripFacts: tripFactsBySlug.get(festival.slug),
         headliners: [...festival.headliners],
         lineup: [...festival.lineup],
         timetable: festival.timetable?.map((performance) => ({ ...performance })),
@@ -428,13 +457,18 @@ export async function readCatalog({
 }
 
 // Normalize options so equivalent reads share a projection within a request.
-const getRequestCatalog = cache((includeFreshness: boolean, requireTimetableEvidence: boolean) =>
-  readCatalog({ includeFreshness, requireTimetableEvidence }),
+const getRequestCatalog = cache(
+  (
+    includeFreshness: boolean,
+    requireTimetableEvidence: boolean,
+    includeComparisonTripFacts: boolean,
+  ) => readCatalog({ includeFreshness, requireTimetableEvidence, includeComparisonTripFacts }),
 );
 
 export function getCatalog(options?: CatalogReadOptions) {
   return getRequestCatalog(
     options?.includeFreshness === true,
     options?.requireTimetableEvidence === true,
+    options?.includeComparisonTripFacts === true,
   );
 }

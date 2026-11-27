@@ -24,7 +24,7 @@ export async function generateMetadata({
 }
 export default async function CountryPage({ params }: { params: Promise<{ code: string }> }) {
   const code = (await params).code.toUpperCase();
-  const { festivals, discoveryLineups } = await getCatalog();
+  const { festivals, discoveryLineups } = await getCatalog({ includeComparisonTripFacts: true });
   const items = festivals.filter((item) => item.countryCode === code);
   if (!items.length) notFound();
   return (

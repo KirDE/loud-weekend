@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { createPrismaClient } from "../../lib/prisma-client.mjs";
+import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
 
 const labels = {
   en: {
@@ -68,3 +70,116 @@ for (const [locale, t] of Object.entries(labels)) {
       .toBeLessThanOrEqual(320);
   });
 }
+
+test("comparison displays only matching public trip facts in every locale", async ({ browser }) => {
+  requireLocalDisposableDatabase(process.env.DATABASE_URL);
+  const db = createPrismaClient();
+  const rows = await db.festivalEdition.findMany({
+    where: {
+      recordState: "CURRENT",
+      festival: { slug: { in: ["synthetic-fest", "synthetic-west"] } },
+    },
+    select: { id: true, year: true, festival: { select: { slug: true, countryCode: true } } },
+  });
+  const current = rows.find(({ festival }) => festival.slug === "synthetic-fest");
+  const west = rows.find(({ festival }) => festival.slug === "synthetic-west");
+  const source = {
+    organizerHost: "festival.example.test",
+    checkedOn: new Date("2026-11-01"),
+  };
+  const description = {
+    descriptionEn: "Fixture transfer",
+    descriptionDe: "Test-Shuttle",
+    descriptionRu: "Тестовый шаттл",
+  };
+  const campingUrl = "https://festival.example.test/camping";
+  const arrivalUrl = "https://festival.example.test/shuttle";
+  try {
+    await db.$transaction([
+      db.editionCampingFact.create({
+        data: {
+          ...source,
+          editionId: current.id,
+          editionYear: current.year,
+          countryCode: current.festival.countryCode,
+          city: "Sample City",
+          field: "arrival",
+          earliestDate: new Date("2027-06-09"),
+          sourceUrl: campingUrl,
+        },
+      }),
+      db.editionCampingFact.create({
+        data: {
+          ...source,
+          ...description,
+          editionId: west.id,
+          editionYear: west.year,
+          countryCode: west.festival.countryCode,
+          city: "Old fixture location",
+          field: "camping",
+          sourceUrl: campingUrl,
+        },
+      }),
+      db.editionArrivalFact.createMany({
+        data: [
+          {
+            ...source,
+            ...description,
+            editionId: current.id,
+            editionYear: current.year,
+            countryCode: current.festival.countryCode,
+            kind: "shuttle",
+            sourceUrl: arrivalUrl,
+          },
+          {
+            ...source,
+            ...description,
+            editionId: west.id,
+            editionYear: west.year,
+            countryCode: west.festival.countryCode,
+            kind: "shuttle",
+            sourceUrl: "https://foreign.example.test/shuttle",
+          },
+        ],
+      }),
+    ]);
+    for (const [locale, t] of Object.entries(labels)) {
+      const page = await browser.newPage({ viewport: { width: 320, height: 850 } });
+      try {
+        await page.goto(`/${locale}/`);
+        await expect(page.locator(".search")).toHaveAttribute("data-ready", "true");
+        for (const name of ["Synthetic Fest", "Synthetic West"]) {
+          await page
+            .locator(".festivalCard")
+            .filter({ has: page.getByRole("heading", { name, exact: true }) })
+            .locator(".compareButton")
+            .click();
+        }
+        const table = page.locator(".comparisonTable");
+        await expect(table.locator(`a[href="${campingUrl}"]`)).toHaveCount(1);
+        await expect(table.locator('time[datetime="2027-06-09"]')).toBeVisible();
+        const shuttle = table.locator(`a[href="${arrivalUrl}"]`);
+        await expect(shuttle).toHaveCount(1);
+        const localized = {
+          en: description.descriptionEn,
+          de: description.descriptionDe,
+          ru: description.descriptionRu,
+        };
+        await expect(shuttle.locator("..")).toContainText(localized[locale]);
+        await expect(table.getByRole("cell", { name: t.unknown, exact: true })).toHaveCount(2);
+        await expect(table.locator('a[href*="foreign.example"]')).toHaveCount(0);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+          320,
+        );
+      } finally {
+        await page.close();
+      }
+    }
+  } finally {
+    await db.$transaction([
+      db.editionCampingFact.deleteMany({ where: { editionId: { in: [current.id, west.id] } } }),
+      db.editionArrivalFact.deleteMany({ where: { editionId: { in: [current.id, west.id] } } }),
+    ]);
+    await db.$disconnect();
+  }
+});
