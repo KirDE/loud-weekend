@@ -46,3 +46,16 @@ retrying.
 
 After a refresh, open each affected festival page and confirm the Spotify link
 and artist/track counts match the production API response.
+
+## Artist-name containment is not identity proof
+
+The primary-artist safeguard rejects strict token containment in either direction
+(e.g. a short act name versus an unrelated longer artist name). Reviewed aliases
+must be resolved by the catalogue before this check; raw fuzzy containment cannot
+substitute for an alias. Case, punctuation and featuring-clause normalization and
+explicit live-repertoire bindings remain supported.
+
+This policy only changes future discovery. Frozen plans and unknown provider
+operations remain immutable. Reconcile the existing generation, preserve its
+year-scoped URL, and use the audited scoped refresh path after deployment for an
+affected plan; never blindly replay or rewrite the old plan.

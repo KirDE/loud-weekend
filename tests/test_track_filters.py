@@ -181,10 +181,30 @@ class TrackFilterTest(unittest.TestCase):
 
         self.assertIsNone(playlists.should_skip_track_for_artist("Anna Grey", track))
 
-    def test_accepts_alias_primary_artist_match(self):
+    def test_alias_must_be_resolved_before_primary_artist_matching(self):
         track = make_track(artists=["Cavalera Conspiracy"])
 
-        self.assertIsNone(playlists.should_skip_track_for_artist("Cavalera", track))
+        self.assertEqual(
+            playlists.should_skip_track_for_artist("Cavalera", track), "primary_artist_mismatch"
+        )
+        self.assertIsNone(playlists.should_skip_track_for_artist("Cavalera Conspiracy", track))
+
+    def test_rejects_different_artists_extending_the_lineup_name(self):
+        for query, primary in [("The Stone", "The Stone Roses"), ("Tired", "Tired Radio")]:
+            with self.subTest(query=query, primary=primary):
+                self.assertEqual(
+                    playlists.should_skip_track_for_artist(query, make_track(artists=[primary])),
+                    "primary_artist_mismatch",
+                )
+
+    def test_accepts_exact_short_names_and_reviewed_aliases(self):
+        pairs = [("The Stone", "The Stone"), ("Tired", "Tired"),
+                 ("Cavalera Conspiracy", "Cavalera Conspiracy")]
+        for query, primary in pairs:
+            with self.subTest(query=query, primary=primary):
+                self.assertIsNone(
+                    playlists.should_skip_track_for_artist(query, make_track(artists=[primary]))
+                )
 
     def test_blocks_known_bad_primary_artist_prefix_match(self):
         track = make_track(artists=["Phantom Planet"])

@@ -191,6 +191,10 @@ def primary_artist_matches_query(query_artist: str, track: dict) -> bool:
     primary_tokens = simplify_name(primary_artist).split()
     if len(query_tokens) == 1 and len(primary_tokens) > 1 and query_tokens[0] != primary_tokens[0]:
         return False
+    # Containment in another artist name is not identity evidence.
+    # Resolve reviewed aliases through query_base before applying this guard.
+    if set(query_tokens) < set(primary_tokens) or set(primary_tokens) < set(query_tokens):
+        return False
     overlap = token_overlap(query_base, primary_artist)
     if len(query_tokens) > 1 and len(primary_tokens) > 1 and overlap <= 0.5:
         return False
