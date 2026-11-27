@@ -10,6 +10,8 @@ import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { FestivalEdition } from "@/lib/domain/edition";
 import type { PublicArrivalFact } from "@/lib/catalog/arrival-facts";
 import { FestivalArrival } from "./FestivalArrival";
+import { FestivalOverview } from "./FestivalOverview";
+import type { PublicFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { EditionAttendance, SeasonCalendar } from "./SeasonPlan";
 import { SeasonNavigation } from "./SeasonNavigation";
@@ -302,10 +304,12 @@ export function FestivalEditionContent({
   item,
   artistSlugs = {},
   arrivalFacts = [],
+  overview,
 }: {
   item: FestivalEdition;
   artistSlugs?: Readonly<Record<string, string>>;
   arrivalFacts?: readonly PublicArrivalFact[];
+  overview?: PublicFestivalOverview;
 }) {
   const { t, date, dateTime, range, translateLabel } = usePublicCopy();
   const paused = currentEditionOnHiatus(item);
@@ -337,6 +341,7 @@ export function FestivalEditionContent({
           {!paused && <span className={"status " + recordTone}>{recordLabel}</span>}
         </div>
       </section>
+      <FestivalOverview overview={overview} />
       {paused ? (
         <EditionLifecycleNotice item={item} />
       ) : (

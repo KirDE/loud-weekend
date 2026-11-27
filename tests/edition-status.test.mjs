@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "esbuild";
 import { socialPreviewMetadata } from "../lib/social-preview.ts";
+import { editionOnHiatus } from "../lib/edition-lifecycle.ts";
 import { editionRecordCompleteness } from "../lib/edition-status.ts";
 import { EditionHistory } from "../components/EditionHistory.tsx";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
@@ -58,6 +59,15 @@ function loadPage(editions, artists = []) {
     },
     "@/lib/social-preview": { socialPreviewMetadata },
     "@/lib/catalog/arrival-facts": { readArrivalFacts: async () => [] },
+    "@/lib/edition-lifecycle": { editionOnHiatus },
+    "@/lib/catalog/festival-overviews": {
+      readFestivalOverview: async (client, item) => {
+        assert.equal(client, db);
+        assert.equal(item.recordState, "current");
+        assert.ok(!editionOnHiatus(item));
+        return undefined;
+      },
+    },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
     "@/lib/seo": { canonicalPath },
     "@/components/PublicCatalogPages": { FestivalEditionContent },

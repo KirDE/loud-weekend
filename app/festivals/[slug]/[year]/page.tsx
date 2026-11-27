@@ -8,6 +8,8 @@ import { FestivalEditionContent } from "@/components/PublicCatalogPages";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
 import { getCatalog } from "@/lib/catalog/repository";
 import { canonicalPath } from "@/lib/seo";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
+import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 
 type Params = Promise<{ slug: string; year: string }>;
 
@@ -36,14 +38,24 @@ export default async function FestivalEditionPage({ params }: { params: Params }
     (edition) => edition.slug === slug && edition.editionYear === Number(rawYear),
   );
   if (!item) notFound();
-  const [history, arrivalFacts] = await Promise.all([
+  const publicOverview =
+    item.recordState === "current" && !editionOnHiatus(item)
+      ? readFestivalOverview(db, item)
+      : undefined;
+  const [history, arrivalFacts, overview] = await Promise.all([
     item.editionYear === undefined ? [] : readEditionHistory(db, item.slug, item.editionYear),
     readArrivalFacts(db, item),
+    publicOverview,
   ]);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
     <>
-      <FestivalEditionContent item={item} arrivalFacts={arrivalFacts} artistSlugs={artistSlugs} />
+      <FestivalEditionContent
+        item={item}
+        arrivalFacts={arrivalFacts}
+        artistSlugs={artistSlugs}
+        overview={overview}
+      />
       <EditionHistory entries={history} officialUrl={item.officialUrl} />
     </>
   );
