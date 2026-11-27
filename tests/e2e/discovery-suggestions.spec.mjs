@@ -112,10 +112,12 @@ test("composition keys remain available to the input method", async ({ page }) =
 });
 
 test("ArrowDown can open suggestions before the typing debounce completes", async ({ page }) => {
+  // Own the app's timers from startup; installing after hydration mixes real
+  // debounce timers with the fake clearTimeout implementation.
+  await page.clock.install();
   await page.goto("/en/");
   await expect(page.locator(".search")).toHaveAttribute("data-ready", "true");
   const search = page.locator(".search input");
-  await page.clock.install();
   await page.clock.pauseAt(new Date(Date.now() + 1000));
   await search.fill("synthetic fest");
   const suggestion = page
