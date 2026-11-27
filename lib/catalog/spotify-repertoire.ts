@@ -26,6 +26,12 @@ export const spotifyRepertoireSchema = z
     sourceUrls: z.array(z.string().url().startsWith("https://")).min(1).max(100),
   })
   .strict()
+  .refine(
+    (profile) =>
+      profile.collaborationArtistIds.length > 0 ||
+      (profile.searchArtists.length === 1 && profile.anchorArtistIds.length === 1),
+    "Repertoire without collaborators requires exactly one search artist and anchor",
+  )
   .refine((profile) => {
     const ids = new Set(profile.searchArtists.map((a) => a.id));
     return (

@@ -52,7 +52,10 @@ class RepertoireTests(unittest.TestCase):
         self.assertTrue(eligible_track(single, track(1)))
         self.assertFalse(eligible_track(single, track(2, album="x")))
         self.assertFalse(eligible_track(single, track(3, credits="x")))
-        for changed in [{"albumIds": []}, {"searchArtists": []},
+        for changed in [{"searchArtists": PROFILE["searchArtists"]},
+                        {"searchArtists": PROFILE["searchArtists"],
+                         "anchorArtistIds": [a["id"] for a in PROFILE["searchArtists"]]},
+                        {"albumIds": []}, {"searchArtists": []},
                         {"anchorArtistIds": ["z" * 22]},
                         {"collaborationArtistIds": single["anchorArtistIds"]}]:
             with self.assertRaises(ValueError):

@@ -117,6 +117,12 @@ test("one reviewed artist is album-bounded without inventing a canonical identit
   };
   assert.deepEqual(spotifyRepertoireSchema.parse(single), single);
   for (const invalid of [
+    { ...single, searchArtists: profile.searchArtists },
+    {
+      ...single,
+      searchArtists: profile.searchArtists,
+      anchorArtistIds: profile.searchArtists.map((artist) => artist.id),
+    },
     { ...single, albumIds: [] },
     { ...single, searchArtists: [] },
     { ...single, anchorArtistIds: ["z".repeat(22)] },

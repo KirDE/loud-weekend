@@ -60,7 +60,7 @@ replanning existing work remains a separately reconciled operation.
 
 ## Single-artist disambiguation
 
-A profile may contain one reviewed search artist and an empty collaboration list.
+An empty collaboration list requires exactly one reviewed search artist and one anchor.
 Use this for an ambiguous billing only after official-source artist-ID evidence
 and authenticated release credits establish the intended artist and album IDs.
 The existing audited stdin configuration flow remains mandatory. This is a

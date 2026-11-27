@@ -72,6 +72,10 @@ def validate_profile(value):
         )
     ):
         raise ValueError("Invalid repertoire search identities")
+    if not value["collaborationArtistIds"] and (
+        len(artists) != 1 or len(value["anchorArtistIds"]) != 1
+    ):
+        raise ValueError("Repertoire without collaborators requires one search artist and anchor")
     ids = {a["id"] for a in artists}
     if (
         len(ids) != len(artists)
