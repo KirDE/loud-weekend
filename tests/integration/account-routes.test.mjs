@@ -1,4 +1,7 @@
 import { createPrismaClient } from "../../lib/prisma-client.mjs";
+import { TRACK_POLICY_MIGRATION_KEY } from "../../lib/catalog/spotify-repertoire.ts";
+import { requireLocalDisposableDatabase } from "../support/disposable-db.ts";
+import { Prisma } from "@prisma/client";
 import assert from "node:assert/strict";
 import { createDecipheriv, createHash } from "node:crypto";
 import { once } from "node:events";
@@ -7,6 +10,7 @@ import { spawn } from "node:child_process";
 import test from "node:test";
 
 const databaseUrl = process.env.DATABASE_URL;
+requireLocalDisposableDatabase(databaseUrl);
 if (!databaseUrl) throw new Error("DATABASE_URL is required for integration tests");
 const databaseName = new URL(databaseUrl).pathname.slice(1);
 if (!/(?:test|integration)/i.test(databaseName)) {
@@ -749,6 +753,10 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
       .digest("hex")
       .slice(0, 22);
     const created = [];
+    const policyKeys = [];
+    const previousReadiness = await db.operationalState.findUnique({
+      where: { key: TRACK_POLICY_MIGRATION_KEY },
+    });
     try {
       const row = await db.artist.create({
         data: {
@@ -773,6 +781,18 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
       });
       created.push(row.id);
       selectionIdentity = { id: identity, name };
+      await db.operationalState.deleteMany({ where: { key: TRACK_POLICY_MIGRATION_KEY } });
+      const beforeReadiness = { reads: selectionReads, writes: selectionWrites.length };
+      const blocked = await anonymous.json("/api/spotify/selection-playlist", "POST", {
+        artists: [name],
+        festivals: ["Synthetic"],
+      });
+      assert.equal(blocked.status, 502);
+      assert.deepEqual({ reads: selectionReads, writes: selectionWrites.length }, beforeReadiness);
+      // Readiness is confined to this guarded disposable fixture, never production seeds.
+      await db.operationalState.create({
+        data: { key: TRACK_POLICY_MIGRATION_KEY, payload: { schemaVersion: 1, ready: true } },
+      });
       const result = await anonymous.json("/api/spotify/selection-playlist", "POST", {
         artists: [name, name, name.toLowerCase(), alias, alias],
         festivals: ["Synthetic"],
@@ -789,7 +809,7 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
         "Attack Attack!",
         "Sex Pistols",
         "Ozzy Osbourne",
-        "Ultimate Ozzy",
+        "Synthetic Curated Exclusion",
       ].entries()) {
         const originalId = createHash("sha256")
           .update("original-" + index + "-" + suffix)
@@ -817,13 +837,29 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
           },
         });
         created.push(row.id);
+        if (original === "Synthetic Curated Exclusion") {
+          const key = "spotify-track-policy:" + row.slug;
+          await db.operationalState.create({
+            data: {
+              key,
+              payload: {
+                schemaVersion: 1,
+                excluded: true,
+                reviewedOriginal: false,
+                blockedPrimaryNames: [],
+                blockedVersionHints: [],
+              },
+            },
+          });
+          policyKeys.push(key);
+        }
         selectionIdentity = { id: originalId, name: original };
         const beforeWrites = selectionWrites.length;
         const response = await anonymous.json("/api/spotify/selection-playlist", "POST", {
           artists: [original],
           festivals: ["Synthetic"],
         });
-        if (original === "Ultimate Ozzy") {
+        if (original === "Synthetic Curated Exclusion") {
           assert.equal(response.status, 502);
           assert.equal(selectionWrites.length, beforeWrites);
         } else {
@@ -860,6 +896,13 @@ test("auth, sync, sharing, and Spotify OAuth work against PostgreSQL", async () 
       assert.deepEqual({ reads: selectionReads, writes: selectionWrites.length }, before);
     } finally {
       selectionIdentity = null;
+      await db.operationalState.deleteMany({
+        where: { key: { in: [TRACK_POLICY_MIGRATION_KEY, ...policyKeys] } },
+      });
+      if (previousReadiness)
+        await db.operationalState.create({
+          data: { ...previousReadiness, payload: previousReadiness.payload ?? Prisma.JsonNull },
+        });
       await db.artist.deleteMany({ where: { id: { in: created } } });
     }
   }

@@ -7,16 +7,19 @@ const copy = {
     nav: "Festival seasons",
     heading: "2028 festival editions",
     noArtists: "No current acts listed",
+    editionCalendar: "Download edition calendar (.ics)",
   },
   de: {
     nav: "Festivalsaisons",
     heading: "Festivalausgaben 2028",
     noArtists: "Derzeit keine Acts gelistet",
+    editionCalendar: "Ausgabekalender herunterladen (.ics)",
   },
   ru: {
     nav: "Фестивальные сезоны",
     heading: "Выпуски фестивалей 2028 года",
     noArtists: "Нет действующих анонсов",
+    editionCalendar: "Скачать календарь выпуска (.ics)",
   },
 };
 
@@ -145,6 +148,23 @@ test("season navigation and local attendance use verified editions without repla
         expect(remoteMutations).toEqual([]);
         expect((await readPlan()).attendance).toEqual({ "synthetic-fest": "going" });
         expect((await readPlan()).favoriteFestivals).toEqual(["synthetic-fest"]);
+        await page.goto(`/festivals/synthetic-fest/2026/`);
+        const editionCalendar = page.getByRole("link", { name: t.editionCalendar });
+        const [editionDownload] = await Promise.all([
+          page.waitForEvent("download"),
+          editionCalendar.click({ timeout: 10_000 }),
+        ]);
+        expect(editionDownload.suggestedFilename()).toBe("synthetic-fest-2026.ics");
+        const editionHref = await editionCalendar.getAttribute("href");
+        const editionIcs = decodeURIComponent(editionHref.split(",")[1]);
+        expect(editionIcs).toContain("UID:synthetic-fest-2026@festival-radar");
+        expect(editionIcs).toContain("DTSTART;VALUE=DATE:20260703");
+        expect(editionIcs).not.toContain("20270703");
+        await page.goto(`/festivals/synthetic-fest/2028/`);
+        await expect(
+          page.getByRole("heading", { name: "Synthetic Fest 2028", exact: true }),
+        ).toBeVisible();
+        await expect(editionCalendar).toHaveCount(0);
         if (lang === "en") {
           await page.goto("/en/planner/");
           await page.getByRole("button", { name: "Clear local data" }).click();

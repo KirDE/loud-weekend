@@ -19,7 +19,7 @@ import { brutalAssaultVenueSource } from "../lib/ingestion/adapters/brutal-assau
 import { collectReviewedVenue } from "../lib/ingestion/venue-collector.ts";
 import sitemap from "../app/sitemap.ts";
 import { importLineupDays } from "../lib/catalog/lineup-days-import.ts";
-import { readEditionHistory } from "../lib/catalog/public-history.ts";
+import { readEditionHistory, readPublicAnnouncements } from "../lib/catalog/public-history.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl || !/(?:test|integration)/i.test(new URL(databaseUrl).pathname)) {
@@ -233,6 +233,24 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     ];
     assert.deepEqual(await readEditionHistory(db, slug, 2027), expectedHistory);
     assert.deepEqual(await readEditionHistory(db, slug, 2026), []);
+    const artistAnnouncements = async (artistSlug: string) => {
+      const { entries } = await readPublicAnnouncements(db, {
+        artist: artistSlug,
+        country: "",
+        days: null,
+        page: 1,
+      });
+      return entries.filter((entry) => entry.slug === slug);
+    };
+    assert.deepEqual(
+      (await artistAnnouncements(artist.slug)).map(({ year, categories }) => ({
+        year,
+        categories,
+      })),
+      [{ year: 2027, categories: ["lineup"] }],
+    );
+    assert.deepEqual(await artistAnnouncements(spare.slug), []);
+
     const reobservation = { ...input, observedAt: "2026-10-01T12:00:00Z" };
     assert.deepEqual(await importLineupDays(db, reobservation), { checkOnly: true, changed: 0 });
     assert.deepEqual(await importLineupDays(db, reobservation, false), {
@@ -288,6 +306,8 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     );
     assert.equal((await importLineupDays(db, revision, false)).changed, 1);
     assert.equal(await db.catalogPublication.count({ where: receiptScope }), 2);
+    assert.equal((await artistAnnouncements(artist.slug)).length, 2);
+    assert.deepEqual(await artistAnnouncements(spare.slug), []);
     await assert.rejects(importLineupDays(db, input, false), /newer official observation/);
     const readback = (await read()).lineupDays?.find((row) => row.artistSlug === artist.slug);
     assert.deepEqual(readback, {

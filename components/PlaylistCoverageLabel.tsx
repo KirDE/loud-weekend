@@ -17,6 +17,7 @@ const copy = {
     failed: "Latest refresh failed",
     matched: (matched: string, eligible: string) => `Artists matched: ${matched} / ${eligible}`,
     unmatched: "Without a verified match",
+    partial: "Partial coverage",
     complete: "All eligible artists matched",
   },
   de: {
@@ -33,6 +34,7 @@ const copy = {
     matched: (matched: string, eligible: string) =>
       `Zugeordnete Künstler: ${matched} / ${eligible}`,
     unmatched: "Ohne bestätigte Zuordnung",
+    partial: "Teilweise Abdeckung",
     complete: "Alle berücksichtigten Künstler zugeordnet",
   },
   ru: {
@@ -48,6 +50,7 @@ const copy = {
     failed: "Последнее обновление не удалось",
     matched: (matched: string, eligible: string) => `Подобрано артистов: ${matched} / ${eligible}`,
     unmatched: "Без подтверждённого совпадения",
+    partial: "Частичный охват",
     complete: "Все учтённые артисты подобраны",
   },
 };
@@ -75,7 +78,12 @@ export function PlaylistCoverageLabel({
           : `${t.reported}: ${format(coverage.reportedArtists)}`}{" "}
         · {t.tracks}: {format(coverage.tracks)}
       </span>
-      {verified && <span>{missing ? `${t.unmatched}: ${format(missing)}` : t.complete}</span>}
+      <span>{verified ? (missing ? t.partial : t.complete) : t.unknown}</span>
+      {missing > 0 && (
+        <span>
+          {t.unmatched}: {format(missing)}
+        </span>
+      )}
       {verified?.unmatchedReasons &&
         (Object.keys(t.reasons) as (keyof typeof t.reasons)[]).map((reason) => {
           const count = verified.unmatchedReasons?.[reason];
