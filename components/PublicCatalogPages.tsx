@@ -5,6 +5,7 @@ import { editionRecordCompleteness } from "@/lib/edition-status";
 import { festivalDateInterval } from "@/lib/festival-dates";
 import { lineupPresentation } from "@/lib/festival-lineup";
 import { StageTimetable } from "./StageTimetable";
+import { LineupByDay } from "./LineupByDay";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { FestivalEdition } from "@/lib/domain/edition";
@@ -301,10 +302,12 @@ export function EditionYearContent({
 export function FestivalEditionContent({
   item,
   artistSlugs = {},
+  lineupDayArtistSlugs = [],
   arrivalFacts = [],
 }: {
   item: FestivalEdition;
   artistSlugs?: Readonly<Record<string, string>>;
+  lineupDayArtistSlugs?: readonly string[];
   arrivalFacts?: readonly PublicArrivalFact[];
 }) {
   const { t, date, dateTime, range, translateLabel } = usePublicCopy();
@@ -361,6 +364,9 @@ export function FestivalEditionContent({
               {item.recordState === "tracking" && <span>{t.trackingNotice}</span>}
             </div>
           )}
+          {item.recordState === "current" && item.lineupDays?.length ? (
+            <LineupByDay appearances={item.lineupDays} publicArtistSlugs={lineupDayArtistSlugs} />
+          ) : null}
         </section>
       )}
       {!paused && item.timetable?.length ? (
