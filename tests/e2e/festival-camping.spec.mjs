@@ -81,6 +81,17 @@ test("validated edition camping facts are accessible in every locale", async ({ 
       inserted.push(festival.id);
     }
 
+    await db.festivalEdition.create({
+      data: {
+        festivalId: inserted[0],
+        year: year - 1,
+        status: "CONFIRMED",
+        ticketStatus: "UNKNOWN",
+        recordState: "ARCHIVED",
+        completeness: "COMPLETE",
+        sourceUpdatedAt: new Date(),
+      },
+    });
     const previews = [];
     for (const [index, input] of inputs.entries())
       previews.push(await stage(db, inserted[index], input));
@@ -99,13 +110,16 @@ test("validated edition camping facts are accessible in every locale", async ({ 
     const campingRecords = previews.map((item) => item.candidate.camping);
     const first = campingRecords[0];
     const route = `/en/festivals/${first.festivalSlug}/`;
+    const editionRoute = (slug, editionYear = year) => `/festivals/${slug}/${editionYear}/`;
     const before = await browser.newPage();
     try {
       expect(await db.editionCampingFact.count()).toBe(0);
-      await before.goto(route);
-      await expect(
-        before.getByRole("heading", { name: "Camping and on-site facilities" }),
-      ).toHaveCount(0);
+      for (const path of [route, editionRoute(first.festivalSlug)]) {
+        await before.goto(path);
+        await expect(
+          before.getByRole("region", { name: "Camping and on-site facilities" }),
+        ).toHaveCount(0);
+      }
     } finally {
       await before.close();
     }
@@ -176,23 +190,34 @@ test("validated edition camping facts are accessible in every locale", async ({ 
       try {
         const page = await context.newPage();
         for (const record of campingRecords) {
-          await page.goto(`/${lang}/festivals/${record.festivalSlug}/`);
-          const panel = page.getByRole("region", { name: heading });
-          await expect(panel.locator("dd")).toHaveCount(record.facts.length);
-          await expect(panel.locator(`a[href="${record.sourceUrl}"]`)).toBeVisible();
-          await expect(panel.locator(`time[datetime="${record.checkedOn}"]`)).toBeVisible();
-          for (const fact of record.facts) {
-            if (fact.field === "arrival") {
-              await expect(panel.locator(`time[datetime="${fact.earliestDate}"]`)).toBeVisible();
-            } else {
-              await expect(panel.getByText(fact.description[lang], { exact: true })).toBeVisible();
+          for (const path of [
+            `/${lang}/festivals/${record.festivalSlug}/`,
+            editionRoute(record.festivalSlug),
+          ]) {
+            await page.goto(path);
+            await expect(page.locator("html")).toHaveAttribute("lang", lang);
+            const panel = page.getByRole("region", { name: heading });
+            await expect(panel.locator("dd")).toHaveCount(record.facts.length);
+            await expect(panel.locator(`a[href="${record.sourceUrl}"]`)).toBeVisible();
+            await expect(panel.locator(`time[datetime="${record.checkedOn}"]`)).toBeVisible();
+            for (const fact of record.facts) {
+              if (fact.field === "arrival") {
+                await expect(panel.locator(`time[datetime="${fact.earliestDate}"]`)).toBeVisible();
+              } else {
+                await expect(
+                  panel.getByText(fact.description[lang], { exact: true }),
+                ).toBeVisible();
+              }
             }
+            expect(
+              await page.evaluate(() => document.documentElement.scrollWidth),
+            ).toBeLessThanOrEqual(320);
           }
-          expect(
-            await page.evaluate(() => document.documentElement.scrollWidth),
-          ).toBeLessThanOrEqual(320);
         }
         if (lang === "en") {
+          await page.goto(editionRoute(first.festivalSlug, year - 1));
+          await expect(page.getByRole("heading", { level: 1 })).toContainText(String(year - 1));
+          await expect(page.getByRole("region", { name: heading })).toHaveCount(0);
           await page.goto(`/festivals/${first.festivalSlug}/`);
           await expect(page.getByRole("region", { name: heading })).toBeVisible();
         }
