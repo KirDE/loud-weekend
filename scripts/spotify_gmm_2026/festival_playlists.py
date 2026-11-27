@@ -40,6 +40,7 @@ from track_policy import (
     artist_family_match,
     live_repertoire_primary_match,
     primary_artist_matches_query,
+    accepted_credit_key,
     should_skip_track_for_artist,
     setlist_track_sort_key,
 )
@@ -538,13 +539,27 @@ def spotify_search_artist(name):
     data = spotify_get(
         "https://api.spotify.com/v1/search", {"q": name, "type": "artist", "limit": 5}
     )
-    items = data.get("artists", {}).get("items", [])
+    items = list(data.get("artists", {}).get("items", []))
+    if not any(accepted_credit_key(item.get("name", "")) == accepted_credit_key(name) for item in items):
+        # A popular partial-name match can hide an exact act beyond the first
+        # generic search page. One bounded fielded search is not an identity pin.
+        escaped = name.replace("\\", "\\\\").replace('"', '\\"')
+        exact = spotify_get(
+            "https://api.spotify.com/v1/search",
+            {"q": f'artist:"{escaped}"', "type": "artist", "limit": 10},
+        )
+        items.extend(exact.get("artists", {}).get("items", []))
     best = None
     best_score = 0.0
     for item in items:
         candidate = item.get("name", "")
+        exact_credit = accepted_credit_key(name) == accepted_credit_key(candidate)
+        if not exact_credit and not primary_artist_matches_query(name, {"artists": [{"name": candidate}]}):
+            continue
         score = token_overlap(name, candidate)
-        if simplify_name(name) == simplify_name(candidate):
+        if exact_credit:
+            score += 2.0
+        elif simplify_name(name) == simplify_name(candidate):
             score += 1.0
         if score > best_score:
             best_score = score
