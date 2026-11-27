@@ -67,7 +67,10 @@ try {
         if (!plan) {
           stage = "spotify_discovery";
           const names = new Set([...festival.headliners, ...festival.lineup]);
-          const identities = await festivalSpotifyArtists(db, [...names]);
+          const identities = await festivalSpotifyArtists(db, [...names], {
+            festivalSlug: festival.slug,
+            editionYear: publication.editionYear,
+          });
           plan = (await discoverSpotifyChunk(
             db,
             claim,
