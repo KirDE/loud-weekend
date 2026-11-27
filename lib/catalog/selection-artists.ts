@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { verifiedSpotifyArtistId } from "../artist-spotify-identity.ts";
-import { spotifyRepertoiresForArtists } from "./spotify-repertoire.ts";
+import { spotifyRepertoiresForArtists, type RepertoireEdition } from "./spotify-repertoire.ts";
 import { deduplicateArtists, type SelectionArtist } from "../selection-playlist.ts";
 
 type IdentityRow = {
@@ -25,6 +25,7 @@ export function matchSelectionArtists(rows: IdentityRow[], names: string[]) {
 export async function selectionArtists(
   db: Pick<PrismaClient, "artist" | "operationalState">,
   names: string[],
+  edition?: RepertoireEdition,
 ): Promise<SelectionArtist[]> {
   const rows = await db.artist.findMany({
     select: {
@@ -43,7 +44,7 @@ export async function selectionArtists(
       matches.flatMap((m) => (m.artist ? [[m.artist.id, m.artist] as const] : [])),
     ).values(),
   ];
-  const profiles = await spotifyRepertoiresForArtists(db, matched);
+  const profiles = await spotifyRepertoiresForArtists(db, matched, edition);
   return matches.map(({ requestedName, artist }) => ({
     requestedName,
     name: artist?.name ?? requestedName,
@@ -62,8 +63,9 @@ export async function selectionArtists(
 export async function festivalSpotifyArtists(
   db: Pick<PrismaClient, "artist" | "operationalState">,
   names: string[],
+  edition?: RepertoireEdition,
 ) {
-  const artists = await selectionArtists(db, names);
+  const artists = await selectionArtists(db, names, edition);
   return {
     aliases: Object.fromEntries(
       artists

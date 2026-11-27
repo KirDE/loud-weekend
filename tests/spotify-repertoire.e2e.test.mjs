@@ -4,7 +4,11 @@ import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { requireLocalDisposableDatabase } from "./support/disposable-db.ts";
-import { spotifyRepertoiresForArtists } from "../lib/catalog/spotify-repertoire.ts";
+import {
+  spotifyRepertoiresForArtists,
+  repertoireBindingKey,
+} from "../lib/catalog/spotify-repertoire.ts";
+import { festivalSpotifyArtists } from "../lib/catalog/selection-artists.ts";
 
 requireLocalDisposableDatabase(process.env.DATABASE_URL);
 const db = createPrismaClient();
@@ -108,3 +112,120 @@ for (const single of [false, true])
       );
     },
   );
+
+test("audited edition configuration rejects unannounced/archive scope and cannot leak to another edition", async () => {
+  const slug = "scope-" + randomUUID();
+  const artist = await db.artist.create({
+    data: {
+      slug,
+      name: slug,
+      aliases: [],
+      genres: [],
+      topTracks: [],
+      recentSetlists: [],
+      freshness: {},
+      identityState: "UNRESOLVED",
+    },
+  });
+  const festival = await db.festival.create({
+    data: {
+      slug,
+      name: slug,
+      country: "Synthetic",
+      countryCode: "XX",
+      officialUrl: "https://example.com",
+      genres: [],
+      editions: {
+        create: [2027, 2028].map((year) => ({
+          year,
+          status: "CONFIRMED",
+          ticketStatus: "UNKNOWN",
+          recordState: year === 2027 ? "CURRENT" : "ARCHIVED",
+          completeness: "PARTIAL",
+          sourceUpdatedAt: new Date(),
+        })),
+      },
+    },
+    include: { editions: true },
+  });
+  const current = festival.editions.find((e) => e.year === 2027);
+  const profile = {
+    schemaVersion: 1,
+    key: slug + ":v1",
+    artistSlugs: [slug],
+    setlistArtist: slug,
+    searchArtists: [{ id: "a".repeat(22), name: slug }],
+    anchorArtistIds: ["a".repeat(22)],
+    collaborationArtistIds: [],
+    albumIds: ["b".repeat(22)],
+    sourceUrls: ["https://example.com/evidence"],
+  };
+  const context = { festivalSlug: slug, editionYear: 2027 };
+  const invoke = (options = [], value = profile) =>
+    spawnSync(
+      process.execPath,
+      ["--import", "tsx", "scripts/configure-spotify-repertoire.ts", ...options],
+      { input: JSON.stringify(value), encoding: "utf8", timeout: 20000, env: process.env },
+    );
+  const args = ["--festival", slug, "--year", "2027"];
+  try {
+    const before = await db.artist.findUniqueOrThrow({ where: { id: artist.id } });
+    assert.notEqual(invoke([...args, "--apply"]).status, 0);
+    assert.equal(await db.operationalState.count({ where: { key: { contains: slug } } }), 0);
+    await db.lineupEntry.create({
+      data: { editionId: current.id, artistId: artist.id, billing: "LINEUP", position: 0 },
+    });
+    assert.equal(invoke(args).status, 0);
+    assert.equal(await db.operationalState.count({ where: { key: { contains: slug } } }), 0);
+    const applied = invoke([...args, "--apply"]);
+    assert.equal(applied.status, 0, applied.stderr);
+    assert.deepEqual(JSON.parse(applied.stdout).edition, context);
+    assert.equal(await db.operationalState.count({ where: { key: { contains: slug } } }), 3);
+    assert.equal(
+      await db.operationalState.count({ where: { key: "spotify-repertoire-binding:" + slug } }),
+      0,
+    );
+    assert.equal(invoke(["--apply", ...args]).status, 0);
+    assert.equal(await db.operationalState.count({ where: { key: { contains: slug } } }), 3);
+    const audit = await db.operationalState.findUniqueOrThrow({
+      where: {
+        key: "spotify-repertoire-edition-audit:" + slug + ":2027:" + profile.key,
+      },
+    });
+    assert.deepEqual(audit.payload.edition, context);
+    assert.equal(audit.payload.providerWrites, 0);
+    assert.deepEqual(
+      (await festivalSpotifyArtists(db, [slug], context)).spotifyRepertoireProfiles[slug],
+      profile,
+    );
+    for (const context of [
+      undefined,
+      { festivalSlug: slug, editionYear: 2028 },
+      { festivalSlug: "other", editionYear: 2027 },
+    ])
+      assert.deepEqual(
+        (await festivalSpotifyArtists(db, [slug], context)).spotifyRepertoireProfiles,
+        {},
+      );
+    for (const invalid of [
+      ["--festival", slug],
+      ["--year", "2027"],
+      ["--festival", slug, "--year", "2028"],
+      [...args, "--year", "2027"],
+    ])
+      assert.notEqual(invoke([...invalid, "--apply"]).status, 0);
+    assert.notEqual(invoke([...args, "--apply"], { ...profile, key: slug + ":v2" }).status, 0);
+    assert.deepEqual(await db.artist.findUniqueOrThrow({ where: { id: artist.id } }), before);
+    assert.equal(await db.lineupEntry.count({ where: { editionId: current.id } }), 1);
+    // A corrupted scoped binding rejects discovery instead of falling back to a fuzzy search.
+    await db.operationalState.update({
+      where: { key: repertoireBindingKey(slug, context) },
+      data: { payload: { profileKey: "nonexistent:v1" } },
+    });
+    await assert.rejects(festivalSpotifyArtists(db, [slug], context));
+  } finally {
+    await db.operationalState.deleteMany({ where: { key: { contains: slug } } });
+    await db.festival.delete({ where: { id: festival.id } });
+    await db.artist.delete({ where: { id: artist.id } });
+  }
+});

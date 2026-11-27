@@ -31,7 +31,13 @@ const catalog = {
   })),
 };
 for (const festival of catalog.festivals) {
-  Object.assign(festival, await festivalSpotifyArtists(db, festival.artists));
+  Object.assign(
+    festival,
+    await festivalSpotifyArtists(db, festival.artists, {
+      festivalSlug: festival.slug,
+      editionYear: festival.editionYear,
+    }),
+  );
 }
 await mkdir(path.dirname(output), { recursive: true });
 await writeFile(output, `${JSON.stringify(catalog, null, 2)}\n`);

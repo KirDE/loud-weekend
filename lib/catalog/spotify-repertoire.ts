@@ -3,6 +3,23 @@ import type { PrismaClient } from "@prisma/client";
 
 export const REPERTOIRE_PROFILE_PREFIX = "spotify-repertoire-profile:";
 export const REPERTOIRE_BINDING_PREFIX = "spotify-repertoire-binding:";
+export const repertoireEditionSchema = z
+  .object({
+    festivalSlug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,199}$/),
+    editionYear: z.number().int().min(1000).max(9999),
+  })
+  .strict();
+export type RepertoireEdition = z.infer<typeof repertoireEditionSchema>;
+
+export function repertoireScopeKey(edition: RepertoireEdition) {
+  const value = repertoireEditionSchema.parse(edition);
+  return `${value.festivalSlug}:${value.editionYear}:`;
+}
+export function repertoireBindingKey(slug: string, edition?: RepertoireEdition) {
+  return edition
+    ? "spotify-repertoire-edition-binding:" + repertoireScopeKey(edition) + slug
+    : REPERTOIRE_BINDING_PREFIX + slug;
+}
 const id = z.string().regex(/^[A-Za-z0-9]{22}$/);
 const unique = (values: string[]) => new Set(values).size === values.length;
 export const spotifyRepertoireSchema = z
@@ -48,10 +65,27 @@ export type SpotifyRepertoireProfile = z.infer<typeof spotifyRepertoireSchema>;
 export async function spotifyRepertoiresForArtists(
   db: Pick<PrismaClient, "operationalState">,
   artists: { slug: string; name: string }[],
+  edition?: RepertoireEdition,
 ): Promise<Record<string, SpotifyRepertoireProfile>> {
   if (!artists.length) return {};
-  const bindings = await db.operationalState.findMany({
-    where: { key: { in: artists.map((a) => REPERTOIRE_BINDING_PREFIX + a.slug) } },
+  const rowsByBinding = await db.operationalState.findMany({
+    where: {
+      key: {
+        in: artists.flatMap((a) => [
+          repertoireBindingKey(a.slug),
+          ...(edition ? [repertoireBindingKey(a.slug, edition)] : []),
+        ]),
+      },
+    },
+  });
+  // Only the explicit edition can override its global policy; never leak it to
+  // another edition or a context-free personal selection. Broken overrides fail closed.
+  const bindings = artists.flatMap((artist) => {
+    const row =
+      (edition &&
+        rowsByBinding.find((r) => r.key === repertoireBindingKey(artist.slug, edition))) ||
+      rowsByBinding.find((r) => r.key === repertoireBindingKey(artist.slug));
+    return row ? [{ ...row, artist }] : [];
   });
   const keys = bindings.map((row) => {
     const binding = z
@@ -73,7 +107,7 @@ export async function spotifyRepertoiresForArtists(
   const result: Record<string, SpotifyRepertoireProfile> = {};
   for (let i = 0; i < bindings.length; i++) {
     const profile = profiles.get(keys[i]);
-    const artist = artists.find((a) => REPERTOIRE_BINDING_PREFIX + a.slug === bindings[i].key);
+    const artist = bindings[i].artist;
     if (!profile || !artist || !profile.artistSlugs.includes(artist.slug))
       throw new Error("Missing or mismatched repertoire binding");
     if (Object.hasOwn(result, artist.name)) throw new Error("Ambiguous repertoire artist name");

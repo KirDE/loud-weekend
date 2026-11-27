@@ -5,6 +5,7 @@ import {
   spotifyRepertoiresForArtists,
   REPERTOIRE_PROFILE_PREFIX as P,
   REPERTOIRE_BINDING_PREFIX as B,
+  repertoireBindingKey,
 } from "../lib/catalog/spotify-repertoire.ts";
 
 export const profile = {
@@ -43,6 +44,46 @@ test("one live act may have N reviewed search identities, not equivalent identit
     }),
   );
   assert.throws(() => spotifyRepertoireSchema.parse({ ...profile, albumIds: [] }));
+});
+
+test("edition overrides stay out of other years, festivals and context-free selections", async () => {
+  const edition = { festivalSlug: "synthetic", editionYear: 2027 };
+  const scoped = { ...profile, key: "scoped:v1" };
+  const rows = [
+    { key: B + "joint-act", payload: { profileKey: profile.key } },
+    { key: P + profile.key, payload: profile },
+    { key: repertoireBindingKey("joint-act", edition), payload: { profileKey: scoped.key } },
+    { key: P + scoped.key, payload: scoped },
+  ];
+  const acts = [{ slug: "joint-act", name: "Act" }];
+  assert.deepEqual(
+    (await spotifyRepertoiresForArtists(fixture(rows).db, acts, edition)).Act,
+    scoped,
+  );
+  for (const context of [
+    undefined,
+    { ...edition, editionYear: 2028 },
+    { ...edition, festivalSlug: "other" },
+  ])
+    assert.deepEqual(
+      (await spotifyRepertoiresForArtists(fixture(rows).db, acts, context)).Act,
+      profile,
+    );
+  const onlyScoped = rows.slice(2);
+  assert.deepEqual(await spotifyRepertoiresForArtists(fixture(onlyScoped).db, acts), {});
+  // A missing or invalid override cannot silently widen to the global repertoire.
+  for (const broken of [
+    rows.slice(0, 3),
+    rows.map((r) =>
+      r.key === P + scoped.key ? { ...r, payload: { ...scoped, albumIds: [] } } : r,
+    ),
+  ])
+    await assert.rejects(spotifyRepertoiresForArtists(fixture(broken).db, acts, edition));
+  for (const context of [
+    { ...edition, festivalSlug: "bad:scope" },
+    { ...edition, editionYear: 2027.5 },
+  ])
+    await assert.rejects(spotifyRepertoiresForArtists(fixture(rows).db, acts, context));
 });
 
 function fixture(rows) {

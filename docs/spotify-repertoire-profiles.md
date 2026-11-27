@@ -70,3 +70,21 @@ unreviewed releases and same-name artists remain ineligible. Nonempty album and
 anchor lists remain required for both single and collaborative profiles.
 No profile configuration rewrites frozen plans or triggers a provider write.
 Existing work needs a separately authorized, lease/edition/binding-fenced refresh.
+
+## Edition-scoped disambiguation
+
+When official evidence identifies an act only for one festival edition, pass
+`--festival <slug> --year <year>` (together) to the same stdin configuration CLI.
+It requires a current edition and announced lineup membership for every act.
+The immutable profile format is unchanged; the binding is stored separately in
+`spotify-repertoire-edition-binding:<festival-slug>:<year>:<artist-slug>` and its
+audit in `spotify-repertoire-edition-audit:<festival-slug>:<year>:<profile-key>`.
+Preview, atomic append-only apply, conflict rejection and no-provider-write
+behavior remain unchanged. No global binding or catalogue identity is created.
+
+The DB worker and canonical exporter pass the explicit festival/year. Its
+edition binding overrides a global binding only for that exact context. Other
+festivals, years and context-free personal selections continue to use their
+previous global policy (or no profile). Invalid/missing bound profiles still
+fail closed, including a broken edition override over a valid global profile.
+Already frozen plans, checkpoints and provider intents are not changed.
