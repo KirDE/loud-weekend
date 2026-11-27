@@ -9,6 +9,7 @@ export function DataQualityContent({ data }: { data?: ReturnType<typeof summariz
   const { language, locale } = useLanguage();
   const t = dataQualityCopy[language];
   const count = new Intl.NumberFormat(locale);
+  const coverageTotal = data ? data.total - data.hiatus : 0;
   const group = (header: string, total: number, rows: readonly (readonly [string, number])[]) => (
     <section>
       <h2>{header}</h2>
@@ -34,12 +35,20 @@ export function DataQualityContent({ data }: { data?: ReturnType<typeof summariz
       ) : (
         <>
           <p>{t.intro}</p>
-          {group(t.coverage, data.total, [
-            [t.dates, data.dates],
-            [t.lineup, data.lineup],
-            [t.tickets, data.tickets],
-            [t.timetable, data.timetable],
-          ])}
+          {data.hiatus > 0 && <p>{t.hiatusExcluded}</p>}
+          {coverageTotal > 0 ? (
+            group(t.coverage, coverageTotal, [
+              [t.dates, data.dates],
+              [t.lineup, data.lineup],
+              [t.tickets, data.tickets],
+              [t.timetable, data.timetable],
+            ])
+          ) : (
+            <section>
+              <h2>{t.coverage}</h2>
+              <p>{t.allPaused}</p>
+            </section>
+          )}
           {group(t.source, data.total, [
             [t.recent, data.checked],
             [t.stale, data.stale],
