@@ -45,6 +45,39 @@ def track(index, name=None, credits="a", album="d", popularity=50):
 
 
 class RepertoireTests(unittest.TestCase):
+    def test_single_artist_stays_album_and_credit_bounded(self):
+        single = {**PROFILE, "searchArtists": [PROFILE["searchArtists"][0]],
+                  "collaborationArtistIds": []}
+        self.assertEqual(validate_profile(single), single)
+        self.assertTrue(eligible_track(single, track(1)))
+        self.assertFalse(eligible_track(single, track(2, album="x")))
+        self.assertFalse(eligible_track(single, track(3, credits="x")))
+        for changed in [{"searchArtists": PROFILE["searchArtists"]},
+                        {"searchArtists": PROFILE["searchArtists"],
+                         "anchorArtistIds": [a["id"] for a in PROFILE["searchArtists"]]},
+                        {"albumIds": []}, {"searchArtists": []},
+                        {"anchorArtistIds": ["z" * 22]},
+                        {"collaborationArtistIds": single["anchorArtistIds"]}]:
+            with self.assertRaises(ValueError):
+                validate_profile({**single, **changed})
+        calls = []
+        tracks = [track(1), track(2, album="x"), track(3, credits="x")]
+
+        def get(url, params):
+            calls.append(url)
+            if url.endswith("/top-tracks"):
+                return {"tracks": tracks}
+            if "/albums/" in url:
+                return {"items": [{"id": t["id"]} for t in tracks], "next": None}
+            if url.endswith("/tracks"):
+                return {"tracks": tracks}
+            raise AssertionError(url)
+
+        selected, _ = select_tracks(single, {}, get, lambda x: x.lower(),
+                                    lambda t: False, lambda t: 0, set(), set())
+        self.assertEqual([t["id"] for t in selected], [tracks[0]["id"]])
+        self.assertEqual(sum(url.endswith("/top-tracks") for url in calls), 1)
+
     def test_actual_slash_credits_with_solo_split_and_combined_identities(self):
         raw = json.loads(
             (

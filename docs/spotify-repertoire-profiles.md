@@ -1,7 +1,7 @@
-# Spotify repertoire profiles for composite live acts
+# Reviewed Spotify repertoire profiles
 
 A festival billing is not necessarily one Spotify artist identity. A profile
-preserves the single catalogue act and its five-track budget while using N
+preserves the single catalogue act and its five-track budget while using one or more
 reviewed Spotify entities to find the correct collaborative repertoire.
 
 This is deliberately separate from `ArtistIdentity` and artist aliases. It
@@ -57,3 +57,16 @@ unknown provider operations, creation markers and playlist bindings are never
 reset or replayed by configuring a profile. Configuration itself does not enqueue
 jobs or call Spotify/YouTube write endpoints. New discovery uses the profile;
 replanning existing work remains a separately reconciled operation.
+
+## Single-artist disambiguation
+
+An empty collaboration list requires exactly one reviewed search artist and one anchor.
+Use this for an ambiguous billing only after official-source artist-ID evidence
+and authenticated release credits establish the intended artist and album IDs.
+The existing audited stdin configuration flow remains mandatory. This is a
+selection policy, not a canonical identity pin, alias, or MusicBrainz relation.
+Every admitted track still needs an anchor credit AND a reviewed album ID;
+unreviewed releases and same-name artists remain ineligible. Nonempty album and
+anchor lists remain required for both single and collaborative profiles.
+No profile configuration rewrites frozen plans or triggers a provider write.
+Existing work needs a separately authorized, lease/edition/binding-fenced refresh.

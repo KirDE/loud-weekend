@@ -108,3 +108,33 @@ test("missing, invalid and wrongly assigned profiles fail closed instead of fuzz
       spotifyRepertoiresForArtists(fixture(rows).db, [{ slug: "joint-act", name: "Joint" }]),
     );
 });
+
+test("one reviewed artist is album-bounded without inventing a canonical identity", async () => {
+  const single = {
+    ...profile,
+    searchArtists: [profile.searchArtists[0]],
+    collaborationArtistIds: [],
+  };
+  assert.deepEqual(spotifyRepertoireSchema.parse(single), single);
+  for (const invalid of [
+    { ...single, searchArtists: profile.searchArtists },
+    {
+      ...single,
+      searchArtists: profile.searchArtists,
+      anchorArtistIds: profile.searchArtists.map((artist) => artist.id),
+    },
+    { ...single, albumIds: [] },
+    { ...single, searchArtists: [] },
+    { ...single, anchorArtistIds: ["z".repeat(22)] },
+    { ...single, collaborationArtistIds: single.anchorArtistIds },
+  ])
+    assert.throws(() => spotifyRepertoireSchema.parse(invalid));
+  const rows = [
+    { key: B + "joint-act", payload: { profileKey: single.key } },
+    { key: P + single.key, payload: single },
+  ];
+  const result = await spotifyRepertoiresForArtists(fixture(rows).db, [
+    { slug: "joint-act", name: "Ambiguous billing" },
+  ]);
+  assert.deepEqual(result["Ambiguous billing"], single);
+});

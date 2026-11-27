@@ -53,14 +53,14 @@ def validate_profile(value):
         raise ValueError("Invalid repertoire setlist artist")
     strings("artistSlugs", 1, 20, re.compile(r"[a-z0-9][a-z0-9-]{0,199}"))
     for key, maximum in [("anchorArtistIds", 8), ("collaborationArtistIds", 8), ("albumIds", 24)]:
-        strings(key, 1, maximum, ID)
+        strings(key, 0 if key == "collaborationArtistIds" else 1, maximum, ID)
     strings("sourceUrls", 1, 100)
     if any(not url.startswith("https://") for url in value["sourceUrls"]):
         raise ValueError("Invalid repertoire evidence URL")
     artists = value["searchArtists"]
     if (
         not isinstance(artists, list)
-        or not 2 <= len(artists) <= 8
+        or not 1 <= len(artists) <= 8
         or any(
             not isinstance(a, dict)
             or set(a) != {"id", "name"}
@@ -72,6 +72,10 @@ def validate_profile(value):
         )
     ):
         raise ValueError("Invalid repertoire search identities")
+    if not value["collaborationArtistIds"] and (
+        len(artists) != 1 or len(value["anchorArtistIds"]) != 1
+    ):
+        raise ValueError("Repertoire without collaborators requires one search artist and anchor")
     ids = {a["id"] for a in artists}
     if (
         len(ids) != len(artists)
