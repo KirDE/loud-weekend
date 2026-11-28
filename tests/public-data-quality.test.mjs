@@ -72,6 +72,7 @@ test("data quality aggregates only current records and excludes stale/invalid ev
     dates: 2,
     lineup: 2,
     tickets: 2,
+    ticketCategories: 0,
     timetable: 1,
     dateEvidence: 1,
     lineupEvidence: 1,
@@ -98,6 +99,56 @@ test("absence of a source check is not success or proof of an outage", () => {
   assert.equal(unchecked.checked, 0);
   assert.equal(unchecked.stale, 0);
   assert.equal(unchecked.lastRecentCheck, undefined);
+});
+
+test("published ticket category coverage counts editions, not individual categories or ticket stock", () => {
+  const ticketOffers = {
+    editionYear: 2027,
+    observedAt: checkedAt,
+    sourceUrl: "https://festival.example.test/private-offer-fixture",
+    offers: [
+      { key: "full-pass", kind: "full_pass", status: "sold_out", price: null, saleDateText: null },
+      { key: "day-pass", kind: "day_pass", status: "unknown", price: null, saleDateText: null },
+    ],
+  };
+  const edition = {
+    ...festival,
+    slug: "synthetic-ticket-edition",
+    ticketStatus: "unknown",
+    editionYear: 2027,
+    ticketOffers,
+  };
+  const paused = {
+    ...edition,
+    editionLifecycle: {
+      festivalSlug: edition.slug,
+      editionYear: edition.editionYear,
+      lifecycle: "hiatus",
+      announcedReturnYear: null,
+      alternativeEvent: null,
+      sourceUrl: edition.officialUrl,
+      observedAt: checkedAt,
+      approvedAt: checkedAt,
+    },
+  };
+  const tally = summarizeDataQuality(
+    {
+      festivals: [
+        edition,
+        festival,
+        paused,
+        { ...edition, editionYear: 2028 },
+        { ...edition, ticketOffers: { ...ticketOffers, offers: [] } },
+        { ...edition, ticketOffers: { ...ticketOffers, observedAt: "2029-01-01T00:00:00Z" } },
+      ],
+      editions: [],
+    },
+    now,
+  );
+  assert.equal(tally.ticketCategories, 1);
+  assert.equal(tally.tickets, 1);
+  assert.equal(tally.hiatus, 1);
+  assert.doesNotMatch(JSON.stringify(tally), /private-offer-fixture/);
 });
 
 test("stage schedule coverage excludes malformed, out-of-edition and future observations", () => {
