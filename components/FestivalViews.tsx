@@ -148,8 +148,11 @@ export function FestivalViews({ festivals }: { festivals: Festival[] }) {
           {visible.length ? (
             visible.map((f) => {
               const firstVisibleDate = f.startDate! < monthStart ? monthStart : f.startDate!;
+              const href = f.editionYear
+                ? `/festivals/${f.slug}/${f.editionYear}/`
+                : `/festivals/${f.slug}/`;
               return (
-                <Link role="listitem" href={`/festivals/${f.slug}/`} key={f.slug}>
+                <Link role="listitem" href={href} key={href}>
                   <time dateTime={firstVisibleDate}>{Number(firstVisibleDate.slice(8, 10))}</time>
                   <span>
                     <strong>{f.name}</strong>
