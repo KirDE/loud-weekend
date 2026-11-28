@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const locales = {
   en: {
-    title: "Your 2027 plan",
+    title: "Your festival plan",
     notifications: "Notifications",
     calendar: "Festival calendar",
     map: "Festival map",
@@ -12,7 +12,7 @@ const locales = {
     previous: "Previous month",
   },
   de: {
-    title: "Dein Plan für 2027",
+    title: "Dein Festivalplan",
     notifications: "Benachrichtigungen",
     calendar: "Festivalkalender",
     map: "Festivalkarte",
@@ -22,7 +22,7 @@ const locales = {
     previous: "Vorheriger Monat",
   },
   ru: {
-    title: "Ваш план на 2027 год",
+    title: "Ваш фестивальный план",
     notifications: "Уведомления",
     calendar: "Календарь фестивалей",
     map: "Карта фестивалей",

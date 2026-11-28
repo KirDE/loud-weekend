@@ -53,7 +53,7 @@ type PlannerLabels = {
 const plannerLabels: Record<Language, PlannerLabels> = {
   en: {
     eyebrow: "LOCAL TRIP PLANNER",
-    title: "Your 2027 plan",
+    title: "Your festival plan",
     intro:
       "Saved in this browser by default. Sign in below only if you want explicit cross-device sync.",
     clear: "Clear local data",
@@ -90,7 +90,7 @@ const plannerLabels: Record<Language, PlannerLabels> = {
   },
   de: {
     eyebrow: "LOKALER REISEPLANER",
-    title: "Dein Plan für 2027",
+    title: "Dein Festivalplan",
     intro:
       "Standardmäßig in diesem Browser gespeichert. Melde dich nur für eine geräteübergreifende Synchronisierung an.",
     clear: "Lokale Daten löschen",
@@ -129,7 +129,7 @@ const plannerLabels: Record<Language, PlannerLabels> = {
   },
   ru: {
     eyebrow: "ЛОКАЛЬНЫЙ ПЛАН ПОЕЗДКИ",
-    title: "Ваш план на 2027 год",
+    title: "Ваш фестивальный план",
     intro:
       "По умолчанию данные сохраняются в этом браузере. Войдите только для синхронизации между устройствами.",
     clear: "Удалить локальные данные",
@@ -286,6 +286,11 @@ export function PlannerPage({
   const dated = planned
     .filter(calendarEligible)
     .sort((a, b) => a.startDate!.localeCompare(b.startDate!));
+  const calendarYear = dated[0]?.editionYear;
+  const calendarFilename =
+    calendarYear && dated.every((festival) => festival.editionYear === calendarYear)
+      ? `loud-weekend-${calendarYear}.ics`
+      : "loud-weekend.ics";
   async function createPlaylist() {
     sendProductEvent("PLAYLIST_START", language);
     setPlaylist({ status: "creating", message: t.creating });
@@ -402,7 +407,7 @@ export function PlannerPage({
               <a
                 className="primaryButton"
                 href={`data:text/calendar;charset=utf-8,${encodeURIComponent(calendarFile(dated))}`}
-                download="loud-weekend-2027.ics"
+                download={calendarFilename}
               >
                 {t.download}
               </a>

@@ -164,7 +164,7 @@ test("prefixed planner switching preserves the plan, query and hash on reload an
   await page.goto("/en/planner/?filter=keep#main-content");
   await page.waitForFunction(() => document.cookie.includes("festival-radar-language=en"));
   await switchWithoutNavigation(page, "de");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Dein Plan für 2027");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Dein Festivalplan");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "de");
   await page
