@@ -89,7 +89,8 @@ Record known limits honestly; do not claim a security review or production accep
 Exact festival-edition links use `components/CatalogLink.tsx` for a full document navigation.
 This preserves the server-owned canonical/alternate/social metadata when leaving another catalogue page;
 client transitions in the pinned Next.js runtime can retain the previous document's canonical alongside
-that of the exact edition. Other links keep Next navigation. The trade-off is a document request for
+that of the exact edition. Native edition anchors include the build-time `NEXT_PUBLIC_BASE_PATH`, matching `next.config.ts`.
+Other links keep Next navigation and let Next apply that prefix. The trade-off is a document request for
 edition entry, not a second SEO implementation or client-side metadata deletion. Persisted local planner
 choices survive navigation; page-local transient UI resets normally. Keep the actual keyboard navigation,
 unique exact canonical and cross-season planner persistence checks in the browser suite.
