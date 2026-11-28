@@ -4,16 +4,19 @@ const labels = {
   en: {
     title: "Catalogue data quality",
     coverage: "Published coverage",
+    ticketCategories: "Published ticket categories",
     noCheck: "No current successful check to display.",
   },
   de: {
     title: "Datenqualität des Katalogs",
     coverage: "Veröffentlichte Abdeckung",
+    ticketCategories: "Veröffentlichte Ticketkategorien",
     noCheck: "Keine aktuelle erfolgreiche Prüfung vorhanden.",
   },
   ru: {
     title: "Качество данных каталога",
     coverage: "Опубликованные данные",
+    ticketCategories: "Опубликованы категории билетов",
     noCheck: "Нет актуальной успешной проверки для отображения.",
   },
 };
@@ -27,6 +30,9 @@ for (const [lang, t] of Object.entries(labels))
     await expect(page.getByRole("heading", { level: 1, name: t.title })).toBeVisible();
     await expect(page.getByRole("heading", { level: 2, name: t.coverage })).toBeVisible();
     await expect(page.locator(".dataQualityCount dd").first()).toHaveText("4 / 4");
+    await expect(
+      page.locator(".dataQualityCount").filter({ hasText: t.ticketCategories }).locator("dd"),
+    ).toHaveText("0 / 4");
     await expect(page.getByText(t.noCheck, { exact: true })).toBeVisible();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

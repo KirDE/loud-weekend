@@ -17,6 +17,7 @@ export function summarizeDataQuality(
     dates: 0,
     lineup: 0,
     tickets: 0,
+    ticketCategories: 0,
     timetable: 0,
     dateEvidence: 0,
     lineupEvidence: 0,
@@ -45,6 +46,14 @@ export function summarizeDataQuality(
     if (dateInterval) summary.dates += 1;
     if (hasAnnouncedLineup(festival)) summary.lineup += 1;
     if (festival.ticketStatus !== "unknown") summary.tickets += 1;
+    const offers = festival.ticketOffers;
+    if (
+      offers &&
+      offers.editionYear === festival.editionYear &&
+      verifiedTime(offers.observedAt) &&
+      offers.offers.length > 0
+    )
+      summary.ticketCategories += 1;
     // A verified range may span New Year. Without both dates, fall back to the edition year.
     const scheduleYear = dateInterval && festival.endDate ? undefined : festival.editionYear;
     const hasUsableSchedule = festival.timetable?.some(
