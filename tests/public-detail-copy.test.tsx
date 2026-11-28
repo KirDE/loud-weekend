@@ -12,10 +12,69 @@ import { LocalPlannerProvider } from "../components/LocalPlanner";
 import { festival } from "./support/catalog";
 import { hasAvailableTickets } from "../lib/tickets";
 import { festivalSetlistHistoryUrl } from "../lib/setlist-history";
+import { publicFestivalVenue } from "../lib/catalog/festival-venues";
+import { festivalMusicEvent } from "../lib/seo";
 
 const similar = { ...festival, slug: "similar-fest", name: "Similar Fest" };
 
 for (const language of ["en", "de", "ru"] as const) {
+  test(`event markup and visible location use the same verified edition venue in ${language}`, () => {
+    const evidence = {
+      editionId: "sample-edition",
+      editionYear: 2027,
+      countryCode: festival.countryCode,
+      city: festival.city!,
+      organizerHost: "festival.example.test",
+      name: "Fixture Venue",
+      sourceUrl: "https://festival.example.test/venue",
+      checkedOn: new Date("2026-11-23"),
+      latitude: 50,
+      longitude: 10,
+    };
+    const render = (item: typeof festival) =>
+      renderToStaticMarkup(
+        <LanguageProvider initialLanguage={language}>
+          <LocalPlannerProvider>
+            <FestivalDetail item={item} festivals={[item]} artistSlugs={{}} />
+          </LocalPlannerProvider>
+        </LanguageProvider>,
+      );
+
+    const item = { ...festival, venue: publicFestivalVenue(evidence, festival) };
+    assert.equal(festivalMusicEvent(item, language)?.location.name, evidence.name);
+    assert.equal(
+      festivalMusicEvent(item, language)?.location.address.addressLocality,
+      festival.city,
+    );
+    assert.match(render(item), /class="eyebrow">DE · Sample City · Fixture Venue<\/div>/);
+
+    for (const rejected of [
+      { ...evidence, editionYear: 2026 },
+      { ...evidence, city: "Another City" },
+      { ...evidence, sourceUrl: "https://other.example.test/venue" },
+    ]) {
+      const fallback = { ...festival, venue: publicFestivalVenue(rejected, festival) };
+      assert.equal(festivalMusicEvent(fallback, language)?.location.name, festival.city);
+      assert.doesNotMatch(render(fallback), /Fixture Venue/);
+    }
+
+    const paused = {
+      ...item,
+      editionLifecycle: {
+        festivalSlug: item.slug,
+        editionYear: evidence.editionYear,
+        lifecycle: "hiatus" as const,
+        announcedReturnYear: null,
+        alternativeEvent: null,
+        sourceUrl: item.officialUrl,
+        observedAt: "2026-11-23T12:00:00.000Z",
+        approvedAt: "2026-11-23T13:00:00.000Z",
+      },
+    };
+    assert.equal(festivalMusicEvent(paused, language), null);
+    assert.doesNotMatch(render(paused), /Fixture Venue/);
+  });
+
   test(`live history links to all festival editions, not a future-year search, in ${language}`, () => {
     for (const year of [2026, 2027, 2028]) {
       const item = {
