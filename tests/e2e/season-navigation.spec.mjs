@@ -102,6 +102,8 @@ test("season navigation and local attendance use verified editions without repla
         const calendar = page.locator("a[download$='-plan.ics']");
         const nav = page.getByRole("navigation", { name: t.nav });
         await expect(nav.getByRole("link")).toHaveText(["2028", "2027", "2026"]);
+        await page.goto(lang === "en" ? "/planner/" : `/${lang}/planner/`);
+        await expect(nav.getByRole("link")).toHaveText(["2028", "2027", "2026"]);
         await nav.getByRole("link", { name: "2028", exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`/${lang}/editions/2028/$`));
         await expect(page.getByRole("heading", { level: 1, name: t.heading })).toBeVisible();

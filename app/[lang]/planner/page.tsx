@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { PlannerPage } from "@/components/PlannerPage";
 import { supportedLanguages } from "@/lib/catalog/public";
 import { getCatalog } from "@/lib/catalog/repository";
+import { publicSeasonEditions, seasonYears } from "@/lib/catalog/seasons";
 
 export const dynamic = "force-dynamic";
 import type { Language } from "@/components/LanguageProvider";
@@ -21,10 +22,11 @@ export async function generateMetadata({ params }: { params: Promise<{ lang: str
 export default async function LocalizedPlanner({ params }: { params: Promise<{ lang: string }> }) {
   const lang = (await params).lang as Language;
   if (!supportedLanguages.includes(lang)) notFound();
-  const { festivals, artists, discoveryLineups } = await getCatalog();
+  const { festivals, editions, artists, discoveryLineups } = await getCatalog();
   return (
     <PlannerPage
       festivals={festivals}
+      years={seasonYears(publicSeasonEditions(editions))}
       catalogueArtists={artists.map(({ name, slug, aliases }) => ({ name, slug, aliases }))}
       lineups={discoveryLineups}
     />
