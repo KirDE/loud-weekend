@@ -64,6 +64,34 @@ for (const language of ["en", "de", "ru"] as const) {
   });
 }
 
+for (const language of ["en", "de", "ru"] as const) {
+  const expected = {
+    en: ["2026 lineup", "2027 lineup", "2028 lineup", "Lineup"],
+    de: ["Line-up 2026", "Line-up 2027", "Line-up 2028", "Line-up"],
+    ru: ["Лайнап 2026", "Лайнап 2027", "Лайнап 2028", "Лайнап"],
+  }[language];
+
+  test(`festival lineup heading uses the edition year or no year in ${language}`, () => {
+    const cases = [2026, 2027, 2028, undefined].map((editionYear, index) => ({
+      editionYear,
+      heading: expected[index],
+    }));
+    for (const { editionYear, heading } of cases) {
+      // A date alone does not identify the edition; a festival can span calendar years.
+      const item = { ...festival, editionYear, startDate: "2027-12-31", endDate: "2028-01-01" };
+      const html = renderToStaticMarkup(
+        <LanguageProvider initialLanguage={language}>
+          <LocalPlannerProvider>
+            <FestivalDetail item={item} festivals={[item]} artistSlugs={{}} />
+          </LocalPlannerProvider>
+        </LanguageProvider>,
+      );
+      const lineup = html.split('class="lineupSection"')[1];
+      assert.equal(lineup?.match(/<h2>([^<]+)<\/h2>/)?.[1], heading);
+    }
+  });
+}
+
 test("history resolves canonical series independently of display-name aliases", () => {
   assert.equal(
     festivalSetlistHistoryUrl("hellfest"),
