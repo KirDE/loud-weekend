@@ -165,6 +165,12 @@ test("season navigation and local attendance use verified editions without repla
           page.getByRole("heading", { name: "Synthetic Fest 2028", exact: true }),
         ).toBeVisible();
         await expect(editionCalendar).toHaveCount(0);
+        await page
+          .getByRole("link")
+          .filter({ hasText: /^←.*2028/ })
+          .click();
+        await expect(page).toHaveURL(new RegExp(`/${lang}/editions/2028/$`));
+        await expect(page.getByRole("heading", { level: 1, name: t.heading })).toBeVisible();
         if (lang === "en") {
           await page.goto("/en/planner/");
           await page.getByRole("button", { name: "Clear local data" }).click();
