@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { socialPreviewMetadata } from "@/lib/social-preview";
 import { EditionHistory } from "@/components/EditionHistory";
 import { db } from "@/lib/db";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
+import { editionKey } from "@/lib/catalog/freshness";
+import { getPlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-readback";
 import { readEditionHistory } from "@/lib/catalog/public-history";
 import { notFound } from "next/navigation";
 import { FestivalEditionContent } from "@/components/PublicCatalogPages";
@@ -32,14 +35,19 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
 export default async function FestivalEditionPage({ params }: { params: Params }) {
   const { slug, year: rawYear } = await params;
-  const { editions, artists } = await getCatalog();
+  const { editions, artists, editionPlaylists } = await getCatalog();
   const item = editions.find(
     (edition) => edition.slug === slug && edition.editionYear === Number(rawYear),
   );
   if (!item) notFound();
-  const [history, arrivalFacts] = await Promise.all([
+  const showPlaylists = item.recordState === "current" && !editionOnHiatus(item);
+  const playlistFailures = showPlaylists
+    ? getPlaylistRefreshFailures(item.slug, item.editionYear, db)
+    : undefined;
+  const [history, arrivalFacts, playlistRefreshFailures] = await Promise.all([
     item.editionYear === undefined ? [] : readEditionHistory(db, item.slug, item.editionYear),
     readArrivalFacts(db, item),
+    playlistFailures,
   ]);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
@@ -49,6 +57,10 @@ export default async function FestivalEditionPage({ params }: { params: Params }
         arrivalFacts={arrivalFacts}
         artistSlugs={artistSlugs}
         lineupDayArtistSlugs={lineupDayProfileSlugs(item.lineupDays, artists)}
+        playlist={
+          showPlaylists ? editionPlaylists[editionKey(item.slug, item.editionYear)] : undefined
+        }
+        playlistRefreshFailures={playlistRefreshFailures}
       />
       <EditionHistory entries={history} officialUrl={item.officialUrl} />
     </>

@@ -25,6 +25,7 @@ export type CatalogSnapshot = Readonly<{
   editions: readonly FestivalEdition[];
   artists: ArtistProfile[];
   playlists: Readonly<Record<string, PlaylistStatus>>;
+  editionPlaylists: Readonly<Record<string, PlaylistStatus>>;
   discoveryLineups: DiscoveryLineups;
   freshness: CatalogFreshness;
 }>;
@@ -375,6 +376,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       }))
       .sort((left, right) => left.name.localeCompare(right.name));
     const playlists: Record<string, PlaylistStatus> = {};
+    const editionPlaylists: Record<string, PlaylistStatus> = {};
     for (const row of editionRows.filter(({ recordState }) => recordState === "CURRENT")) {
       const spotify = row.playlists.find(
         ({ provider, url }) =>
@@ -386,7 +388,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       );
       if (!spotify && !youtube) continue;
       const spotifyCoverage = playlistCoverage(spotify);
-      playlists[row.festival.slug] = {
+      const status: PlaylistStatus = {
         spotifyUrl: spotify?.url,
         youtubeMusicUrl: youtube?.url,
         youtubeMusicArtists: youtube?.artistCount ?? undefined,
@@ -402,6 +404,8 @@ export class DatabaseCatalogRepository implements CatalogRepository {
           youtubeMusic: playlistCoverage(youtube),
         },
       };
+      playlists[row.festival.slug] = status;
+      editionPlaylists[editionKey(row.festival.slug, row.year)] = status;
     }
     const freshness = {
       checkedAt: latestDate(currentEditions.map(({ freshness }) => freshness?.checkedAt)),
@@ -443,6 +447,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
       editions,
       artists,
       playlists,
+      editionPlaylists,
       discoveryLineups,
       freshness,
     });

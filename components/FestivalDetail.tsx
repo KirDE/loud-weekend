@@ -20,7 +20,7 @@ import { useLanguage } from "./LanguageProvider";
 import type { PublicArrivalFact } from "@/lib/domain/festival";
 import { FestivalArrival } from "./FestivalArrival";
 import { PlanningTools } from "./PlanningTools";
-import { PlaylistCoverageLabel } from "./PlaylistCoverageLabel";
+import { FestivalPlaylistActions } from "./FestivalPlaylistActions";
 import type { PlaylistStatus } from "@/lib/domain/festival";
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { EditionLifecycleNotice } from "./EditionLifecycleNotice";
@@ -77,10 +77,6 @@ export function FestivalDetail({
   const setlistUrl = festivalSetlistHistoryUrl(item.slug);
   const hiatus = editionOnHiatus(item);
   const tickets = ticketPresentation(item);
-  const reviewedSpotify = item.reviewedPlaylistLinks?.spotify;
-  const reviewedYoutube = item.reviewedPlaylistLinks?.youtube_music;
-  const playlistUrl = reviewedSpotify || playlist?.spotifyUrl || item.playlistUrl;
-  const youtubePlaylistUrl = reviewedYoutube || playlist?.youtubeMusicUrl;
   const artistCount = announcedArtists(item).length;
   const hasArtists = hasAnnouncedLineup(item);
   const lineupStatus = lineupPresentation(item);
@@ -169,48 +165,12 @@ export function FestivalDetail({
             <strong>{t(tickets.label)}</strong>
           </div>
         )}
-        {playlistUrl ? (
-          <a href={playlistUrl} target="_blank" rel="noreferrer">
-            <small>{t("listen")}</small>
-            <strong>{t("spotifyPlaylist")}</strong>
-            <PlaylistCoverageLabel
-              coverage={
-                playlistUrl === playlist?.spotifyUrl ? playlist.coverage?.spotify : undefined
-              }
-              failed={playlistRefreshFailures?.spotify}
-            />
-          </a>
-        ) : (
-          <div className="disabled">
-            <small>{t("listen")}</small>
-            <strong>
-              {playlistRefreshFailures?.spotify ? t("spotifyPlaylist") : t("playlistSoon")}
-            </strong>
-            {playlistRefreshFailures?.spotify && <PlaylistCoverageLabel failed />}
-          </div>
-        )}
-        {youtubePlaylistUrl ? (
-          <a href={youtubePlaylistUrl} target="_blank" rel="noreferrer">
-            <small>{t("listen")}</small>
-            <strong>{t("youtubeMusicPlaylist")}</strong>
-            <PlaylistCoverageLabel
-              coverage={
-                youtubePlaylistUrl === playlist?.youtubeMusicUrl
-                  ? playlist.coverage?.youtubeMusic
-                  : undefined
-              }
-              failed={playlistRefreshFailures?.youtubeMusic}
-            />
-          </a>
-        ) : (
-          playlistRefreshFailures?.youtubeMusic && (
-            <div className="disabled">
-              <small>{t("listen")}</small>
-              <strong>{t("youtubeMusicPlaylist")}</strong>
-              <PlaylistCoverageLabel failed />
-            </div>
-          )
-        )}
+        <FestivalPlaylistActions
+          item={item}
+          playlist={playlist}
+          playlistRefreshFailures={playlistRefreshFailures}
+          showPlaceholder
+        />
         {setlistUrl ? (
           <a href={setlistUrl} target="_blank" rel="noreferrer">
             <small>{t("liveHistory")}</small>

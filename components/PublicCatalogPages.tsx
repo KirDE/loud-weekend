@@ -8,7 +8,9 @@ import { festivalDateInterval } from "@/lib/festival-dates";
 import { lineupPresentation } from "@/lib/festival-lineup";
 import { StageTimetable } from "./StageTimetable";
 import { LineupByDay } from "./LineupByDay";
-import type { Festival } from "@/lib/domain/festival";
+import type { Festival, PlaylistStatus } from "@/lib/domain/festival";
+import type { PlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-readback";
+import { FestivalPlaylistActions } from "./FestivalPlaylistActions";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { FestivalEdition } from "@/lib/domain/edition";
 import type { PublicArrivalFact } from "@/lib/domain/festival";
@@ -310,11 +312,15 @@ export function FestivalEditionContent({
   artistSlugs = {},
   lineupDayArtistSlugs = [],
   arrivalFacts = [],
+  playlist,
+  playlistRefreshFailures,
 }: {
   item: FestivalEdition;
   artistSlugs?: Readonly<Record<string, string>>;
   lineupDayArtistSlugs?: readonly string[];
   arrivalFacts?: readonly PublicArrivalFact[];
+  playlist?: PlaylistStatus;
+  playlistRefreshFailures?: PlaylistRefreshFailures;
 }) {
   const { t, date, dateTime, range, translateLabel } = usePublicCopy();
   const { language } = useLanguage();
@@ -396,6 +402,14 @@ export function FestivalEditionContent({
       {!paused && item.timetable?.length ? (
         <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
       ) : null}
+      {item.recordState === "current" && !paused && (
+        <FestivalPlaylistActions
+          item={item}
+          playlist={playlist}
+          playlistRefreshFailures={playlistRefreshFailures}
+          standalone
+        />
+      )}
       <FestivalArrival facts={arrivalFacts} />
       <section className="sourceNote">
         <strong>{t.provenance}</strong>
