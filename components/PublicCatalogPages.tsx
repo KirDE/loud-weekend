@@ -59,7 +59,17 @@ const copy = {
     snapshot: "Immutable snapshot captured",
     officialSource: "Official source ↗",
     checked: "checked",
-    fields: { edition: "edition", dates: "dates", lineup: "lineup", finalLineup: "full lineup" },
+    otherField: "source detail",
+    fields: {
+      edition: "edition",
+      dates: "dates",
+      status: "festival status",
+      headliners: "headliners",
+      lineup: "lineup",
+      finalLineup: "full lineup",
+      ticketStatus: "ticket availability",
+      ticketsUrl: "ticket link",
+    },
     sharedEyebrow: "PUBLIC FESTIVAL PLAN",
     sharedTitle: "Shared plan",
     updated: "Last updated",
@@ -105,11 +115,16 @@ const copy = {
     snapshot: "Unveränderlicher Stand gespeichert am",
     officialSource: "Offizielle Quelle ↗",
     checked: "geprüft",
+    otherField: "Quellenhinweis",
     fields: {
       edition: "Ausgabe",
       dates: "Termine",
+      status: "Festivalstatus",
+      headliners: "Headliner",
       lineup: "Line-up",
       finalLineup: "vollständiges Line-up",
+      ticketStatus: "Ticketverfügbarkeit",
+      ticketsUrl: "Ticketlink",
     },
     sharedEyebrow: "ÖFFENTLICHER FESTIVALPLAN",
     sharedTitle: "Geteilter Plan",
@@ -156,7 +171,17 @@ const copy = {
     snapshot: "Неизменяемый снимок сохранён",
     officialSource: "Официальный источник ↗",
     checked: "проверено",
-    fields: { edition: "выпуск", dates: "даты", lineup: "лайнап", finalLineup: "полный лайнап" },
+    otherField: "сведения источника",
+    fields: {
+      edition: "выпуск",
+      dates: "даты",
+      status: "статус фестиваля",
+      headliners: "хедлайнеры",
+      lineup: "лайнап",
+      finalLineup: "полный лайнап",
+      ticketStatus: "наличие билетов",
+      ticketsUrl: "ссылка на билеты",
+    },
     sharedEyebrow: "ОБЩИЙ ПЛАН ФЕСТИВАЛЕЙ",
     sharedTitle: "Общий план",
     updated: "Обновлено",
@@ -168,6 +193,12 @@ const copy = {
     month: (name: string) => "Фестивали в " + name,
   },
 } as const;
+
+function provenanceLabel(t: (typeof copy)[keyof typeof copy], field: string) {
+  const key = field === "startDate" || field === "endDate" ? "dates" : field;
+  const labels: Readonly<Record<string, string | undefined>> = t.fields;
+  return (Object.hasOwn(labels, key) ? labels[key] : undefined) ?? t.otherField;
+}
 
 function usePublicCopy() {
   const { language, locale, t: translateLabel } = useLanguage();
@@ -406,17 +437,7 @@ export function FestivalEditionContent({
         )}
         {item.provenance.map((source) => (
           <p key={source.field + "-" + source.url}>
-            <b>
-              {
-                t.fields[
-                  source.field === "startDate" || source.field === "endDate"
-                    ? "dates"
-                    : source.field
-                ]
-              }
-              :
-            </b>{" "}
-            {source.note}{" "}
+            <b>{provenanceLabel(t, source.field)}:</b> {source.note}{" "}
             <a href={source.url} target="_blank" rel="noreferrer">
               {t.officialSource}
             </a>{" "}

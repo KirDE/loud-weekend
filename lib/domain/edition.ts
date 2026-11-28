@@ -1,7 +1,8 @@
 import type { Festival, TimetableEntry } from "./festival.ts";
 
 export type EditionProvenance = Readonly<{
-  field: "edition" | "dates" | "startDate" | "endDate" | "lineup" | "finalLineup";
+  // Persisted evidence can include older or newly introduced field identifiers.
+  field: string;
   url: string;
   checkedAt: string;
   note: string;
