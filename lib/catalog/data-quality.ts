@@ -2,6 +2,7 @@ import type { CatalogSnapshot } from "./repository";
 import { latestDate } from "./freshness";
 import { festivalDateInterval } from "../festival-dates";
 import { hasAnnouncedLineup } from "../festival-lineup";
+import { isCalendarDate } from "../domain/edition-dates";
 import { editionOnHiatus } from "../edition-lifecycle";
 import { isOfficialTimetableSource, timetableEntrySchema } from "../timetables";
 
@@ -16,6 +17,7 @@ export function summarizeDataQuality(
     hiatus: 0,
     dates: 0,
     lineup: 0,
+    lineupDayCoverage: 0,
     tickets: 0,
     ticketCategories: 0,
     timetable: 0,
@@ -47,6 +49,27 @@ export function summarizeDataQuality(
     const dateInterval = festivalDateInterval(festival);
     if (dateInterval) summary.dates += 1;
     if (hasAnnouncedLineup(festival)) summary.lineup += 1;
+    // Day assignments are published separately from timed stage schedules.
+    const { startDate, endDate, lineupDays } = festival;
+    if (dateInterval && startDate && endDate && lineupDays?.length) {
+      const officialOrigin = URL.parse(festival.officialUrl)?.origin;
+      if (
+        lineupDays.some(({ cancelled, dates, sourceUrl, observedAt }) => {
+          if (cancelled || !dates.length || !sourceUrl || !verifiedTime(observedAt)) return false;
+          const source = URL.parse(sourceUrl);
+          return (
+            source?.protocol === "https:" &&
+            source.origin === officialOrigin &&
+            !source.username &&
+            !source.password &&
+            !source.search &&
+            !source.hash &&
+            dates.every((date) => isCalendarDate(date) && date >= startDate && date <= endDate)
+          );
+        })
+      )
+        summary.lineupDayCoverage += 1;
+    }
     if (festival.ticketStatus !== "unknown") summary.tickets += 1;
     const offers = festival.ticketOffers;
     if (

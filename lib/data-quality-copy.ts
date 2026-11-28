@@ -4,6 +4,7 @@ export const dataQualityCopy = {
     intro:
       "These counts cover current editions in the public catalogue, not every announced event or source.",
     coverage: "Published coverage",
+    lineupDays: "Published lineup by day",
     hiatusExcluded:
       "Editions on hiatus are excluded from published coverage, but still count in source checks.",
     allPaused: "All current editions are on hiatus. There is no published coverage to report.",
@@ -35,6 +36,7 @@ export const dataQualityCopy = {
       "Die Zahlen beziehen sich auf aktuelle Ausgaben im öffentlichen " +
       "Katalog, nicht auf alle angekündigten Veranstaltungen oder Quellen.",
     coverage: "Veröffentlichte Abdeckung",
+    lineupDays: "Veröffentlichtes Line-up nach Tagen",
     hiatusExcluded:
       "Pausierende Ausgaben zählen bei den Quellenprüfungen, nicht bei der veröffentlichten Abdeckung.",
     allPaused:
@@ -66,6 +68,7 @@ export const dataQualityCopy = {
     intro:
       "В подсчёт входят текущие выпуски публичного каталога, а не все заявленные мероприятия или источники.",
     coverage: "Опубликованные данные",
+    lineupDays: "Опубликован состав по дням",
     hiatusExcluded:
       "Выпуски на паузе учитываются при проверке источников, но не в сводке опубликованных данных.",
     allPaused: "Все текущие выпуски на паузе. Сводка опубликованных данных недоступна.",

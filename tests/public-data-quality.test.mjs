@@ -71,6 +71,7 @@ test("data quality aggregates only current records and excludes stale/invalid ev
     hiatus: 0,
     dates: 2,
     lineup: 2,
+    lineupDayCoverage: 0,
     tickets: 2,
     ticketCategories: 0,
     timetable: 1,
@@ -248,6 +249,16 @@ test("published hiatus excludes retained facts from coverage but not source heal
       approvedAt: checkedAt,
     },
   };
+  paused.lineupDays = [
+    {
+      artist: "Verified artist",
+      artistSlug: "verified-artist",
+      dates: ["2027-06-17"],
+      cancelled: false,
+      sourceUrl: festival.officialUrl,
+      observedAt: checkedAt,
+    },
+  ];
   const mixed = summarizeDataQuality({ festivals: [festival, paused], editions: [] }, now);
   assert.equal(mixed.total, 2);
   assert.equal(mixed.checked, 2);
@@ -262,6 +273,42 @@ test("published hiatus excludes retained facts from coverage but not source heal
   assert.equal(allPaused.dates, 0);
   assert.equal(allPaused.tickets, 0);
   assert.equal(allPaused.timetable, 0);
+  assert.equal(allPaused.lineupDayCoverage, 0);
+});
+
+test("published lineup day coverage counts editions, not acts or stage times", () => {
+  const appearance = {
+    artist: "Verified artist",
+    artistSlug: "verified-artist",
+    dates: ["2027-06-17", "2027-06-18"],
+    cancelled: false,
+    sourceUrl: "https://festival.example.test/private-day-fixture",
+    observedAt: checkedAt,
+  };
+  const edition = { ...festival, timetable: undefined };
+  const count = (record) =>
+    summarizeDataQuality({ festivals: [record], editions: [] }, now).lineupDayCoverage;
+  const valid = {
+    ...edition,
+    lineupDays: [appearance, { ...appearance, artistSlug: "second-act" }],
+  };
+  const tally = summarizeDataQuality({ festivals: [valid], editions: [] }, now);
+  assert.equal(tally.lineupDayCoverage, 1);
+  assert.equal(tally.timetable, 0);
+  assert.doesNotMatch(JSON.stringify(tally), /private-day-fixture|verified-artist/);
+  assert.equal(count({ ...valid, endDate: undefined }), 0);
+  for (const invalid of [
+    { cancelled: true },
+    { dates: [] },
+    { dates: ["2027-06-20"] },
+    { dates: ["2027-06-17T12:00:00Z"] },
+    { sourceUrl: undefined },
+    { sourceUrl: "https://other.example.test/lineup" },
+    { sourceUrl: appearance.sourceUrl + "?preview=1" },
+    { observedAt: "2029-01-01T00:00:00.000Z" },
+  ]) {
+    assert.equal(count({ ...edition, lineupDays: [{ ...appearance, ...invalid }] }), 0);
+  }
 });
 
 test("date evidence includes separately verified start and end dates for the same current edition", () => {
