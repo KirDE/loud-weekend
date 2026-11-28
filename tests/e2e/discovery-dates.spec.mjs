@@ -104,3 +104,51 @@ for (const [locale, t] of Object.entries(labels)) {
     }
   });
 }
+
+for (const [locale, t] of Object.entries(labels)) {
+  test(`date-only links keep saved filters and restore the URL on Back (${locale})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 850 });
+    const key = "festival-radar-planner-v1";
+    const saved = { query: "Synthetic", dateFrom: "2027-05-01" };
+    await page.addInitScript(
+      ({ key, saved }) => {
+        if (!localStorage.getItem(key)) {
+          localStorage.setItem(key, JSON.stringify({ savedFilters: saved }));
+        }
+      },
+      { key, saved },
+    );
+    const linkedUrl = `/${locale}/?dateFrom=2027-06-12&ref=festival-guide`;
+    await page.goto(linkedUrl);
+    await expect(page.locator(".search")).toHaveAttribute("data-ready", "true");
+    const search = page.locator(".search input");
+    const from = page.locator(".discoveryDates").getByLabel(t.from, { exact: true });
+    await expect(search).toHaveValue(saved.query);
+    await expect(from).toHaveValue("2027-06-12");
+    await from.fill("2027-07-01");
+    await search.fill("Synthetic West");
+    await expect(page).toHaveURL(linkedUrl);
+    await expect(from).toHaveValue("2027-07-01");
+
+    await page.getByRole("button", { name: t.reset, exact: true }).click();
+    await expect(page).toHaveURL(`/${locale}/?ref=festival-guide`);
+    await expect(search).toHaveValue(saved.query);
+    await expect(from).toHaveValue(saved.dateFrom);
+    await expect(search).toBeFocused();
+
+    await page.goBack();
+    await expect(page).toHaveURL(linkedUrl);
+    await expect(search).toHaveValue(saved.query);
+    await expect(from).toHaveValue("2027-06-12");
+    await page.goForward();
+    await expect(from).toHaveValue(saved.dateFrom);
+    expect(
+      await page.evaluate((key) => {
+        const { query, dateFrom } = JSON.parse(localStorage.getItem(key)).savedFilters;
+        return { query, dateFrom };
+      }, key),
+    ).toEqual(saved);
+  });
+}

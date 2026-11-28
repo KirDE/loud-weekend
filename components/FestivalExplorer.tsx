@@ -30,7 +30,6 @@ import {
   hasDiscoveryDates,
   matchesDiscoveryDates,
   removeDateQuery,
-  type DiscoveryDates,
 } from "@/lib/discovery-dates";
 import { FestivalComparison } from "./FestivalComparison";
 import { useLocalPlanner } from "./LocalPlanner";
@@ -89,17 +88,20 @@ export function FestivalExplorer({
     () => (queryParams ? discoveryFromQuery(queryParams, discoveryLineups) : null),
     [queryParams, discoveryLineups],
   );
-  const [draft, setDraft] = useState<{ key: string; patch: Partial<DiscoveryPreferences> }>();
-  // Leaving a shared URL discards its temporary edits. Browser history
-  // restores the URL's own snapshot, not edits that were never in that URL.
-  if (draft && draft.key !== linkKey) setDraft(undefined);
-  const activeFilters = useMemo(
-    () =>
-      shared
-        ? { ...shared.filters, ...(draft?.key === linkKey ? draft.patch : {}) }
-        : planner.savedFilters,
-    [shared, draft, linkKey, planner.savedFilters],
+  const linkedDates = useMemo(
+    () => (!shared && queryParams ? datesFromQuery(queryParams) : null),
+    [queryParams, shared],
   );
+  const isLinked = Boolean(shared || linkedDates);
+  const [draft, setDraft] = useState<{ key: string; patch: Partial<DiscoveryPreferences> }>();
+  // Linked filters are temporary. History restores the URL's snapshot rather
+  // than edits that were never saved or written into that URL.
+  if (draft && draft.key !== linkKey) setDraft(undefined);
+  const activeFilters = useMemo(() => {
+    if (!shared && !linkedDates) return planner.savedFilters;
+    const baseline = shared?.filters ?? { ...planner.savedFilters, ...linkedDates };
+    return draft?.key === linkKey ? { ...baseline, ...draft.patch } : baseline;
+  }, [shared, linkedDates, draft, linkKey, planner.savedFilters]);
   const {
     query,
     country,
@@ -112,15 +114,11 @@ export function FestivalExplorer({
     maxDistance,
     sort,
   } = activeFilters;
-  const linkedDates = useMemo(
-    () => (queryParams ? datesFromQuery(queryParams) : null),
-    [queryParams],
-  );
   const artistSelection = matchingArtists
     ? (activeFilters.artistSelection ?? emptyArtistSelection)
     : emptyArtistSelection;
   const artistMatch = activeFilters.artistMatch ?? "all";
-  const dateFilters = shared ? activeFilters : (linkedDates ?? activeFilters);
+  const dateFilters = activeFilters;
   const dateFiltersActive = hasDiscoveryDates(dateFilters);
   const favoriteKeys = shared?.favorites ?? planner.favoriteArtists;
   const shareFavorites = useMemo(
@@ -128,7 +126,7 @@ export function FestivalExplorer({
     [favoriteKeys, discoveryLineups],
   );
   const updateFilters = (patch: Partial<DiscoveryPreferences>) => {
-    if (!shared) {
+    if (!isLinked) {
       planner.updateSavedFilters(patch);
       return;
     }
@@ -283,23 +281,14 @@ export function FestivalExplorer({
     });
   };
 
-  const clearLinkedDates = () => {
-    const url = new URL(window.location.href);
-    removeDateQuery(url);
-    window.history.replaceState(null, "", url);
-  };
-  const updateDates = (patch: Partial<DiscoveryDates>) => {
-    updateFilters(shared ? patch : { ...linkedDates, ...patch });
-    if (!shared && linkedDates) clearLinkedDates();
-  };
   const clearFilters = () => {
-    if (shared) {
+    if (isLinked) {
       const url = new URL(window.location.href);
-      removeDiscoveryQuery(url);
+      if (shared) removeDiscoveryQuery(url);
+      else removeDateQuery(url);
       setDraft(undefined);
       window.history.pushState(null, "", url);
     } else {
-      if (linkedDates) clearLinkedDates();
       planner.setSavedFilters(defaultDiscoveryPreferences);
     }
     searchRef.current?.focus();
@@ -409,7 +398,7 @@ export function FestivalExplorer({
         >
           {t("clearAllFilters")}
         </button>
-        <DiscoveryDateFilters filters={dateFilters} onChange={updateDates} />
+        <DiscoveryDateFilters filters={dateFilters} onChange={updateFilters} />
         {matchingArtists && (
           <DiscoveryArtistPicker
             artists={matchingArtists}
@@ -422,7 +411,7 @@ export function FestivalExplorer({
           />
         )}
         <DiscoveryShare
-          filters={{ ...activeFilters, ...dateFilters, artistSelection }}
+          filters={{ ...activeFilters, artistSelection }}
           favorites={shareFavorites}
         />
         <div className="filterToggles">
