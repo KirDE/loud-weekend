@@ -333,7 +333,7 @@ export function FestivalEditionContent({
   );
   return (
     <div className="detailPage">
-      <Link className="back" href={"/editions/" + item.editionYear + "/"}>
+      <Link className="back" href={`/${language}/editions/${item.editionYear}/`}>
         {t.backEdition(item.editionYear)}
       </Link>
       <section className="detailHero editionDetailHero">

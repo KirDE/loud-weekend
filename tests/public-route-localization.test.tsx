@@ -106,3 +106,15 @@ for (const language of ["de", "ru"] as const) {
     assert.ok(!month.includes("Festivals in June"));
   });
 }
+
+for (const language of ["en", "de", "ru"] as const) {
+  test("the edition back link preserves its season and selected language: " + language, () => {
+    for (const item of [archived, current, tracking]) {
+      const detail = render(language, <FestivalEditionContent item={item} />);
+      assert.match(
+        detail,
+        new RegExp(`class="back" href="/${language}/editions/${item.editionYear}/?"`),
+      );
+    }
+  });
+}
