@@ -10,6 +10,7 @@ import { readCampingFacts } from "@/lib/catalog/camping-facts";
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { getCatalog } from "@/lib/catalog/repository";
 import { canonicalPath } from "@/lib/seo";
+import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { lineupDayProfileSlugs } from "@/lib/festival-lineup";
 
 type Params = Promise<{ slug: string; year: string }>;
@@ -39,10 +40,12 @@ export default async function FestivalEditionPage({ params }: { params: Params }
     (edition) => edition.slug === slug && edition.editionYear === Number(rawYear),
   );
   if (!item) notFound();
-  const [history, arrivalFacts, campingFacts] = await Promise.all([
+  const publishable = item.recordState === "current" && !editionOnHiatus(item);
+  const [history, arrivalFacts, campingFacts, overview] = await Promise.all([
     item.editionYear === undefined ? [] : readEditionHistory(db, item.slug, item.editionYear),
     readArrivalFacts(db, item),
-    item.recordState === "current" && !editionOnHiatus(item) ? readCampingFacts(db, item) : [],
+    publishable ? readCampingFacts(db, item) : [],
+    publishable ? readFestivalOverview(db, item) : undefined,
   ]);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
@@ -52,6 +55,7 @@ export default async function FestivalEditionPage({ params }: { params: Params }
         arrivalFacts={arrivalFacts}
         campingFacts={campingFacts}
         artistSlugs={artistSlugs}
+        overview={overview}
         lineupDayArtistSlugs={lineupDayProfileSlugs(item.lineupDays, artists)}
       />
       <EditionHistory entries={history} officialUrl={item.officialUrl} />

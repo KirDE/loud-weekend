@@ -13,6 +13,8 @@ import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { FestivalEdition } from "@/lib/domain/edition";
 import type { PublicArrivalFact, PublicCampingFact } from "@/lib/domain/festival";
 import { FestivalArrival } from "./FestivalArrival";
+import { FestivalOverview } from "./FestivalOverview";
+import type { PublicFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { FestivalCamping } from "./FestivalCamping";
 import { FestivalTicketOffers } from "./FestivalTicketOffers";
 import { FestivalExplorer } from "./FestivalExplorer";
@@ -311,12 +313,14 @@ export function FestivalEditionContent({
   artistSlugs = {},
   lineupDayArtistSlugs = [],
   arrivalFacts = [],
+  overview,
   campingFacts = [],
 }: {
   item: FestivalEdition;
   artistSlugs?: Readonly<Record<string, string>>;
   lineupDayArtistSlugs?: readonly string[];
   arrivalFacts?: readonly PublicArrivalFact[];
+  overview?: PublicFestivalOverview;
   campingFacts?: readonly PublicCampingFact[];
 }) {
   const { t, date, dateTime, range, translateLabel } = usePublicCopy();
@@ -362,6 +366,7 @@ export function FestivalEditionContent({
           )}
         </div>
       </section>
+      <FestivalOverview overview={overview} />
       {paused ? (
         <EditionLifecycleNotice item={item} />
       ) : (

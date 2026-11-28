@@ -215,6 +215,16 @@ for (const [lang, heading] of Object.entries({
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       320,
     );
+    await page.goto(`/festivals/${slug}/${year}/`);
+    await expect(region.getByText(record.summary[lang], { exact: true })).toBeVisible();
+    await expect(region.locator(`a[href="${source.url}"]`)).toBeVisible();
+    await expect(region.locator("time")).toHaveAttribute("datetime", record.checkedOn);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
+    await page.goto(`/festivals/synthetic-fest/2027/`);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("2027");
+    await expect(page.getByRole("region", { name: heading })).toHaveCount(0);
     await page.goto(`/${lang}/festivals/synthetic-fest/`);
     await expect(page.getByRole("region", { name: heading })).toHaveCount(0);
   });
