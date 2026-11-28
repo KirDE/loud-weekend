@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { artistMetadata } from "../lib/artist-page.ts";
+import { festival } from "./support/catalog.ts";
 
 const provider = await readFile(
   new URL("../components/LanguageProvider.tsx", import.meta.url),
@@ -78,6 +79,22 @@ test("artist deep links remain localized while UI navigation uses bare paths", (
   }
   assert.match(artistDetail, /href="\/"/);
   assert.match(artistDetail, /href=\{`\/festivals\/\$\{festival\.slug\}/);
+});
+
+test("artist metadata identifies the actual published editions without inferring missing years", () => {
+  const artist = { name: "Example", slug: "example" };
+  const appearances = [
+    { ...festival, startDate: undefined },
+    { ...festival, editionYear: 2028, startDate: undefined },
+    { ...festival, name: "Another Fest", editionYear: undefined },
+  ];
+  for (const language of Object.keys(expected)) {
+    const { description } = artistMetadata(artist, appearances, language);
+    assert.match(description, /Synthetic Fest 2027/);
+    assert.match(description, /Synthetic Fest 2028/);
+    assert.match(description, /Another Fest/);
+    assert.doesNotMatch(description, /Another Fest \d{4}/);
+  }
 });
 
 test("artist enrichment UI renders all labels through LanguageProvider", () => {

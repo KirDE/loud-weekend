@@ -162,9 +162,15 @@ export function ArtistDetail({
               a.slug.localeCompare(b.slug),
           )
           .map((festival) => (
-            <Link href={`/festivals/${festival.slug}/`} key={festival.slug}>
+            <Link
+              href={`/festivals/${festival.slug}/${festival.editionYear ? `${festival.editionYear}/` : ""}`}
+              key={festival.slug}
+            >
               <span>{festival.countryCode}</span>
-              <strong>{festival.name}</strong>
+              <strong>
+                {festival.name}
+                {festival.editionYear && ` ${festival.editionYear}`}
+              </strong>
               <em>{festival.city}</em>
               <b>→</b>
             </Link>

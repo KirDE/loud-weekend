@@ -46,7 +46,7 @@ export function festivalMusicEvent(item: Festival, language?: string) {
       : {}),
     location: {
       "@type": "Place",
-      name: item.city || item.country,
+      name: item.venue?.name || item.city || item.country,
       address: {
         "@type": "PostalAddress",
         addressCountry: item.countryCode,

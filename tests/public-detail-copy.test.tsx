@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { publicFestivalVenue } from "../lib/catalog/festival-venues";
+import { festivalMusicEvent } from "../lib/seo";
 import { StageTimetable } from "../components/StageTimetable";
 import { ArtistDetail } from "../components/ArtistDetail";
 import { artist } from "./support/catalog";
@@ -16,6 +18,63 @@ import { festivalSetlistHistoryUrl } from "../lib/setlist-history";
 const similar = { ...festival, slug: "similar-fest", name: "Similar Fest" };
 
 for (const language of ["en", "de", "ru"] as const) {
+  test(`event markup and visible location use the same verified edition venue in ${language}`, () => {
+    const evidence = {
+      editionId: "sample-edition",
+      editionYear: 2027,
+      countryCode: festival.countryCode,
+      city: festival.city!,
+      organizerHost: "festival.example.test",
+      name: "Fixture Venue",
+      sourceUrl: "https://festival.example.test/venue",
+      checkedOn: new Date("2026-11-23"),
+      latitude: 50,
+      longitude: 10,
+    };
+    const render = (item: typeof festival) =>
+      renderToStaticMarkup(
+        <LanguageProvider initialLanguage={language}>
+          <LocalPlannerProvider>
+            <FestivalDetail item={item} festivals={[item]} artistSlugs={{}} />
+          </LocalPlannerProvider>
+        </LanguageProvider>,
+      );
+
+    const item = { ...festival, venue: publicFestivalVenue(evidence, festival) };
+    assert.equal(festivalMusicEvent(item, language)?.location.name, evidence.name);
+    assert.equal(
+      festivalMusicEvent(item, language)?.location.address.addressLocality,
+      festival.city,
+    );
+    assert.match(render(item), /class="eyebrow">DE · Sample City · Fixture Venue<\/div>/);
+
+    for (const rejected of [
+      { ...evidence, editionYear: 2026 },
+      { ...evidence, city: "Another City" },
+      { ...evidence, sourceUrl: "https://other.example.test/venue" },
+    ]) {
+      const fallback = { ...festival, venue: publicFestivalVenue(rejected, festival) };
+      assert.equal(festivalMusicEvent(fallback, language)?.location.name, festival.city);
+      assert.doesNotMatch(render(fallback), /Fixture Venue/);
+    }
+
+    const paused = {
+      ...item,
+      editionLifecycle: {
+        festivalSlug: item.slug,
+        editionYear: evidence.editionYear,
+        lifecycle: "hiatus" as const,
+        announcedReturnYear: null,
+        alternativeEvent: null,
+        sourceUrl: item.officialUrl,
+        observedAt: "2026-11-23T12:00:00.000Z",
+        approvedAt: "2026-11-23T13:00:00.000Z",
+      },
+    };
+    assert.equal(festivalMusicEvent(paused, language), null);
+    assert.doesNotMatch(render(paused), /Fixture Venue/);
+  });
+
   test(`live history links to all festival editions, not a future-year search, in ${language}`, () => {
     for (const year of [2026, 2027, 2028]) {
       const item = {
@@ -276,8 +335,14 @@ for (const language of ["en", "de", "ru"] as const) {
 for (const language of ["en", "de", "ru"] as const) {
   test(`artist appearances follow festival dates, not import order, in ${language}`, () => {
     const appearances = [
-      { ...festival, slug: "unknown", startDate: undefined },
-      { ...festival, slug: "late", startDate: "2027-08-01", updatedAt: "2026-01-01" },
+      { ...festival, slug: "unknown", editionYear: undefined, startDate: undefined },
+      {
+        ...festival,
+        slug: "late",
+        editionYear: 2028,
+        startDate: "2028-08-01",
+        updatedAt: "2026-01-01",
+      },
       { ...festival, slug: "early-b", startDate: "2027-06-01", updatedAt: "2026-11-07" },
       { ...festival, slug: "early-a", startDate: "2027-06-01", updatedAt: "2026-11-06" },
     ];
@@ -290,9 +355,12 @@ for (const language of ["en", "de", "ru"] as const) {
       </LanguageProvider>,
     );
     assert.deepEqual(
-      [...html.matchAll(/href="\/festivals\/([^/"\s]+)\/?"/g)].map((match) => match[1]),
-      ["early-a", "early-b", "late", "unknown"],
+      [...html.matchAll(/href="\/festivals\/([^"\s]+)"/g)].map((match) => match[1]),
+      ["early-a/2027", "early-b/2027", "late/2028", "unknown"],
     );
+    assert.match(html, /<strong>Synthetic Fest 2028<\/strong>/);
+    assert.match(html, /<strong>Synthetic Fest<\/strong>/);
+    assert.doesNotMatch(html, /Synthetic Fest undefined/);
     assert.deepEqual(appearances, before);
   });
 }
