@@ -71,11 +71,16 @@ export function FestivalComparison({
         <thead>
           <tr>
             <th scope="col">{t("planningDetail")}</th>
-            {festivals.map((item) => (
-              <th scope="col" key={item.slug}>
-                <Link href={`/festivals/${item.slug}/`}>{item.name}</Link>
-              </th>
-            ))}
+            {festivals.map((item) => {
+              const href = item.editionYear
+                ? `/festivals/${item.slug}/${item.editionYear}/`
+                : `/festivals/${item.slug}/`;
+              return (
+                <th scope="col" key={item.slug}>
+                  <Link href={href}>{item.name}</Link>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
