@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { publicFestivalVenue } from "../lib/catalog/festival-venues";
+import { festivalMusicEvent } from "../lib/seo";
 import { StageTimetable } from "../components/StageTimetable";
 import { ArtistDetail } from "../components/ArtistDetail";
 import { artist } from "./support/catalog";
@@ -12,8 +14,6 @@ import { LocalPlannerProvider } from "../components/LocalPlanner";
 import { festival } from "./support/catalog";
 import { hasAvailableTickets } from "../lib/tickets";
 import { festivalSetlistHistoryUrl } from "../lib/setlist-history";
-import { publicFestivalVenue } from "../lib/catalog/festival-venues";
-import { festivalMusicEvent } from "../lib/seo";
 
 const similar = { ...festival, slug: "similar-fest", name: "Similar Fest" };
 
