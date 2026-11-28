@@ -2,7 +2,7 @@
 
 import { sendProductEvent } from "@/lib/product-events";
 import { favoriteArtistLabels, type FavoriteArtistIdentity } from "@/lib/favorite-artist";
-import Link from "next/link";
+import Link from "./CatalogLink";
 import { useState } from "react";
 import { playlistDepths, type PlaylistDepth } from "@/lib/playlist-depth";
 import { playlistLineup } from "@/lib/playlist-selection";

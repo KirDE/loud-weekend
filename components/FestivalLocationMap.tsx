@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./CatalogLink";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { MapLibreMap } from "maplibre-gl";
 import Supercluster from "supercluster";

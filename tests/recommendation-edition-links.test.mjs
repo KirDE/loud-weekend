@@ -36,7 +36,7 @@ for (const locale of ["en", "de", "ru"]) {
 
   test(`related festival links use the persisted edition year in ${locale}`, () => {
     const html = render(recommendation);
-    assert.ok(html.includes(`href="/${locale}/festivals/related/2028"`));
+    assert.ok(html.includes(`href="/${locale}/festivals/related/2028/"`));
     assert.ok(!html.includes(`href="/${locale}/festivals/related"`));
   });
 

@@ -94,10 +94,14 @@ test("curated guides publish reciprocal locale metadata and display only evidenc
     const editionLink = page.getByRole("link", { name: "Synthetic Fest", exact: true });
     await editionLink.focus();
     await expect(editionLink).toBeFocused();
+    await page.evaluate(() => {
+      window.__editionSourceDocument = true;
+    });
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/de\/festivals\/synthetic-fest\/2027\/$/);
     await expect(page.locator("html")).toHaveAttribute("lang", "de");
-    // A client transition may briefly retain the previous page's streamed metadata.
+    expect(await page.evaluate(() => window.__editionSourceDocument)).toBeUndefined();
+    // Exact edition navigation replaces the document rather than retaining streamed metadata.
     // Wait for exactly one canonical, not merely the presence of the desired link.
     await expect
       .poll(() =>

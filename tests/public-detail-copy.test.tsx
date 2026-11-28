@@ -112,7 +112,7 @@ for (const language of ["en", "de", "ru"] as const) {
       de: "Ausgabe 2028 öffnen",
       ru: "Открыть выпуск 2028 года",
     };
-    const link = new RegExp(`${href}/?">${labels[language]}</a>`);
+    const link = new RegExp(`<a\\b(?=[^>]*${href}/?")[^>]*>${labels[language]}</a>`);
     assert.match(render(2028), link);
     assert.doesNotMatch(
       render(),

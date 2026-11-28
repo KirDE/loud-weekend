@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./CatalogLink";
 import type { AnnouncementFilters, readPublicAnnouncements } from "@/lib/catalog/public-history";
 import { publicHistoryCopy } from "@/lib/catalog/public-history-copy";
 import { useLanguage } from "./LanguageProvider";

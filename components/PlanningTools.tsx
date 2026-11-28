@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./CatalogLink";
 import type { Festival } from "@/lib/domain/festival";
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";

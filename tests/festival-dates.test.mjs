@@ -91,9 +91,9 @@ for (const [language, locale, march, july] of [
       ],
       language,
     );
-    const links = [...calendar.matchAll(/<a role="listitem" href="([^"]+)"/g)].map(([, href]) =>
-      href.replace(/\/$/, ""),
-    );
+    const links = [
+      ...calendar.matchAll(/<a\b(?=[^>]*role="listitem")(?=[^>]*href="([^"]+)")[^>]*>/g),
+    ].map(([, href]) => href.replace(/\/$/, ""));
     assert.deepEqual(links, [`/festivals/${festival.slug}/2026`, "/festivals/year-unknown"]);
   });
 

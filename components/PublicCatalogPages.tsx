@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./CatalogLink";
 import { hasSeasonCalendarDates } from "@/lib/catalog/seasons";
 import { calendarEligible, calendarFile } from "@/lib/planning";
 import { editionRecordCompleteness } from "@/lib/edition-status";

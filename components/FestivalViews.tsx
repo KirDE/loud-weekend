@@ -1,5 +1,5 @@
 "use client";
-import Link from "next/link";
+import Link from "./CatalogLink";
 import { useMemo, useState } from "react";
 import type { Festival } from "@/lib/domain/festival";
 import {

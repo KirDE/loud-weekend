@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./CatalogLink";
 import { formatFestivalDateRange } from "@/lib/festival-dates";
 import { festivalGuides, type GuideTopic } from "@/lib/festival-guides";
 import { useLanguage } from "./LanguageProvider";
