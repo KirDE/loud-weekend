@@ -5,11 +5,13 @@
 
   --surface: #fff;
   --solid: #171712;
-  --muted: #68665f;
+  --muted: #626058;
   --ink: #171712;
   --paper: #f2efe7;
   --acid: #d7ff3f;
   --orange: #ff5c35;
+  --accent-text-on-light: #ad3519;
+  --accent-text: var(--accent-text-on-light);
   --line: #ccc8bc;
   --soft: #e7e3d8;
 }
@@ -23,6 +25,7 @@
   --soft: #2d3028;
   --line: #53574b;
   --muted: #babbb1;
+  --accent-text: #ff947a;
 }
 
 .footerPreferences {
@@ -1328,6 +1331,8 @@ main {
 }
 
 .festivalCard:is(:hover, :focus-within) {
+  --accent-text: var(--accent-text-on-light);
+
   background: var(--acid);
   transform: translateY(-4px);
   box-shadow: 0 15px 30px rgb(0 0 0 / 9%);
@@ -1466,7 +1471,7 @@ main {
 }
 
 .cardFoot b {
-  color: #d7431e;
+  color: var(--accent-text);
 }
 
 .empty {
