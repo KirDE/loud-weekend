@@ -97,10 +97,15 @@ test("curated guides publish reciprocal locale metadata and display only evidenc
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/de\/festivals\/synthetic-fest\/2027\/$/);
     await expect(page.locator("html")).toHaveAttribute("lang", "de");
-    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
-      "href",
-      "https://loudweekend.eu/de/festivals/synthetic-fest/2027/",
-    );
+    // A client transition may briefly retain the previous page's streamed metadata.
+    // Wait for exactly one canonical, not merely the presence of the desired link.
+    await expect
+      .poll(() =>
+        page
+          .locator('link[rel="canonical"]')
+          .evaluateAll((links) => links.map((link) => link.href)),
+      )
+      .toEqual(["https://loudweekend.eu/de/festivals/synthetic-fest/2027/"]);
   } finally {
     if (proof) await db.editionProvenance.delete({ where: { id: proof.id } });
     await db.$disconnect();
