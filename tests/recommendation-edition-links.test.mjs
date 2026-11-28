@@ -40,9 +40,11 @@ for (const locale of ["en", "de", "ru"]) {
     assert.ok(!html.includes(`href="/${locale}/festivals/related"`));
   });
 
-  test(`related festival links do not infer an edition from event dates in ${locale}`, () => {
-    const html = render({ ...recommendation, editionYear: undefined });
-    assert.ok(html.includes(`href="/${locale}/festivals/related"`));
-    assert.ok(!html.includes(`href="/${locale}/festivals/related/2028"`));
+  test(`related festivals must have a recorded matching edition in ${locale}`, () => {
+    for (const editionYear of [undefined, 2027]) {
+      const html = render({ ...recommendation, editionYear });
+      assert.ok(!html.includes(`href="/${locale}/festivals/related`));
+      assert.ok(!html.includes(recommendation.name));
+    }
   });
 }
