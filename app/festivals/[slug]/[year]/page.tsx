@@ -40,8 +40,7 @@ export default async function FestivalEditionPage({ params }: { params: Params }
   const item = editions.find(
     (edition) => edition.slug === slug && edition.editionYear === parseSeasonYear(rawYear),
   );
-  if (!item || (item.recordState === "archived" && !publicSeasonEditions([item]).length))
-    notFound();
+  if (!item || !publicSeasonEditions([item]).length) notFound();
   const publishable = item.recordState === "current" && !editionOnHiatus(item);
   const [history, arrivalFacts, campingFacts, overview] = await Promise.all([
     item.editionYear === undefined ? [] : readEditionHistory(db, item.slug, item.editionYear),

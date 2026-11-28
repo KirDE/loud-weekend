@@ -13,7 +13,9 @@ import { EditionHistory } from "../components/EditionHistory.tsx";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
 import { parseSeasonYear, publicSeasonEditions } from "../lib/catalog/seasons.ts";
 import { canonicalPath, localizedAlternates } from "../lib/seo.ts";
-import { LanguageProvider } from "../components/LanguageProvider.tsx";
+import { notificationEventsForChanges } from "../lib/ingestion/notification-events.ts";
+import { ticketPresentation } from "../lib/tickets.ts";
+import { LanguageProvider, translate } from "../components/LanguageProvider.tsx";
 
 function makeEdition(overrides = {}) {
   return {
@@ -31,7 +33,14 @@ function makeEdition(overrides = {}) {
     officialUrl: "https://example.test/",
     updatedAt: "2026-10-08T00:00:00Z",
     genres: [],
-    provenance: [],
+    provenance: [
+      {
+        field: "edition",
+        url: "https://example.test/",
+        note: "Reviewed synthetic edition",
+        checkedAt: "2026-11-28T00:00:00Z",
+      },
+    ],
     snapshotAt: overrides.recordState === "archived" ? "2026-11-01T00:00:00Z" : undefined,
     ...overrides,
   };
@@ -456,4 +465,92 @@ test("published archives keep their route body and reciprocal metadata", async (
     localizedAlternates("/festivals/synthetic-fest/2027/"),
   );
   assert.deepEqual(item, before);
+});
+
+test("unreviewed tracking routes fail closed before downstream readers", async () => {
+  const item = makeEdition({ provenance: [] });
+  const page = loadPage([item], [], [], { denyReads: true });
+  const props = { params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }) };
+  await assert.rejects(page(props), /NEXT_NOT_FOUND/);
+  assert.deepEqual(await page.generateMetadata(props), {});
+});
+
+test("ticket notifications land on exact editions with ordinary ticket actions and truthful states", async () => {
+  for (const status of [
+    "available",
+    "low",
+    "sold_out",
+    "not_on_sale",
+    "sales_ended",
+    "unknown",
+    "free",
+  ]) {
+    const item = makeEdition({
+      recordState: "current",
+      ticketStatus: status,
+      ticketsUrl: "https://example.test/tickets",
+    });
+    const before = structuredClone(item);
+    const presentation = ticketPresentation(item);
+    for (const language of ["en", "de", "ru"]) {
+      const html = await renderEdition(item, [item], language);
+      assert.ok(html.includes(`data-ticket-status="${presentation.status}"`));
+      assert.ok(html.includes(`href="${presentation.href}" target="_blank" rel="noreferrer"`));
+      assert.ok(html.includes(translate(language, presentation.label)));
+    }
+    if (["available", "low", "sold_out"].includes(status)) {
+      const [event] = notificationEventsForChanges(
+        item,
+        [
+          {
+            kind: "ticket_status_changed",
+            field: "ticketStatus",
+            before: "unknown",
+            after: status,
+          },
+        ],
+        "2026-11-28T00:00:00Z",
+      );
+      assert.equal(new URL(event.url).pathname, `/festivals/${item.slug}/${item.editionYear}/`);
+    }
+    assert.deepEqual(item, before);
+  }
+});
+
+test("exact edition ticket controls never invent stock or leak archive/tracking offers", async () => {
+  const missing = makeEdition({ recordState: "current", ticketStatus: "available" });
+  assert.match(await renderEdition(missing), /data-ticket-status="unknown"/);
+  assert.doesNotMatch(await renderEdition(missing), /href="https:\/\/example.test\/tickets"/);
+  for (const recordState of ["archived", "tracking"]) {
+    const item = makeEdition({
+      recordState,
+      ticketStatus: "available",
+      ticketsUrl: "https://example.test/tickets",
+    });
+    const html = await renderEdition(item);
+    assert.doesNotMatch(html, /data-ticket-status=|href="https:\/\/example.test\/tickets"/);
+  }
+});
+
+test("exact edition keeps reviewed ticket tiers instead of ordinary stock claims", async () => {
+  const item = makeEdition({
+    recordState: "current",
+    ticketStatus: "available",
+    ticketsUrl: "https://example.test/ordinary",
+    ticketOffers: {
+      editionYear: 2027,
+      sourceUrl: "https://example.test/reviewed",
+      observedAt: "2026-11-28T00:00:00Z",
+      offers: [
+        { key: "full", kind: "full_pass", status: "sold_out", price: null, saleDateText: null },
+      ],
+    },
+  });
+  const html = await renderEdition(item);
+  assert.match(html, /ticketOfferSection/);
+  assert.doesNotMatch(
+    html,
+    /href="https:\/\/example.test\/ordinary"|data-ticket-status="available"/,
+  );
+  assert.match(html, /href="https:\/\/example.test\/reviewed"/);
 });

@@ -23,6 +23,7 @@ import { SeasonNavigation } from "./SeasonNavigation";
 import { useLanguage } from "./LanguageProvider";
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { EditionLifecycleNotice } from "./EditionLifecycleNotice";
+import { ticketPresentation } from "@/lib/tickets";
 
 // Public route bodies use the selected UI language; their server routes and SEO
 // metadata remain independent of the saved preference and unchanged.
@@ -327,6 +328,10 @@ export function FestivalEditionContent({
   const { language } = useLanguage();
   const paused = currentEditionOnHiatus(item);
   const downloadable = !paused && hasSeasonCalendarDates(item) && calendarEligible(item);
+  const tickets =
+    item.recordState === "current" && !paused && !item.ticketOffers
+      ? ticketPresentation(item)
+      : undefined;
   const artists = [...item.headliners, ...item.lineup];
   const completeness = editionRecordCompleteness(item);
   const recordLabel = {
@@ -366,6 +371,26 @@ export function FestivalEditionContent({
           )}
         </div>
       </section>
+      {tickets && (
+        <div className="actionGrid">
+          {tickets.href ? (
+            <a
+              href={tickets.href}
+              target="_blank"
+              rel="noreferrer"
+              data-ticket-status={tickets.status}
+            >
+              <small>{translateLabel("passes")}</small>
+              <strong>{translateLabel(tickets.label)}</strong>
+            </a>
+          ) : (
+            <div className="disabled" data-ticket-status={tickets.status}>
+              <small>{translateLabel("passes")}</small>
+              <strong>{translateLabel(tickets.label)}</strong>
+            </div>
+          )}
+        </div>
+      )}
       <FestivalOverview overview={overview} />
       {paused ? (
         <EditionLifecycleNotice item={item} />

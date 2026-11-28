@@ -18,7 +18,18 @@ export type TicketPresentation = {
   label: TicketLabel;
 };
 
-export function ticketPresentation(item: Festival): TicketPresentation {
+type TicketInput = Pick<
+  Festival,
+  | "slug"
+  | "editionYear"
+  | "officialUrl"
+  | "editionLifecycle"
+  | "ticketStatus"
+  | "ticketsUrl"
+  | "ticketOffers"
+>;
+
+export function ticketPresentation(item: TicketInput): TicketPresentation {
   if (editionOnHiatus(item)) return { status: "hiatus", label: "editionHiatus" };
   // Free, unticketed admission has no purchase flow. Ancillary camping/VIP
   // ticket URLs must not become a misleading general-admission CTA.
