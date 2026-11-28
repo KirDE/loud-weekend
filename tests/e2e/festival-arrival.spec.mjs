@@ -22,6 +22,12 @@ const headings = {
   ru: "Место проведения и проезд",
 };
 
+const mapLabels = {
+  en: { venue: "Find the venue on OpenStreetMap", city: "Find the city on OpenStreetMap" },
+  de: { venue: "Festivalgelände auf OpenStreetMap suchen", city: "Stadt auf OpenStreetMap suchen" },
+  ru: { venue: "Найти площадку на OpenStreetMap", city: "Найти город на OpenStreetMap" },
+};
+
 test("arrival details come from reviewed rows for the exact edition and organizer", async ({
   browser,
 }) => {
@@ -62,6 +68,7 @@ test("arrival details come from reviewed rows for the exact edition and organize
         slug,
         name: "Arrival fixture",
         country: "Germany",
+        city: "Fixture City",
         countryCode: "DE",
         officialUrl,
         genres: [],
@@ -102,6 +109,12 @@ test("arrival details come from reviewed rows for the exact edition and organize
         await page.goto(`/${locale}/festivals/${slug}/`);
         const panel = page.getByRole("region", { name: heading });
         await expect(panel.locator("dd")).toHaveCount(1);
+        const cityMap = page.getByRole("link", { name: mapLabels[locale].city });
+        await expect(cityMap).toHaveAttribute(
+          "href",
+          "https://www.openstreetmap.org/search?query=Fixture%20City%2C%20Germany",
+        );
+        await expect(page.getByRole("link", { name: mapLabels[locale].venue })).toHaveCount(0);
         await expect(panel.getByText(fact.description[locale], { exact: false })).toBeVisible();
         await expect(panel.locator(`time[datetime="${fact.checkedOn}"]`)).toBeVisible();
         await expect(panel.locator(`a[href="${fact.sourceUrl}"]`)).toHaveAttribute(
@@ -120,10 +133,54 @@ test("arrival details come from reviewed rows for the exact edition and organize
       }
     }
 
+    const address = "Fixture Grounds, Gate 2 & 3, Fixture City, Germany";
+    await db.editionArrivalFact.create({
+      data: {
+        editionId: editionRow.id,
+        editionYear: review.editionYear,
+        countryCode: review.countryCode,
+        organizerHost: review.organizerHost,
+        kind: "venue",
+        descriptionEn: address,
+        descriptionDe: "Testgelände, Tor 2 und 3",
+        descriptionRu: "Тестовая площадка, вход 2 и 3",
+        sourceUrl: fact.sourceUrl,
+        checkedOn: new Date(fact.checkedOn),
+      },
+    });
+
     const page = await browser.newPage();
     try {
       await page.goto(`/festivals/${slug}/`);
       await expect(page.getByRole("region", { name: headings.en })).toBeVisible();
+      const venueMap = page.getByRole("link", { name: mapLabels.en.venue });
+      await expect(venueMap).toHaveAttribute(
+        "href",
+        `https://www.openstreetmap.org/search?query=${encodeURIComponent(address)}`,
+      );
+      await expect(venueMap).toHaveAttribute("rel", "noreferrer");
+      await expect(page.getByRole("link", { name: mapLabels.en.city })).toHaveCount(0);
+
+      await db.editionVenue.create({
+        data: {
+          editionId: editionRow.id,
+          editionYear: review.editionYear,
+          countryCode: review.countryCode,
+          organizerHost: review.organizerHost,
+          city: "Fixture City",
+          name: "Fixture Grounds",
+          latitude: 50.123,
+          longitude: 8.456,
+          sourceUrl: fact.sourceUrl,
+          checkedOn: new Date(fact.checkedOn),
+        },
+      });
+      await page.reload();
+      await expect(venueMap).toHaveAttribute(
+        "href",
+        "https://www.openstreetmap.org/?mlat=50.123&mlon=8.456#map=17/50.123/8.456",
+      );
+
       await db.festival.update({
         where: { id: festivalId },
         data: { officialUrl: "https://new.example.test/" },
@@ -133,6 +190,8 @@ test("arrival details come from reviewed rows for the exact edition and organize
         page.getByRole("heading", { name: "Arrival fixture", exact: true }),
       ).toBeVisible();
       await expect(page.getByRole("region", { name: headings.en })).toHaveCount(0);
+      await expect(venueMap).toHaveCount(0);
+      await expect(page.getByRole("link", { name: mapLabels.en.city })).toBeVisible();
 
       await db.festival.update({ where: { id: festivalId }, data: { officialUrl } });
       await db.festivalEdition.update({
@@ -141,6 +200,8 @@ test("arrival details come from reviewed rows for the exact edition and organize
       });
       await page.reload();
       await expect(page.getByRole("region", { name: headings.en })).toHaveCount(0);
+      await expect(venueMap).toHaveCount(0);
+      await expect(page.getByRole("link", { name: mapLabels.en.city })).toBeVisible();
     } finally {
       await page.close();
     }
