@@ -74,7 +74,7 @@ export function summarizeDataQuality(
     const proof = new Set(
       edition.provenance
         .filter(({ checkedAt }) => verifiedTime(checkedAt))
-        .map(({ field }) => field),
+        .map(({ field }) => (field === "finalLineup" ? "lineup" : field)),
     );
     if (proof.has("dates") || (proof.has("startDate") && proof.has("endDate")))
       summary.dateEvidence += 1;
