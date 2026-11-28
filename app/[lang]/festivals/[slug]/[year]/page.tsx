@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import FestivalEditionPage from "@/app/festivals/[slug]/[year]/page";
 import { getCatalog } from "@/lib/catalog/repository";
 import { supportedLanguages } from "@/lib/catalog/public";
-import { parseSeasonYear } from "@/lib/catalog/seasons";
+import { parseSeasonYear, publicSeasonEditions } from "@/lib/catalog/seasons";
 import { canonicalPath, localizedAlternates } from "@/lib/seo";
 import { socialPreviewMetadata } from "@/lib/social-preview";
 
@@ -18,7 +18,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (editionYear === undefined) return {};
   const { editions } = await getCatalog();
   const edition = editions.find((item) => item.slug === slug && item.editionYear === editionYear);
-  if (!edition || edition.recordState === "tracking") return {};
+  if (!edition || (edition.recordState === "tracking" && !publicSeasonEditions([edition]).length))
+    return {};
   const path = canonicalPath(`/festivals/${edition.slug}/${edition.editionYear}`);
   const canonical = `/${language}${path}`;
   return {

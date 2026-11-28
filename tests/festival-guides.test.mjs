@@ -97,7 +97,10 @@ for (const language of ["en", "de", "ru"]) {
         h(FestivalGuideContent, { topic: "multi-day", items }),
       ),
     );
-    assert.match(html, /href="\/festivals\/fixture\/2028\/?">Future Festival<\/a>/);
+    assert.match(
+      html,
+      new RegExp(`href="/${language}/festivals/fixture/2028/?">Future Festival</a>`),
+    );
     assert.match(html, new RegExp(`href="/${language}/?"`));
   });
 }

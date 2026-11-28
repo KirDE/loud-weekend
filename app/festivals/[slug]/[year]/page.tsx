@@ -9,7 +9,7 @@ import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
 import { readCampingFacts } from "@/lib/catalog/camping-facts";
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { getCatalog } from "@/lib/catalog/repository";
-import { parseSeasonYear } from "@/lib/catalog/seasons";
+import { parseSeasonYear, publicSeasonEditions } from "@/lib/catalog/seasons";
 import { canonicalPath, localizedAlternates } from "@/lib/seo";
 import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { lineupDayProfileSlugs } from "@/lib/festival-lineup";
@@ -22,7 +22,8 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   if (parseSeasonYear(year) === undefined) return {};
   const { editions } = await getCatalog();
   const edition = editions.find((item) => item.slug === slug && item.editionYear === Number(year));
-  if (!edition || edition.recordState === "tracking") return {};
+  if (!edition || (edition.recordState === "tracking" && !publicSeasonEditions([edition]).length))
+    return {};
   const canonical = canonicalPath(`/festivals/${edition.slug}/${edition.editionYear}`);
   return {
     ...socialPreviewMetadata(

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { resolveTitle } from "next/dist/lib/metadata/resolvers/resolve-title";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StageTimetable } from "../components/StageTimetable";
 import { ArtistDetail } from "../components/ArtistDetail";
@@ -582,7 +583,7 @@ for (const language of ["en", "de", "ru"] as const) {
       assert.ok(eyebrow);
       assert.doesNotMatch(eyebrow, /\d/);
       const metadata = homeMetadata(language, festivals);
-      assert.equal(metadata.title, "Loud Weekend");
+      assert.equal(resolveTitle(metadata.title, "%s · Loud Weekend").absolute, "Loud Weekend");
       assert.equal(metadata.openGraph?.title, "Loud Weekend");
       assert.equal(metadata.twitter?.title, "Loud Weekend");
     }

@@ -45,7 +45,7 @@ export function homeMetadata(
   };
   const description = descriptions[language];
   return {
-    title,
+    title: year ? title : { absolute: title },
     description,
     openGraph: { title, description, type: "website" },
     twitter: { card: "summary", title, description },

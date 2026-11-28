@@ -58,8 +58,10 @@ export function FestivalGuideContent({ topic, items }: { topic: GuideTopic; item
           <ul>
             {items.map((item) => (
               <li key={`${item.slug}:${item.editionYear}`}>
-                <Link href={`/festivals/${item.slug}/${item.editionYear}/`}>{item.name}</Link> —{" "}
-                {formatFestivalDateRange(item, locale, "")}
+                <Link href={`${prefix}/festivals/${item.slug}/${item.editionYear}/`}>
+                  {item.name}
+                </Link>{" "}
+                — {formatFestivalDateRange(item, locale, "")}
               </li>
             ))}
           </ul>

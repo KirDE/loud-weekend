@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { transform } from "esbuild";
-import { parseSeasonYear } from "../lib/catalog/seasons.ts";
+import { parseSeasonYear, publicSeasonEditions } from "../lib/catalog/seasons.ts";
 import { canonicalPath, localizedAlternates } from "../lib/seo.ts";
 import { socialPreviewMetadata } from "../lib/social-preview.ts";
 
@@ -29,7 +29,7 @@ function loadRoute(editions) {
     },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions }) },
     "@/lib/catalog/public": { supportedLanguages: ["en", "de", "ru"] },
-    "@/lib/catalog/seasons": { parseSeasonYear },
+    "@/lib/catalog/seasons": { parseSeasonYear, publicSeasonEditions },
     "@/lib/seo": { canonicalPath, localizedAlternates },
     "@/lib/social-preview": { socialPreviewMetadata },
   };
@@ -45,8 +45,14 @@ function loadRoute(editions) {
 }
 
 test("localized exact editions delegate to the shared body and preserve SEO language/year", async () => {
-  for (const recordState of ["current", "archived"]) {
-    const item = { slug: "fixture", name: "Fixture Festival", editionYear: 2026, recordState };
+  for (const recordState of ["current", "archived", "tracking"]) {
+    const item = {
+      slug: "fixture",
+      name: "Fixture Festival",
+      editionYear: 2026,
+      recordState,
+      provenance: [{ field: "edition" }],
+    };
     const route = loadRoute([item]);
     assert.equal(route.dynamic, "force-dynamic");
     for (const lang of ["en", "de", "ru"]) {
@@ -64,8 +70,10 @@ test("localized exact editions delegate to the shared body and preserve SEO lang
   }
 });
 
-test("unsupported languages never reach the shared body; invalid/unknown/tracking metadata stays empty", async () => {
-  const route = loadRoute([{ slug: "fixture", editionYear: 2028, recordState: "tracking" }]);
+test("reject unsupported locale; omit invalid, unknown and unreviewed tracking metadata", async () => {
+  const route = loadRoute([
+    { slug: "fixture", editionYear: 2028, recordState: "tracking", provenance: [] },
+  ]);
   const props = (lang, year, slug = "fixture") => ({
     params: Promise.resolve({ lang, year, slug }),
   });

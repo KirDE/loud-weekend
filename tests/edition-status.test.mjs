@@ -11,7 +11,7 @@ import { lineupDayProfileSlugs } from "../lib/festival-lineup.ts";
 import { editionRecordCompleteness } from "../lib/edition-status.ts";
 import { EditionHistory } from "../components/EditionHistory.tsx";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
-import { parseSeasonYear } from "../lib/catalog/seasons.ts";
+import { parseSeasonYear, publicSeasonEditions } from "../lib/catalog/seasons.ts";
 import { canonicalPath, localizedAlternates } from "../lib/seo.ts";
 import { LanguageProvider } from "../components/LanguageProvider.tsx";
 
@@ -83,7 +83,7 @@ function loadPage(editions, artists = [], campingReads = [], observations = {}) 
     "@/lib/seo": { canonicalPath, localizedAlternates },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
     "@/components/EditionHistory": { EditionHistory },
-    "@/lib/catalog/seasons": { parseSeasonYear },
+    "@/lib/catalog/seasons": { parseSeasonYear, publicSeasonEditions },
     "@/lib/db": { db },
     "@/lib/catalog/public-history": {
       readEditionHistory: async (client, slug, year) => {
@@ -104,7 +104,9 @@ function loadPage(editions, artists = [], campingReads = [], observations = {}) 
     module.exports,
   );
   assert.equal(module.exports.dynamic, "force-dynamic");
-  return module.exports.default;
+  return Object.assign(module.exports.default, {
+    generateMetadata: module.exports.generateMetadata,
+  });
 }
 
 async function renderEdition(item, editions = [item], language = "en", artists = []) {
@@ -399,5 +401,24 @@ test("exact current edition renders reviewed overview and camping without leakin
     }
     assert.deepEqual(reads, [current]);
     assert.deepEqual(campingReads, [current]);
+  }
+});
+
+test("bare tracking metadata agrees with sitemap publication and localized alternates", async () => {
+  for (const reviewed of [false, true]) {
+    const item = makeEdition({ provenance: reviewed ? [{ field: "edition" }] : [] });
+    const route = loadPage([item]);
+    const meta = await route.generateMetadata({
+      params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }),
+    });
+    if (!reviewed) assert.deepEqual(meta, {});
+    else {
+      assert.equal(meta.title, "Synthetic Fest 2027");
+      assert.equal(meta.alternates.canonical, "/festivals/synthetic-fest/2027/");
+      assert.deepEqual(
+        meta.alternates.languages,
+        localizedAlternates("/festivals/synthetic-fest/2027/"),
+      );
+    }
   }
 });
