@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement as h } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { CatalogueBrowse } from "../components/CatalogueBrowse.tsx";
+import { LanguageProvider } from "../components/LanguageProvider.tsx";
 import { catalogueBrowse } from "../lib/catalog/browse.ts";
 
 test("browse lists only recorded countries, overlapping months, edition years and public artist keys", () => {
@@ -38,3 +42,24 @@ test("browse lists only recorded countries, overlapping months, edition years an
   assert.equal(complete.hasArchive, true);
   assert.deepEqual(complete.years, [2029, 2027, 2025]);
 });
+
+for (const language of ["en", "de", "ru"]) {
+  test(`browse links to the recorded seasons in ${language}`, () => {
+    const data = {
+      countries: [],
+      months: [],
+      years: [2028, 2027, 2026],
+      hasArchive: true,
+      artists: [],
+    };
+    const html = renderToStaticMarkup(
+      h(LanguageProvider, { initialLanguage: language }, h(CatalogueBrowse, { data })),
+    );
+    const links = [...html.matchAll(/href="([^"]+)"[^>]*>([0-9]{4})<\/a>/g)];
+    assert.deepEqual(
+      links.map(([, url]) => url.replace(/\/$/, "")),
+      data.years.map((year) => `/${language}/editions/${year}`),
+    );
+    assert.match(html, /href="\/archive\/?"/);
+  });
+}
