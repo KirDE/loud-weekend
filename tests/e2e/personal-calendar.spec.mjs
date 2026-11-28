@@ -46,8 +46,17 @@ for (const [lang, t] of Object.entries(labels)) {
     const conflict = calendar.locator(".personalCalendarConflicts");
     await expect(conflict.getByRole("heading", { name: t.conflicts })).toBeVisible();
     await expect(conflict.locator("li")).toHaveCount(1);
-    await expect(conflict.getByRole("link", { name: "Synthetic Fest" })).toBeVisible();
-    await expect(conflict.getByRole("link", { name: "Synthetic Alpine" })).toBeVisible();
+    for (const [name, slug] of [
+      ["Synthetic Fest", "synthetic-fest"],
+      ["Synthetic Alpine", "synthetic-alpine"],
+    ]) {
+      const url = `/festivals/${slug}/2027/`;
+      await expect(conflict.getByRole("link", { name, exact: true })).toHaveAttribute("href", url);
+      await expect(calendar.locator("ol").getByRole("link", { name, exact: true })).toHaveAttribute(
+        "href",
+        url,
+      );
+    }
     await expect(page.getByRole("region", { name: t.all, exact: true })).toBeVisible();
     const exportLink = calendar.getByRole("link", { name: t.export });
     const data = () =>
