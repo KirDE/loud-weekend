@@ -282,7 +282,7 @@ export class DatabaseCatalogRepository implements CatalogRepository {
         completeness: lower(row.completeness),
         snapshotAt: instant(row.snapshotAt),
         provenance: row.provenance.map((source) => ({
-          field: source.field as FestivalEdition["provenance"][number]["field"],
+          field: source.field,
           url: source.url,
           checkedAt: source.checkedAt.toISOString(),
           note: source.note,
