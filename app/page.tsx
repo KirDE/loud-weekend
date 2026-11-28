@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata() {
   const { festivals } = await getHomeCatalog();
   return {
-    ...homeMetadata("en", festivals.length),
+    ...homeMetadata("en", festivals),
     alternates: { canonical: "/", languages: localizedAlternates("/") },
   };
 }
