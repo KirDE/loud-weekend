@@ -28,7 +28,9 @@ export function summarizeDataQuality(
   for (const festival of catalog.festivals) {
     const freshness = festival.freshness;
     const checkAt = verifiedTime(freshness?.lastSuccessfulSourceCheckAt);
-    if (freshness?.sourceCheckStale || festival.sourceDeprecated) {
+    // Exact-edition monitoring excludes archived sources. The older
+    // catalogue badge also describes retired sources outside that scope.
+    if (freshness?.sourceCheckStale ?? festival.sourceDeprecated) {
       summary.stale += 1;
     } else if (checkAt) {
       summary.checked += 1;
