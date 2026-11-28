@@ -393,7 +393,7 @@ export function FestivalEditionContent({
         item.ticketOffers?.editionYear === item.editionYear && (
           <FestivalTicketOffers value={item.ticketOffers} locale={language} />
         )}
-      {!paused && item.timetable?.length ? (
+      {!paused ? (
         <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
       ) : null}
       <FestivalArrival facts={arrivalFacts} />

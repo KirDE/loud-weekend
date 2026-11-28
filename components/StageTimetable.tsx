@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   assessPerformanceSelections,
   orderPerformanceSelections,
@@ -109,6 +109,9 @@ const plannerCopy = {
     download: "Download running order (.ics)",
     calendarHint:
       "Calendar files include only scheduled sets with verified times and do not update automatically.",
+    removeCancelled: "Remove cancelled performance",
+    unavailable: "Some saved performances are no longer listed for this edition.",
+    removeUnavailable: "Remove unlisted performances",
     storageFailed: "This browser could not save the running order.",
   },
   de: {
@@ -124,6 +127,9 @@ const plannerCopy = {
     download: "Bühnenplan herunterladen (.ics)",
     calendarHint:
       "Die Kalenderdatei enthält nur Auftritte mit bestätigten Zeiten und wird nicht automatisch aktualisiert.",
+    removeCancelled: "Abgesagten Auftritt entfernen",
+    unavailable: "Einige gespeicherte Auftritte sind für diese Ausgabe nicht mehr gelistet.",
+    removeUnavailable: "Nicht gelistete Auftritte entfernen",
     storageFailed: "Dieser Browser konnte den Bühnenplan nicht speichern.",
   },
   ru: {
@@ -139,6 +145,9 @@ const plannerCopy = {
     download: "Скачать расписание (.ics)",
     calendarHint:
       "В файл входят только запланированные выступления с подтверждённым временем. Файл не обновляется автоматически.",
+    removeCancelled: "Убрать отменённое выступление",
+    unavailable: "Некоторые сохранённые выступления больше не указаны в расписании этого выпуска.",
+    removeUnavailable: "Убрать выступления не из расписания",
     storageFailed: "Браузер не смог сохранить расписание.",
   },
 };
@@ -170,18 +179,45 @@ export function StageTimetable({
   const labels = filters[language];
   const planner = plannerCopy[language];
   const plan = useTimetablePlan(slug, year);
-  if (!entries?.length)
-    return (
-      <div className="timetable timetableEmpty">
-        <strong>{t.title}</strong>
-        <span>{t.empty}</span>
-      </div>
-    );
+  const timetableHeading = useRef<HTMLElement>(null);
+  const removeSelections = (ids: string[]) => {
+    if (plan.remove(ids)) timetableHeading.current?.focus();
+  };
   const selected = orderPerformanceSelections(
-    entries.filter(
+    (entries ?? []).filter(
       (entry) => entry.sourcePerformanceId && plan.selected.includes(entry.sourcePerformanceId),
     ),
   );
+  const listedIds = new Set(selected.map(({ sourcePerformanceId }) => sourcePerformanceId));
+  const unlisted = plan.selected.filter((id) => !listedIds.has(id));
+  const storageAlert = plan.storageFailed && <p role="alert">{planner.storageFailed}</p>;
+  const unlistedRecovery = unlisted.length > 0 && (
+    <div>
+      <p>{planner.unavailable}</p>
+      <button type="button" onClick={() => removeSelections(unlisted)}>
+        {planner.removeUnavailable}
+      </button>
+    </div>
+  );
+  if (!entries?.length)
+    return (
+      <section className="timetable timetableEmpty" aria-labelledby="stage-timetable-heading">
+        <div>
+          <strong id="stage-timetable-heading" ref={timetableHeading} tabIndex={-1}>
+            {t.title}
+          </strong>{" "}
+          <span>{t.empty}</span>
+          {storageAlert}
+          {unlistedRecovery && (
+            <section className="timetablePlan" aria-label={planner.title}>
+              <h3>{planner.title}</h3>
+              <p>{planner.local}</p>
+              {unlistedRecovery}
+            </section>
+          )}
+        </div>
+      </section>
+    );
   const { conflicts: overlaps, incomplete } = assessPerformanceSelections(selected);
   const calendar = slug && year ? runningOrderCalendar(selected, slug, year) : null;
   const dates = [...new Set(entries.map(({ date }) => date))].sort();
@@ -211,7 +247,9 @@ export function StageTimetable({
     <section className="timetable timetablePublished" aria-labelledby="stage-timetable-heading">
       <div className="timetableHeader">
         <div>
-          <strong id="stage-timetable-heading">{t.title}</strong>
+          <strong id="stage-timetable-heading" ref={timetableHeading} tabIndex={-1}>
+            {t.title}
+          </strong>
           <span>{t.performances(entries.length)}</span>
         </div>
         <span>
@@ -250,7 +288,7 @@ export function StageTimetable({
           </select>
         </label>
       </div>
-      {plan.storageFailed && <p role="alert">{planner.storageFailed}</p>}
+      {storageAlert}
       {plan.selected.length > 0 && (
         <section className="timetablePlan" aria-label={planner.title}>
           <h3>{planner.title}</h3>
@@ -266,12 +304,24 @@ export function StageTimetable({
                       {entry.start}
                       {showOffsets && ` ${start?.offset}`}
                     </time>
-                    {entry.status === "cancelled" && ` · ${t.cancelled}`}
+                    {entry.status === "cancelled" && (
+                      <>
+                        {` · ${t.cancelled}`}{" "}
+                        <button
+                          type="button"
+                          aria-label={`${planner.removeCancelled}: ${entry.artist}`}
+                          onClick={() => removeSelections([entry.sourcePerformanceId!])}
+                        >
+                          {planner.remove}
+                        </button>
+                      </>
+                    )}
                   </li>
                 );
               })}
             </ul>
           )}
+          {unlistedRecovery}
           {overlaps.length > 0 && (
             <div role="status">
               {overlaps.map(([left, right]) => (

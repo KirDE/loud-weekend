@@ -63,6 +63,10 @@ export function useTimetablePlan(slug?: string, year?: number) {
     selected,
     storageFailed,
     toggle: (id: string) => update((ids) => togglePerformanceSelection(ids, id)) === "updated",
+    remove: (removed: string[]) => {
+      const excluded = new Set(removed);
+      return update((ids) => ids.filter((id) => !excluded.has(id))) === "updated";
+    },
     clear: () => update(() => []) === "updated",
     replace: (ids: string[], expected: string[]) => update(() => ids, expected),
   };
