@@ -162,6 +162,21 @@ function readyPlanner(items, locale, overrides = {}) {
   return html;
 }
 for (const locale of ["en", "de", "ru"]) {
+  test(`saved festivals link to the confirmed edition or fall back to the series in ${locale}`, () => {
+    const items = [
+      paused,
+      { ...active, editionYear: 2028, startDate: undefined, endDate: undefined },
+    ];
+    const html = readyPlanner(items, locale);
+    assert.match(html, /href="\/festivals\/rock-en-seine\/2027\/?"[^>]*><strong>Rock en Seine/);
+    assert.match(html, /href="\/festivals\/other-event\/2028\/?"[^>]*><strong>Other Event/);
+
+    const unknown = readyPlanner([{ ...active, editionYear: undefined }], locale);
+    assert.match(unknown, /href="\/festivals\/other-event\/?"[^>]*><strong>Other Event/);
+  });
+}
+
+for (const locale of ["en", "de", "ru"]) {
   test(`actual calendar view omits hiatus scheduling but preserves geographic discovery in ${locale}`, () => {
     const html = render(locale, h(FestivalViews, { festivals: [paused, active] }));
     const grid = html.match(/<div class="calendarGrid"[^]*?<\/div>/)[0];
