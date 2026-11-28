@@ -15,6 +15,7 @@ import { parseSeasonYear, publicSeasonEditions } from "../lib/catalog/seasons.ts
 import { canonicalPath, localizedAlternates } from "../lib/seo.ts";
 import { notificationEventsForChanges } from "../lib/ingestion/notification-events.ts";
 import { ticketPresentation } from "../lib/tickets.ts";
+import { LocalPlannerProvider } from "../components/LocalPlanner.tsx";
 import { LanguageProvider, translate } from "../components/LanguageProvider.tsx";
 
 function makeEdition(overrides = {}) {
@@ -132,7 +133,13 @@ async function renderEdition(item, editions = [item], language = "en", artists =
   const body = await page({
     params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }),
   });
-  return renderToStaticMarkup(createElement(LanguageProvider, { initialLanguage: language }, body));
+  return renderToStaticMarkup(
+    createElement(
+      LanguageProvider,
+      { initialLanguage: language },
+      createElement(LocalPlannerProvider, null, body),
+    ),
+  );
 }
 
 test("stale TBA completeness derives only a partial record from published facts", () => {
@@ -405,7 +412,11 @@ test("exact current edition renders reviewed overview and camping without leakin
         params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }),
       });
       const html = renderToStaticMarkup(
-        createElement(LanguageProvider, { initialLanguage: language }, body),
+        createElement(
+          LanguageProvider,
+          { initialLanguage: language },
+          createElement(LocalPlannerProvider, null, body),
+        ),
       );
       if (item === current) {
         assert.ok(html.includes(overview.summary[language]));
@@ -553,4 +564,22 @@ test("exact edition keeps reviewed ticket tiers instead of ordinary stock claims
     /href="https:\/\/example.test\/ordinary"|data-ticket-status="available"/,
   );
   assert.match(html, /href="https:\/\/example.test\/reviewed"/);
+});
+
+test("search-led current edition retains planner actions; other seasons do not", async () => {
+  for (const language of ["en", "de", "ru"]) {
+    const item = makeEdition({ recordState: "current" });
+    const html = await renderEdition(item, [item], language);
+    assert.match(html, /class="favoriteButton"/);
+    assert.match(html, /class="seasonAttendance"/);
+    assert.match(html, /<option value="going"/);
+    assert.match(html, /<option value="maybe"/);
+    assert.match(html, /href="\/planner\/?"/);
+    assert.ok(html.includes(translate(language, "openPlan")));
+    for (const recordState of ["archived", "tracking"]) {
+      const other = makeEdition({ recordState });
+      const excluded = await renderEdition(other, [other], language);
+      assert.doesNotMatch(excluded, /class="localActions"/);
+    }
+  }
 });

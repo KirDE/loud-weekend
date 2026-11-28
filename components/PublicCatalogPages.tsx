@@ -19,6 +19,7 @@ import { FestivalCamping } from "./FestivalCamping";
 import { FestivalTicketOffers } from "./FestivalTicketOffers";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { EditionAttendance, SeasonCalendar } from "./SeasonPlan";
+import { FavoriteButton } from "./LocalPlanner";
 import { SeasonNavigation } from "./SeasonNavigation";
 import { useLanguage } from "./LanguageProvider";
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
@@ -371,6 +372,13 @@ export function FestivalEditionContent({
           )}
         </div>
       </section>
+      {item.recordState === "current" && (
+        <section className="localActions">
+          <FavoriteButton value={item.slug} />
+          <EditionAttendance item={item} />
+          <Link href="/planner/">{translateLabel("openPlan")}</Link>
+        </section>
+      )}
       {tickets && (
         <div className="actionGrid">
           {tickets.href ? (

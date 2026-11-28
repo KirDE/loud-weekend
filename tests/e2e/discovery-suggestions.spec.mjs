@@ -127,3 +127,70 @@ test("ArrowDown can open suggestions before the typing debounce completes", asyn
   await search.press("ArrowDown");
   await expect(suggestion).toBeFocused();
 });
+
+for (const locale of ["en", "de", "ru"]) {
+  for (const width of [320, 1280]) {
+    test(`search destination preserves local planner actions (${locale}, ${width})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 850 });
+      await page.addInitScript(() => {
+        if (!localStorage.getItem("festival-radar-planner-v1")) {
+          localStorage.setItem(
+            "festival-radar-planner-v1",
+            JSON.stringify({
+              favoriteFestivals: [],
+              favoriteArtists: [],
+              attendance: {},
+              seasonAttendance: { "2026:synthetic-fest": "not-going" },
+            }),
+          );
+        }
+      });
+      await page.route("**/*", (route) =>
+        ["GET", "HEAD"].includes(route.request().method()) ? route.continue() : route.abort(),
+      );
+      await page.goto(`/${locale}/`);
+      await expect(page.locator(".search")).toHaveAttribute("data-ready", "true");
+      const search = page.locator(".search input");
+      await search.fill("synthetic fest");
+      const suggestion = page
+        .locator(".discoverySuggestions")
+        .getByRole("link", { name: /Synthetic Fest/ });
+      await expect(suggestion).toHaveAttribute("href", "/festivals/synthetic-fest/2027/");
+      await search.press("ArrowDown");
+      await expect(suggestion).toBeFocused();
+      await suggestion.press("Enter");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Synthetic Fest 2027");
+      await expect(page.locator("html")).toHaveAttribute("lang", locale);
+      const actions = page.locator(".localActions");
+      const favorite = actions.getByRole("button");
+      const attendance = actions.getByRole("combobox");
+      await expect(attendance).toBeEnabled();
+      await favorite.focus();
+      await page.keyboard.press("Enter");
+      await expect(favorite).toHaveAttribute("aria-pressed", "true");
+      for (const value of ["going", "maybe"]) {
+        await attendance.selectOption(value);
+        await expect(attendance).toHaveValue(value);
+        await page.reload();
+        await expect(attendance).toHaveValue(value);
+        await expect(favorite).toHaveAttribute("aria-pressed", "true");
+      }
+      const stored = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("festival-radar-planner-v1")),
+      );
+      expect(stored.seasonAttendance["2026:synthetic-fest"]).toBe("not-going");
+      expect(stored.attendance["synthetic-fest"]).toBe("maybe");
+      expect(stored.favoriteFestivals).toContain("synthetic-fest");
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      const plan = actions.getByRole("link");
+      await plan.focus();
+      await expect(plan).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page).toHaveURL(/\/planner\/$/);
+    });
+  }
+}
