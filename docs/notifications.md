@@ -1,6 +1,8 @@
 # Notifications runbook
 
-Loud Weekend records lineup additions/cancellations, date moves, ticket on-sale/low/sold-out transitions, and first timetable publication as part of a successful `ingest --publish` run. Keys contain the festival slug, edition year, event type and normalized changed value. Re-observing a change therefore returns the existing event and cannot create another delivery.
+Loud Weekend records lineup additions/cancellations, date moves, ticket on-sale/low/sold-out transitions, and first timetable publication as part of a successful `ingest --publish` run. Keys contain the festival slug, edition year, event type and normalized changed value. Re-observing a change therefore returns the existing event and cannot create another delivery. Newly created
+events link to their recorded festival edition, or to the festival series if the edition year is not recorded.
+Existing event links and notification preferences are not rewritten.
 
 Authenticated users configure per-event, optionally per-festival preferences at `/api/notifications/preferences` and email, Telegram, or web-push endpoints at `/api/notifications/subscriptions`. Preferences support immediate, daily, and weekly delivery.
 

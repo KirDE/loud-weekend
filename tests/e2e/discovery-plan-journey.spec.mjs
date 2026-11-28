@@ -98,8 +98,18 @@ for (const [lang, t] of Object.entries(copy)) {
     await page.getByRole("button", { name: t.remove("Synthetic West"), exact: true }).click();
     await expect(fourth).toBeEnabled();
     await table.getByRole("link", { name: "Synthetic Fest", exact: true }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Synthetic Fest" })).toBeVisible();
+    await expect(page).toHaveURL(/\/festivals\/synthetic-fest\/2027\/$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Synthetic Fest 2027", exact: true }),
+    ).toBeVisible();
 
+    // Saving a festival series is a separate action from viewing its edition.
+    await page.goBack();
+    await grid
+      .getByRole("link")
+      .filter({ has: page.getByRole("heading", { name: "Synthetic Fest", exact: true }) })
+      .click();
+    await expect(page).toHaveURL(/\/festivals\/synthetic-fest\/$/);
     const attendance = page.getByRole("combobox", { name: t.attendance, exact: true });
     await page.getByRole("button", { name: t.save, exact: true }).click();
     await attendance.selectOption("going");

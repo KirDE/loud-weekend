@@ -88,6 +88,7 @@ test("validated edition camping facts are accessible in every locale", async ({ 
         status: "CONFIRMED",
         ticketStatus: "UNKNOWN",
         recordState: "ARCHIVED",
+        snapshotAt: new Date("2026-10-10T08:00:00Z"),
         completeness: "COMPLETE",
         sourceUpdatedAt: new Date(),
       },

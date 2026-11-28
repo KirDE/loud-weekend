@@ -43,7 +43,7 @@ for (const [lang, labelsForLocale] of Object.entries(labels)) {
       ).toBeVisible();
     }
     const directory = page.locator(".catalogueBrowse");
-    for (const path of ["/countries/de/", "/months/06/", "/editions/2027/"]) {
+    for (const path of ["/countries/de/", "/months/06/", `/${lang}/editions/2027/`]) {
       await expect(directory.locator(`a[href="${path}"]`)).toHaveCount(1);
       expect((await request.get(path)).status()).toBe(200);
     }
@@ -59,6 +59,12 @@ for (const [lang, labelsForLocale] of Object.entries(labels)) {
     await directory.getByRole("link", { name: "Second Artist", exact: true }).click();
     await expect(page).toHaveURL("/artists/second-artist/");
     await expect(browse).toHaveAttribute("aria-current", "location");
+    await expect(page.locator("html")).toHaveAttribute("lang", lang);
+    await page.goBack();
+    const season = directory.getByRole("link", { name: "2027", exact: true });
+    await season.focus();
+    await season.press("Enter");
+    await expect(page).toHaveURL(`/${lang}/editions/2027/`);
     await expect(page.locator("html")).toHaveAttribute("lang", lang);
   });
 }

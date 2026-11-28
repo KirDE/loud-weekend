@@ -22,6 +22,7 @@ const labels: Record<
     next: string;
     until: string;
     noDates: string;
+    noCalendarDates: string;
     download: string;
     area: string;
     map: string;
@@ -49,6 +50,7 @@ const labels: Record<
     next: "Next month",
     until: "Until",
     noDates: "No confirmed dates in this month yet.",
+    noCalendarDates: "No confirmed festival dates yet.",
     download: "Download full festival calendar",
     area: "EUROPE-WIDE",
     map: "Festival map",
@@ -75,6 +77,7 @@ const labels: Record<
     next: "Nächster Monat",
     until: "Bis",
     noDates: "Für diesen Monat gibt es noch keine bestätigten Termine.",
+    noCalendarDates: "Es gibt noch keine bestätigten Festivaltermine.",
     download: "Vollständigen Festivalkalender herunterladen",
     area: "EUROPAWEIT",
     map: "Festivalkarte",
@@ -101,6 +104,7 @@ const labels: Record<
     next: "Следующий месяц",
     until: "До",
     noDates: "На этот месяц пока нет подтверждённых дат.",
+    noCalendarDates: "Подтверждённых дат фестивалей пока нет.",
     download: "Скачать полный календарь фестивалей",
     area: "ПО ВСЕЙ ЕВРОПЕ",
     map: "Карта фестивалей",
@@ -115,31 +119,62 @@ export function FestivalViews({ festivals }: { festivals: Festival[] }) {
       festivals.filter(calendarEligible).sort((a, b) => a.startDate!.localeCompare(b.startDate!)),
     [festivals],
   );
-  const [selectedMonth, setSelectedMonth] = useState(() =>
-    dated[0]
-      ? monthIndex(festivalDateInterval(dated[0])!.start)
-      : (festivals[0]?.editionYear ?? 2027) * 12,
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const firstDate = dated[0] ? festivalDateInterval(dated[0])?.start : undefined;
+  const heading = (
+    <div>
+      <div className="eyebrow">{t.dates}</div>
+      <h2 id="festival-calendar-title">{t.calendar}</h2>
+    </div>
   );
-  const year = Math.floor(selectedMonth / 12);
-  const month = selectedMonth - year * 12;
+  const map = (
+    <section className="plannerSection" aria-labelledby="festival-map-title">
+      <div className="viewHeading">
+        <div>
+          <div className="eyebrow">{t.area}</div>
+          <h2 id="festival-map-title">{t.map}</h2>
+        </div>
+        <p>{t.mapHelp}</p>
+      </div>
+      <FestivalLocationMap festivals={festivals} />
+    </section>
+  );
+  if (!firstDate) {
+    return (
+      <>
+        <section className="plannerSection" aria-labelledby="festival-calendar-title">
+          <div className="viewHeading">{heading}</div>
+          <p>{t.noCalendarDates}</p>
+        </section>
+        {map}
+      </>
+    );
+  }
+  const firstMonth = monthIndex(firstDate);
+  const activeMonth = selectedMonth ?? firstMonth;
+  const year = Math.floor(activeMonth / 12);
+  const month = activeMonth - year * 12;
   const monthStart = `${year}-${String(month + 1).padStart(2, "0")}-01`;
   const visible = dated.filter((f) => festivalOverlapsMonth(f, month + 1, year));
   return (
     <>
       <section className="plannerSection" aria-labelledby="festival-calendar-title">
         <div className="viewHeading">
-          <div>
-            <div className="eyebrow">{t.dates}</div>
-            <h2 id="festival-calendar-title">{t.calendar}</h2>
-          </div>
+          {heading}
           <div className="monthNav">
-            <button onClick={() => setSelectedMonth((value) => value - 1)} aria-label={t.previous}>
+            <button
+              onClick={() => setSelectedMonth((value) => (value ?? firstMonth) - 1)}
+              aria-label={t.previous}
+            >
               ←
             </button>
             <strong role="status" aria-live="polite" aria-atomic="true">
               {t.months[month]} {year}
             </strong>
-            <button onClick={() => setSelectedMonth((value) => value + 1)} aria-label={t.next}>
+            <button
+              onClick={() => setSelectedMonth((value) => (value ?? firstMonth) + 1)}
+              aria-label={t.next}
+            >
               →
             </button>
           </div>
@@ -148,8 +183,11 @@ export function FestivalViews({ festivals }: { festivals: Festival[] }) {
           {visible.length ? (
             visible.map((f) => {
               const firstVisibleDate = f.startDate! < monthStart ? monthStart : f.startDate!;
+              const href = f.editionYear
+                ? `/festivals/${f.slug}/${f.editionYear}/`
+                : `/festivals/${f.slug}/`;
               return (
-                <Link role="listitem" href={`/festivals/${f.slug}/`} key={f.slug}>
+                <Link role="listitem" href={href} key={href}>
                   <time dateTime={firstVisibleDate}>{Number(firstVisibleDate.slice(8, 10))}</time>
                   <span>
                     <strong>{f.name}</strong>
@@ -172,16 +210,7 @@ export function FestivalViews({ festivals }: { festivals: Festival[] }) {
           {t.download}
         </a>
       </section>
-      <section className="plannerSection" aria-labelledby="festival-map-title">
-        <div className="viewHeading">
-          <div>
-            <div className="eyebrow">{t.area}</div>
-            <h2 id="festival-map-title">{t.map}</h2>
-          </div>
-          <p>{t.mapHelp}</p>
-        </div>
-        <FestivalLocationMap festivals={festivals} />
-      </section>
+      {map}
     </>
   );
 }

@@ -8,7 +8,7 @@ import { useLanguage } from "./LanguageProvider";
 const artistPageSize = 24;
 
 export function CatalogueBrowse({ data }: { data: BrowseData }) {
-  const { t, locale } = useLanguage();
+  const { t, locale, language } = useLanguage();
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(artistPageSize);
   const regions = new Intl.DisplayNames([locale], { type: "region" });
@@ -64,7 +64,7 @@ export function CatalogueBrowse({ data }: { data: BrowseData }) {
             <ul>
               {data.years.map((year) => (
                 <li key={year}>
-                  <Link href={`/editions/${year}/`}>{year}</Link>
+                  <Link href={`/${language}/editions/${year}/`}>{year}</Link>
                 </li>
               ))}
               {data.hasArchive && (

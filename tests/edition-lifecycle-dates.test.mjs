@@ -147,7 +147,11 @@ for (const locale of ["en", "de", "ru"]) {
         html,
         /2027-08-25|2027-09-01|lineupSection|confirmedLineup|Sample Artist/,
       );
-      assert.doesNotMatch(html, /<select[^>]*disabled=""/);
+      // Static markup has not restored the saved plan yet. The browser hiatus
+      // test verifies the control is enabled after hydration and can clear a plan.
+      const attendance = html.match(/<section class="localActions"[^>]*>.*?(<select[^>]*>)/)?.[1];
+      assert.ok(attendance);
+      assert.match(attendance, / disabled=""/);
       assert.match(html, /<option value="going" disabled=""/);
       assert.doesNotMatch(html, /reviewer|contentHash|approvedAt|audit/);
       assert.equal(render(locale, h(EditionLifecycleNotice, { item: active })), "");

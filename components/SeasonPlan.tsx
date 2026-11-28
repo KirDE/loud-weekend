@@ -3,7 +3,7 @@
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import type { FestivalEdition } from "@/lib/domain/edition";
 import { hasSeasonCalendarDates } from "@/lib/catalog/seasons";
-import { calendarFile } from "@/lib/planning";
+import { calendarEligible, calendarFile } from "@/lib/planning";
 import { useLanguage } from "./LanguageProvider";
 import { useLocalPlanner, type Attendance } from "./LocalPlanner";
 
@@ -90,7 +90,8 @@ export function SeasonCalendar({
     return (
       planner.ready &&
       (attendance === "going" || attendance === "maybe") &&
-      hasSeasonCalendarDates(item)
+      hasSeasonCalendarDates(item) &&
+      calendarEligible(item)
     );
   });
   return (

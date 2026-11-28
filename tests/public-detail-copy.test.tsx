@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { resolveTitle } from "next/dist/lib/metadata/resolvers/resolve-title";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StageTimetable } from "../components/StageTimetable";
 import { ArtistDetail } from "../components/ArtistDetail";
@@ -12,6 +13,7 @@ import { LocalPlannerProvider } from "../components/LocalPlanner";
 import { festival } from "./support/catalog";
 import { hasAvailableTickets } from "../lib/tickets";
 import { festivalSetlistHistoryUrl } from "../lib/setlist-history";
+import { homeMetadata } from "../lib/home-metadata";
 
 const similar = { ...festival, slug: "similar-fest", name: "Similar Fest" };
 
@@ -61,6 +63,61 @@ for (const language of ["en", "de", "ru"] as const) {
       ),
     );
     assert.doesNotMatch(html, /href="https:\/\/www\.setlist\.fm\//);
+  });
+}
+
+for (const language of ["en", "de", "ru"] as const) {
+  const expected = {
+    en: ["2026 lineup", "2027 lineup", "2028 lineup", "Lineup"],
+    de: ["Line-up 2026", "Line-up 2027", "Line-up 2028", "Line-up"],
+    ru: ["Лайнап 2026", "Лайнап 2027", "Лайнап 2028", "Лайнап"],
+  }[language];
+
+  test(`festival lineup heading uses the edition year or no year in ${language}`, () => {
+    const cases = [2026, 2027, 2028, undefined].map((editionYear, index) => ({
+      editionYear,
+      heading: expected[index],
+    }));
+    for (const { editionYear, heading } of cases) {
+      // A date alone does not identify the edition; a festival can span calendar years.
+      const item = { ...festival, editionYear, startDate: "2027-12-31", endDate: "2028-01-01" };
+      const html = renderToStaticMarkup(
+        <LanguageProvider initialLanguage={language}>
+          <LocalPlannerProvider>
+            <FestivalDetail item={item} festivals={[item]} artistSlugs={{}} />
+          </LocalPlannerProvider>
+        </LanguageProvider>,
+      );
+      const lineup = html.split('class="lineupSection"')[1];
+      assert.equal(lineup?.match(/<h2>([^<]+)<\/h2>/)?.[1], heading);
+    }
+  });
+}
+
+for (const language of ["en", "de", "ru"] as const) {
+  test(`the festival series links only to its recorded edition in ${language}`, () => {
+    const render = (editionYear?: number) => {
+      const item = { ...festival, editionYear, startDate: "2028-06-10", endDate: "2028-06-12" };
+      return renderToStaticMarkup(
+        <LanguageProvider initialLanguage={language}>
+          <LocalPlannerProvider>
+            <FestivalDetail item={item} festivals={[item]} artistSlugs={{}} />
+          </LocalPlannerProvider>
+        </LanguageProvider>,
+      );
+    };
+    const href = `href="/${language}/festivals/${festival.slug}/2028`;
+    const labels = {
+      en: "Open 2028 edition",
+      de: "Ausgabe 2028 öffnen",
+      ru: "Открыть выпуск 2028 года",
+    };
+    const link = new RegExp(`${href}/?">${labels[language]}</a>`);
+    assert.match(render(2028), link);
+    assert.doesNotMatch(
+      render(),
+      new RegExp(`href="/${language}/festivals/${festival.slug}/[0-9]{4}/?"`),
+    );
   });
 }
 
@@ -223,6 +280,62 @@ for (const language of ["de", "ru"] as const) {
       language === "de" ? "★ Gespeichert" : "★ Сохранено",
     );
     assert.ok(html.includes('href="/planner"') || html.includes('href="/planner/"'));
+  });
+}
+
+const appearanceSeasonCopy = {
+  en: {
+    heading: "FESTIVAL APPEARANCES",
+    seasonHeading: (year: number) => `${year} APPEARANCES`,
+    summary: "1 European festival announced",
+    seasonSummary: (year: number) => `1 European festival announced for ${year}`,
+  },
+  de: {
+    heading: "FESTIVALAUFTRITTE",
+    seasonHeading: (year: number) => `AUFTRITTE ${year}`,
+    summary: "1 europäisches Festival angekündigt",
+    seasonSummary: (year: number) => `1 europäisches Festival für ${year} angekündigt`,
+  },
+  ru: {
+    heading: "ВЫСТУПЛЕНИЯ НА ФЕСТИВАЛЯХ",
+    seasonHeading: (year: number) => `ВЫСТУПЛЕНИЯ В ${year}`,
+    summary: "Объявлено: 1 европейский фестиваль",
+    seasonSummary: (year: number) => `Объявлено на ${year} год: 1 европейский фестиваль`,
+  },
+};
+
+for (const language of ["en", "de", "ru"] as const) {
+  const copy = appearanceSeasonCopy[language];
+  const render = (appearances: (typeof festival)[]) =>
+    renderToStaticMarkup(
+      <LanguageProvider initialLanguage={language}>
+        <LocalPlannerProvider>
+          <ArtistDetail artist={artist} legacySlugs={{}} appearances={appearances} />
+        </LocalPlannerProvider>
+      </LanguageProvider>,
+    );
+
+  test(`artist copy names the verified appearance season in ${language}`, () => {
+    for (const year of [2026, 2027, 2028]) {
+      // Do not infer the edition from its event date.
+      const html = render([{ ...festival, editionYear: year, startDate: "2027-06-01" }]);
+      assert.ok(html.includes(`<p>${copy.seasonSummary(year)}</p>`));
+      assert.ok(html.includes(`<div class="eyebrow">${copy.seasonHeading(year)}</div>`));
+    }
+  });
+
+  test(`artist copy is season-neutral for mixed, unknown and empty appearances in ${language}`, () => {
+    const known = { ...festival, editionYear: 2028 };
+    const unknown = { ...festival, slug: "unknown", editionYear: undefined };
+    const older = { ...festival, slug: "older", editionYear: 2026 };
+    assert.ok(render([unknown]).includes(`<p>${copy.summary}</p>`));
+    for (const appearances of [[known, older], [known, unknown], [unknown], []]) {
+      const html = render(appearances);
+      assert.ok(html.includes(`<div class="eyebrow">${copy.heading}</div>`));
+      const summary = html.match(/class="artistHero"[^]*?<p>([^<]*)<\/p>/)?.[1];
+      assert.ok(summary);
+      assert.doesNotMatch(summary, /202[678]/);
+    }
   });
 }
 
@@ -431,3 +544,48 @@ test("the public timetable distinguishes both occurrences of a repeated local ti
     assert.ok(html.includes(`>02:50 GMT+${offset}</time>`));
   }
 });
+
+for (const language of ["en", "de", "ru"] as const) {
+  test(`home hero and metadata describe only a shared edition year in ${language}`, () => {
+    const season = (editionYear: number | undefined, slug: string) => ({
+      ...festival,
+      editionYear,
+      slug,
+    });
+    const renderEyebrow = (festivals: (typeof festival)[]) => {
+      const html = renderToStaticMarkup(
+        <LanguageProvider initialLanguage={language}>
+          <LocalPlannerProvider>
+            <HomeContent festivals={festivals} years={[2028, 2026]} freshness={{}} />
+          </LocalPlannerProvider>
+        </LanguageProvider>,
+      );
+      return html.match(/<section class="hero"><div class="eyebrow">([^<]+)<\/div>/)?.[1];
+    };
+
+    for (const year of [2026, 2027, 2028]) {
+      const festivals = [season(year, "one"), season(year, "two")];
+      const expectedTitle = `Loud Weekend ${year}`;
+      assert.match(renderEyebrow(festivals) ?? "", new RegExp(`\\b${year}\\b`));
+      const metadata = homeMetadata(language, festivals);
+      assert.equal(metadata.title, expectedTitle);
+      assert.equal(metadata.openGraph?.title, expectedTitle);
+      assert.equal(metadata.twitter?.title, expectedTitle);
+      assert.match(metadata.description ?? "", /^2\b/);
+    }
+
+    for (const festivals of [
+      [],
+      [season(2026, "one"), season(2028, "two")],
+      [season(2028, "one"), season(undefined, "two")],
+    ]) {
+      const eyebrow = renderEyebrow(festivals);
+      assert.ok(eyebrow);
+      assert.doesNotMatch(eyebrow, /\d/);
+      const metadata = homeMetadata(language, festivals);
+      assert.equal(resolveTitle(metadata.title, "%s · Loud Weekend").absolute, "Loud Weekend");
+      assert.equal(metadata.openGraph?.title, "Loud Weekend");
+      assert.equal(metadata.twitter?.title, "Loud Weekend");
+    }
+  });
+}

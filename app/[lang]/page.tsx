@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ lang: str
   if (!supportedLanguages.includes(lang)) return {};
   const { festivals } = await getHomeCatalog();
   return {
-    ...homeMetadata(lang, festivals.length),
+    ...homeMetadata(lang, festivals),
     manifest: `/${lang}/manifest.webmanifest`,
     alternates: {
       canonical: `/${lang}/`,

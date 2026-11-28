@@ -31,6 +31,15 @@ type PlannerState = {
   savedFilters?: unknown;
 };
 
+export function readEditionAttendance(
+  state: Pick<PlannerState, "attendance" | "seasonAttendance">,
+  slug: string,
+  year?: number,
+): Attendance | undefined {
+  if (year === legacyPlannerYear) return state.attendance[slug];
+  return year === undefined ? undefined : state.seasonAttendance?.[`${year}:${slug}`];
+}
+
 function mergeSelection(current: string[], remote?: string[], expected?: string[]) {
   if (!remote) return current;
   if (!expected) return [...new Set([...current, ...remote])];

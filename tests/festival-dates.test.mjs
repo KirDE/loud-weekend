@@ -76,6 +76,27 @@ for (const [language, locale, march, july] of [
   ["de", "de-DE", "März", "Juli"],
   ["ru", "ru-RU", "март", "июл."],
 ]) {
+  test(`calendar links use the stored edition year rather than the event month in ${language}`, () => {
+    const calendar = render(
+      FestivalViews,
+      [
+        { ...crossYear, editionYear: 2026 },
+        {
+          ...festival,
+          slug: "year-unknown",
+          startDate: "2027-12-31",
+          endDate: undefined,
+          editionYear: undefined,
+        },
+      ],
+      language,
+    );
+    const links = [...calendar.matchAll(/<a role="listitem" href="([^"]+)"/g)].map(([, href]) =>
+      href.replace(/\/$/, ""),
+    );
+    assert.deepEqual(links, [`/festivals/${festival.slug}/2026`, "/festivals/year-unknown"]);
+  });
+
   test(`actual calendar and discovery render truthful intervals and dynamic month options in ${language}`, () => {
     const html = render(FestivalViews, [crossMonth], language);
     assert.ok(html.includes(formatFestivalDateRange(crossMonth, locale, "")));
@@ -100,6 +121,32 @@ for (const [language, locale, march, july] of [
     assert.ok(leap.includes('dateTime="2028-02-29"'));
     const missing = render(FestivalViews, [{ ...festival, startDate: undefined }], language);
     assert.doesNotMatch(missing, /class="calendarGrid"[^]*dateTime=/);
+  });
+}
+
+for (const [language, message] of [
+  ["en", "No confirmed festival dates yet."],
+  ["de", "Es gibt noch keine bestätigten Festivaltermine."],
+  ["ru", "Подтверждённых дат фестивалей пока нет."],
+]) {
+  test(`planner calendar has no invented month or empty download in ${language}`, () => {
+    for (const items of [
+      [],
+      [{ ...festival, editionYear: undefined, startDate: undefined, endDate: undefined }],
+      [{ ...festival, editionYear: 2028, startDate: undefined, endDate: undefined }],
+    ]) {
+      const html = render(FestivalViews, items, language);
+      const calendar = html.match(
+        /<section[^>]+aria-labelledby="festival-calendar-title"[^]*?<\/section>/,
+      )[0];
+      assert.ok(calendar.includes(message));
+      assert.doesNotMatch(calendar, /class="monthNav"|download=|2027|2028/);
+      assert.match(html, /id="festival-map-title"/);
+    }
+    const dated = render(FestivalViews, [crossYear], language);
+    assert.match(dated, /class="monthNav"/);
+    assert.match(dated, /download="loud-weekend-festivals\.ics"/);
+    assert.match(dated, /dateTime="2027-12-30"/);
   });
 }
 

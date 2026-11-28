@@ -28,6 +28,7 @@ for (const [lang, t] of Object.entries(labels))
     await marker.focus();
     await page.keyboard.press("Enter");
     await expect(link).toBeFocused();
+    await expect(link).toHaveAttribute("href", /^\/festivals\/[^/]+\/2027\/$/);
     await expect(marker).toHaveAttribute("aria-expanded", "true");
     const audit = await new AxeBuilder({ page })
       .include(".festivalLocationMap")
@@ -60,6 +61,6 @@ for (const [lang, t] of Object.entries(labels))
     expect(listAudit.violations.map(({ id }) => id)).toEqual([]);
     await expect(list.getByRole("link", { name: /Synthetic Alpine/ })).toHaveAttribute(
       "href",
-      "/festivals/synthetic-alpine/",
+      "/festivals/synthetic-alpine/2027/",
     );
   });

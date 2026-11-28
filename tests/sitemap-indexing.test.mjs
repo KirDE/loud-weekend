@@ -93,6 +93,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
   const clusterPaths = [
     "/",
     "/festivals/synthetic/",
+    "/festivals/synthetic/2027/",
     "/festivals/unsampled/",
     "/artists/synthetic/",
     "/editions/2027/",
@@ -102,12 +103,12 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
   const otherPaths = [
     "/submit/",
     "/archive/",
-    "/festivals/synthetic/2027/",
     "/browse/",
     ...languages.slice(1).flatMap((lang) => [`/${lang}/about/`, `/${lang}/faq/`]),
     "/countries/de/",
     "/months/07/",
   ];
+  // Exact-edition URLs now have all three localized siblings (+3 entries and sampled pages).
   const xml = sitemap(
     clusterPaths.map((path) => cluster(path)).join("") +
       otherPaths.map((path) => `<url><loc>${site}${path}</loc></url>`).join(""),
@@ -162,7 +163,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
   await once(server, "listening");
   const origin = `http://127.0.0.1:${server.address().port}`;
   await t.test("allows pages that only suppress the image preview", async () => {
-    assert.deepEqual(await checkIndexing(origin), { entries: 40, sampled: 31 });
+    assert.deepEqual(await checkIndexing(origin), { entries: 43, sampled: 34 });
   });
   await t.test("rejects unsupported routes even when robots.txt allows them", async () => {
     try {
@@ -204,7 +205,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
     const previous = robotsMeta;
     try {
       robotsMeta += '<template><meta name="robots" content="noindex"></template>';
-      assert.deepEqual(await checkIndexing(origin), { entries: 40, sampled: 31 });
+      assert.deepEqual(await checkIndexing(origin), { entries: 43, sampled: 34 });
     } finally {
       robotsMeta = previous;
     }
@@ -251,7 +252,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
       `Sitemap: ${site}/sitemap.xml`,
       "",
     ].join("\n");
-    assert.deepEqual(await checkIndexing(origin), { entries: 40, sampled: 31 });
+    assert.deepEqual(await checkIndexing(origin), { entries: 43, sampled: 34 });
     robotsBody = openRobots;
   });
   await t.test("allows response headers that only suppress image previews", async () => {
@@ -260,7 +261,7 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
       "Googlebot: MAX-IMAGE-PREVIEW:none, nofollow",
     ]) {
       robotsHeader = header;
-      assert.deepEqual(await checkIndexing(origin), { entries: 40, sampled: 31 });
+      assert.deepEqual(await checkIndexing(origin), { entries: 43, sampled: 34 });
     }
   });
   await t.test("rejects bare and crawler-scoped HTTP indexing blocks", async () => {
@@ -280,4 +281,36 @@ test("the HTTP smoke check validates crawl access and indexing directives", asyn
       await assert.rejects(checkIndexing(origin), /not indexable: \/de\//);
     }
   });
+});
+
+test("exact-edition locale clusters require reciprocal canonical years and reject unroutable variants", () => {
+  const urls = sitemap(cluster("/") + cluster("/festivals/synthetic/2027/"));
+  assert.equal(inspectSitemap(urls).size, 8);
+  for (const path of ["/festivals/synthetic/2027/", "/en/festivals/synthetic/2027/"]) {
+    assert.throws(
+      () => inspectSitemap(sitemap(cluster("/") + `<url><loc>${site}${path}</loc></url>`)),
+      /missing detail hreflang/,
+    );
+  }
+  const mismatchedYear = cluster("/festivals/synthetic/2027/", {
+    "x-default": "/festivals/synthetic/2027/",
+    en: "/en/festivals/synthetic/2027/",
+    de: "/de/festivals/synthetic/2028/",
+    ru: "/ru/festivals/synthetic/2027/",
+  });
+  assert.throws(
+    () => inspectSitemap(sitemap(cluster("/") + mismatchedYear)),
+    /incorrect hreflang de/,
+  );
+  for (const path of [
+    "/fr/festivals/synthetic/2027/",
+    "/de/festivals/synthetic/02027/",
+    "/festivals/synthetic/0000/",
+    "/en/festivals/synthetic/2027/draft/",
+  ]) {
+    assert.throws(
+      () => inspectSitemap(sitemap(cluster("/") + `<url><loc>${site}${path}</loc></url>`)),
+      /unsupported sitemap path/,
+    );
+  }
 });

@@ -72,6 +72,10 @@ type Marker = { id: string; x: number; y: number } & (
 const radius = 34;
 const maxZoom = 10;
 
+function mapFestivalHref({ slug, editionYear }: Festival) {
+  return editionYear ? `/festivals/${slug}/${editionYear}/` : `/festivals/${slug}/`;
+}
+
 function FestivalMapViewport({ festivals, t }: { festivals: Festival[]; t: MapLabels }) {
   const host = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -289,7 +293,7 @@ function FestivalMapViewport({ festivals, t }: { festivals: Festival[]; t: MapLa
                     const venue = festivalMapPoint(festival)?.venue;
                     return (
                       <li key={slug}>
-                        <Link href={`/festivals/${slug}/`}>{festival.name}</Link> ·{" "}
+                        <Link href={mapFestivalHref(festival)}>{festival.name}</Link> ·{" "}
                         {venue?.name || festival.city || festival.country}
                         {" · "}
                         {venue ? (
@@ -373,7 +377,7 @@ export function FestivalLocationMap({
                     const point = festivalMapPoint(festival);
                     return (
                       <li key={festival.slug}>
-                        <Link href={`/festivals/${festival.slug}/`}>
+                        <Link href={mapFestivalHref(festival)}>
                           {festival.name}
                           {festival.city ? ` · ${festival.city}` : ""}
                         </Link>

@@ -37,6 +37,12 @@ import {
 } from "@/lib/festival-lineup";
 import { FavoriteButton, useLocalPlanner, type Attendance } from "./LocalPlanner";
 
+const editionLinkLabel = {
+  en: (year: number) => `Open ${year} edition`,
+  de: (year: number) => `Ausgabe ${year} öffnen`,
+  ru: (year: number) => `Открыть выпуск ${year} года`,
+};
+
 export function FestivalDetail({
   item,
   festivals,
@@ -114,14 +120,26 @@ export function FestivalDetail({
         </div>
       </section>
       <EditionLifecycleNotice item={item} />
+      {item.editionYear !== undefined && (
+        <p>
+          <Link
+            className="textLink"
+            href={`/${language}/festivals/${item.slug}/${item.editionYear}/`}
+          >
+            {editionLinkLabel[language](item.editionYear)}
+          </Link>
+        </p>
+      )}
       <section className="localActions">
         <FavoriteButton value={item.slug} />
         <select
           aria-label={t("attendanceFor", { festival: item.name })}
-          value={planner.attendance[item.slug] || ""}
+          disabled={!planner.ready || item.editionYear === undefined}
+          value={planner.editionAttendance(item.slug, item.editionYear) ?? ""}
           onChange={(event) =>
-            planner.setAttendance(
+            planner.setEditionAttendance(
               item.slug,
+              item.editionYear,
               (event.target.value || undefined) as Attendance | undefined,
             )
           }
@@ -239,7 +257,11 @@ export function FestivalDetail({
           <div className="sectionHeading">
             <div>
               <div className="eyebrow">{t("discoverBill")}</div>
-              <h2>{t("lineup2027")}</h2>
+              <h2>
+                {item.editionYear
+                  ? t("lineupHeadingForYear", { year: item.editionYear })
+                  : t("lineupHeading")}
+              </h2>
             </div>
             <span>
               {artistCount} {t("announced")}

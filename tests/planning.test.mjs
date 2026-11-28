@@ -72,3 +72,27 @@ test("single-day calendar actions agree across a calendar year boundary", () => 
   assert.equal(google.searchParams.get("dates"), "20271231/20280101");
   assert.match(calendarFile([item]), /DTEND;VALUE=DATE:20280101/);
 });
+
+test("calendar identity distinguishes an unknown edition from the verified 2027 season", () => {
+  const unknown = { ...festival, editionYear: undefined };
+  const next = { ...festival, editionYear: 2028 };
+  const payload = calendarFile([festival, unknown, next]);
+  assert.deepEqual(
+    [...payload.matchAll(/^UID:([^\r]+)\r$/gm)].map((match) => match[1]),
+    [
+      "test-fest-2027@festival-radar",
+      "test-fest-unknown-edition@festival-radar",
+      "test-fest-2028@festival-radar",
+    ],
+  );
+  for (const editionYear of [0, Number.NaN, 2028.5]) {
+    assert.match(
+      calendarFile([{ ...unknown, editionYear, startDate: "2027-06-05" }]),
+      /UID:test-fest-unknown-edition@festival-radar/,
+    );
+  }
+  assert.match(
+    calendarFile([{ ...unknown, calendarId: "stored-edition" }]),
+    /UID:stored-edition@festival-radar/,
+  );
+});

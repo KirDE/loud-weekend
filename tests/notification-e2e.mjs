@@ -85,6 +85,7 @@ try {
   assert.equal(delivery.status, NotificationStatus.SENT);
   assert.equal(requests[0].idempotencyKey, delivery.id);
   assert.equal(requests[0].body.deliveryId, delivery.id);
+  assert.ok(requests[0].body.text.endsWith("\nhttps://loudweekend.eu/festivals/test-fest/2027/"));
   console.log(
     JSON.stringify({
       event: "persisted",

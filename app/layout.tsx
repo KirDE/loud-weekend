@@ -12,7 +12,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://loudweekend.eu"),
-  title: { default: "Loud Weekend 2027", template: "%s · Loud Weekend" },
+  title: { default: "Loud Weekend", template: "%s · Loud Weekend" },
   description:
     "Europe's rock and metal festivals: dates, lineups, tickets, playlists and setlists.",
   manifest: "/manifest.webmanifest",
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
   },
   openGraph: {
-    title: "Loud Weekend 2027",
+    title: "Loud Weekend",
     description:
       "European rock and metal festivals: dates, lineups, tickets, playlists and setlists.",
     type: "website",

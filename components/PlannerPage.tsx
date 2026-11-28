@@ -14,6 +14,7 @@ import { AccountSyncPanel } from "./AccountSyncPanel";
 import { TripBudget } from "./TripBudget";
 import { PersonalCalendar } from "./PersonalCalendar";
 import { FestivalViews } from "./FestivalViews";
+import { SeasonNavigation } from "./SeasonNavigation";
 import { calendarEligible, calendarFile } from "@/lib/planning";
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { useLanguage, translate, type Language } from "./LanguageProvider";
@@ -53,7 +54,7 @@ type PlannerLabels = {
 const plannerLabels: Record<Language, PlannerLabels> = {
   en: {
     eyebrow: "LOCAL TRIP PLANNER",
-    title: "Your 2027 plan",
+    title: "Your festival plan",
     intro:
       "Saved in this browser by default. Sign in below only if you want explicit cross-device sync.",
     clear: "Clear local data",
@@ -90,7 +91,7 @@ const plannerLabels: Record<Language, PlannerLabels> = {
   },
   de: {
     eyebrow: "LOKALER REISEPLANER",
-    title: "Dein Plan für 2027",
+    title: "Dein Festivalplan",
     intro:
       "Standardmäßig in diesem Browser gespeichert. Melde dich nur für eine geräteübergreifende Synchronisierung an.",
     clear: "Lokale Daten löschen",
@@ -129,7 +130,7 @@ const plannerLabels: Record<Language, PlannerLabels> = {
   },
   ru: {
     eyebrow: "ЛОКАЛЬНЫЙ ПЛАН ПОЕЗДКИ",
-    title: "Ваш план на 2027 год",
+    title: "Ваш фестивальный план",
     intro:
       "По умолчанию данные сохраняются в этом браузере. Войдите только для синхронизации между устройствами.",
     clear: "Удалить локальные данные",
@@ -227,10 +228,12 @@ const depthCopy = {
 
 export function PlannerPage({
   festivals,
+  years,
   catalogueArtists,
   lineups,
 }: {
   festivals: Festival[];
+  years: readonly number[];
   catalogueArtists: FavoriteArtistIdentity[];
   lineups: DiscoveryLineups;
 }) {
@@ -248,7 +251,7 @@ export function PlannerPage({
     url?: string;
   }>({ status: "idle" });
   const planned = festivals.filter(
-    (f) => p.favoriteFestivals.includes(f.slug) || p.attendance[f.slug],
+    (f) => p.favoriteFestivals.includes(f.slug) || p.editionAttendance(f.slug, f.editionYear),
   );
   const selected = festivals.filter(
     (f) => p.playlistFestivals.includes(f.slug) && !editionOnHiatus(f),
@@ -286,6 +289,11 @@ export function PlannerPage({
   const dated = planned
     .filter(calendarEligible)
     .sort((a, b) => a.startDate!.localeCompare(b.startDate!));
+  const calendarYear = dated[0]?.editionYear;
+  const calendarFilename =
+    calendarYear && dated.every((festival) => festival.editionYear === calendarYear)
+      ? `loud-weekend-${calendarYear}.ics`
+      : "loud-weekend.ics";
   async function createPlaylist() {
     sendProductEvent("PLAYLIST_START", language);
     setPlaylist({ status: "creating", message: t.creating });
@@ -332,6 +340,7 @@ export function PlannerPage({
           <div className="eyebrow">{t.eyebrow}</div>
           <h1>{t.title}</h1>
           <p>{t.intro}</p>
+          <SeasonNavigation years={years} />
           <Link className="textLink" href="/group-trips/">
             {{ en: "Group trips", de: "Gruppenreisen", ru: "Групповые поездки" }[language]}
           </Link>
@@ -367,7 +376,13 @@ export function PlannerPage({
                         ? translate(language, "editionHiatus")
                         : f.startDate || t.datesTba}
                     </small>
-                    <Link href={`/festivals/${f.slug}/`}>
+                    <Link
+                      href={
+                        f.editionYear
+                          ? `/festivals/${f.slug}/${f.editionYear}/`
+                          : `/festivals/${f.slug}/`
+                      }
+                    >
                       <strong>{f.name}</strong>
                     </Link>
                     <span>
@@ -375,11 +390,13 @@ export function PlannerPage({
                     </span>
                   </div>
                   <select
-                    value={p.attendance[f.slug] || ""}
+                    disabled={f.editionYear === undefined}
+                    value={p.editionAttendance(f.slug, f.editionYear) ?? ""}
                     aria-label={`${t.attendance} ${f.name}`}
                     onChange={(e) =>
-                      p.setAttendance(
+                      p.setEditionAttendance(
                         f.slug,
+                        f.editionYear,
                         (e.target.value || undefined) as Attendance | undefined,
                       )
                     }
@@ -402,7 +419,7 @@ export function PlannerPage({
               <a
                 className="primaryButton"
                 href={`data:text/calendar;charset=utf-8,${encodeURIComponent(calendarFile(dated))}`}
-                download="loud-weekend-2027.ics"
+                download={calendarFilename}
               >
                 {t.download}
               </a>

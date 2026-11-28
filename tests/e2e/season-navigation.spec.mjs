@@ -32,8 +32,8 @@ test("season navigation and local attendance use verified editions without repla
   const inserted = [];
   try {
     const current = await db.festival.findUniqueOrThrow({ where: { slug: "synthetic-fest" } });
-    for (const year of [2026, 2028, 2029]) {
-      const archived = year === 2026;
+    for (const year of [2025, 2026, 2028, 2029]) {
+      const archived = year < 2027;
       const edition = await db.festivalEdition.create({
         data: {
           festivalId: current.id,
@@ -45,7 +45,7 @@ test("season navigation and local attendance use verified editions without repla
           recordState: archived ? "ARCHIVED" : "TRACKING",
           completeness: "TBA",
           sourceUpdatedAt: new Date(),
-          snapshotAt: archived ? new Date("2026-11-01") : null,
+          snapshotAt: year === 2026 ? new Date("2026-11-01") : null,
           provenance:
             year === 2028 || archived
               ? {
@@ -64,6 +64,26 @@ test("season navigation and local attendance use verified editions without repla
       });
       inserted.push(edition.id);
     }
+    for (const prefix of ["", "/en", "/de", "/ru"]) {
+      const response = await request.get(`${prefix}/festivals/synthetic-fest/2025/`, {
+        headers: { "user-agent": "Twitterbot/1.0" },
+      });
+      expect(response.status()).toBe(404);
+      const html = await response.text();
+      expect(html).not.toContain("Synthetic Fest 2025");
+      expect(html).not.toContain("/api/social/en/festivals/synthetic-fest/2025/");
+    }
+    for (const prefix of ["", "/en", "/de", "/ru"]) {
+      expect(
+        (
+          await request.get(`${prefix}/festivals/synthetic-fest/2029/`, {
+            headers: { "user-agent": "Twitterbot/1.0" },
+          })
+        ).status(),
+      ).toBe(404);
+    }
+    const unpublishedSitemap = await (await request.get("/sitemap.xml")).text();
+    expect(unpublishedSitemap).not.toContain("/festivals/synthetic-fest/2025/");
 
     for (const [lang, t] of Object.entries(copy)) {
       const context = await browser.newContext({
@@ -101,6 +121,8 @@ test("season navigation and local attendance use verified editions without repla
           page.getByRole("combobox", { name: new RegExp(`Synthetic Fest ${year}$`) });
         const calendar = page.locator("a[download$='-plan.ics']");
         const nav = page.getByRole("navigation", { name: t.nav });
+        await expect(nav.getByRole("link")).toHaveText(["2028", "2027", "2026"]);
+        await page.goto(lang === "en" ? "/planner/" : `/${lang}/planner/`);
         await expect(nav.getByRole("link")).toHaveText(["2028", "2027", "2026"]);
         await nav.getByRole("link", { name: "2028", exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`/${lang}/editions/2028/$`));
@@ -148,7 +170,13 @@ test("season navigation and local attendance use verified editions without repla
         expect(remoteMutations).toEqual([]);
         expect((await readPlan()).attendance).toEqual({ "synthetic-fest": "going" });
         expect((await readPlan()).favoriteFestivals).toEqual(["synthetic-fest"]);
-        await page.goto(`/festivals/synthetic-fest/2026/`);
+        const editionResponse = await page.goto(`/${lang}/festivals/synthetic-fest/2026/`);
+        expect(editionResponse.status()).toBe(200);
+        await expect(page.locator("html")).toHaveAttribute("lang", lang);
+        await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+          "href",
+          `https://loudweekend.eu/${lang}/festivals/synthetic-fest/2026/`,
+        );
         const editionCalendar = page.getByRole("link", { name: t.editionCalendar });
         const [editionDownload] = await Promise.all([
           page.waitForEvent("download"),
@@ -160,11 +188,24 @@ test("season navigation and local attendance use verified editions without repla
         expect(editionIcs).toContain("UID:synthetic-fest-2026@festival-radar");
         expect(editionIcs).toContain("DTSTART;VALUE=DATE:20260703");
         expect(editionIcs).not.toContain("20270703");
-        await page.goto(`/festivals/synthetic-fest/2028/`);
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.goto(`/${lang}/festivals/synthetic-fest/2028/`);
+        await expect(page.locator("html")).toHaveAttribute("lang", lang);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+          1280,
+        );
         await expect(
           page.getByRole("heading", { name: "Synthetic Fest 2028", exact: true }),
         ).toBeVisible();
         await expect(editionCalendar).toHaveCount(0);
+        await page
+          .getByRole("link")
+          .filter({ hasText: /^←.*2028/ })
+          .click();
+        await expect(page).toHaveURL(new RegExp(`/${lang}/editions/2028/$`));
+        await expect(page.getByRole("heading", { level: 1, name: t.heading })).toBeVisible();
+        expect((await request.get(`/${lang}/festivals/synthetic-fest/02028/`)).status()).toBe(404);
+        expect((await request.get(`/fr/festivals/synthetic-fest/2028/`)).status()).toBe(404);
         if (lang === "en") {
           await page.goto("/en/planner/");
           await page.getByRole("button", { name: "Clear local data" }).click();
@@ -342,6 +383,54 @@ test("account sync restores only verified season attendance and never shares it 
     await Promise.all([first.close(), second.close()]);
     await db.user.deleteMany({ where: { email } });
     if (editionId) await db.festivalEdition.deleteMany({ where: { id: editionId } });
+    await db.$disconnect();
+  }
+});
+
+test("exact current edition ticket actions remain localized and keyboard accessible", async ({
+  browser,
+}) => {
+  requireLocalDisposableDatabase(process.env.DATABASE_URL);
+  const db = createPrismaClient();
+  const before = await db.festivalEdition.findFirstOrThrow({
+    where: { festival: { slug: "synthetic-fest" }, year: 2027 },
+    select: { id: true, ticketStatus: true, ticketsUrl: true },
+  });
+  try {
+    await db.festivalEdition.update({
+      where: { id: before.id },
+      data: { ticketStatus: "LOW", ticketsUrl: "https://festival.example.test/tickets" },
+    });
+    for (const lang of ["en", "de", "ru"]) {
+      for (const width of [320, 1280]) {
+        const context = await browser.newContext({ viewport: { width, height: 900 } });
+        try {
+          await context.route("**/*", (route) =>
+            ["GET", "HEAD"].includes(route.request().method()) ? route.continue() : route.abort(),
+          );
+          const page = await context.newPage();
+          const response = await page.goto(`/${lang}/festivals/synthetic-fest/2027/`);
+          expect(response.status()).toBe(200);
+          await expect(page.locator("html")).toHaveAttribute("lang", lang);
+          const ticket = page.locator('a[data-ticket-status="low"]');
+          await expect(ticket).toBeVisible();
+          await expect(ticket).toHaveAttribute("href", "https://festival.example.test/tickets");
+          await expect(ticket).toHaveAttribute("rel", "noreferrer");
+          await ticket.focus();
+          await expect(ticket).toBeFocused();
+          await expect
+            .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+            .toBe(true);
+        } finally {
+          await context.close();
+        }
+      }
+    }
+  } finally {
+    await db.festivalEdition.update({
+      where: { id: before.id },
+      data: { ticketStatus: before.ticketStatus, ticketsUrl: before.ticketsUrl },
+    });
     await db.$disconnect();
   }
 });

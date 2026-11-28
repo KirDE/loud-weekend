@@ -9,7 +9,8 @@ import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
 import { readCampingFacts } from "@/lib/catalog/camping-facts";
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { getCatalog } from "@/lib/catalog/repository";
-import { canonicalPath } from "@/lib/seo";
+import { parseSeasonYear, publicSeasonEditions } from "@/lib/catalog/seasons";
+import { canonicalPath, localizedAlternates } from "@/lib/seo";
 import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { lineupDayProfileSlugs } from "@/lib/festival-lineup";
 
@@ -18,10 +19,10 @@ type Params = Promise<{ slug: string; year: string }>;
 export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug, year } = await params;
-  if (!/^\d{4}$/.test(year)) return {};
+  if (parseSeasonYear(year) === undefined) return {};
   const { editions } = await getCatalog();
   const edition = editions.find((item) => item.slug === slug && item.editionYear === Number(year));
-  if (!edition || edition.recordState === "tracking") return {};
+  if (!edition || !publicSeasonEditions([edition]).length) return {};
   const canonical = canonicalPath(`/festivals/${edition.slug}/${edition.editionYear}`);
   return {
     ...socialPreviewMetadata(
@@ -29,7 +30,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
       canonical,
     ),
     title: `${edition.name} ${edition.editionYear}`,
-    alternates: { canonical },
+    alternates: { canonical, languages: localizedAlternates(canonical) },
   };
 }
 
@@ -37,9 +38,9 @@ export default async function FestivalEditionPage({ params }: { params: Params }
   const { slug, year: rawYear } = await params;
   const { editions, artists } = await getCatalog();
   const item = editions.find(
-    (edition) => edition.slug === slug && edition.editionYear === Number(rawYear),
+    (edition) => edition.slug === slug && edition.editionYear === parseSeasonYear(rawYear),
   );
-  if (!item) notFound();
+  if (!item || !publicSeasonEditions([item]).length) notFound();
   const publishable = item.recordState === "current" && !editionOnHiatus(item);
   const [history, arrivalFacts, campingFacts, overview] = await Promise.all([
     item.editionYear === undefined ? [] : readEditionHistory(db, item.slug, item.editionYear),

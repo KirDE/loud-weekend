@@ -1,4 +1,5 @@
 import type { NotificationEventType } from "@prisma/client";
+import { parseSeasonYear } from "../catalog/seasons.ts";
 import type { Festival } from "../domain/festival.ts";
 import type { FestivalChange } from "./types.ts";
 
@@ -37,6 +38,11 @@ export function notificationEventsForChanges(
   const editionYear = festival.editionYear ?? Number(festival.startDate?.slice(0, 4));
   if (!Number.isInteger(editionYear))
     throw new Error(`Festival ${festival.slug} has no edition identity`);
+  // Only a recorded edition is a public destination. Preserve the legacy
+  // identity fallback for deduplication and matching existing subscriptions.
+  const linkYear = parseSeasonYear(String(festival.editionYear));
+  const seriesUrl = `https://loudweekend.eu/festivals/${festival.slug}`;
+  const url = linkYear === undefined ? seriesUrl : `${seriesUrl}/${linkYear}/`;
   // Use the resulting state so a later verified transition to paid tickets
   // can still announce sales, while ancillary URL changes never invent them.
   const freeAdmission =
@@ -56,7 +62,7 @@ export function notificationEventsForChanges(
         type,
         title: festival.name,
         message: `${type.replaceAll("_", " ").toLocaleLowerCase()}: ${subject}`,
-        url: `https://loudweekend.eu/festivals/${festival.slug}`,
+        url,
         occurredAt,
         payload: { editionYear, change },
       },

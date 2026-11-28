@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement as h } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { FestivalGuideContent } from "../components/FestivalGuideContent.tsx";
+import { LanguageProvider } from "../components/LanguageProvider.tsx";
 import {
   festivalGuides,
   guideTopics,
@@ -75,3 +79,28 @@ test("the two guides have distinct editorial copy in each supported language", (
     assert.equal(festivalGuides.germany[language].checklist.length, 2);
   }
 });
+
+for (const language of ["en", "de", "ru"]) {
+  test(`guide results link to the edition whose dates qualify in ${language}`, () => {
+    const nextEdition = {
+      ...edition,
+      editionYear: 2028,
+      name: "Future Festival",
+      startDate: "2028-12-30",
+      endDate: "2029-01-02",
+    };
+    const items = selectGuideEditions("multi-day", [nextEdition]);
+    const html = renderToStaticMarkup(
+      h(
+        LanguageProvider,
+        { initialLanguage: language },
+        h(FestivalGuideContent, { topic: "multi-day", items }),
+      ),
+    );
+    assert.match(
+      html,
+      new RegExp(`href="/${language}/festivals/fixture/2028/?">Future Festival</a>`),
+    );
+    assert.match(html, new RegExp(`href="/${language}/?"`));
+  });
+}

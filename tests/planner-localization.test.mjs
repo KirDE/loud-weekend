@@ -13,9 +13,9 @@ const language = readFileSync(
 
 test("planner exposes localized EN, DE and RU visible headings and every core control", () => {
   for (const text of [
-    "Your 2027 plan",
-    "Dein Plan für 2027",
-    "Ваш план на 2027 год",
+    "Your festival plan",
+    "Dein Festivalplan",
+    "Ваш фестивальный план",
     "Kalender herunterladen (.ics)",
     "Скачать календарь (.ics)",
     "Teilnahme an",

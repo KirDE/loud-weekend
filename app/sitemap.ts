@@ -94,17 +94,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const years = new Map<number, string | undefined>();
   const archiveDates: (string | undefined)[] = [];
-  for (const { slug, editionYear, snapshotAt } of editions) {
+  const publicEditions = publicSeasonEditions(editions);
+  for (const { slug, editionYear, snapshotAt } of publicEditions) {
     const publication = publications.get(editionKey(slug, editionYear));
     const nameDate = sharedNames.get(slug);
     const validSnapshot =
       snapshotAt && Date.parse(snapshotAt) <= now.getTime() ? snapshotAt : undefined;
-    add(
+    addLocalized(
       `/festivals/${slug}/${editionYear}/`,
       latestDate([publication?.edition ?? undefined, nameDate, validSnapshot]),
     );
   }
-  const publicEditions = publicSeasonEditions(editions);
   for (const { slug, editionYear, recordState } of publicEditions) {
     const publication = publications.get(editionKey(slug, editionYear));
     const listingDate = latestDate([publication?.listing ?? undefined, sharedNames.get(slug)]);

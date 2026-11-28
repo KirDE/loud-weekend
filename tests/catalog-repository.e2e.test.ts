@@ -76,6 +76,54 @@ test("database repository preserves the public catalogue projection", async () =
   );
 });
 
+test("the sitemap includes only public festival editions and seasons", async () => {
+  const { id: festivalId } = await db.festival.findUniqueOrThrow({
+    where: { slug: "synthetic-fest" },
+  });
+  const inserted: string[] = [];
+  try {
+    for (const year of [2028, 2029]) {
+      const { id } = await db.festivalEdition.create({
+        data: {
+          festivalId,
+          year,
+          status: "TBA",
+          ticketStatus: "UNKNOWN",
+          recordState: "TRACKING",
+          completeness: "TBA",
+          sourceUpdatedAt: new Date(),
+          ...(year === 2028 && {
+            provenance: {
+              create: {
+                field: "edition",
+                url: "https://festival.example.test/2028",
+                note: "Synthetic reviewed edition evidence",
+                checkedAt: new Date(),
+              },
+            },
+          }),
+        },
+      });
+      inserted.push(id);
+    }
+    const paths = new Set((await sitemap()).map(({ url }) => new URL(url).pathname));
+    for (const year of [2026, 2027, 2028]) {
+      assert.ok(paths.has(`/festivals/synthetic-fest/${year}/`));
+      for (const prefix of ["", "/en", "/de", "/ru"]) {
+        assert.ok(paths.has(`${prefix}/editions/${year}/`));
+        assert.ok(paths.has(`${prefix}/festivals/synthetic-fest/${year}/`));
+      }
+    }
+    assert.ok(!paths.has("/festivals/synthetic-fest/2029/"));
+    for (const prefix of ["", "/en", "/de", "/ru"]) {
+      assert.ok(!paths.has(`${prefix}/editions/2029/`));
+      assert.ok(!paths.has(`${prefix}/festivals/synthetic-fest/2029/`));
+    }
+  } finally {
+    await db.festivalEdition.deleteMany({ where: { id: { in: inserted } } });
+  }
+});
+
 test("database reads fail closed without a file fallback", async () => {
   const failure = new Error("catalogue database unavailable");
   const failingDatabase = {

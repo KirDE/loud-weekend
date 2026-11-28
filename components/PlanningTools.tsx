@@ -156,7 +156,10 @@ export function PlanningTools({
         <div className="recommendations">
           <h3>{reasons.title}</h3>
           {similar.map(({ festival, shared, favoriteCount, sharedGenres, gapDays, distance }) => (
-            <Link href={`/${language}/festivals/${festival.slug}/`} key={festival.slug}>
+            <Link
+              href={`/${language}/festivals/${festival.slug}/${festival.editionYear ? `${festival.editionYear}/` : ""}`}
+              key={festival.slug}
+            >
               <strong>{festival.name}</strong>
               <span>
                 {[

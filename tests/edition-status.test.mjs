@@ -11,8 +11,12 @@ import { lineupDayProfileSlugs } from "../lib/festival-lineup.ts";
 import { editionRecordCompleteness } from "../lib/edition-status.ts";
 import { EditionHistory } from "../components/EditionHistory.tsx";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
-import { canonicalPath } from "../lib/seo.ts";
-import { LanguageProvider } from "../components/LanguageProvider.tsx";
+import { parseSeasonYear, publicSeasonEditions } from "../lib/catalog/seasons.ts";
+import { canonicalPath, localizedAlternates } from "../lib/seo.ts";
+import { notificationEventsForChanges } from "../lib/ingestion/notification-events.ts";
+import { ticketPresentation } from "../lib/tickets.ts";
+import { LocalPlannerProvider } from "../components/LocalPlanner.tsx";
+import { LanguageProvider, translate } from "../components/LanguageProvider.tsx";
 
 function makeEdition(overrides = {}) {
   return {
@@ -30,7 +34,15 @@ function makeEdition(overrides = {}) {
     officialUrl: "https://example.test/",
     updatedAt: "2026-10-08T00:00:00Z",
     genres: [],
-    provenance: [],
+    provenance: [
+      {
+        field: "edition",
+        url: "https://example.test/",
+        note: "Reviewed synthetic edition",
+        checkedAt: "2026-11-28T00:00:00Z",
+      },
+    ],
+    snapshotAt: overrides.recordState === "archived" ? "2026-11-01T00:00:00Z" : undefined,
     ...overrides,
   };
 }
@@ -60,10 +72,16 @@ function loadPage(editions, artists = [], campingReads = [], observations = {}) 
     },
     "@/lib/festival-lineup": { lineupDayProfileSlugs },
     "@/lib/social-preview": { socialPreviewMetadata },
-    "@/lib/catalog/arrival-facts": { readArrivalFacts: async () => [] },
+    "@/lib/catalog/arrival-facts": {
+      readArrivalFacts: async () => {
+        assert.notEqual(observations.denyReads, true);
+        return [];
+      },
+    },
     "@/lib/edition-lifecycle": { editionOnHiatus },
     "@/lib/catalog/festival-overviews": {
       readFestivalOverview: async (client, item) => {
+        assert.notEqual(observations.denyReads, true);
         assert.equal(client, db);
         assert.equal(item.recordState, "current");
         assert.ok(!editionOnHiatus(item));
@@ -73,18 +91,21 @@ function loadPage(editions, artists = [], campingReads = [], observations = {}) 
     },
     "@/lib/catalog/camping-facts": {
       readCampingFacts: async (client, edition) => {
+        assert.notEqual(observations.denyReads, true);
         assert.equal(client, db);
         campingReads.push(edition);
         return observations.camping ?? [];
       },
     },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
-    "@/lib/seo": { canonicalPath },
+    "@/lib/seo": { canonicalPath, localizedAlternates },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
     "@/components/EditionHistory": { EditionHistory },
+    "@/lib/catalog/seasons": { parseSeasonYear, publicSeasonEditions },
     "@/lib/db": { db },
     "@/lib/catalog/public-history": {
       readEditionHistory: async (client, slug, year) => {
+        assert.notEqual(observations.denyReads, true);
         assert.equal(client, db);
         assert.ok(
           editions.some((edition) => edition.slug === slug && edition.editionYear === year),
@@ -102,7 +123,9 @@ function loadPage(editions, artists = [], campingReads = [], observations = {}) 
     module.exports,
   );
   assert.equal(module.exports.dynamic, "force-dynamic");
-  return module.exports.default;
+  return Object.assign(module.exports.default, {
+    generateMetadata: module.exports.generateMetadata,
+  });
 }
 
 async function renderEdition(item, editions = [item], language = "en", artists = []) {
@@ -110,7 +133,13 @@ async function renderEdition(item, editions = [item], language = "en", artists =
   const body = await page({
     params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }),
   });
-  return renderToStaticMarkup(createElement(LanguageProvider, { initialLanguage: language }, body));
+  return renderToStaticMarkup(
+    createElement(
+      LanguageProvider,
+      { initialLanguage: language },
+      createElement(LocalPlannerProvider, null, body),
+    ),
+  );
 }
 
 test("stale TBA completeness derives only a partial record from published facts", () => {
@@ -249,6 +278,25 @@ test("canonical route still rejects a missing edition", async () => {
   await assert.rejects(renderEdition(makeEdition(), []), /NEXT_NOT_FOUND/);
 });
 
+test("edition detail accepts only the canonical year for a recorded edition", async () => {
+  const editions = [2026, 2027, 2028].map((editionYear) =>
+    makeEdition({ editionYear, recordState: editionYear === 2026 ? "archived" : "current" }),
+  );
+  const page = loadPage(editions);
+  for (const year of ["02027", "2027.0", " 2027", "202A", "0000", "2029"]) {
+    await assert.rejects(
+      page({ params: Promise.resolve({ slug: editions[0].slug, year }) }),
+      /NEXT_NOT_FOUND/,
+    );
+  }
+  for (const item of editions) {
+    assert.match(
+      await renderEdition(item, editions),
+      new RegExp(`<h1>${item.name} ${item.editionYear}</h1>`),
+    );
+  }
+});
+
 test("canonical edition links only resolved catalogue identities without modifying its lineup", async () => {
   const item = makeEdition({
     recordState: "current",
@@ -364,7 +412,11 @@ test("exact current edition renders reviewed overview and camping without leakin
         params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }),
       });
       const html = renderToStaticMarkup(
-        createElement(LanguageProvider, { initialLanguage: language }, body),
+        createElement(
+          LanguageProvider,
+          { initialLanguage: language },
+          createElement(LocalPlannerProvider, null, body),
+        ),
       );
       if (item === current) {
         assert.ok(html.includes(overview.summary[language]));
@@ -378,5 +430,156 @@ test("exact current edition renders reviewed overview and camping without leakin
     }
     assert.deepEqual(reads, [current]);
     assert.deepEqual(campingReads, [current]);
+  }
+});
+
+test("bare tracking metadata agrees with sitemap publication and localized alternates", async () => {
+  for (const reviewed of [false, true]) {
+    const item = makeEdition({ provenance: reviewed ? [{ field: "edition" }] : [] });
+    const route = loadPage([item]);
+    const meta = await route.generateMetadata({
+      params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }),
+    });
+    if (!reviewed) assert.deepEqual(meta, {});
+    else {
+      assert.equal(meta.title, "Synthetic Fest 2027");
+      assert.equal(meta.alternates.canonical, "/festivals/synthetic-fest/2027/");
+      assert.deepEqual(
+        meta.alternates.languages,
+        localizedAlternates("/festivals/synthetic-fest/2027/"),
+      );
+    }
+  }
+});
+
+test("unpublished archives have neither route body nor metadata before any downstream reads", async () => {
+  for (const provenance of [[], [{ field: "edition" }]]) {
+    const item = makeEdition({ recordState: "archived", snapshotAt: undefined, provenance });
+    assert.deepEqual(publicSeasonEditions([item]), []);
+    const page = loadPage([item], [], [], { denyReads: true });
+    const props = { params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }) };
+    await assert.rejects(page(props), /NEXT_NOT_FOUND/);
+    assert.deepEqual(await page.generateMetadata(props), {});
+  }
+});
+
+test("published archives keep their route body and reciprocal metadata", async () => {
+  const item = makeEdition({ recordState: "archived" });
+  const before = structuredClone(item);
+  const page = loadPage([item]);
+  const props = { params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }) };
+  assert.ok(await page(props));
+  const meta = await page.generateMetadata(props);
+  assert.equal(meta.alternates.canonical, "/festivals/synthetic-fest/2027/");
+  assert.deepEqual(
+    meta.alternates.languages,
+    localizedAlternates("/festivals/synthetic-fest/2027/"),
+  );
+  assert.deepEqual(item, before);
+});
+
+test("unreviewed tracking routes fail closed before downstream readers", async () => {
+  const item = makeEdition({ provenance: [] });
+  const page = loadPage([item], [], [], { denyReads: true });
+  const props = { params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }) };
+  await assert.rejects(page(props), /NEXT_NOT_FOUND/);
+  assert.deepEqual(await page.generateMetadata(props), {});
+});
+
+test("ticket notifications land on exact editions with ordinary ticket actions and truthful states", async () => {
+  for (const status of [
+    "available",
+    "low",
+    "sold_out",
+    "not_on_sale",
+    "sales_ended",
+    "unknown",
+    "free",
+  ]) {
+    const item = makeEdition({
+      recordState: "current",
+      ticketStatus: status,
+      ticketsUrl: "https://example.test/tickets",
+    });
+    const before = structuredClone(item);
+    const presentation = ticketPresentation(item);
+    for (const language of ["en", "de", "ru"]) {
+      const html = await renderEdition(item, [item], language);
+      assert.ok(html.includes(`data-ticket-status="${presentation.status}"`));
+      assert.ok(html.includes(`href="${presentation.href}" target="_blank" rel="noreferrer"`));
+      assert.ok(html.includes(translate(language, presentation.label)));
+    }
+    if (["available", "low", "sold_out"].includes(status)) {
+      const [event] = notificationEventsForChanges(
+        item,
+        [
+          {
+            kind: "ticket_status_changed",
+            field: "ticketStatus",
+            before: "unknown",
+            after: status,
+          },
+        ],
+        "2026-11-28T00:00:00Z",
+      );
+      assert.equal(new URL(event.url).pathname, `/festivals/${item.slug}/${item.editionYear}/`);
+    }
+    assert.deepEqual(item, before);
+  }
+});
+
+test("exact edition ticket controls never invent stock or leak archive/tracking offers", async () => {
+  const missing = makeEdition({ recordState: "current", ticketStatus: "available" });
+  assert.match(await renderEdition(missing), /data-ticket-status="unknown"/);
+  assert.doesNotMatch(await renderEdition(missing), /href="https:\/\/example.test\/tickets"/);
+  for (const recordState of ["archived", "tracking"]) {
+    const item = makeEdition({
+      recordState,
+      ticketStatus: "available",
+      ticketsUrl: "https://example.test/tickets",
+    });
+    const html = await renderEdition(item);
+    assert.doesNotMatch(html, /data-ticket-status=|href="https:\/\/example.test\/tickets"/);
+  }
+});
+
+test("exact edition keeps reviewed ticket tiers instead of ordinary stock claims", async () => {
+  const item = makeEdition({
+    recordState: "current",
+    ticketStatus: "available",
+    ticketsUrl: "https://example.test/ordinary",
+    ticketOffers: {
+      editionYear: 2027,
+      sourceUrl: "https://example.test/reviewed",
+      observedAt: "2026-11-28T00:00:00Z",
+      offers: [
+        { key: "full", kind: "full_pass", status: "sold_out", price: null, saleDateText: null },
+      ],
+    },
+  });
+  const html = await renderEdition(item);
+  assert.match(html, /ticketOfferSection/);
+  assert.doesNotMatch(
+    html,
+    /href="https:\/\/example.test\/ordinary"|data-ticket-status="available"/,
+  );
+  assert.match(html, /href="https:\/\/example.test\/reviewed"/);
+});
+
+test("search-led current edition retains planner actions; other seasons do not", async () => {
+  for (const language of ["en", "de", "ru"]) {
+    const item = makeEdition({ recordState: "current" });
+    const html = await renderEdition(item, [item], language);
+    assert.match(html, /class="favoriteButton"/);
+    assert.match(html, /class="seasonAttendance"/);
+    assert.match(html, /<option value="going"/);
+    assert.match(html, /<option value="maybe"/);
+    assert.match(html, /href="\/planner\/?"/);
+    assert.ok(html.includes(translate(language, "openPlan")));
+    for (const recordState of ["archived", "tracking"]) {
+      const other = makeEdition({ recordState });
+      const excluded = await renderEdition(other, [other], language);
+      assert.doesNotMatch(excluded, /class="localActions"/);
+    }
   }
 });

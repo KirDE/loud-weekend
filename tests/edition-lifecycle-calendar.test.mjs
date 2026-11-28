@@ -1,3 +1,4 @@
+import { readEditionAttendance } from "../lib/planner-storage.ts";
 import { personalCalendar } from "../lib/personal-calendar.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -99,18 +100,23 @@ const { code } = await transform(
   await readFile(new URL("../components/PlannerPage.tsx", import.meta.url), "utf8"),
   { loader: "tsx", jsx: "automatic", format: "cjs", target: "es2022" },
 );
-function readyPlanner(items, locale) {
+function readyPlanner(items, locale, overrides = {}) {
   const preferences = {
     ready: true,
     favoriteFestivals: [paused.slug, active.slug],
     attendance: { [paused.slug]: "going" },
     playlistFestivals: items.map((f) => f.slug),
     favoriteArtists: [],
-    setAttendance() {
+    ...overrides,
+  };
+  const planner = {
+    ...preferences,
+    editionAttendance: (slug, year) => readEditionAttendance(preferences, slug, year),
+    setEditionAttendance() {
       throw new Error("Rendering must not rewrite attendance");
     },
   };
-  const before = structuredClone({ ...preferences, setAttendance: undefined });
+  const before = structuredClone(preferences);
   const deps = {
     react: require("react"),
     "react/jsx-runtime": require("react/jsx-runtime"),
@@ -124,9 +130,10 @@ function readyPlanner(items, locale) {
     "./TripBudget": { TripBudget: () => null },
     "@/lib/edition-lifecycle": lifecycle,
     "./LanguageProvider": language,
-    "./LocalPlanner": { useLocalPlanner: () => preferences },
+    "./LocalPlanner": { useLocalPlanner: () => planner },
     "./PlannerReset": { PlannerReset: () => null },
     "./AccountSyncPanel": { AccountSyncPanel: () => null },
+    "./SeasonNavigation": { SeasonNavigation: () => null },
     "./FestivalViews": { FestivalViews: () => null },
   };
   const module = { exports: {} };
@@ -142,6 +149,7 @@ function readyPlanner(items, locale) {
     locale,
     h(module.exports.PlannerPage, {
       festivals: items,
+      years: [],
       catalogueArtists: [
         { slug: "sample-artist", name: "Sample Artist" },
         { slug: "paused-only", name: "Paused Only Headliner" },
@@ -152,9 +160,24 @@ function readyPlanner(items, locale) {
       },
     }),
   );
-  assert.deepEqual({ ...preferences, setAttendance: undefined }, before);
+  assert.deepEqual(preferences, before);
   return html;
 }
+for (const locale of ["en", "de", "ru"]) {
+  test(`saved festivals link to the confirmed edition or fall back to the series in ${locale}`, () => {
+    const items = [
+      paused,
+      { ...active, editionYear: 2028, startDate: undefined, endDate: undefined },
+    ];
+    const html = readyPlanner(items, locale);
+    assert.match(html, /href="\/festivals\/rock-en-seine\/2027\/?"[^>]*><strong>Rock en Seine/);
+    assert.match(html, /href="\/festivals\/other-event\/2028\/?"[^>]*><strong>Other Event/);
+
+    const unknown = readyPlanner([{ ...active, editionYear: undefined }], locale);
+    assert.match(unknown, /href="\/festivals\/other-event\/?"[^>]*><strong>Other Event/);
+  });
+}
+
 for (const locale of ["en", "de", "ru"]) {
   test(`actual calendar view omits hiatus scheduling but preserves geographic discovery in ${locale}`, () => {
     const html = render(locale, h(FestivalViews, { festivals: [paused, active] }));
@@ -165,7 +188,7 @@ for (const locale of ["en", "de", "ru"]) {
     assert.match(html, /Rock en Seine/); // Map remains a geographic link, not a schedule assertion.
     const empty = render(locale, h(FestivalViews, { festivals: [paused] }));
     assert.doesNotMatch(empty, /dateTime="2027-08-25"/);
-    assert.doesNotMatch(payload(empty), /BEGIN:VEVENT/);
+    assert.doesNotMatch(empty, /class="monthNav"|download="loud-weekend-festivals\.ics"/);
   });
   test(`planning downloads use the edition year rather than the current season in ${locale}`, () => {
     const item = { ...active, editionYear: 2028, startDate: "2028-07-03", endDate: "2028-07-05" };
@@ -178,6 +201,27 @@ for (const locale of ["en", "de", "ru"]) {
       h(PlanningTools, { item: { ...item, editionYear: undefined }, festivals: [] }),
     );
     assert.match(withoutYear, /download="other-event\.ics"/);
+    assert.match(payload(withoutYear), /UID:other-event-unknown-edition@festival-radar/);
+  });
+  test(`the local planner labels only the exported editions in ${locale}`, () => {
+    const otherYear = {
+      ...active,
+      editionYear: 2028,
+      startDate: "2028-08-27",
+      endDate: "2028-08-28",
+    };
+    const single = readyPlanner([paused, otherYear], locale);
+    assert.match(single, /<h1>[^<]+<\/h1>/);
+    assert.doesNotMatch(single, /<h1>[^<]*2027/);
+    assert.match(single, /download="loud-weekend-2028\.ics"/);
+    assert.match(payload(single), /UID:other-event-2028@festival-radar/);
+    assert.doesNotMatch(payload(single), /rock-en-seine/);
+    const mixed = readyPlanner([{ ...paused, editionLifecycle: undefined }, otherYear], locale);
+    assert.match(mixed, /download="loud-weekend\.ics"/);
+    assert.match(payload(mixed), /UID:rock-en-seine-2027@festival-radar/);
+    assert.match(payload(mixed), /UID:other-event-2028@festival-radar/);
+    const unknown = readyPlanner([{ ...otherYear, editionYear: undefined }], locale);
+    assert.match(unknown, /download="loud-weekend\.ics"/);
   });
   test(`actual planning tools suppress calendar/timetable and do not promise a pending date in ${locale}`, () => {
     const html = render(locale, h(PlanningTools, { item: paused, festivals: [paused, active] }));
@@ -233,7 +277,8 @@ for (const locale of ["en", "de", "ru"])
 
 test("an approved hiatus cannot create a personal-calendar conflict or erase attendance", () => {
   const current = { ...active, startDate: paused.startDate, endDate: paused.endDate };
-  const attendance = Object.freeze({ [paused.slug]: "going", [current.slug]: "maybe" });
+  const saved = Object.freeze({ [paused.slug]: "going", [current.slug]: "maybe" });
+  const attendance = (slug) => saved[slug];
   assert.equal(
     personalCalendar([{ ...paused, editionLifecycle: undefined }, current], attendance).conflicts
       .length,
@@ -244,5 +289,37 @@ test("an approved hiatus cannot create a personal-calendar conflict or erase att
     undated: [],
     conflicts: [],
   });
-  assert.equal(attendance[paused.slug], "going");
+  assert.equal(saved[paused.slug], "going");
 });
+
+for (const locale of ["en", "de", "ru"]) {
+  test(`ready planner does not use attendance from a different edition in ${locale}`, () => {
+    const upcoming = {
+      ...active,
+      editionYear: 2028,
+      startDate: "2028-08-27",
+      endDate: "2028-08-28",
+    };
+    const legacyOnly = {
+      favoriteFestivals: [],
+      attendance: { [active.slug]: "going" },
+    };
+    assert.doesNotMatch(
+      readyPlanner([upcoming], locale, legacyOnly),
+      /<strong>Other Event<\/strong>/,
+    );
+    assert.doesNotMatch(
+      readyPlanner([{ ...upcoming, editionYear: undefined }], locale, legacyOnly),
+      /<strong>Other Event<\/strong>/,
+    );
+    const current = readyPlanner([active], locale, legacyOnly);
+    assert.match(current, /<option value="going" selected=""/);
+    assert.match(payload(current), /UID:other-event-2027@festival-radar/);
+
+    const bothSeasons = { ...legacyOnly, seasonAttendance: { ["2028:" + active.slug]: "maybe" } };
+    const future = readyPlanner([upcoming], locale, bothSeasons);
+    assert.match(future, /<option value="maybe" selected=""/);
+    assert.match(payload(future), /UID:other-event-2028@festival-radar/);
+    assert.match(readyPlanner([active], locale, bothSeasons), /<option value="going" selected=""/);
+  });
+}

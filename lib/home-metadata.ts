@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import type { Festival } from "./domain/festival";
 import { cache } from "react";
 import { getCatalog } from "./catalog/repository";
 import type { SupportedLanguage } from "./catalog/public";
+import { sharedSeasonYear } from "./catalog/seasons";
 
 // Share one request-scoped catalogue snapshot between metadata and visible stats.
 export const getHomeCatalog = cache(async () => {
@@ -18,8 +20,13 @@ export const getHomeCatalog = cache(async () => {
   return { ...catalogue, matchingArtists, suggestionArtists };
 });
 
-export function homeMetadata(language: SupportedLanguage, count: number): Metadata {
-  const title = "Loud Weekend 2027";
+export function homeMetadata(
+  language: SupportedLanguage,
+  festivals: readonly Pick<Festival, "editionYear">[],
+): Metadata {
+  const count = festivals.length;
+  const year = sharedSeasonYear(festivals);
+  const title = year ? `Loud Weekend ${year}` : "Loud Weekend";
   const festivalWord = new Intl.PluralRules("ru").select(count);
   const ruNoun =
     festivalWord === "one" ? "фестиваль" : festivalWord === "few" ? "фестиваля" : "фестивалей";
@@ -38,7 +45,7 @@ export function homeMetadata(language: SupportedLanguage, count: number): Metada
   };
   const description = descriptions[language];
   return {
-    title,
+    title: year ? title : { absolute: title },
     description,
     openGraph: { title, description, type: "website" },
     twitter: { card: "summary", title, description },

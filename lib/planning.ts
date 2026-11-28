@@ -29,7 +29,7 @@ export function similarFestivals(
   },
   limit = 3,
 ) {
-  if (editionOnHiatus(item)) return [];
+  if (editionOnHiatus(item) || item.editionYear === undefined) return [];
   const collator = new Intl.Collator(options.locale, { sensitivity: "base" });
   const artistSlugs = options.lineups?.artistSlugsByFestival;
   const artists = new Set(artistSlugs?.[item.slug]);
@@ -37,7 +37,12 @@ export function similarFestivals(
   const favorites = discoveryFavoriteSlugs(options.favorites ?? [], options.lineups);
   const dates = festivalDateInterval(item);
   return festivals
-    .filter((candidate) => candidate.slug !== item.slug && !editionOnHiatus(candidate))
+    .filter(
+      (candidate) =>
+        candidate.slug !== item.slug &&
+        candidate.editionYear === item.editionYear &&
+        !editionOnHiatus(candidate),
+    )
     .map((festival) => {
       const candidateArtists = [...new Set(artistSlugs?.[festival.slug])];
       const shared = candidateArtists.filter((slug) => artists.has(slug)).length;
@@ -155,9 +160,12 @@ export function calendarFile(items: readonly CalendarEvent[], generatedAt = new 
     if (!dates) return [];
     const modifiedAt = item.calendarUpdatedAt;
     const location = [item.city, item.country].filter(Boolean).join(", ");
+    const year = item.editionYear;
+    const edition =
+      year && Number.isInteger(year) && year >= 1000 && year <= 9999 ? year : "unknown-edition";
     return [
       "BEGIN:VEVENT",
-      `UID:${item.calendarId ?? `${item.slug}-${item.editionYear || 2027}`}@festival-radar`,
+      `UID:${item.calendarId ?? `${item.slug}-${edition}`}@festival-radar`,
       `DTSTAMP:${calendarStamp(item.calendarUpdatedAt ?? item.updatedAt, generatedAt)}`,
       ...(modifiedAt && Number.isFinite(Date.parse(modifiedAt))
         ? [`LAST-MODIFIED:${calendarStamp(modifiedAt, generatedAt)}`]

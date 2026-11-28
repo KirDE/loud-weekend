@@ -45,7 +45,10 @@ test("curated guides publish reciprocal locale metadata and display only evidenc
             `hrefLang="${lang}" href="https://loudweekend.eu/${lang}/guides/${topic}/"`,
           );
         }
-        expect(html).toContain("Synthetic Fest");
+        const language = path.match(/^\/(en|de|ru)\//)?.[1] ?? "en";
+        expect(html).toContain(
+          `href="/${language}/festivals/synthetic-fest/2027/">Synthetic Fest</a>`,
+        );
         expect(html).not.toContain("Synthetic Alpine");
         titles.push(html.match(/<title>([^<]*)<\/title>/)?.[1]);
       }
@@ -69,7 +72,7 @@ test("curated guides publish reciprocal locale metadata and display only evidenc
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Synthetic Fest" })).toHaveAttribute(
       "href",
-      "/ru/festivals/synthetic-fest/",
+      "/ru/festivals/synthetic-fest/2027/",
     );
     const originalUrl = page.url();
     await page.getByLabel("Язык", { exact: true }).selectOption("de");
@@ -78,12 +81,31 @@ test("curated guides publish reciprocal locale metadata and display only evidenc
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Synthetic Fest" })).toHaveAttribute(
       "href",
-      "/de/festivals/synthetic-fest/",
+      "/de/festivals/synthetic-fest/2027/",
     );
     expect(page.url()).toBe(originalUrl);
+    await expect(page.getByRole("link", { name: "Zum Festivalkatalog" })).toHaveAttribute(
+      "href",
+      "/de/",
+    );
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(320);
+    const editionLink = page.getByRole("link", { name: "Synthetic Fest", exact: true });
+    await editionLink.focus();
+    await expect(editionLink).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/de\/festivals\/synthetic-fest\/2027\/$/);
+    await expect(page.locator("html")).toHaveAttribute("lang", "de");
+    // A client transition may briefly retain the previous page's streamed metadata.
+    // Wait for exactly one canonical, not merely the presence of the desired link.
+    await expect
+      .poll(() =>
+        page
+          .locator('link[rel="canonical"]')
+          .evaluateAll((links) => links.map((link) => link.href)),
+      )
+      .toEqual(["https://loudweekend.eu/de/festivals/synthetic-fest/2027/"]);
   } finally {
     if (proof) await db.editionProvenance.delete({ where: { id: proof.id } });
     await db.$disconnect();
