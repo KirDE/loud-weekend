@@ -37,7 +37,7 @@ export async function readSitemapPublications(
       ]) AS directory,
       MAX("createdAt") FILTER (WHERE fields && ARRAY[
         'startDate', 'endDate', 'status', 'completeness', 'lineup', 'headliners', 'recordState',
-        'arrival', 'overview'
+        'arrival', 'overview', 'camping'
       ] OR (
         source = 'ADMIN'
         AND evidence->>'reviewPolicy' = 'openclaw-import-conflicts-v1'

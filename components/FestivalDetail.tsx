@@ -299,6 +299,7 @@ export function FestivalDetail({
       )}
       <PlanningTools
         item={item}
+        venueAddress={arrivalFacts.find((fact) => fact.kind === "venue")?.description.en}
         festivals={festivals}
         discoveryLineups={discoveryLineups}
         favorites={planner.favoriteArtists}

@@ -6,9 +6,10 @@ import { readEditionHistory } from "@/lib/catalog/public-history";
 import { notFound } from "next/navigation";
 import { FestivalEditionContent } from "@/components/PublicCatalogPages";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
+import { readCampingFacts } from "@/lib/catalog/camping-facts";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { getCatalog } from "@/lib/catalog/repository";
 import { canonicalPath } from "@/lib/seo";
-import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { lineupDayProfileSlugs } from "@/lib/festival-lineup";
 
@@ -39,14 +40,12 @@ export default async function FestivalEditionPage({ params }: { params: Params }
     (edition) => edition.slug === slug && edition.editionYear === Number(rawYear),
   );
   if (!item) notFound();
-  const publicOverview =
-    item.recordState === "current" && !editionOnHiatus(item)
-      ? readFestivalOverview(db, item)
-      : undefined;
-  const [history, arrivalFacts, overview] = await Promise.all([
+  const publishable = item.recordState === "current" && !editionOnHiatus(item);
+  const [history, arrivalFacts, campingFacts, overview] = await Promise.all([
     item.editionYear === undefined ? [] : readEditionHistory(db, item.slug, item.editionYear),
     readArrivalFacts(db, item),
-    publicOverview,
+    publishable ? readCampingFacts(db, item) : [],
+    publishable ? readFestivalOverview(db, item) : undefined,
   ]);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
@@ -54,6 +53,7 @@ export default async function FestivalEditionPage({ params }: { params: Params }
       <FestivalEditionContent
         item={item}
         arrivalFacts={arrivalFacts}
+        campingFacts={campingFacts}
         artistSlugs={artistSlugs}
         overview={overview}
         lineupDayArtistSlugs={lineupDayProfileSlugs(item.lineupDays, artists)}
