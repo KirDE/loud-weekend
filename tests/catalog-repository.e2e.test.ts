@@ -13,6 +13,7 @@ import { createIngestionRun, persistAttempt } from "../lib/ingestion/repository.
 import {
   publishAdminFestivalChange,
   publishAgentFestivalResolution,
+  publishAgentOrganizerResolution,
 } from "../lib/catalog/publication.ts";
 import type { IngestionResult } from "../lib/ingestion/types.ts";
 import { brutalAssaultVenueSource } from "../lib/ingestion/adapters/brutal-assault-venue.ts";
@@ -110,11 +111,13 @@ test("the sitemap includes only public festival editions and seasons", async () 
       assert.ok(paths.has(`/festivals/synthetic-fest/${year}/`));
       for (const prefix of ["", "/en", "/de", "/ru"]) {
         assert.ok(paths.has(`${prefix}/editions/${year}/`));
+        assert.ok(paths.has(`${prefix}/festivals/synthetic-fest/${year}/`));
       }
     }
     assert.ok(!paths.has("/festivals/synthetic-fest/2029/"));
     for (const prefix of ["", "/en", "/de", "/ru"]) {
       assert.ok(!paths.has(`${prefix}/editions/2029/`));
+      assert.ok(!paths.has(`${prefix}/festivals/synthetic-fest/2029/`));
     }
   } finally {
     await db.festivalEdition.deleteMany({ where: { id: { in: inserted } } });
@@ -887,22 +890,47 @@ test("public freshness separates edition-bound checks, publication and source fa
     for (const path of ["/artists/sample-artist/", "/archive/", "/editions/2026/"]) {
       assert.equal(finalDates[path], updatedDates[path], path);
     }
-    const overview = await db.catalogPublication.create({
-      data: {
-        source: "INGESTION",
+    const city = afterPublication.festivals[0].city;
+    assert.ok(city);
+    const { publication: overview, overviewPublished } = await db.$transaction((tx) =>
+      publishAgentOrganizerResolution(tx, {
         sourceId: `${slug}-overview`,
-        festivalSlug: slug,
-        editionYear: current.year,
-        actorLabel: "fixture",
+        overview: {
+          editionId: current.id,
+          festivalSlug: slug,
+          editionYear: current.year,
+          city,
+          countryCode: festival.countryCode,
+          organizerHost: new URL(festival.officialUrl).hostname,
+          checkedOn: now.toISOString().slice(0, 10),
+          sourceUrl: new URL("/about", festival.officialUrl).href,
+          summary: { en: "Sample overview", de: "Beispielübersicht", ru: "Пример обзора" },
+        },
         evidence: {},
-        fields: ["overview"],
-      },
-    });
+      }),
+    );
+    assert.equal(overviewPublished, true);
+    assert.ok(overview);
+    assert.deepEqual(overview.fields, ["overview"]);
+    assert.ok(overview.createdAt > finalLineup.createdAt);
     const overviewDates = await sitemapDates();
-    for (const path of ["/", "/de/", `/festivals/${slug}/`, `/ru/festivals/${slug}/`])
+    for (const path of [
+      "/",
+      "/de/",
+      `/festivals/${slug}/`,
+      `/ru/festivals/${slug}/`,
+      `/festivals/${slug}/2027/`,
+    ]) {
       assert.equal(overviewDates[path], overview.createdAt.toISOString(), path);
-    for (const path of ["/editions/2027/", "/countries/de/", "/months/06/"])
+    }
+    for (const path of [
+      "/editions/2027/",
+      "/countries/de/",
+      "/months/06/",
+      `/festivals/${slug}/2026/`,
+    ]) {
       assert.equal(overviewDates[path], finalDates[path], path);
+    }
   } finally {
     // Publication receipts are append-only; the unique fixture slug isolates reruns.
     await db.ingestionSourceState.deleteMany({ where: { festivalSlug: slug } });

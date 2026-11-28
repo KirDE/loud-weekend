@@ -150,7 +150,13 @@ test("season navigation and local attendance use verified editions without repla
         expect(remoteMutations).toEqual([]);
         expect((await readPlan()).attendance).toEqual({ "synthetic-fest": "going" });
         expect((await readPlan()).favoriteFestivals).toEqual(["synthetic-fest"]);
-        await page.goto(`/festivals/synthetic-fest/2026/`);
+        const editionResponse = await page.goto(`/${lang}/festivals/synthetic-fest/2026/`);
+        expect(editionResponse.status()).toBe(200);
+        await expect(page.locator("html")).toHaveAttribute("lang", lang);
+        await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+          "href",
+          `https://loudweekend.eu/${lang}/festivals/synthetic-fest/2026/`,
+        );
         const editionCalendar = page.getByRole("link", { name: t.editionCalendar });
         const [editionDownload] = await Promise.all([
           page.waitForEvent("download"),
@@ -162,7 +168,12 @@ test("season navigation and local attendance use verified editions without repla
         expect(editionIcs).toContain("UID:synthetic-fest-2026@festival-radar");
         expect(editionIcs).toContain("DTSTART;VALUE=DATE:20260703");
         expect(editionIcs).not.toContain("20270703");
-        await page.goto(`/festivals/synthetic-fest/2028/`);
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.goto(`/${lang}/festivals/synthetic-fest/2028/`);
+        await expect(page.locator("html")).toHaveAttribute("lang", lang);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+          1280,
+        );
         await expect(
           page.getByRole("heading", { name: "Synthetic Fest 2028", exact: true }),
         ).toBeVisible();
@@ -173,6 +184,8 @@ test("season navigation and local attendance use verified editions without repla
           .click();
         await expect(page).toHaveURL(new RegExp(`/${lang}/editions/2028/$`));
         await expect(page.getByRole("heading", { level: 1, name: t.heading })).toBeVisible();
+        expect((await request.get(`/${lang}/festivals/synthetic-fest/02028/`)).status()).toBe(404);
+        expect((await request.get(`/fr/festivals/synthetic-fest/2028/`)).status()).toBe(404);
         if (lang === "en") {
           await page.goto("/en/planner/");
           await page.getByRole("button", { name: "Clear local data" }).click();

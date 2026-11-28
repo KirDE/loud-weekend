@@ -6,12 +6,13 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "esbuild";
 import { socialPreviewMetadata } from "../lib/social-preview.ts";
+import { editionOnHiatus } from "../lib/edition-lifecycle.ts";
 import { lineupDayProfileSlugs } from "../lib/festival-lineup.ts";
 import { editionRecordCompleteness } from "../lib/edition-status.ts";
 import { EditionHistory } from "../components/EditionHistory.tsx";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
 import { parseSeasonYear } from "../lib/catalog/seasons.ts";
-import { canonicalPath } from "../lib/seo.ts";
+import { canonicalPath, localizedAlternates } from "../lib/seo.ts";
 import { LanguageProvider } from "../components/LanguageProvider.tsx";
 
 function makeEdition(overrides = {}) {
@@ -48,7 +49,7 @@ const { code: outputText } = await transform(source, {
   target: "es2022",
 });
 const require = createRequire(import.meta.url);
-function loadPage(editions, artists = []) {
+function loadPage(editions, artists = [], campingReads = [], observations = {}) {
   const module = { exports: {} };
   const db = {};
   const dependencies = {
@@ -61,8 +62,25 @@ function loadPage(editions, artists = []) {
     "@/lib/festival-lineup": { lineupDayProfileSlugs },
     "@/lib/social-preview": { socialPreviewMetadata },
     "@/lib/catalog/arrival-facts": { readArrivalFacts: async () => [] },
+    "@/lib/edition-lifecycle": { editionOnHiatus },
+    "@/lib/catalog/festival-overviews": {
+      readFestivalOverview: async (client, item) => {
+        assert.equal(client, db);
+        assert.equal(item.recordState, "current");
+        assert.ok(!editionOnHiatus(item));
+        observations.reads?.push(item);
+        return observations.overview;
+      },
+    },
+    "@/lib/catalog/camping-facts": {
+      readCampingFacts: async (client, edition) => {
+        assert.equal(client, db);
+        campingReads.push(edition);
+        return observations.camping ?? [];
+      },
+    },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
-    "@/lib/seo": { canonicalPath },
+    "@/lib/seo": { canonicalPath, localizedAlternates },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
     "@/components/EditionHistory": { EditionHistory },
     "@/lib/catalog/seasons": { parseSeasonYear },
@@ -290,5 +308,96 @@ test("a final lineup remains distinct from record completeness", async () => {
       completeness: "complete",
     });
     assert.ok(!(await renderEdition(legacy, [legacy], language)).includes(label));
+  }
+});
+
+test("edition route reads camping only for the selected current edition outside hiatus", async () => {
+  const current = makeEdition({ recordState: "current" });
+  const archived = makeEdition({ recordState: "archived", editionYear: 2026 });
+  const tracking = makeEdition({ editionYear: 2028 });
+  const paused = makeEdition({
+    slug: "synthetic-paused",
+    recordState: "current",
+    editionLifecycle: {
+      festivalSlug: "synthetic-paused",
+      editionYear: 2027,
+      lifecycle: "hiatus",
+      announcedReturnYear: null,
+      alternativeEvent: null,
+      sourceUrl: "https://example.test/",
+      observedAt: "2026-10-08T00:00:00.000Z",
+      approvedAt: "2026-10-08T00:00:00.000Z",
+    },
+  });
+  const editions = [archived, tracking, paused, current];
+  const campingReads = [];
+  const page = loadPage(editions, [], campingReads);
+  for (const item of [archived, tracking, paused]) {
+    await page({ params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }) });
+    assert.deepEqual(campingReads, []);
+  }
+  await page({
+    params: Promise.resolve({ slug: current.slug, year: String(current.editionYear) }),
+  });
+  assert.deepEqual(campingReads, [current]);
+});
+
+test("exact current edition renders reviewed overview and camping without leaking to other states", async () => {
+  const overview = {
+    checkedOn: "2026-11-28",
+    sources: ["https://example.test/about"],
+    summary: { en: "Reviewed overview", de: "Geprüfter Überblick", ru: "Проверенное описание" },
+  };
+  const camping = [
+    {
+      field: "facilities",
+      description: { en: "Reviewed showers", de: "Geprüfte Duschen", ru: "Проверенные душевые" },
+      sourceUrl: "https://example.test/camping",
+      checkedOn: "2026-11-28",
+    },
+  ];
+  const current = makeEdition({ recordState: "current" });
+  const paused = makeEdition({
+    slug: "synthetic-paused",
+    recordState: "current",
+    editionLifecycle: {
+      festivalSlug: "synthetic-paused",
+      editionYear: 2027,
+      lifecycle: "hiatus",
+      announcedReturnYear: null,
+      alternativeEvent: null,
+      sourceUrl: "https://example.test/",
+      observedAt: "2026-10-08T00:00:00.000Z",
+      approvedAt: "2026-10-08T00:00:00.000Z",
+    },
+  });
+  const excluded = [
+    makeEdition({ recordState: "archived", editionYear: 2026 }),
+    makeEdition({ recordState: "tracking", editionYear: 2028 }),
+    paused,
+  ];
+  for (const language of ["en", "de", "ru"]) {
+    const reads = [],
+      campingReads = [];
+    const page = loadPage([current, ...excluded], [], campingReads, { overview, camping, reads });
+    for (const item of [current, ...excluded]) {
+      const body = await page({
+        params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }),
+      });
+      const html = renderToStaticMarkup(
+        createElement(LanguageProvider, { initialLanguage: language }, body),
+      );
+      if (item === current) {
+        assert.ok(html.includes(overview.summary[language]));
+        assert.ok(html.includes(camping[0].description[language]));
+        assert.ok(html.includes('href="https://example.test/about" rel="noreferrer"'));
+        assert.match(html, /datetime="2026-11-28"/i);
+      } else {
+        assert.ok(!html.includes(overview.summary[language]));
+        assert.ok(!html.includes(camping[0].description[language]));
+      }
+    }
+    assert.deepEqual(reads, [current]);
+    assert.deepEqual(campingReads, [current]);
   }
 });

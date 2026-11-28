@@ -100,7 +100,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const nameDate = sharedNames.get(slug);
     const validSnapshot =
       snapshotAt && Date.parse(snapshotAt) <= now.getTime() ? snapshotAt : undefined;
-    add(
+    addLocalized(
       `/festivals/${slug}/${editionYear}/`,
       latestDate([publication?.edition ?? undefined, nameDate, validSnapshot]),
     );

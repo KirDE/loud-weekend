@@ -6,9 +6,12 @@ import { readEditionHistory } from "@/lib/catalog/public-history";
 import { notFound } from "next/navigation";
 import { FestivalEditionContent } from "@/components/PublicCatalogPages";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
+import { readCampingFacts } from "@/lib/catalog/camping-facts";
+import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { getCatalog } from "@/lib/catalog/repository";
 import { parseSeasonYear } from "@/lib/catalog/seasons";
-import { canonicalPath } from "@/lib/seo";
+import { canonicalPath, localizedAlternates } from "@/lib/seo";
+import { readFestivalOverview } from "@/lib/catalog/festival-overviews";
 import { lineupDayProfileSlugs } from "@/lib/festival-lineup";
 
 type Params = Promise<{ slug: string; year: string }>;
@@ -27,7 +30,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
       canonical,
     ),
     title: `${edition.name} ${edition.editionYear}`,
-    alternates: { canonical },
+    alternates: { canonical, languages: localizedAlternates(canonical) },
   };
 }
 
@@ -38,9 +41,12 @@ export default async function FestivalEditionPage({ params }: { params: Params }
     (edition) => edition.slug === slug && edition.editionYear === parseSeasonYear(rawYear),
   );
   if (!item) notFound();
-  const [history, arrivalFacts] = await Promise.all([
+  const publishable = item.recordState === "current" && !editionOnHiatus(item);
+  const [history, arrivalFacts, campingFacts, overview] = await Promise.all([
     item.editionYear === undefined ? [] : readEditionHistory(db, item.slug, item.editionYear),
     readArrivalFacts(db, item),
+    publishable ? readCampingFacts(db, item) : [],
+    publishable ? readFestivalOverview(db, item) : undefined,
   ]);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (
@@ -48,7 +54,9 @@ export default async function FestivalEditionPage({ params }: { params: Params }
       <FestivalEditionContent
         item={item}
         arrivalFacts={arrivalFacts}
+        campingFacts={campingFacts}
         artistSlugs={artistSlugs}
+        overview={overview}
         lineupDayArtistSlugs={lineupDayProfileSlugs(item.lineupDays, artists)}
       />
       <EditionHistory entries={history} officialUrl={item.officialUrl} />
