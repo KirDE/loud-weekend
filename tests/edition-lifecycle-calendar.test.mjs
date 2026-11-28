@@ -179,6 +179,26 @@ for (const locale of ["en", "de", "ru"]) {
     );
     assert.match(withoutYear, /download="other-event\.ics"/);
   });
+  test(`the local planner labels only the exported editions in ${locale}`, () => {
+    const otherYear = {
+      ...active,
+      editionYear: 2028,
+      startDate: "2028-08-27",
+      endDate: "2028-08-28",
+    };
+    const single = readyPlanner([paused, otherYear], locale);
+    assert.match(single, /<h1>[^<]+<\/h1>/);
+    assert.doesNotMatch(single, /<h1>[^<]*2027/);
+    assert.match(single, /download="loud-weekend-2028\.ics"/);
+    assert.match(payload(single), /UID:other-event-2028@festival-radar/);
+    assert.doesNotMatch(payload(single), /rock-en-seine/);
+    const mixed = readyPlanner([{ ...paused, editionLifecycle: undefined }, otherYear], locale);
+    assert.match(mixed, /download="loud-weekend\.ics"/);
+    assert.match(payload(mixed), /UID:rock-en-seine-2027@festival-radar/);
+    assert.match(payload(mixed), /UID:other-event-2028@festival-radar/);
+    const unknown = readyPlanner([{ ...otherYear, editionYear: undefined }], locale);
+    assert.match(unknown, /download="loud-weekend\.ics"/);
+  });
   test(`actual planning tools suppress calendar/timetable and do not promise a pending date in ${locale}`, () => {
     const html = render(locale, h(PlanningTools, { item: paused, festivals: [paused, active] }));
     assert.ok(html.includes(language.translate(locale, "editionHiatus")));
