@@ -255,6 +255,62 @@ for (const language of ["de", "ru"] as const) {
   });
 }
 
+const appearanceSeasonCopy = {
+  en: {
+    heading: "FESTIVAL APPEARANCES",
+    seasonHeading: (year: number) => `${year} APPEARANCES`,
+    summary: "1 European festival announced",
+    seasonSummary: (year: number) => `1 European festival announced for ${year}`,
+  },
+  de: {
+    heading: "FESTIVALAUFTRITTE",
+    seasonHeading: (year: number) => `AUFTRITTE ${year}`,
+    summary: "1 europäisches Festival angekündigt",
+    seasonSummary: (year: number) => `1 europäisches Festival für ${year} angekündigt`,
+  },
+  ru: {
+    heading: "ВЫСТУПЛЕНИЯ НА ФЕСТИВАЛЯХ",
+    seasonHeading: (year: number) => `ВЫСТУПЛЕНИЯ В ${year}`,
+    summary: "Объявлено: 1 европейский фестиваль",
+    seasonSummary: (year: number) => `Объявлено на ${year} год: 1 европейский фестиваль`,
+  },
+};
+
+for (const language of ["en", "de", "ru"] as const) {
+  const copy = appearanceSeasonCopy[language];
+  const render = (appearances: (typeof festival)[]) =>
+    renderToStaticMarkup(
+      <LanguageProvider initialLanguage={language}>
+        <LocalPlannerProvider>
+          <ArtistDetail artist={artist} legacySlugs={{}} appearances={appearances} />
+        </LocalPlannerProvider>
+      </LanguageProvider>,
+    );
+
+  test(`artist copy names the verified appearance season in ${language}`, () => {
+    for (const year of [2026, 2027, 2028]) {
+      // Do not infer the edition from its event date.
+      const html = render([{ ...festival, editionYear: year, startDate: "2027-06-01" }]);
+      assert.ok(html.includes(`<p>${copy.seasonSummary(year)}</p>`));
+      assert.ok(html.includes(`<div class="eyebrow">${copy.seasonHeading(year)}</div>`));
+    }
+  });
+
+  test(`artist copy is season-neutral for mixed, unknown and empty appearances in ${language}`, () => {
+    const known = { ...festival, editionYear: 2028 };
+    const unknown = { ...festival, slug: "unknown", editionYear: undefined };
+    const older = { ...festival, slug: "older", editionYear: 2026 };
+    assert.ok(render([unknown]).includes(`<p>${copy.summary}</p>`));
+    for (const appearances of [[known, older], [known, unknown], [unknown], []]) {
+      const html = render(appearances);
+      assert.ok(html.includes(`<div class="eyebrow">${copy.heading}</div>`));
+      const summary = html.match(/class="artistHero"[^]*?<p>([^<]*)<\/p>/)?.[1];
+      assert.ok(summary);
+      assert.doesNotMatch(summary, /202[678]/);
+    }
+  });
+}
+
 const checkedAt = "2026-10-10T23:45:00.000Z";
 const lastPublishedAt = "2026-10-12T00:05:00.000Z";
 const dates = {
