@@ -133,6 +133,7 @@ function readyPlanner(items, locale, overrides = {}) {
     "./LocalPlanner": { useLocalPlanner: () => planner },
     "./PlannerReset": { PlannerReset: () => null },
     "./AccountSyncPanel": { AccountSyncPanel: () => null },
+    "./SeasonNavigation": { SeasonNavigation: () => null },
     "./FestivalViews": { FestivalViews: () => null },
   };
   const module = { exports: {} };
@@ -148,6 +149,7 @@ function readyPlanner(items, locale, overrides = {}) {
     locale,
     h(module.exports.PlannerPage, {
       festivals: items,
+      years: [],
       catalogueArtists: [
         { slug: "sample-artist", name: "Sample Artist" },
         { slug: "paused-only", name: "Paused Only Headliner" },

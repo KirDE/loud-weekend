@@ -14,6 +14,7 @@ import { AccountSyncPanel } from "./AccountSyncPanel";
 import { TripBudget } from "./TripBudget";
 import { PersonalCalendar } from "./PersonalCalendar";
 import { FestivalViews } from "./FestivalViews";
+import { SeasonNavigation } from "./SeasonNavigation";
 import { calendarEligible, calendarFile } from "@/lib/planning";
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import { useLanguage, translate, type Language } from "./LanguageProvider";
@@ -227,10 +228,12 @@ const depthCopy = {
 
 export function PlannerPage({
   festivals,
+  years,
   catalogueArtists,
   lineups,
 }: {
   festivals: Festival[];
+  years: readonly number[];
   catalogueArtists: FavoriteArtistIdentity[];
   lineups: DiscoveryLineups;
 }) {
@@ -337,6 +340,7 @@ export function PlannerPage({
           <div className="eyebrow">{t.eyebrow}</div>
           <h1>{t.title}</h1>
           <p>{t.intro}</p>
+          <SeasonNavigation years={years} />
           <Link className="textLink" href="/group-trips/">
             {{ en: "Group trips", de: "Gruppenreisen", ru: "Групповые поездки" }[language]}
           </Link>
