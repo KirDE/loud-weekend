@@ -184,6 +184,7 @@ for (const locale of ["en", "de", "ru"]) {
       h(PlanningTools, { item: { ...item, editionYear: undefined }, festivals: [] }),
     );
     assert.match(withoutYear, /download="other-event\.ics"/);
+    assert.match(payload(withoutYear), /UID:other-event-unknown-edition@festival-radar/);
   });
   test(`the local planner labels only the exported editions in ${locale}`, () => {
     const otherYear = {

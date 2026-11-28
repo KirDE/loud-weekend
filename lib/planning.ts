@@ -155,9 +155,12 @@ export function calendarFile(items: readonly CalendarEvent[], generatedAt = new 
     if (!dates) return [];
     const modifiedAt = item.calendarUpdatedAt;
     const location = [item.city, item.country].filter(Boolean).join(", ");
+    const year = item.editionYear;
+    const edition =
+      year && Number.isInteger(year) && year >= 1000 && year <= 9999 ? year : "unknown-edition";
     return [
       "BEGIN:VEVENT",
-      `UID:${item.calendarId ?? `${item.slug}-${item.editionYear || 2027}`}@festival-radar`,
+      `UID:${item.calendarId ?? `${item.slug}-${edition}`}@festival-radar`,
       `DTSTAMP:${calendarStamp(item.calendarUpdatedAt ?? item.updatedAt, generatedAt)}`,
       ...(modifiedAt && Number.isFinite(Date.parse(modifiedAt))
         ? [`LAST-MODIFIED:${calendarStamp(modifiedAt, generatedAt)}`]
