@@ -15,12 +15,13 @@ const htmlMonitor = monitor + " (Bingbot metadata compatibility)";
 const fixedPaths = ["/", "/en/", "/de/", "/ru/", "/submit/"];
 const localizedGuide = /^\/(?:(?:en|de|ru)\/)?guides\/(?:germany|multi-day)\/$/;
 const editionDirectory = /^\/(?:(?:en|de|ru)\/)?editions\/\d{4}\/$/;
+const localizedEdition = /^\/(?:(?:en|de|ru)\/)?festivals\/[^/]+\/[1-9][0-9]{3}\/$/;
 const routeClasses = [
   /^\/browse\/$/,
   /^\/(?:en|de|ru)\/(?:about|faq)\/$/,
   /^\/festivals\/[^/]+\/$/,
   /^\/artists\/[^/]+\/$/,
-  /^\/festivals\/[^/]+\/\d{4}\/$/,
+  localizedEdition,
   editionDirectory,
   /^\/countries\/[a-z]{2}\/$/,
   /^\/months\/(?:0[1-9]|1[0-2])\/$/,
@@ -141,7 +142,12 @@ export function inspectSitemap(xml, now = Date.now()) {
     entries.set(path, alternates);
   }
   for (const [path, alternates] of entries) {
-    if (localizedDetail.test(path) || localizedGuide.test(path) || editionDirectory.test(path)) {
+    if (
+      localizedDetail.test(path) ||
+      localizedGuide.test(path) ||
+      editionDirectory.test(path) ||
+      localizedEdition.test(path)
+    ) {
       assert.equal(alternates.size, languages.length, `missing detail hreflang on ${path}`);
     }
     if (!alternates.size) continue;
