@@ -248,7 +248,7 @@ export function PlannerPage({
     url?: string;
   }>({ status: "idle" });
   const planned = festivals.filter(
-    (f) => p.favoriteFestivals.includes(f.slug) || p.attendance[f.slug],
+    (f) => p.favoriteFestivals.includes(f.slug) || p.editionAttendance(f.slug, f.editionYear),
   );
   const selected = festivals.filter(
     (f) => p.playlistFestivals.includes(f.slug) && !editionOnHiatus(f),
@@ -375,11 +375,13 @@ export function PlannerPage({
                     </span>
                   </div>
                   <select
-                    value={p.attendance[f.slug] || ""}
+                    disabled={f.editionYear === undefined}
+                    value={p.editionAttendance(f.slug, f.editionYear) ?? ""}
                     aria-label={`${t.attendance} ${f.name}`}
                     onChange={(e) =>
-                      p.setAttendance(
+                      p.setEditionAttendance(
                         f.slug,
+                        f.editionYear,
                         (e.target.value || undefined) as Attendance | undefined,
                       )
                     }

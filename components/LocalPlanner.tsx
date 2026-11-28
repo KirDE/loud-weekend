@@ -7,6 +7,7 @@ import {
   legacyPlannerYear,
   mergePlannerState,
   parsePlannerState,
+  readEditionAttendance,
   serializePlannerState,
   type Attendance,
 } from "@/lib/planner-storage";
@@ -45,9 +46,12 @@ const Context = createContext<
       toggleArtist: (slug: string, legacySlugs: Readonly<Record<string, string>>) => void;
       removeArtistKey: (key: string) => void;
       setTripBudget: (key: string, value?: TripBudget) => boolean;
-      setAttendance: (v: string, a?: Attendance) => void;
-      editionAttendance: (slug: string, year: number) => Attendance | undefined;
-      setEditionAttendance: (slug: string, year: number, attendance?: Attendance) => void;
+      editionAttendance: (slug: string, year?: number) => Attendance | undefined;
+      setEditionAttendance: (
+        slug: string,
+        year: number | undefined,
+        attendance?: Attendance,
+      ) => void;
       setPlaylistExclusions: (value: string[]) => void;
       togglePlaylistArtist: (slug: string) => void;
       togglePlaylistFestival: (v: string) => void;
@@ -104,19 +108,10 @@ export function LocalPlannerProvider({ children }: { children: React.ReactNode }
           ...s,
           favoriteArtists: s.favoriteArtists.filter((item) => item !== key),
         })),
-      setAttendance: (v: string, a?: Attendance) =>
-        setState((s) => {
-          const attendance = { ...s.attendance };
-          if (a) attendance[v] = a;
-          else delete attendance[v];
-          return { ...s, attendance };
-        }),
-      editionAttendance: (slug: string, year: number) =>
-        year === legacyPlannerYear
-          ? state.attendance[slug]
-          : state.seasonAttendance?.[`${year}:${slug}`],
-      setEditionAttendance: (slug: string, year: number, attendance?: Attendance) =>
+      editionAttendance: (slug: string, year?: number) => readEditionAttendance(state, slug, year),
+      setEditionAttendance: (slug: string, year: number | undefined, attendance?: Attendance) =>
         setState((current) => {
+          if (year === undefined) return current;
           // The original planner already stores the 2027 plan; keep one copy.
           const field = year === legacyPlannerYear ? "attendance" : "seasonAttendance";
           const key = year === legacyPlannerYear ? slug : `${year}:${slug}`;

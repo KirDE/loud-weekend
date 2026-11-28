@@ -118,10 +118,12 @@ export function FestivalDetail({
         <FavoriteButton value={item.slug} />
         <select
           aria-label={t("attendanceFor", { festival: item.name })}
-          value={planner.attendance[item.slug] || ""}
+          disabled={!planner.ready || item.editionYear === undefined}
+          value={planner.editionAttendance(item.slug, item.editionYear) ?? ""}
           onChange={(event) =>
-            planner.setAttendance(
+            planner.setEditionAttendance(
               item.slug,
+              item.editionYear,
               (event.target.value || undefined) as Attendance | undefined,
             )
           }
