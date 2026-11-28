@@ -85,7 +85,9 @@ export function observeRemainingTicket(
       negative.test(text(card.text())) ||
       purchase.length !== 1 ||
       !/^€\s*\d+(?:[.,]\d+)?$/.test(price) ||
-      text(card.find(".summary").text()) !== "Toegang tot het festivalterrein en de Festivalcamping"
+      !/^Toegang tot het festivalterrein(?: \(incl\. [^()]+\))? en (?:de )?festivalcamping$/i.test(
+        text(card.find(".summary").text()),
+      )
     )
       return fail("ordinary weekend stock/control missing or conflicting");
     return {

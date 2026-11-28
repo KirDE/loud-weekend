@@ -89,6 +89,13 @@ export function pinkpop(html: string) {
       malformed = true;
       continue;
     }
+    // Pre-opening shows share the artist-card layout, but are outside the dated main bill.
+    const dayLabel = match[2].match(/<h5\b[^>]*>([\s\S]*?)<\/h5>/i)?.[1];
+    const day = dayLabel && text(dayLabel).match(/\b(\d{1,2})\s+([a-z]+)\b/i);
+    if (day && months[day[2].toLowerCase()]) {
+      const performanceDate = `${date[5]}-${months[day[2].toLowerCase()]}-${pad(day[1])}`;
+      if (performanceDate < result.startDate || performanceDate > result.endDate) continue;
+    }
     const key = name.toLocaleLowerCase();
     const prior = artists.get(key);
     artists.set(key, {
