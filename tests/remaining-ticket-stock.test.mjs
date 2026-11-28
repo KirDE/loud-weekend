@@ -122,3 +122,31 @@ for (const [slug, url, primaryPath, strategy, providerId, replacement, dates] of
       assert.equal(observe(stock.replace("2, 3, 4 et 5", "3, 4, 5 et 6")).status, undefined);
     });
 }
+
+test("Pinkpop weekend benefits may include an extra opening show without losing stock evidence", () => {
+  const source = parserSource("pinkpop", { url: "https://www.pinkpop.nl/" });
+  const stock = readFileSync(
+    new URL("./fixtures/ticket-status/pinkpop-ordinary-stock.html", import.meta.url),
+    "utf8",
+  );
+  const observe = (summary) =>
+    observeTicketSupplement(
+      stock.replace("Toegang tot het festivalterrein en de Festivalcamping", summary),
+      source,
+      ticketSupplementUrl(source),
+      { startDate: "2027-06-18", endDate: "2027-06-20" },
+    );
+  assert.equal(
+    observe(
+      "Toegang tot het festivalterrein (incl. openingsshow op donderdag 17 juni) en festivalcamping",
+    ).status,
+    "available",
+  );
+  for (const summary of [
+    "Alleen festivalcamping",
+    "Toegang tot het festivalterrein",
+    "Toegang tot het festivalterrein (incl. uitverkocht) en festivalcamping",
+    "Geen toegang tot het festivalterrein en de Festivalcamping",
+  ])
+    assert.equal(observe(summary).status, undefined);
+});

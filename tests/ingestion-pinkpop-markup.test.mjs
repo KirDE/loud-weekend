@@ -181,3 +181,30 @@ test("Pinkpop malformed or changed artist cards surface review instead of silent
     assert.equal(evaluateCandidate(current, result).publishable, false);
   }
 });
+
+test("Pinkpop scopes dated cards to the main festival, without name exceptions", () => {
+  const offDate = (name, day) => card(name).replace("Vrijdag 18 juni", day);
+  const result = parse(
+    page(
+      offDate("Opening ensemble", "Donderdag 17 juni") +
+        offDate("Closing ensemble", "Maandag 21 juni") +
+        offDate("Future band", "Zaterdag 19 juni") +
+        offDate("Other month", "Zaterdag 19 juli"),
+    ),
+  );
+  assert.deepEqual(result.lineup, ["Future band"]);
+  assert.deepEqual(result.warnings, []);
+  assert.equal(result.startDate, "2027-06-18");
+  assert.equal(result.endDate, "2027-06-20");
+});
+
+test("Pinkpop actual November opening-show card is not a main-edition artist", async () => {
+  const opening = await readFile(
+    new URL("./fixtures/official-markup/pinkpop-opening-2027.html", import.meta.url),
+    "utf8",
+  );
+  const result = parse(opening);
+  assert.equal(result.lineup, undefined);
+  assert.equal(result.startDate, "2027-06-18");
+  assert.equal(result.endDate, "2027-06-20");
+});
