@@ -865,7 +865,7 @@ test("public freshness separates edition-bound checks, publication and source fa
   }
 });
 
-test("reviewed public venue changes advance only the localized homepage sitemap clock", async () => {
+test("reviewed public venue changes advance only homepage and festival sitemap dates", async () => {
   const { festivalSlug: slug, countryCode, organizerHost, sourceUrl } = brutalAssaultVenueSource;
   await seedCatalog(db, {
     ...catalogSeed,
@@ -889,8 +889,9 @@ test("reviewed public venue changes advance only the localized homepage sitemap 
     new URL("./fixtures/brutal-assault/about-venue.html", import.meta.url),
     "utf8",
   );
+  let fixtureVenue = "Updated fixture venue";
   const fetchImpl: typeof fetch = async () => {
-    const response = new Response(original.replace("Josefov Fortress", "Updated fixture venue"), {
+    const response = new Response(original.replace("Josefov Fortress", fixtureVenue), {
       headers: { "content-type": "text/html" },
     });
     Object.defineProperty(response, "url", { value: sourceUrl });
@@ -905,12 +906,32 @@ test("reviewed public venue changes advance only the localized homepage sitemap 
   const receipt = await db.catalogPublication.findFirstOrThrow({
     where: { festivalSlug: slug, editionYear: 2027, fields: { has: "venue" } },
   });
-  const home = receipt.createdAt.toISOString();
+  const lastModified = receipt.createdAt.toISOString();
+  const expected = (date: string) => ({
+    ...before,
+    ...Object.fromEntries(
+      ["", "/en", "/de", "/ru"].flatMap((prefix) => [
+        [`${prefix}/`, date],
+        [`${prefix}/festivals/${slug}/`, date],
+      ]),
+    ),
+  });
   const published = await sitemapDates();
-  assert.deepEqual(published, { ...before, "/": home, "/en/": home, "/de/": home, "/ru/": home });
+  assert.deepEqual(published, expected(lastModified));
 
   const repeat = await collectReviewedVenue(db, 2027, { fetchImpl });
   await collectReviewedVenue(db, 2027, { fetchImpl, approval: repeat.token, actor: "fixture" });
   assert.equal(await db.catalogPublication.count({ where: { festivalSlug: slug } }), 1);
   assert.deepEqual(await sitemapDates(), published);
+
+  fixtureVenue = "Renamed fixture venue";
+  const rename = await collectReviewedVenue(db, 2027, { fetchImpl });
+  assert.deepEqual(await sitemapDates(), published);
+  await collectReviewedVenue(db, 2027, { fetchImpl, approval: rename.token, actor: "fixture" });
+  const renamed = await db.catalogPublication.findFirstOrThrow({
+    where: { festivalSlug: slug, editionYear: 2027, fields: { has: "venue" } },
+    orderBy: { createdAt: "desc" },
+  });
+  assert.ok(renamed.createdAt > receipt.createdAt);
+  assert.deepEqual(await sitemapDates(), expected(renamed.createdAt.toISOString()));
 });
