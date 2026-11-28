@@ -654,6 +654,27 @@ test("public freshness separates edition-bound checks, publication and source fa
     assert.equal((await read()).freshness.checkedAt, ago(48).toISOString());
     assert.equal((await read()).festivals[0].freshness?.lastSuccessfulSourceCheckAt, undefined);
 
+    const { summarizeDataQuality } = await import("../lib/catalog/data-quality.ts");
+    await db.festivalSource.update({ where: { id: active.id }, data: { enabled: false } });
+    const retiredArchive = await db.festivalSource.create({
+      data: {
+        url: new URL("retired-archive", festival.officialUrl).href,
+        festivalSlug: slug,
+        festivalId: current.festivalId,
+        editionId: current.id,
+        editionYear: current.year,
+        refreshPolicy: "archived",
+        strategies: ["json_ld_event"],
+        deprecatedAt: ago(24),
+      },
+    });
+    const withoutMonitoredSource = await read();
+    assert.equal(withoutMonitoredSource.festivals[0].sourceDeprecated, true);
+    assert.equal(summarizeDataQuality(withoutMonitoredSource).notChecked, 1);
+    assert.equal(summarizeDataQuality(withoutMonitoredSource).stale, 0);
+    await db.festivalSource.delete({ where: { id: retiredArchive.id } });
+    await db.festivalSource.update({ where: { id: active.id }, data: { enabled: true } });
+
     const validAt = ago(12);
     await attempt(active.url, validAt, [current.year]);
     const afterCheck = await read();
@@ -680,6 +701,7 @@ test("public freshness separates edition-bound checks, publication and source fa
     const afterFailure = await read();
     assert.equal(afterFailure.festivals[0].freshness?.sourceCheckStale, true);
     assert.equal(afterFailure.freshness.checkedAt, validAt.toISOString());
+    assert.equal(summarizeDataQuality(afterFailure).stale, 1);
     assert.doesNotMatch(
       JSON.stringify(afterFailure.festivals[0].freshness),
       /private-error-fixture/,

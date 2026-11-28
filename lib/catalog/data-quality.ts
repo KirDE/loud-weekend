@@ -2,6 +2,7 @@ import type { CatalogSnapshot } from "./repository";
 import { latestDate } from "./freshness";
 import { festivalDateInterval } from "../festival-dates";
 import { hasAnnouncedLineup } from "../festival-lineup";
+import { isCalendarDate } from "../domain/edition-dates";
 import { editionOnHiatus } from "../edition-lifecycle";
 import { isOfficialTimetableSource, timetableEntrySchema } from "../timetables";
 
@@ -16,7 +17,9 @@ export function summarizeDataQuality(
     hiatus: 0,
     dates: 0,
     lineup: 0,
+    lineupDayCoverage: 0,
     tickets: 0,
+    ticketCategories: 0,
     timetable: 0,
     dateEvidence: 0,
     lineupEvidence: 0,
@@ -28,7 +31,9 @@ export function summarizeDataQuality(
   for (const festival of catalog.festivals) {
     const freshness = festival.freshness;
     const checkAt = verifiedTime(freshness?.lastSuccessfulSourceCheckAt);
-    if (freshness?.sourceCheckStale || festival.sourceDeprecated) {
+    // Exact-edition monitoring excludes archived sources. The older
+    // catalogue badge also describes retired sources outside that scope.
+    if (freshness?.sourceCheckStale ?? festival.sourceDeprecated) {
       summary.stale += 1;
     } else if (checkAt) {
       summary.checked += 1;
@@ -44,7 +49,36 @@ export function summarizeDataQuality(
     const dateInterval = festivalDateInterval(festival);
     if (dateInterval) summary.dates += 1;
     if (hasAnnouncedLineup(festival)) summary.lineup += 1;
+    // Day assignments are published separately from timed stage schedules.
+    const { startDate, endDate, lineupDays } = festival;
+    if (dateInterval && startDate && endDate && lineupDays?.length) {
+      const officialOrigin = URL.parse(festival.officialUrl)?.origin;
+      if (
+        lineupDays.some(({ cancelled, dates, sourceUrl, observedAt }) => {
+          if (cancelled || !dates.length || !sourceUrl || !verifiedTime(observedAt)) return false;
+          const source = URL.parse(sourceUrl);
+          return (
+            source?.protocol === "https:" &&
+            source.origin === officialOrigin &&
+            !source.username &&
+            !source.password &&
+            !source.search &&
+            !source.hash &&
+            dates.every((date) => isCalendarDate(date) && date >= startDate && date <= endDate)
+          );
+        })
+      )
+        summary.lineupDayCoverage += 1;
+    }
     if (festival.ticketStatus !== "unknown") summary.tickets += 1;
+    const offers = festival.ticketOffers;
+    if (
+      offers &&
+      offers.editionYear === festival.editionYear &&
+      verifiedTime(offers.observedAt) &&
+      offers.offers.length > 0
+    )
+      summary.ticketCategories += 1;
     // A verified range may span New Year. Without both dates, fall back to the edition year.
     const scheduleYear = dateInterval && festival.endDate ? undefined : festival.editionYear;
     const hasUsableSchedule = festival.timetable?.some(
@@ -63,9 +97,10 @@ export function summarizeDataQuality(
     const proof = new Set(
       edition.provenance
         .filter(({ checkedAt }) => verifiedTime(checkedAt))
-        .map(({ field }) => field),
+        .map(({ field }) => (field === "finalLineup" ? "lineup" : field)),
     );
-    if (proof.has("dates")) summary.dateEvidence += 1;
+    if (proof.has("dates") || (proof.has("startDate") && proof.has("endDate")))
+      summary.dateEvidence += 1;
     if (proof.has("lineup")) summary.lineupEvidence += 1;
   }
   return summary;

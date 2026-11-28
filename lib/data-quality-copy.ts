@@ -4,12 +4,14 @@ export const dataQualityCopy = {
     intro:
       "These counts cover current editions in the public catalogue, not every announced event or source.",
     coverage: "Published coverage",
+    lineupDays: "Published lineup by day",
     hiatusExcluded:
       "Editions on hiatus are excluded from published coverage, but still count in source checks.",
     allPaused: "All current editions are on hiatus. There is no published coverage to report.",
     dates: "Dates recorded",
     lineup: "Announced lineup",
     tickets: "Explicit ticket status",
+    ticketCategories: "Published ticket categories",
     timetable: "Published stage schedule",
     source: "Source checks",
     recent: "Successful check, not flagged stale",
@@ -34,6 +36,7 @@ export const dataQualityCopy = {
       "Die Zahlen beziehen sich auf aktuelle Ausgaben im öffentlichen " +
       "Katalog, nicht auf alle angekündigten Veranstaltungen oder Quellen.",
     coverage: "Veröffentlichte Abdeckung",
+    lineupDays: "Veröffentlichtes Line-up nach Tagen",
     hiatusExcluded:
       "Pausierende Ausgaben zählen bei den Quellenprüfungen, nicht bei der veröffentlichten Abdeckung.",
     allPaused:
@@ -41,6 +44,7 @@ export const dataQualityCopy = {
     dates: "Erfasste Termine",
     lineup: "Angekündigtes Line-up",
     tickets: "Expliziter Ticketstatus",
+    ticketCategories: "Veröffentlichte Ticketkategorien",
     timetable: "Veröffentlichter Bühnenplan",
     source: "Quellenprüfungen",
     recent: "Erfolgreich und nicht als veraltet markiert",
@@ -64,12 +68,14 @@ export const dataQualityCopy = {
     intro:
       "В подсчёт входят текущие выпуски публичного каталога, а не все заявленные мероприятия или источники.",
     coverage: "Опубликованные данные",
+    lineupDays: "Опубликован состав по дням",
     hiatusExcluded:
       "Выпуски на паузе учитываются при проверке источников, но не в сводке опубликованных данных.",
     allPaused: "Все текущие выпуски на паузе. Сводка опубликованных данных недоступна.",
     dates: "Указаны даты",
     lineup: "Объявлен состав",
     tickets: "Явный статус билетов",
+    ticketCategories: "Опубликованы категории билетов",
     timetable: "Опубликовано расписание сцен",
     source: "Проверка источников",
     recent: "Успешная проверка без отметки об устаревании",

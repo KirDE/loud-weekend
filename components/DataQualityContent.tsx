@@ -40,7 +40,9 @@ export function DataQualityContent({ data }: { data?: ReturnType<typeof summariz
             group(t.coverage, coverageTotal, [
               [t.dates, data.dates],
               [t.lineup, data.lineup],
+              [t.lineupDays, data.lineupDayCoverage],
               [t.tickets, data.tickets],
+              [t.ticketCategories, data.ticketCategories],
               [t.timetable, data.timetable],
             ])
           ) : (

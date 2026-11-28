@@ -71,7 +71,9 @@ test("data quality aggregates only current records and excludes stale/invalid ev
     hiatus: 0,
     dates: 2,
     lineup: 2,
+    lineupDayCoverage: 0,
     tickets: 2,
+    ticketCategories: 0,
     timetable: 1,
     dateEvidence: 1,
     lineupEvidence: 1,
@@ -81,6 +83,33 @@ test("data quality aggregates only current records and excludes stale/invalid ev
     lastRecentCheck: checkedAt,
   });
   assert.doesNotMatch(JSON.stringify(tally), /private|redundant/);
+});
+
+test("recorded lineup evidence includes a reviewed final-lineup decision once per current edition", () => {
+  const decision = { field: "finalLineup", checkedAt, note: "private-final-lineup-fixture" };
+  const edition = (provenance, recordState = "current") => ({ provenance, recordState });
+  const tally = summarizeDataQuality(
+    {
+      festivals: Array.from({ length: 4 }, () => ({
+        ticketStatus: "unknown",
+        headliners: [],
+        lineup: [],
+      })),
+      editions: [
+        edition([decision]),
+        edition([decision, { field: "lineup", checkedAt }]),
+        edition([{ ...decision, checkedAt: "2029-01-01T00:00:00.000Z" }]),
+        edition([{ ...decision, checkedAt: "invalid" }]),
+        edition([decision], "archived"),
+        edition([decision], "tracking"),
+      ],
+    },
+    now,
+  );
+  assert.equal(tally.lineupEvidence, 2);
+  assert.equal(tally.lineup, 0);
+  assert.equal(tally.checked, 0);
+  assert.doesNotMatch(JSON.stringify(tally), /private-final-lineup-fixture/);
 });
 
 test("absence of a source check is not success or proof of an outage", () => {
@@ -98,6 +127,56 @@ test("absence of a source check is not success or proof of an outage", () => {
   assert.equal(unchecked.checked, 0);
   assert.equal(unchecked.stale, 0);
   assert.equal(unchecked.lastRecentCheck, undefined);
+});
+
+test("published ticket category coverage counts editions, not individual categories or ticket stock", () => {
+  const ticketOffers = {
+    editionYear: 2027,
+    observedAt: checkedAt,
+    sourceUrl: "https://festival.example.test/private-offer-fixture",
+    offers: [
+      { key: "full-pass", kind: "full_pass", status: "sold_out", price: null, saleDateText: null },
+      { key: "day-pass", kind: "day_pass", status: "unknown", price: null, saleDateText: null },
+    ],
+  };
+  const edition = {
+    ...festival,
+    slug: "synthetic-ticket-edition",
+    ticketStatus: "unknown",
+    editionYear: 2027,
+    ticketOffers,
+  };
+  const paused = {
+    ...edition,
+    editionLifecycle: {
+      festivalSlug: edition.slug,
+      editionYear: edition.editionYear,
+      lifecycle: "hiatus",
+      announcedReturnYear: null,
+      alternativeEvent: null,
+      sourceUrl: edition.officialUrl,
+      observedAt: checkedAt,
+      approvedAt: checkedAt,
+    },
+  };
+  const tally = summarizeDataQuality(
+    {
+      festivals: [
+        edition,
+        festival,
+        paused,
+        { ...edition, editionYear: 2028 },
+        { ...edition, ticketOffers: { ...ticketOffers, offers: [] } },
+        { ...edition, ticketOffers: { ...ticketOffers, observedAt: "2029-01-01T00:00:00Z" } },
+      ],
+      editions: [],
+    },
+    now,
+  );
+  assert.equal(tally.ticketCategories, 1);
+  assert.equal(tally.tickets, 1);
+  assert.equal(tally.hiatus, 1);
+  assert.doesNotMatch(JSON.stringify(tally), /private-offer-fixture/);
 });
 
 test("stage schedule coverage excludes malformed, out-of-edition and future observations", () => {
@@ -170,6 +249,16 @@ test("published hiatus excludes retained facts from coverage but not source heal
       approvedAt: checkedAt,
     },
   };
+  paused.lineupDays = [
+    {
+      artist: "Verified artist",
+      artistSlug: "verified-artist",
+      dates: ["2027-06-17"],
+      cancelled: false,
+      sourceUrl: festival.officialUrl,
+      observedAt: checkedAt,
+    },
+  ];
   const mixed = summarizeDataQuality({ festivals: [festival, paused], editions: [] }, now);
   assert.equal(mixed.total, 2);
   assert.equal(mixed.checked, 2);
@@ -184,4 +273,55 @@ test("published hiatus excludes retained facts from coverage but not source heal
   assert.equal(allPaused.dates, 0);
   assert.equal(allPaused.tickets, 0);
   assert.equal(allPaused.timetable, 0);
+  assert.equal(allPaused.lineupDayCoverage, 0);
+});
+
+test("published lineup day coverage counts editions, not acts or stage times", () => {
+  const appearance = {
+    artist: "Verified artist",
+    artistSlug: "verified-artist",
+    dates: ["2027-06-17", "2027-06-18"],
+    cancelled: false,
+    sourceUrl: "https://festival.example.test/private-day-fixture",
+    observedAt: checkedAt,
+  };
+  const edition = { ...festival, timetable: undefined };
+  const count = (record) =>
+    summarizeDataQuality({ festivals: [record], editions: [] }, now).lineupDayCoverage;
+  const valid = {
+    ...edition,
+    lineupDays: [appearance, { ...appearance, artistSlug: "second-act" }],
+  };
+  const tally = summarizeDataQuality({ festivals: [valid], editions: [] }, now);
+  assert.equal(tally.lineupDayCoverage, 1);
+  assert.equal(tally.timetable, 0);
+  assert.doesNotMatch(JSON.stringify(tally), /private-day-fixture|verified-artist/);
+  assert.equal(count({ ...valid, endDate: undefined }), 0);
+  for (const invalid of [
+    { cancelled: true },
+    { dates: [] },
+    { dates: ["2027-06-20"] },
+    { dates: ["2027-06-17T12:00:00Z"] },
+    { sourceUrl: undefined },
+    { sourceUrl: "https://other.example.test/lineup" },
+    { sourceUrl: appearance.sourceUrl + "?preview=1" },
+    { observedAt: "2029-01-01T00:00:00.000Z" },
+  ]) {
+    assert.equal(count({ ...edition, lineupDays: [{ ...appearance, ...invalid }] }), 0);
+  }
+});
+
+test("date evidence includes separately verified start and end dates for the same current edition", () => {
+  const start = { field: "startDate", checkedAt, note: "private-start-evidence" };
+  const end = { field: "endDate", checkedAt, note: "private-end-evidence" };
+  const complete = { ...current, provenance: [start, end, start] };
+  const count = (...editions) =>
+    summarizeDataQuality({ festivals: [], editions }, now).dateEvidence;
+  assert.equal(count(complete), 1);
+  assert.equal(count(current, complete), 2);
+  assert.equal(count({ ...current, provenance: [...current.provenance, start, end] }), 1);
+  assert.equal(count({ ...current, provenance: [start] }, { ...current, provenance: [end] }), 0);
+  assert.equal(count({ ...complete, recordState: "archived" }), 0);
+  assert.equal(count({ ...current, provenance: [start, { ...end, checkedAt: "2029-01-01" }] }), 0);
+  assert.equal(count({ ...current, provenance: [{ ...start, checkedAt: "invalid" }, end] }), 0);
 });
