@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./CatalogLink";
 import type { Festival } from "@/lib/domain/festival";
 import { formatFestivalDateRange } from "@/lib/festival-dates";
 import { personalCalendar } from "@/lib/personal-calendar";

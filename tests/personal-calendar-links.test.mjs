@@ -1,3 +1,4 @@
+import CatalogLink from "../components/CatalogLink.tsx";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -49,7 +50,7 @@ const { code } = await transform(
 );
 const deps = {
   "react/jsx-runtime": require("react/jsx-runtime"),
-  "next/link": require("next/link"),
+  "./CatalogLink": { __esModule: true, default: CatalogLink },
   "@/lib/festival-dates": dates,
   "@/lib/personal-calendar": calendar,
   "@/lib/planning": planning,

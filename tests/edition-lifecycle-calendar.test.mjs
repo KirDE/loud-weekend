@@ -1,3 +1,4 @@
+import CatalogLink from "../components/CatalogLink.tsx";
 import { readEditionAttendance } from "../lib/planner-storage.ts";
 import { personalCalendar } from "../lib/personal-calendar.ts";
 import assert from "node:assert/strict";
@@ -120,7 +121,7 @@ function readyPlanner(items, locale, overrides = {}) {
   const deps = {
     react: require("react"),
     "react/jsx-runtime": require("react/jsx-runtime"),
-    "next/link": require("next/link"),
+    "./CatalogLink": { __esModule: true, default: CatalogLink },
     "@/lib/planning": planning,
     "@/lib/product-events": { sendProductEvent: () => undefined },
     "@/lib/favorite-artist": require("../lib/favorite-artist.ts"),

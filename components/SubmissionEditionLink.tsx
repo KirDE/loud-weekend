@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./CatalogLink";
 import { useState, type FormEvent } from "react";
 import type { SubmissionEditionLink as LinkedEdition } from "@/lib/submission-edition-link";
 import { SubmissionFollowOnEdition, type FollowOnDraft } from "./SubmissionFollowOnEdition";

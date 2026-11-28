@@ -4,7 +4,7 @@ import { sendProductEvent } from "@/lib/product-events";
 import type { PlaylistRefreshFailures } from "@/lib/catalog/playlist-refresh-readback";
 
 import { useState } from "react";
-import Link from "next/link";
+import Link from "./CatalogLink";
 import { CorrectionReportForm } from "./CorrectionReportForm";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";

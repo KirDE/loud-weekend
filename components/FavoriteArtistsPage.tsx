@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./CatalogLink";
 import { useState } from "react";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { Festival } from "@/lib/domain/festival";

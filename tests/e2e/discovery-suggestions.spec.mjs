@@ -160,8 +160,12 @@ for (const locale of ["en", "de", "ru"]) {
       await expect(suggestion).toHaveAttribute("href", "/festivals/synthetic-fest/2027/");
       await search.press("ArrowDown");
       await expect(suggestion).toBeFocused();
+      await page.evaluate(() => {
+        window.__editionSourceDocument = true;
+      });
       await suggestion.press("Enter");
       await expect(page.getByRole("heading", { level: 1 })).toHaveText("Synthetic Fest 2027");
+      expect(await page.evaluate(() => window.__editionSourceDocument)).toBeUndefined();
       await expect(page.locator("html")).toHaveAttribute("lang", locale);
       const actions = page.locator(".localActions");
       const favorite = actions.getByRole("button");
