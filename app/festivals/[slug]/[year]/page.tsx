@@ -38,7 +38,9 @@ export default async function FestivalEditionPage({ params }: { params: Params }
   );
   if (!item) notFound();
   const [history, arrivalFacts] = await Promise.all([
-    item.editionYear === undefined ? [] : readEditionHistory(db, item.slug, item.editionYear),
+    item.editionYear === undefined
+      ? []
+      : readEditionHistory(db, item.slug, item.editionYear, item.officialUrl),
     readArrivalFacts(db, item),
   ]);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
