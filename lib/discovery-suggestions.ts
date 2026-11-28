@@ -61,8 +61,13 @@ export function discoverySuggestionIndex(
       suggestion: { id: slug, label: name, href: `/artists/${slug}/` },
       terms: [name, ...aliases].map(normalized),
     })),
-    festivals: festivals.map(({ slug, name, countryCode }) => ({
-      suggestion: { id: slug, label: name, detail: countryCode, href: `/festivals/${slug}/` },
+    festivals: festivals.map(({ slug, name, countryCode, editionYear }) => ({
+      suggestion: {
+        id: slug,
+        label: name,
+        detail: countryCode,
+        href: editionYear ? `/festivals/${slug}/${editionYear}/` : `/festivals/${slug}/`,
+      },
       terms: [normalized(name)],
     })),
     cities: [...uniqueCities.values()].map((suggestion) => ({

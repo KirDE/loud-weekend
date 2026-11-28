@@ -26,6 +26,24 @@ test("normalizes punctuation and accents, preserves separate canonical aliases a
   assert.deepEqual(get("x"), { festivals: [], artists: [], cities: [] });
 });
 
+test("festival suggestions link to the displayed edition without guessing a missing year", () => {
+  const [festival] = festivals;
+  for (const locale of ["en-US", "de-DE", "ru-RU"]) {
+    for (const editionYear of [2026, 2028, undefined]) {
+      const options = discoverySuggestionIndex(
+        [{ ...festival, editionYear, startDate: "2027-07-01" }],
+        artists,
+      );
+      const [match] = discoverySuggestions("electrique festival", options, locale).festivals;
+      assert.equal(
+        match.href,
+        editionYear ? `/festivals/synthetic/${editionYear}/` : "/festivals/synthetic/",
+        `${locale}: ${editionYear ?? "unknown season"}`,
+      );
+    }
+  }
+});
+
 test("large catalogues return a bounded, deterministic set per category", () => {
   const large = discoverySuggestionIndex(
     festivals,
