@@ -276,8 +276,14 @@ for (const language of ["en", "de", "ru"] as const) {
 for (const language of ["en", "de", "ru"] as const) {
   test(`artist appearances follow festival dates, not import order, in ${language}`, () => {
     const appearances = [
-      { ...festival, slug: "unknown", startDate: undefined },
-      { ...festival, slug: "late", startDate: "2027-08-01", updatedAt: "2026-01-01" },
+      { ...festival, slug: "unknown", editionYear: undefined, startDate: undefined },
+      {
+        ...festival,
+        slug: "late",
+        editionYear: 2028,
+        startDate: "2028-08-01",
+        updatedAt: "2026-01-01",
+      },
       { ...festival, slug: "early-b", startDate: "2027-06-01", updatedAt: "2026-11-07" },
       { ...festival, slug: "early-a", startDate: "2027-06-01", updatedAt: "2026-11-06" },
     ];
@@ -290,9 +296,12 @@ for (const language of ["en", "de", "ru"] as const) {
       </LanguageProvider>,
     );
     assert.deepEqual(
-      [...html.matchAll(/href="\/festivals\/([^/"\s]+)\/?"/g)].map((match) => match[1]),
-      ["early-a", "early-b", "late", "unknown"],
+      [...html.matchAll(/href="\/festivals\/([^"\s]+)"/g)].map((match) => match[1]),
+      ["early-a/2027", "early-b/2027", "late/2028", "unknown"],
     );
+    assert.match(html, /<strong>Synthetic Fest 2028<\/strong>/);
+    assert.match(html, /<strong>Synthetic Fest<\/strong>/);
+    assert.doesNotMatch(html, /Synthetic Fest undefined/);
     assert.deepEqual(appearances, before);
   });
 }

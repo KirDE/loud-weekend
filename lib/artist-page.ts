@@ -45,7 +45,11 @@ export function artistMetadata(
   const locale = language ?? "en";
   const t = phrases[locale];
   const path = `/artists/${artist.slug}/`;
-  const names = [...new Set(appearances.map((item) => item.name))]
+  const names = [
+    ...new Set(
+      appearances.map(({ name, editionYear }) => (editionYear ? `${name} ${editionYear}` : name)),
+    ),
+  ]
     .sort((a, b) => a.localeCompare(b, locale))
     .slice(0, 3);
   const description = names.length
