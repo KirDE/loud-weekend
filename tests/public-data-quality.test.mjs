@@ -185,3 +185,18 @@ test("published hiatus excludes retained facts from coverage but not source heal
   assert.equal(allPaused.tickets, 0);
   assert.equal(allPaused.timetable, 0);
 });
+
+test("date evidence includes separately verified start and end dates for the same current edition", () => {
+  const start = { field: "startDate", checkedAt, note: "private-start-evidence" };
+  const end = { field: "endDate", checkedAt, note: "private-end-evidence" };
+  const complete = { ...current, provenance: [start, end, start] };
+  const count = (...editions) =>
+    summarizeDataQuality({ festivals: [], editions }, now).dateEvidence;
+  assert.equal(count(complete), 1);
+  assert.equal(count(current, complete), 2);
+  assert.equal(count({ ...current, provenance: [...current.provenance, start, end] }), 1);
+  assert.equal(count({ ...current, provenance: [start] }, { ...current, provenance: [end] }), 0);
+  assert.equal(count({ ...complete, recordState: "archived" }), 0);
+  assert.equal(count({ ...current, provenance: [start, { ...end, checkedAt: "2029-01-01" }] }), 0);
+  assert.equal(count({ ...current, provenance: [{ ...start, checkedAt: "invalid" }, end] }), 0);
+});

@@ -67,7 +67,8 @@ export function summarizeDataQuality(
         .filter(({ checkedAt }) => verifiedTime(checkedAt))
         .map(({ field }) => field),
     );
-    if (proof.has("dates")) summary.dateEvidence += 1;
+    if (proof.has("dates") || (proof.has("startDate") && proof.has("endDate")))
+      summary.dateEvidence += 1;
     if (proof.has("lineup")) summary.lineupEvidence += 1;
   }
   return summary;
