@@ -124,6 +124,32 @@ for (const [language, locale, march, july] of [
   });
 }
 
+for (const [language, message] of [
+  ["en", "No confirmed festival dates yet."],
+  ["de", "Es gibt noch keine bestätigten Festivaltermine."],
+  ["ru", "Подтверждённых дат фестивалей пока нет."],
+]) {
+  test(`planner calendar has no invented month or empty download in ${language}`, () => {
+    for (const items of [
+      [],
+      [{ ...festival, editionYear: undefined, startDate: undefined, endDate: undefined }],
+      [{ ...festival, editionYear: 2028, startDate: undefined, endDate: undefined }],
+    ]) {
+      const html = render(FestivalViews, items, language);
+      const calendar = html.match(
+        /<section[^>]+aria-labelledby="festival-calendar-title"[^]*?<\/section>/,
+      )[0];
+      assert.ok(calendar.includes(message));
+      assert.doesNotMatch(calendar, /class="monthNav"|download=|2027|2028/);
+      assert.match(html, /id="festival-map-title"/);
+    }
+    const dated = render(FestivalViews, [crossYear], language);
+    assert.match(dated, /class="monthNav"/);
+    assert.match(dated, /download="loud-weekend-festivals\.ics"/);
+    assert.match(dated, /dateTime="2027-12-30"/);
+  });
+}
+
 test("date-only rendering and month membership do not depend on the process timezone", () => {
   const original = process.env.TZ;
   try {

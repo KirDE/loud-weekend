@@ -165,7 +165,7 @@ for (const locale of ["en", "de", "ru"]) {
     assert.match(html, /Rock en Seine/); // Map remains a geographic link, not a schedule assertion.
     const empty = render(locale, h(FestivalViews, { festivals: [paused] }));
     assert.doesNotMatch(empty, /dateTime="2027-08-25"/);
-    assert.doesNotMatch(payload(empty), /BEGIN:VEVENT/);
+    assert.doesNotMatch(empty, /class="monthNav"|download="loud-weekend-festivals\.ics"/);
   });
   test(`planning downloads use the edition year rather than the current season in ${locale}`, () => {
     const item = { ...active, editionYear: 2028, startDate: "2028-07-03", endDate: "2028-07-05" };
