@@ -78,6 +78,30 @@ test("publication maps every supported event type to stable edition-aware keys",
   );
 });
 
+test("notification links use the recorded edition without guessing from dates", () => {
+  const changes = [
+    { kind: "artist_added", field: "lineup", after: "New Band", reviewRequired: false },
+  ];
+  const at = "2026-08-29T19:15:00.000Z";
+  for (const year of [2026, 2027, 2028]) {
+    const [event] = notificationEventsForChanges(
+      { ...festival, editionYear: year, startDate: "2027-06-01" },
+      changes,
+      at,
+    );
+    assert.equal(event.url, `https://loudweekend.eu/festivals/test-fest/${year}/`);
+    assert.equal(event.festivalId, `test-fest:${year}`);
+    assert.equal(event.dedupeKey, `festival:test-fest:${year}:ARTIST_ADDED:new%20band`);
+  }
+  const [legacy] = notificationEventsForChanges(
+    { ...festival, editionYear: undefined, startDate: "2027-06-01" },
+    changes,
+    at,
+  );
+  assert.equal(legacy.url, "https://loudweekend.eu/festivals/test-fest");
+  assert.equal(legacy.festivalId, "test-fest:2027");
+});
+
 test("duplicate keys keep first event and original order", () => {
   const changes = [
     { kind: "date_changed", field: "startDate", after: "2027-07-07", reviewRequired: false },
