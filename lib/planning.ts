@@ -29,7 +29,7 @@ export function similarFestivals(
   },
   limit = 3,
 ) {
-  if (editionOnHiatus(item)) return [];
+  if (editionOnHiatus(item) || item.editionYear === undefined) return [];
   const collator = new Intl.Collator(options.locale, { sensitivity: "base" });
   const artistSlugs = options.lineups?.artistSlugsByFestival;
   const artists = new Set(artistSlugs?.[item.slug]);
@@ -37,7 +37,12 @@ export function similarFestivals(
   const favorites = discoveryFavoriteSlugs(options.favorites ?? [], options.lineups);
   const dates = festivalDateInterval(item);
   return festivals
-    .filter((candidate) => candidate.slug !== item.slug && !editionOnHiatus(candidate))
+    .filter(
+      (candidate) =>
+        candidate.slug !== item.slug &&
+        candidate.editionYear === item.editionYear &&
+        !editionOnHiatus(candidate),
+    )
     .map((festival) => {
       const candidateArtists = [...new Set(artistSlugs?.[festival.slug])];
       const shared = candidateArtists.filter((slug) => artists.has(slug)).length;
