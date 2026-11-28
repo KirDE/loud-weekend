@@ -367,7 +367,13 @@ export function PlannerPage({
                         ? translate(language, "editionHiatus")
                         : f.startDate || t.datesTba}
                     </small>
-                    <Link href={`/festivals/${f.slug}/`}>
+                    <Link
+                      href={
+                        f.editionYear
+                          ? `/festivals/${f.slug}/${f.editionYear}/`
+                          : `/festivals/${f.slug}/`
+                      }
+                    >
                       <strong>{f.name}</strong>
                     </Link>
                     <span>
