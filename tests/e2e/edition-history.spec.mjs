@@ -33,6 +33,7 @@ test.beforeAll(async () => {
         status: "TBA",
         ticketStatus: "UNKNOWN",
         recordState: year === 2027 ? "CURRENT" : "ARCHIVED",
+        snapshotAt: year === 2026 ? new Date("2026-10-10T08:00:00Z") : null,
         completeness: "TBA",
         sourceUpdatedAt: new Date("2026-10-10T08:00:00Z"),
       },
