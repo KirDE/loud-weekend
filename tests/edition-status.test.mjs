@@ -10,6 +10,7 @@ import { lineupDayProfileSlugs } from "../lib/festival-lineup.ts";
 import { editionRecordCompleteness } from "../lib/edition-status.ts";
 import { EditionHistory } from "../components/EditionHistory.tsx";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
+import { parseSeasonYear } from "../lib/catalog/seasons.ts";
 import { canonicalPath } from "../lib/seo.ts";
 import { LanguageProvider } from "../components/LanguageProvider.tsx";
 
@@ -64,6 +65,7 @@ function loadPage(editions, artists = []) {
     "@/lib/seo": { canonicalPath },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
     "@/components/EditionHistory": { EditionHistory },
+    "@/lib/catalog/seasons": { parseSeasonYear },
     "@/lib/db": { db },
     "@/lib/catalog/public-history": {
       readEditionHistory: async (client, slug, year) => {
@@ -229,6 +231,25 @@ test("edition route keeps partial facts and localized badges in DE and RU", asyn
 
 test("canonical route still rejects a missing edition", async () => {
   await assert.rejects(renderEdition(makeEdition(), []), /NEXT_NOT_FOUND/);
+});
+
+test("edition detail accepts only the canonical year for a recorded edition", async () => {
+  const editions = [2026, 2027, 2028].map((editionYear) =>
+    makeEdition({ editionYear, recordState: editionYear === 2026 ? "archived" : "current" }),
+  );
+  const page = loadPage(editions);
+  for (const year of ["02027", "2027.0", " 2027", "202A", "0000", "2029"]) {
+    await assert.rejects(
+      page({ params: Promise.resolve({ slug: editions[0].slug, year }) }),
+      /NEXT_NOT_FOUND/,
+    );
+  }
+  for (const item of editions) {
+    assert.match(
+      await renderEdition(item, editions),
+      new RegExp(`<h1>${item.name} ${item.editionYear}</h1>`),
+    );
+  }
 });
 
 test("canonical edition links only resolved catalogue identities without modifying its lineup", async () => {

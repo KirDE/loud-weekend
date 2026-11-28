@@ -7,6 +7,7 @@ import { notFound } from "next/navigation";
 import { FestivalEditionContent } from "@/components/PublicCatalogPages";
 import { readArrivalFacts } from "@/lib/catalog/arrival-facts";
 import { getCatalog } from "@/lib/catalog/repository";
+import { parseSeasonYear } from "@/lib/catalog/seasons";
 import { canonicalPath } from "@/lib/seo";
 import { lineupDayProfileSlugs } from "@/lib/festival-lineup";
 
@@ -15,7 +16,7 @@ type Params = Promise<{ slug: string; year: string }>;
 export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug, year } = await params;
-  if (!/^\d{4}$/.test(year)) return {};
+  if (parseSeasonYear(year) === undefined) return {};
   const { editions } = await getCatalog();
   const edition = editions.find((item) => item.slug === slug && item.editionYear === Number(year));
   if (!edition || edition.recordState === "tracking") return {};
@@ -34,7 +35,7 @@ export default async function FestivalEditionPage({ params }: { params: Params }
   const { slug, year: rawYear } = await params;
   const { editions, artists } = await getCatalog();
   const item = editions.find(
-    (edition) => edition.slug === slug && edition.editionYear === Number(rawYear),
+    (edition) => edition.slug === slug && edition.editionYear === parseSeasonYear(rawYear),
   );
   if (!item) notFound();
   const [history, arrivalFacts] = await Promise.all([
