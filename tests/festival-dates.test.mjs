@@ -76,6 +76,27 @@ for (const [language, locale, march, july] of [
   ["de", "de-DE", "März", "Juli"],
   ["ru", "ru-RU", "март", "июл."],
 ]) {
+  test(`calendar links use the stored edition year rather than the event month in ${language}`, () => {
+    const calendar = render(
+      FestivalViews,
+      [
+        { ...crossYear, editionYear: 2026 },
+        {
+          ...festival,
+          slug: "year-unknown",
+          startDate: "2027-12-31",
+          endDate: undefined,
+          editionYear: undefined,
+        },
+      ],
+      language,
+    );
+    const links = [...calendar.matchAll(/<a role="listitem" href="([^"]+)"/g)].map(([, href]) =>
+      href.replace(/\/$/, ""),
+    );
+    assert.deepEqual(links, [`/festivals/${festival.slug}/2026`, "/festivals/year-unknown"]);
+  });
+
   test(`actual calendar and discovery render truthful intervals and dynamic month options in ${language}`, () => {
     const html = render(FestivalViews, [crossMonth], language);
     assert.ok(html.includes(formatFestivalDateRange(crossMonth, locale, "")));
