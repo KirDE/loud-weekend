@@ -35,7 +35,7 @@ for (const [locale, t] of Object.entries(labels)) {
     const section = page.locator(".recommendations");
     await expect(section.getByRole("heading", { name: t.heading })).toBeVisible();
     const link = section.getByRole("link").first();
-    await expect(link).toHaveAttribute("href", `/${locale}/festivals/synthetic-fest/`);
+    await expect(link).toHaveAttribute("href", `/${locale}/festivals/synthetic-fest/2027/`);
     await expect(link).toContainText(t.genres);
     await expect(link).toContainText(t.favorite);
     await expect(link).toContainText(t.overlap);
@@ -44,6 +44,6 @@ for (const [locale, t] of Object.entries(labels)) {
       .toBeLessThanOrEqual(320);
     await link.focus();
     await link.press("Enter");
-    await expect(page).toHaveURL(`/${locale}/festivals/synthetic-fest/`);
+    await expect(page).toHaveURL(`/${locale}/festivals/synthetic-fest/2027/`);
   });
 }
