@@ -32,8 +32,8 @@ test("season navigation and local attendance use verified editions without repla
   const inserted = [];
   try {
     const current = await db.festival.findUniqueOrThrow({ where: { slug: "synthetic-fest" } });
-    for (const year of [2026, 2028, 2029]) {
-      const archived = year === 2026;
+    for (const year of [2025, 2026, 2028, 2029]) {
+      const archived = year < 2027;
       const edition = await db.festivalEdition.create({
         data: {
           festivalId: current.id,
@@ -45,7 +45,7 @@ test("season navigation and local attendance use verified editions without repla
           recordState: archived ? "ARCHIVED" : "TRACKING",
           completeness: "TBA",
           sourceUpdatedAt: new Date(),
-          snapshotAt: archived ? new Date("2026-11-01") : null,
+          snapshotAt: year === 2026 ? new Date("2026-11-01") : null,
           provenance:
             year === 2028 || archived
               ? {
@@ -64,6 +64,17 @@ test("season navigation and local attendance use verified editions without repla
       });
       inserted.push(edition.id);
     }
+    for (const prefix of ["", "/en", "/de", "/ru"]) {
+      const response = await request.get(`${prefix}/festivals/synthetic-fest/2025/`, {
+        headers: { "user-agent": "Twitterbot/1.0" },
+      });
+      expect(response.status()).toBe(404);
+      const html = await response.text();
+      expect(html).not.toContain("Synthetic Fest 2025");
+      expect(html).not.toContain("/api/social/en/festivals/synthetic-fest/2025/");
+    }
+    const unpublishedSitemap = await (await request.get("/sitemap.xml")).text();
+    expect(unpublishedSitemap).not.toContain("/festivals/synthetic-fest/2025/");
 
     for (const [lang, t] of Object.entries(copy)) {
       const context = await browser.newContext({

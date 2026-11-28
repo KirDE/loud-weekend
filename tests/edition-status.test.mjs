@@ -32,6 +32,7 @@ function makeEdition(overrides = {}) {
     updatedAt: "2026-10-08T00:00:00Z",
     genres: [],
     provenance: [],
+    snapshotAt: overrides.recordState === "archived" ? "2026-11-01T00:00:00Z" : undefined,
     ...overrides,
   };
 }
@@ -61,10 +62,16 @@ function loadPage(editions, artists = [], campingReads = [], observations = {}) 
     },
     "@/lib/festival-lineup": { lineupDayProfileSlugs },
     "@/lib/social-preview": { socialPreviewMetadata },
-    "@/lib/catalog/arrival-facts": { readArrivalFacts: async () => [] },
+    "@/lib/catalog/arrival-facts": {
+      readArrivalFacts: async () => {
+        assert.notEqual(observations.denyReads, true);
+        return [];
+      },
+    },
     "@/lib/edition-lifecycle": { editionOnHiatus },
     "@/lib/catalog/festival-overviews": {
       readFestivalOverview: async (client, item) => {
+        assert.notEqual(observations.denyReads, true);
         assert.equal(client, db);
         assert.equal(item.recordState, "current");
         assert.ok(!editionOnHiatus(item));
@@ -74,6 +81,7 @@ function loadPage(editions, artists = [], campingReads = [], observations = {}) 
     },
     "@/lib/catalog/camping-facts": {
       readCampingFacts: async (client, edition) => {
+        assert.notEqual(observations.denyReads, true);
         assert.equal(client, db);
         campingReads.push(edition);
         return observations.camping ?? [];
@@ -87,6 +95,7 @@ function loadPage(editions, artists = [], campingReads = [], observations = {}) 
     "@/lib/db": { db },
     "@/lib/catalog/public-history": {
       readEditionHistory: async (client, slug, year) => {
+        assert.notEqual(observations.denyReads, true);
         assert.equal(client, db);
         assert.ok(
           editions.some((edition) => edition.slug === slug && edition.editionYear === year),
@@ -421,4 +430,30 @@ test("bare tracking metadata agrees with sitemap publication and localized alter
       );
     }
   }
+});
+
+test("unpublished archives have neither route body nor metadata before any downstream reads", async () => {
+  for (const provenance of [[], [{ field: "edition" }]]) {
+    const item = makeEdition({ recordState: "archived", snapshotAt: undefined, provenance });
+    assert.deepEqual(publicSeasonEditions([item]), []);
+    const page = loadPage([item], [], [], { denyReads: true });
+    const props = { params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }) };
+    await assert.rejects(page(props), /NEXT_NOT_FOUND/);
+    assert.deepEqual(await page.generateMetadata(props), {});
+  }
+});
+
+test("published archives keep their route body and reciprocal metadata", async () => {
+  const item = makeEdition({ recordState: "archived" });
+  const before = structuredClone(item);
+  const page = loadPage([item]);
+  const props = { params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }) };
+  assert.ok(await page(props));
+  const meta = await page.generateMetadata(props);
+  assert.equal(meta.alternates.canonical, "/festivals/synthetic-fest/2027/");
+  assert.deepEqual(
+    meta.alternates.languages,
+    localizedAlternates("/festivals/synthetic-fest/2027/"),
+  );
+  assert.deepEqual(item, before);
 });

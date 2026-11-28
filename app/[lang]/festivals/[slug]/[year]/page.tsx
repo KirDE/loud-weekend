@@ -18,8 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (editionYear === undefined) return {};
   const { editions } = await getCatalog();
   const edition = editions.find((item) => item.slug === slug && item.editionYear === editionYear);
-  if (!edition || (edition.recordState === "tracking" && !publicSeasonEditions([edition]).length))
-    return {};
+  if (!edition || !publicSeasonEditions([edition]).length) return {};
   const path = canonicalPath(`/festivals/${edition.slug}/${edition.editionYear}`);
   const canonical = `/${language}${path}`;
   return {

@@ -51,6 +51,7 @@ test("localized exact editions delegate to the shared body and preserve SEO lang
       name: "Fixture Festival",
       editionYear: 2026,
       recordState,
+      snapshotAt: recordState === "archived" ? "2026-11-01T00:00:00Z" : undefined,
       provenance: [{ field: "edition" }],
     };
     const route = loadRoute([item]);
@@ -84,4 +85,24 @@ test("reject unsupported locale; omit invalid, unknown and unreviewed tracking m
     assert.deepEqual(await route.generateMetadata(props("de", year)), {});
   }
   assert.deepEqual(await route.generateMetadata(props("ru", "2028", "unknown")), {});
+});
+
+test("unsnapshotted archive metadata is excluded in every locale despite edition provenance", async () => {
+  const item = {
+    slug: "fixture",
+    name: "Fixture Festival",
+    editionYear: 2026,
+    recordState: "archived",
+    provenance: [{ field: "edition" }],
+  };
+  assert.deepEqual(publicSeasonEditions([item]), []);
+  const route = loadRoute([item]);
+  for (const lang of ["en", "de", "ru"]) {
+    assert.deepEqual(
+      await route.generateMetadata({
+        params: Promise.resolve({ lang, slug: item.slug, year: "2026" }),
+      }),
+      {},
+    );
+  }
 });

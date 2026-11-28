@@ -22,8 +22,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   if (parseSeasonYear(year) === undefined) return {};
   const { editions } = await getCatalog();
   const edition = editions.find((item) => item.slug === slug && item.editionYear === Number(year));
-  if (!edition || (edition.recordState === "tracking" && !publicSeasonEditions([edition]).length))
-    return {};
+  if (!edition || !publicSeasonEditions([edition]).length) return {};
   const canonical = canonicalPath(`/festivals/${edition.slug}/${edition.editionYear}`);
   return {
     ...socialPreviewMetadata(
@@ -41,7 +40,8 @@ export default async function FestivalEditionPage({ params }: { params: Params }
   const item = editions.find(
     (edition) => edition.slug === slug && edition.editionYear === parseSeasonYear(rawYear),
   );
-  if (!item) notFound();
+  if (!item || (item.recordState === "archived" && !publicSeasonEditions([item]).length))
+    notFound();
   const publishable = item.recordState === "current" && !editionOnHiatus(item);
   const [history, arrivalFacts, campingFacts, overview] = await Promise.all([
     item.editionYear === undefined ? [] : readEditionHistory(db, item.slug, item.editionYear),
