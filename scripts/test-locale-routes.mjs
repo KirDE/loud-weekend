@@ -29,14 +29,18 @@ async function ready() {
 
 const expected = { en: "Find your next", de: "Finde dein nächstes", ru: "Найди свои следующие" };
 const plannerExpected = {
-  en: { heading: "Your 2027 plan", notifications: "Notifications", calendar: "Festival calendar" },
+  en: {
+    heading: "Your festival plan",
+    notifications: "Notifications",
+    calendar: "Festival calendar",
+  },
   de: {
-    heading: "Dein Plan für 2027",
+    heading: "Dein Festivalplan",
     notifications: "Benachrichtigungen",
     calendar: "Festivalkalender",
   },
   ru: {
-    heading: "Ваш план на 2027 год",
+    heading: "Ваш фестивальный план",
     notifications: "Уведомления",
     calendar: "Календарь фестивалей",
   },
@@ -96,7 +100,7 @@ try {
     const plannerHtml = await planner.text();
     assert.match(plannerHtml, new RegExp(`<html lang="${lang}"`));
     assert.ok(
-      plannerHtml.includes(plannerExpected[lang].heading),
+      plannerHtml.includes(`<h1>${plannerExpected[lang].heading}</h1>`),
       `${lang} planner heading is not localized`,
     );
     assert.ok(
