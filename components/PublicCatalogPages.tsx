@@ -11,8 +11,9 @@ import { LineupByDay } from "./LineupByDay";
 import type { Festival } from "@/lib/domain/festival";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
 import type { FestivalEdition } from "@/lib/domain/edition";
-import type { PublicArrivalFact } from "@/lib/domain/festival";
+import type { PublicArrivalFact, PublicCampingFact } from "@/lib/domain/festival";
 import { FestivalArrival } from "./FestivalArrival";
+import { FestivalCamping } from "./FestivalCamping";
 import { FestivalTicketOffers } from "./FestivalTicketOffers";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { EditionAttendance, SeasonCalendar } from "./SeasonPlan";
@@ -310,11 +311,13 @@ export function FestivalEditionContent({
   artistSlugs = {},
   lineupDayArtistSlugs = [],
   arrivalFacts = [],
+  campingFacts = [],
 }: {
   item: FestivalEdition;
   artistSlugs?: Readonly<Record<string, string>>;
   lineupDayArtistSlugs?: readonly string[];
   arrivalFacts?: readonly PublicArrivalFact[];
+  campingFacts?: readonly PublicCampingFact[];
 }) {
   const { t, date, dateTime, range, translateLabel } = usePublicCopy();
   const { language } = useLanguage();
@@ -397,6 +400,7 @@ export function FestivalEditionContent({
         <StageTimetable entries={item.timetable} slug={item.slug} year={item.editionYear} />
       ) : null}
       <FestivalArrival facts={arrivalFacts} />
+      <FestivalCamping facts={campingFacts} />
       <section className="sourceNote">
         <strong>{t.provenance}</strong>
         {item.snapshotAt && (

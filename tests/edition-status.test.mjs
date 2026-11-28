@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "esbuild";
 import { socialPreviewMetadata } from "../lib/social-preview.ts";
+import { editionOnHiatus } from "../lib/edition-lifecycle.ts";
 import { lineupDayProfileSlugs } from "../lib/festival-lineup.ts";
 import { editionRecordCompleteness } from "../lib/edition-status.ts";
 import { EditionHistory } from "../components/EditionHistory.tsx";
@@ -47,7 +48,7 @@ const { code: outputText } = await transform(source, {
   target: "es2022",
 });
 const require = createRequire(import.meta.url);
-function loadPage(editions, artists = []) {
+function loadPage(editions, artists = [], campingReads = []) {
   const module = { exports: {} };
   const db = {};
   const dependencies = {
@@ -60,6 +61,14 @@ function loadPage(editions, artists = []) {
     "@/lib/festival-lineup": { lineupDayProfileSlugs },
     "@/lib/social-preview": { socialPreviewMetadata },
     "@/lib/catalog/arrival-facts": { readArrivalFacts: async () => [] },
+    "@/lib/catalog/camping-facts": {
+      readCampingFacts: async (client, edition) => {
+        assert.equal(client, db);
+        campingReads.push(edition);
+        return [];
+      },
+    },
+    "@/lib/edition-lifecycle": { editionOnHiatus },
     "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
     "@/lib/seo": { canonicalPath },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
@@ -270,4 +279,35 @@ test("a final lineup remains distinct from record completeness", async () => {
     });
     assert.ok(!(await renderEdition(legacy, [legacy], language)).includes(label));
   }
+});
+
+test("edition route reads camping only for the selected current edition outside hiatus", async () => {
+  const current = makeEdition({ recordState: "current" });
+  const archived = makeEdition({ recordState: "archived", editionYear: 2026 });
+  const tracking = makeEdition({ editionYear: 2028 });
+  const paused = makeEdition({
+    slug: "synthetic-paused",
+    recordState: "current",
+    editionLifecycle: {
+      festivalSlug: "synthetic-paused",
+      editionYear: 2027,
+      lifecycle: "hiatus",
+      announcedReturnYear: null,
+      alternativeEvent: null,
+      sourceUrl: "https://example.test/",
+      observedAt: "2026-10-08T00:00:00.000Z",
+      approvedAt: "2026-10-08T00:00:00.000Z",
+    },
+  });
+  const editions = [archived, tracking, paused, current];
+  const campingReads = [];
+  const page = loadPage(editions, [], campingReads);
+  for (const item of [archived, tracking, paused]) {
+    await page({ params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }) });
+    assert.deepEqual(campingReads, []);
+  }
+  await page({
+    params: Promise.resolve({ slug: current.slug, year: String(current.editionYear) }),
+  });
+  assert.deepEqual(campingReads, [current]);
 });
