@@ -308,7 +308,6 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     assert.equal(await db.catalogPublication.count({ where: receiptScope }), 2);
     assert.equal((await artistAnnouncements(artist.slug)).length, 2);
     assert.deepEqual(await artistAnnouncements(spare.slug), []);
-    await assert.rejects(importLineupDays(db, input, false), /newer official observation/);
     const readback = (await read()).lineupDays?.find((row) => row.artistSlug === artist.slug);
     assert.deepEqual(readback, {
       artist: artist.name,
@@ -318,6 +317,17 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
       sourceUrl: input.sourceUrl,
       observedAt: revision.observedAt.replace("Z", ".000Z"),
     });
+    await assert.rejects(
+      importLineupDays(
+        db,
+        {
+          ...input,
+          observedAt: "2026-10-03T10:00:00Z",
+        },
+        false,
+      ),
+      /requires an announced roster entry/,
+    );
     const removed = await db.lineupEntry.delete({
       where: { editionId_artistId: { editionId: edition.id, artistId: artist.id } },
     });
@@ -328,6 +338,28 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
         readback,
       );
       assert.ok(![...afterRemoval.headliners, ...afterRemoval.lineup].includes(artist.name));
+      const rejectedReannouncement = {
+        ...input,
+        entries: [
+          { artistSlug: spare.slug, dates: ["2027-08-02"], status: "announced" },
+          { artistSlug: artist.slug, dates: ["2027-08-02"], status: "announced" },
+        ],
+        observedAt: "2026-10-03T10:00:00Z",
+      };
+      for (const checkOnly of [true, false]) {
+        await assert.rejects(
+          importLineupDays(db, rejectedReannouncement, checkOnly),
+          /requires an announced roster entry/,
+        );
+      }
+      assert.equal(await db.catalogPublication.count({ where: receiptScope }), 2);
+      assert.equal(await db.adminAuditEntry.count({ where: auditScope }), 2);
+      const afterRejection = (await read()).lineupDays;
+      assert.deepEqual(
+        afterRejection?.find((row) => row.artistSlug === artist.slug),
+        readback,
+      );
+      assert.deepEqual(afterRejection?.find((row) => row.artistSlug === spare.slug)?.dates, []);
       const corrected = {
         ...input,
         entries: [{ artistSlug: artist.slug, dates: ["2027-08-02"], status: "cancelled" }],

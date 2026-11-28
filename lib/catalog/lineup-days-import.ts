@@ -69,6 +69,11 @@ export async function importLineupDays(db: PrismaClient, document: unknown, chec
         throw new Error("Source must use the festival's official origin");
       }
       const editionArtists = new Map(edition.lineup.map(({ artist }) => [artist.slug, artist.id]));
+      const announcedArtistIds = new Set(
+        edition.lineup
+          .filter(({ status }) => status === "ANNOUNCED")
+          .map(({ artistId }) => artistId),
+      );
       for (const allocation of edition.lineupDays)
         editionArtists.set(allocation.artist.slug, allocation.artistId);
       const existing = new Map(edition.lineupDays.map((record) => [record.artistId, record]));
@@ -78,6 +83,9 @@ export async function importLineupDays(db: PrismaClient, document: unknown, chec
         const artistId = editionArtists.get(entry.artistSlug);
         if (!artistId || seen.has(artistId))
           throw new Error("Every entry must resolve to a distinct artist in this edition");
+        if (entry.status === "announced" && !announcedArtistIds.has(artistId)) {
+          throw new Error("An announced allocation requires an announced roster entry");
+        }
         seen.add(artistId);
         const dates = [...new Set(entry.dates)].sort();
         if (
