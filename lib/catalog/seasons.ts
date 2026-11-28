@@ -4,6 +4,16 @@ export function parseSeasonYear(value: string): number | undefined {
   return /^[1-9][0-9]{3}$/.test(value) ? Number(value) : undefined;
 }
 
+/** A heading for the whole catalogue may name a year only if every displayed record agrees. */
+export function sharedSeasonYear(items: readonly { editionYear?: number }[]) {
+  const year = items[0]?.editionYear;
+  return year !== undefined &&
+    parseSeasonYear(String(year)) === year &&
+    items.every((item) => item.editionYear === year)
+    ? year
+    : undefined;
+}
+
 export function publicSeasonEditions(editions: readonly FestivalEdition[]) {
   return editions.filter((edition) => {
     if (edition.recordState === "current") return true;

@@ -1,5 +1,6 @@
 "use client";
 
+import { sharedSeasonYear } from "@/lib/catalog/seasons";
 import { editionOnHiatus } from "@/lib/edition-lifecycle";
 import Link from "next/link";
 import { CorrectionReportForm } from "./CorrectionReportForm";
@@ -22,10 +23,11 @@ export function ArtistDetail({
   // Also protect direct consumers, not just the server route projection.
   appearances = appearances.filter((festival) => !editionOnHiatus(festival));
   const festivalWord = appearances.length === 1 ? t("europeanFestival") : t("europeanFestivals");
+  const year = sharedSeasonYear(appearances);
+  const announcement = year ? t("announcedForYear", { year }) : t("artistAnnounced");
+  const countLabel = `${appearances.length} ${festivalWord}`;
   const sentence =
-    language === "ru"
-      ? `${t("announcedFor")}: ${appearances.length} ${festivalWord}`
-      : `${appearances.length} ${festivalWord} ${t("announcedFor")}`;
+    language === "ru" ? `${announcement}: ${countLabel}` : `${countLabel} ${announcement}`;
   return (
     <div className="artistPage">
       <div className="artistToolbar">
@@ -154,7 +156,7 @@ export function ArtistDetail({
         </section>
       )}
       <section className="appearances">
-        <div className="eyebrow">{t("appearances")}</div>
+        <div className="eyebrow">{year ? t("appearancesYear", { year }) : t("appearances")}</div>
         {[...appearances]
           .sort(
             (a, b) =>
