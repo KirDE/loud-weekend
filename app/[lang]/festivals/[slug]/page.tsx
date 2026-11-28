@@ -65,7 +65,9 @@ export default async function LocalizedFestivalPage({
     : {};
   const overview = await readFestivalOverview(db, item);
   const history =
-    item.editionYear === undefined ? [] : await readEditionHistory(db, item.slug, item.editionYear);
+    item.editionYear === undefined
+      ? []
+      : await readEditionHistory(db, item.slug, item.editionYear, item.officialUrl);
   const event = festivalMusicEvent(item, lang);
   const artistSlugs = Object.fromEntries(artists.map(({ name, slug }) => [name, slug]));
   return (

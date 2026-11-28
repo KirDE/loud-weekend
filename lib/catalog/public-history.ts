@@ -19,23 +19,60 @@ function publicCategories(fields: string[]) {
 export type EditionHistoryEntry = {
   publishedAt: string;
   categories: (keyof typeof categories)[];
+  sourceUrl?: string;
 };
+
+// Only the reviewed day allocation importer guarantees that receipt evidence
+// points to a public organizer page. Do not expose generic editorial evidence.
+function lineupHistorySource(
+  publication: { source: string; sourceId: string; fields: string[]; evidence: Prisma.JsonValue },
+  officialUrl: string,
+) {
+  const { source, sourceId, fields, evidence } = publication;
+  if (
+    source !== "ADMIN" ||
+    !sourceId.startsWith("lineup-days:") ||
+    fields.length !== 1 ||
+    fields[0] !== "lineupDays" ||
+    !evidence ||
+    typeof evidence !== "object" ||
+    Array.isArray(evidence) ||
+    typeof evidence.sourceUrl !== "string"
+  )
+    return undefined;
+
+  const url = URL.parse(evidence.sourceUrl);
+  if (
+    url?.protocol === "https:" &&
+    url.origin === URL.parse(officialUrl)?.origin &&
+    !url.username &&
+    !url.password &&
+    !url.href.includes("?") &&
+    !url.href.includes("#")
+  )
+    return url.href;
+}
 
 export async function readEditionHistory(
   database: PrismaClient,
   festivalSlug: string,
   editionYear: number,
+  officialUrl: string,
 ): Promise<EditionHistoryEntry[]> {
   const publications = await database.catalogPublication.findMany({
     where: { festivalSlug, editionYear, fields: { hasSome: publicationFields } },
-    select: { createdAt: true, fields: true },
+    select: { createdAt: true, fields: true, source: true, sourceId: true, evidence: true },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 20,
   });
-  return publications.map((publication) => ({
-    publishedAt: publication.createdAt.toISOString(),
-    categories: publicCategories(publication.fields),
-  }));
+  return publications.map((publication) => {
+    const sourceUrl = lineupHistorySource(publication, officialUrl);
+    return {
+      publishedAt: publication.createdAt.toISOString(),
+      categories: publicCategories(publication.fields),
+      ...(sourceUrl ? { sourceUrl } : {}),
+    };
+  });
 }
 
 export const ANNOUNCEMENTS_PAGE_SIZE = 20;

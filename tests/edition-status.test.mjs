@@ -8,6 +8,7 @@ import { transform } from "esbuild";
 import { socialPreviewMetadata } from "../lib/social-preview.ts";
 import { lineupDayProfileSlugs } from "../lib/festival-lineup.ts";
 import { editionRecordCompleteness } from "../lib/edition-status.ts";
+import { readEditionHistory } from "../lib/catalog/public-history.ts";
 import { EditionHistory } from "../components/EditionHistory.tsx";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
 import { canonicalPath } from "../lib/seo.ts";
@@ -66,10 +67,15 @@ function loadPage(editions, artists = []) {
     "@/components/EditionHistory": { EditionHistory },
     "@/lib/db": { db },
     "@/lib/catalog/public-history": {
-      readEditionHistory: async (client, slug, year) => {
+      readEditionHistory: async (client, slug, year, officialUrl) => {
         assert.equal(client, db);
         assert.ok(
-          editions.some((edition) => edition.slug === slug && edition.editionYear === year),
+          editions.some(
+            (edition) =>
+              edition.slug === slug &&
+              edition.editionYear === year &&
+              edition.officialUrl === officialUrl,
+          ),
         );
         return [];
       },
@@ -270,4 +276,72 @@ test("a final lineup remains distinct from record completeness", async () => {
     });
     assert.ok(!(await renderEdition(legacy, [legacy], language)).includes(label));
   }
+});
+
+test("edition history links each reviewed lineup change to its localized official source", () => {
+  const sourceUrl = "https://example.test/2027/lineup-by-day";
+  for (const [language, label] of [
+    ["en", "Official source for this change"],
+    ["de", "Offizielle Quelle dieser Änderung"],
+    ["ru", "Официальный источник изменения"],
+  ]) {
+    const html = renderToStaticMarkup(
+      createElement(
+        LanguageProvider,
+        { initialLanguage: language },
+        createElement(EditionHistory, {
+          officialUrl: "https://example.test/",
+          entries: [
+            { publishedAt: "2026-09-30T22:30:00.000Z", categories: ["lineup"], sourceUrl },
+            { publishedAt: "2026-09-29T22:30:00.000Z", categories: ["tickets"] },
+          ],
+        }),
+      ),
+    );
+    const rows = [...html.matchAll(/<li>(.*?)<\/li>/g)].map((row) => row[1]);
+    assert.equal(rows.length, 2);
+    assert.ok(rows[0].includes(`href="${sourceUrl}"`));
+    assert.ok(rows[0].includes(label));
+    assert.match(rows[0], /dateTime="2026-09-30T22:30:00.000Z"/);
+    assert.doesNotMatch(rows[1], /<a /);
+    assert.match(html, /href="https:\/\/example.test\/"/);
+  }
+});
+
+test("edition history redacts unrelated and non-public evidence", async () => {
+  const officialUrl = "https://festival.example.test/";
+  const sourceUrl = officialUrl + "2027/lineup";
+  const createdAt = new Date("2026-09-30T22:30:00.000Z");
+  const base = {
+    source: "ADMIN",
+    sourceId: "lineup-days:fixture",
+    fields: ["lineupDays"],
+    createdAt,
+  };
+  const rows = [
+    { ...base, evidence: { sourceUrl, editorialNotes: "Internal fixture" } },
+    { ...base, source: "INGESTION", evidence: { sourceUrl } },
+    { ...base, sourceId: "unrelated:fixture", evidence: { sourceUrl } },
+    { ...base, evidence: { sourceUrl: "https://private.example.test/review" } },
+    { ...base, evidence: { sourceUrl: sourceUrl + "?token=fixture" } },
+    { ...base, evidence: { sourceUrl: sourceUrl + "#internal" } },
+    { ...base, evidence: { sourceUrl: "https://editor@festival.example.test/2027/lineup" } },
+    { ...base, evidence: { sourceUrl: "http://festival.example.test/2027/lineup" } },
+    { ...base, evidence: { sourceUrl: "invalid-url" } },
+    { ...base, evidence: null },
+  ];
+  const database = {
+    catalogPublication: {
+      findMany: async ({ where }) => {
+        assert.equal(where.festivalSlug, "fixture");
+        assert.equal(where.editionYear, 2027);
+        return rows;
+      },
+    },
+  };
+  const redacted = { publishedAt: createdAt.toISOString(), categories: ["lineup"] };
+  assert.deepEqual(await readEditionHistory(database, "fixture", 2027, officialUrl), [
+    { ...redacted, sourceUrl },
+    ...rows.slice(1).map(() => redacted),
+  ]);
 });

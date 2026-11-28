@@ -228,11 +228,17 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     assert.equal(await db.catalogPublication.count({ where: receiptScope }), 1);
     assert.equal(receipt.lineupChanged, false);
     assert.equal((await read()).freshness?.lastPublishedAt, receipt.createdAt.toISOString());
+    const officialUrl = "https://festival.example.test/";
+    const history = (year = 2027) => readEditionHistory(db, slug, year, officialUrl);
     const expectedHistory = [
-      { publishedAt: receipt.createdAt.toISOString(), categories: ["lineup"] },
+      {
+        publishedAt: receipt.createdAt.toISOString(),
+        categories: ["lineup"],
+        sourceUrl: input.sourceUrl,
+      },
     ];
-    assert.deepEqual(await readEditionHistory(db, slug, 2027), expectedHistory);
-    assert.deepEqual(await readEditionHistory(db, slug, 2026), []);
+    assert.deepEqual(await history(), expectedHistory);
+    assert.deepEqual(await history(2026), []);
     const artistAnnouncements = async (artistSlug: string) => {
       const { entries } = await readPublicAnnouncements(db, {
         artist: artistSlug,
@@ -259,7 +265,7 @@ test("reviewed lineup days are edition-bound, audited, and independent of stage 
     });
     assert.equal(await db.catalogPublication.count({ where: receiptScope }), 1);
     assert.equal(await db.adminAuditEntry.count({ where: auditScope }), 1);
-    assert.deepEqual(await readEditionHistory(db, slug, 2027), expectedHistory);
+    assert.deepEqual(await history(), expectedHistory);
     assert.equal((await read()).freshness?.lastPublishedAt, receipt.createdAt.toISOString());
     assert.equal(
       (await read()).lineupDays?.find((row) => row.artistSlug === artist.slug)?.observedAt,

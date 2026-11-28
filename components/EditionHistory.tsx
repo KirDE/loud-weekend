@@ -31,6 +31,13 @@ export function EditionHistory({
                   {format.format(new Date(entry.publishedAt))} UTC
                 </time>
                 <p>{entry.categories.map((category) => copy[category]).join(" · ")}</p>
+                {entry.sourceUrl && (
+                  <p>
+                    <a href={entry.sourceUrl} rel="noreferrer">
+                      {copy.changeSource}
+                    </a>
+                  </p>
+                )}
               </li>
             ))}
           </ol>
