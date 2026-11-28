@@ -7,6 +7,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "esbuild";
 import { socialPreviewMetadata } from "../lib/social-preview.ts";
 import { lineupDayProfileSlugs } from "../lib/festival-lineup.ts";
+import { editionKey } from "../lib/catalog/freshness.ts";
+import { editionOnHiatus } from "../lib/edition-lifecycle.ts";
 import { editionRecordCompleteness } from "../lib/edition-status.ts";
 import { EditionHistory } from "../components/EditionHistory.tsx";
 import { FestivalEditionContent } from "../components/PublicCatalogPages.tsx";
@@ -47,7 +49,11 @@ const { code: outputText } = await transform(source, {
   target: "es2022",
 });
 const require = createRequire(import.meta.url);
-function loadPage(editions, artists = []) {
+function loadPage(
+  editions,
+  artists = [],
+  { editionPlaylists = {}, readFailures = async () => ({}) } = {},
+) {
   const module = { exports: {} };
   const db = {};
   const dependencies = {
@@ -60,7 +66,12 @@ function loadPage(editions, artists = []) {
     "@/lib/festival-lineup": { lineupDayProfileSlugs },
     "@/lib/social-preview": { socialPreviewMetadata },
     "@/lib/catalog/arrival-facts": { readArrivalFacts: async () => [] },
-    "@/lib/catalog/repository": { getCatalog: async () => ({ editions, artists }) },
+    "@/lib/catalog/repository": {
+      getCatalog: async () => ({ editions, artists, editionPlaylists }),
+    },
+    "@/lib/catalog/playlist-refresh-readback": { getPlaylistRefreshFailures: readFailures },
+    "@/lib/catalog/freshness": { editionKey },
+    "@/lib/edition-lifecycle": { editionOnHiatus },
     "@/lib/seo": { canonicalPath },
     "@/components/PublicCatalogPages": { FestivalEditionContent },
     "@/components/EditionHistory": { EditionHistory },
@@ -87,8 +98,14 @@ function loadPage(editions, artists = []) {
   return module.exports.default;
 }
 
-async function renderEdition(item, editions = [item], language = "en", artists = []) {
-  const page = loadPage(editions, artists);
+async function renderEdition(
+  item,
+  editions = [item],
+  language = "en",
+  artists = [],
+  playlistOptions,
+) {
+  const page = loadPage(editions, artists, playlistOptions);
   const body = await page({
     params: Promise.resolve({ slug: item.slug, year: String(item.editionYear) }),
   });
@@ -270,4 +287,114 @@ test("a final lineup remains distinct from record completeness", async () => {
     });
     assert.ok(!(await renderEdition(legacy, [legacy], language)).includes(label));
   }
+});
+
+test("current edition renders each provider's own persisted coverage and failed refresh state", async () => {
+  const item = makeEdition({ recordState: "current" });
+  const spotify = "https://open.spotify.com/playlist/0123456789012345678901";
+  const youtube = "https://music.youtube.com/playlist?list=PLsynthetic";
+  const recordedAt = "2026-10-08T00:00:00.000Z";
+  const youtubeRecordedAt = "2026-10-06T00:00:00.000Z";
+  const playlist = {
+    spotifyUrl: spotify,
+    youtubeMusicUrl: youtube,
+    artists: 110,
+    tracks: 220,
+    updatedAt: recordedAt,
+    coverage: {
+      spotify: {
+        reportedArtists: 110,
+        verified: { matchedArtists: 110, eligibleArtists: 110 },
+        tracks: 220,
+        recordedAt,
+      },
+      youtubeMusic: {
+        reportedArtists: 8,
+        verified: { matchedArtists: 8, eligibleArtists: 110 },
+        tracks: 16,
+        recordedAt: youtubeRecordedAt,
+      },
+    },
+  };
+  const editionPlaylists = { [editionKey(item.slug, item.editionYear)]: playlist };
+  const calls = [];
+  const readFailures = async (slug, year) => {
+    calls.push([slug, year]);
+    return { youtubeMusic: true };
+  };
+  for (const [language, matched, failed] of [
+    ["en", "Artists matched", "Latest refresh failed"],
+    ["de", "Zugeordnete Künstler", "Letzte Aktualisierung fehlgeschlagen"],
+    ["ru", "Подобрано артистов", "Последнее обновление не удалось"],
+  ]) {
+    const html = await renderEdition(item, [item], language, [], {
+      editionPlaylists,
+      readFailures,
+    });
+    const links = [...html.matchAll(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/g)];
+    const spotifyCard = links.find(([, url]) => url === spotify)?.[2] ?? "";
+    const youtubeCard = links.find(([, url]) => url === youtube)?.[2] ?? "";
+    assert.ok(spotifyCard.includes(matched + ": 110 / 110"));
+    assert.ok(youtubeCard.includes(matched + ": 8 / 110"));
+    assert.ok(spotifyCard.includes(recordedAt));
+    assert.ok(youtubeCard.includes(youtubeRecordedAt));
+    assert.ok(!youtubeCard.includes(recordedAt));
+    assert.ok(youtubeCard.includes(failed));
+    assert.ok(!spotifyCard.includes(failed));
+  }
+  assert.deepEqual(calls, Array(3).fill([item.slug, item.editionYear]));
+
+  for (const other of [
+    makeEdition({ recordState: "archived", editionYear: 2026 }),
+    makeEdition({ recordState: "tracking", editionYear: 2028 }),
+    {
+      ...item,
+      editionLifecycle: {
+        festivalSlug: item.slug,
+        editionYear: item.editionYear,
+        lifecycle: "hiatus",
+        announcedReturnYear: 2028,
+        alternativeEvent: "under_consideration",
+        sourceUrl: item.officialUrl,
+        observedAt: "2026-10-01T00:00:00.000Z",
+        approvedAt: "2026-10-02T00:00:00.000Z",
+      },
+    },
+  ]) {
+    const html = await renderEdition(other, [other], "en", [], {
+      editionPlaylists,
+      readFailures: async () =>
+        assert.fail("Inactive edition queried live playlist refresh status"),
+    });
+    assert.doesNotMatch(html, /open\.spotify\.com|music\.youtube\.com|Latest refresh failed/);
+  }
+
+  const override = "https://open.spotify.com/playlist/1234567890123456789012";
+  const reviewed = { ...item, reviewedPlaylistLinks: { spotify: override } };
+  const html = await renderEdition(reviewed, [reviewed], "en", [], {
+    editionPlaylists,
+    readFailures,
+  });
+  assert.ok(html.includes(override));
+  assert.ok(html.includes("Verified coverage unavailable"));
+  assert.ok(!html.includes("Artists matched: 110 / 110"));
+  assert.ok(!html.includes(spotify));
+});
+
+test("current edition with no matching public link or refresh failure renders no playlist cards", async () => {
+  const item = makeEdition({ recordState: "current" });
+  const html = await renderEdition(item, [item], "en", [], {
+    editionPlaylists: {
+      [editionKey(item.slug, item.editionYear + 1)]: {
+        spotifyUrl: "https://open.spotify.com/playlist/0123456789012345678901",
+      },
+    },
+  });
+  assert.doesNotMatch(html, /Spotify|YouTube Music|playlistCoverage/);
+  const failed = await renderEdition(item, [item], "en", [], {
+    readFailures: async () => ({ spotify: true }),
+  });
+  assert.match(failed, /Spotify playlist/);
+  assert.match(failed, /Latest refresh failed/);
+  assert.doesNotMatch(failed, /YouTube Music|open\.spotify\.com/);
 });
