@@ -93,7 +93,9 @@ An authorized catalogue operator can add `--apply` after review. The importer
 does not fetch or interpret the source. The range must match the edition,
 and the document affects only its explicit artists. An empty `dates` array
 withdraws a known assignment without inventing a replacement; record an
-official artist cancellation with `status: "cancelled"`. Each changed record
+official artist cancellation with `status: "cancelled"`. An announced allocation
+requires an announced artist on the edition roster. An existing cancellation can
+still be corrected after the artist is removed from the roster. Each changed record
 requires a newer source observation and writes a before/after audit in the
 same transaction. Replaying the same document is a no-op.
 
