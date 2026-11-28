@@ -239,7 +239,11 @@ export function FestivalDetail({
           <div className="sectionHeading">
             <div>
               <div className="eyebrow">{t("discoverBill")}</div>
-              <h2>{t("lineup2027")}</h2>
+              <h2>
+                {item.editionYear
+                  ? t("lineupHeadingForYear", { year: item.editionYear })
+                  : t("lineupHeading")}
+              </h2>
             </div>
             <span>
               {artistCount} {t("announced")}
