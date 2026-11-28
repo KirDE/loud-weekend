@@ -95,6 +95,7 @@ export function FestivalDetail({
         <div>
           <div className="eyebrow">
             {item.countryCode} · {item.city || displayNames.of(item.countryCode) || item.country}
+            {!hiatus && item.venue?.name ? ` · ${item.venue.name}` : ""}
           </div>
           <h1>{item.name}</h1>
           <p className="detailDate">
