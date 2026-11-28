@@ -19,27 +19,9 @@ export function DiscoveryDateFilters({
 }) {
   const { t } = useLanguage();
   const hintId = useId();
-  const [copied, setCopied] = useState(false);
-  const [fallbackLink, setFallbackLink] = useState("");
   const active = hasDiscoveryDates(filters);
   const reversed = reversedDiscoveryDates(filters);
-
-  function update(patch: Partial<DiscoveryDates>) {
-    setCopied(false);
-    setFallbackLink("");
-    onChange(patch);
-  }
-
-  async function copyLink() {
-    const url = new URL(window.location.pathname, window.location.origin);
-    url.search = dateShareQuery(filters);
-    try {
-      await navigator.clipboard.writeText(url.href);
-      setCopied(true);
-    } catch {
-      setFallbackLink(url.href);
-    }
-  }
+  const shareQuery = dateShareQuery(filters);
 
   return (
     <details className="discoveryDates" open={active || undefined}>
@@ -53,7 +35,7 @@ export function DiscoveryDateFilters({
             value={filters.dateFrom}
             aria-invalid={reversed}
             onChange={(event) =>
-              update({ dateFrom: readDiscoveryDates({ dateFrom: event.target.value }).dateFrom })
+              onChange({ dateFrom: readDiscoveryDates({ dateFrom: event.target.value }).dateFrom })
             }
           />
         </label>
@@ -64,7 +46,7 @@ export function DiscoveryDateFilters({
             value={filters.dateTo}
             aria-invalid={reversed}
             onChange={(event) =>
-              update({ dateTo: readDiscoveryDates({ dateTo: event.target.value }).dateTo })
+              onChange({ dateTo: readDiscoveryDates({ dateTo: event.target.value }).dateTo })
             }
           />
         </label>
@@ -79,7 +61,7 @@ export function DiscoveryDateFilters({
             placeholder={t("dateAnyDuration")}
             value={filters.maxDays === "all" ? "" : filters.maxDays}
             onChange={(event) =>
-              update({ maxDays: readDiscoveryDates({ maxDays: event.target.value }).maxDays })
+              onChange({ maxDays: readDiscoveryDates({ maxDays: event.target.value }).maxDays })
             }
           />
         </label>
@@ -87,18 +69,41 @@ export function DiscoveryDateFilters({
           <input
             type="checkbox"
             checked={filters.weekendOnly}
-            onChange={(event) => update({ weekendOnly: event.target.checked })}
+            onChange={(event) => onChange({ weekendOnly: event.target.checked })}
           />
           {t("dateWeekend")}
         </label>
       </fieldset>
       <p id={hintId}>{reversed ? t("dateReversed") : t("dateUnknownExcluded")}</p>
-      {active && !reversed && (
-        <button type="button" className="outlineButton" onClick={copyLink}>
-          {t("copyDateFilters")}
-        </button>
-      )}
-      {fallbackLink && active && (
+      {active && !reversed && <DateShareControls key={shareQuery} query={shareQuery} />}
+    </details>
+  );
+}
+
+function DateShareControls({ query }: { query: string }) {
+  const { t } = useLanguage();
+  const [copied, setCopied] = useState(false);
+  const [fallbackLink, setFallbackLink] = useState("");
+
+  async function copyLink() {
+    const url = new URL(window.location.pathname, window.location.origin);
+    url.search = query;
+    try {
+      await navigator.clipboard.writeText(url.href);
+      setFallbackLink("");
+      setCopied(true);
+    } catch {
+      setCopied(false);
+      setFallbackLink(url.href);
+    }
+  }
+
+  return (
+    <>
+      <button type="button" className="outlineButton" onClick={copyLink}>
+        {t("copyDateFilters")}
+      </button>
+      {fallbackLink && (
         <input
           className="dateShareFallback"
           aria-label={t("copyDateFilters")}
@@ -107,7 +112,7 @@ export function DiscoveryDateFilters({
           onFocus={(event) => event.target.select()}
         />
       )}
-      <span role="status">{copied && active ? t("dateFiltersCopied") : ""}</span>
-    </details>
+      <span role="status">{copied ? t("dateFiltersCopied") : ""}</span>
+    </>
   );
 }
