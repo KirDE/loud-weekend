@@ -20,6 +20,10 @@ const festivalMapLabels = {
     unknown: "Location not mapped",
     zoomIn: "Zoom in",
     zoomOut: "Zoom out",
+    panLeft: "Pan map left",
+    panRight: "Pan map right",
+    panUp: "Pan map up",
+    panDown: "Pan map down",
     reset: "Fit festival locations",
     close: "Close map results",
     cluster: (count: number) => `${count} festival locations`,
@@ -38,6 +42,10 @@ const festivalMapLabels = {
     unknown: "Kein Standort auf der Karte",
     zoomIn: "Vergrößern",
     zoomOut: "Verkleinern",
+    panLeft: "Karte nach links verschieben",
+    panRight: "Karte nach rechts verschieben",
+    panUp: "Karte nach oben verschieben",
+    panDown: "Karte nach unten verschieben",
     reset: "Festivalstandorte einpassen",
     close: "Kartenergebnisse schließen",
     cluster: (count: number) => `${count} Festivalstandorte`,
@@ -56,6 +64,10 @@ const festivalMapLabels = {
     unknown: "Место не отмечено на карте",
     zoomIn: "Увеличить масштаб",
     zoomOut: "Уменьшить масштаб",
+    panLeft: "Сдвинуть карту влево",
+    panRight: "Сдвинуть карту вправо",
+    panUp: "Сдвинуть карту вверх",
+    panDown: "Сдвинуть карту вниз",
     reset: "Показать все места фестивалей",
     close: "Закрыть результаты на карте",
     cluster: (count: number) => `Мест фестивалей: ${count}`,
@@ -71,6 +83,14 @@ type Marker = { id: string; x: number; y: number } & (
 );
 const radius = 34;
 const maxZoom = 10;
+const panStep = 48;
+// panBy moves the camera; the arrows describe the movement of the map content.
+const panControls = [
+  { label: "panLeft", arrow: "←", offset: [panStep, 0] },
+  { label: "panRight", arrow: "→", offset: [-panStep, 0] },
+  { label: "panUp", arrow: "↑", offset: [0, panStep] },
+  { label: "panDown", arrow: "↓", offset: [0, -panStep] },
+] satisfies { label: keyof MapLabels; arrow: string; offset: [number, number] }[];
 
 function FestivalMapViewport({ festivals, t }: { festivals: Festival[]; t: MapLabels }) {
   const host = useRef<HTMLDivElement>(null);
@@ -248,6 +268,16 @@ function FestivalMapViewport({ festivals, t }: { festivals: Festival[]; t: MapLa
           </div>
           {map && (
             <div className="festivalLocationToolbar">
+              {panControls.map(({ label, arrow, offset }) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-label={t[label]}
+                  onClick={() => map.panBy(offset, { animate: false })}
+                >
+                  {arrow}
+                </button>
+              ))}
               <button
                 type="button"
                 aria-label={t.zoomIn}

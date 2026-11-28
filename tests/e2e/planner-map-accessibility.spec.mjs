@@ -63,3 +63,66 @@ for (const [lang, t] of Object.entries(labels))
       "/festivals/synthetic-alpine/",
     );
   });
+
+const panLabels = {
+  en: ["Pan map left", "Pan map right", "Pan map up", "Pan map down", "Fit festival locations"],
+  de: [
+    "Karte nach links verschieben",
+    "Karte nach rechts verschieben",
+    "Karte nach oben verschieben",
+    "Karte nach unten verschieben",
+    "Festivalstandorte einpassen",
+  ],
+  ru: [
+    "Сдвинуть карту влево",
+    "Сдвинуть карту вправо",
+    "Сдвинуть карту вверх",
+    "Сдвинуть карту вниз",
+    "Показать все места фестивалей",
+  ],
+};
+
+for (const [lang, [left, right, up, down, fit]] of Object.entries(panLabels)) {
+  test(`${lang}: move the map without dragging at 320px`, async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 844 });
+    await page.goto(`/${lang}/`);
+    const countryFilter = page
+      .locator("select")
+      .filter({ has: page.locator('option[value="AT"]') });
+    await countryFilter.selectOption("AT");
+    await page.locator(".festivalLocationMap > button").press("Enter");
+    const map = page.locator(".festivalLocationMap");
+    const marker = map.locator(".festivalLocationMarker");
+    await expect(marker).toBeVisible();
+    const position = () =>
+      marker.evaluate((element) => [parseFloat(element.style.left), parseFloat(element.style.top)]);
+    const [startX, startY] = await position();
+    for (const [name, key, axis, direction] of [
+      [left, "Enter", 0, -1],
+      [right, null, 0, 1],
+      [up, "Enter", 1, -1],
+      [down, "Space", 1, 1],
+    ]) {
+      const button = map.getByRole("button", { name, exact: true });
+      await expect(button).toBeVisible({ timeout: 2500 });
+      const before = (await position())[axis];
+      if (key) {
+        await button.press(key);
+        await expect(button).toBeFocused();
+      } else {
+        await button.click();
+      }
+      await expect
+        .poll(async () => ((await position())[axis] - before) * direction)
+        .toBeGreaterThan(20);
+    }
+    await map.getByRole("button", { name: fit, exact: true }).press("Enter");
+    await expect
+      .poll(async () => {
+        const [x, y] = await position();
+        return Math.hypot(x - startX, y - startY);
+      })
+      .toBeLessThan(2);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  });
+}
