@@ -83,6 +83,33 @@ test("data quality aggregates only current records and excludes stale/invalid ev
   assert.doesNotMatch(JSON.stringify(tally), /private|redundant/);
 });
 
+test("recorded lineup evidence includes a reviewed final-lineup decision once per current edition", () => {
+  const decision = { field: "finalLineup", checkedAt, note: "private-final-lineup-fixture" };
+  const edition = (provenance, recordState = "current") => ({ provenance, recordState });
+  const tally = summarizeDataQuality(
+    {
+      festivals: Array.from({ length: 4 }, () => ({
+        ticketStatus: "unknown",
+        headliners: [],
+        lineup: [],
+      })),
+      editions: [
+        edition([decision]),
+        edition([decision, { field: "lineup", checkedAt }]),
+        edition([{ ...decision, checkedAt: "2029-01-01T00:00:00.000Z" }]),
+        edition([{ ...decision, checkedAt: "invalid" }]),
+        edition([decision], "archived"),
+        edition([decision], "tracking"),
+      ],
+    },
+    now,
+  );
+  assert.equal(tally.lineupEvidence, 2);
+  assert.equal(tally.lineup, 0);
+  assert.equal(tally.checked, 0);
+  assert.doesNotMatch(JSON.stringify(tally), /private-final-lineup-fixture/);
+});
+
 test("absence of a source check is not success or proof of an outage", () => {
   const empty = summarizeDataQuality({ festivals: [], editions: [] }, now);
   assert.equal(empty.total, 0);
