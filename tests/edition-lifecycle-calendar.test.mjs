@@ -178,6 +178,7 @@ for (const locale of ["en", "de", "ru"]) {
       h(PlanningTools, { item: { ...item, editionYear: undefined }, festivals: [] }),
     );
     assert.match(withoutYear, /download="other-event\.ics"/);
+    assert.match(payload(withoutYear), /UID:other-event-unknown-edition@festival-radar/);
   });
   test(`actual planning tools suppress calendar/timetable and do not promise a pending date in ${locale}`, () => {
     const html = render(locale, h(PlanningTools, { item: paused, festivals: [paused, active] }));
