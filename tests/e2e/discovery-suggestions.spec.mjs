@@ -30,11 +30,11 @@ for (const [locale, t] of Object.entries(labels)) {
     await expect(panel.getByRole("status")).toHaveText(t.empty);
     await expect(page.locator(".festivalCard")).toHaveCount(0);
     await search.fill("synthetic fest");
-    await expect(
-      panel
-        .getByRole("region", { name: t.festivals })
-        .getByRole("link", { name: /Synthetic Fest/ }),
-    ).toBeVisible();
+    const festival = panel
+      .getByRole("region", { name: t.festivals })
+      .getByRole("link", { name: /Synthetic Fest/ });
+    await expect(festival).toBeVisible();
+    await expect(festival).toHaveAttribute("href", "/festivals/synthetic-fest/2027/");
     await search.press("Escape");
     await expect(panel).toHaveCount(0);
     await expect(page.locator(".festivalCard h2")).toHaveText(["Synthetic Fest"]);
