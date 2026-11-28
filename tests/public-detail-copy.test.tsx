@@ -12,6 +12,7 @@ import { LocalPlannerProvider } from "../components/LocalPlanner";
 import { festival } from "./support/catalog";
 import { hasAvailableTickets } from "../lib/tickets";
 import { festivalSetlistHistoryUrl } from "../lib/setlist-history";
+import { homeMetadata } from "../lib/home-metadata";
 
 const similar = { ...festival, slug: "similar-fest", name: "Similar Fest" };
 
@@ -431,3 +432,48 @@ test("the public timetable distinguishes both occurrences of a repeated local ti
     assert.ok(html.includes(`>02:50 GMT+${offset}</time>`));
   }
 });
+
+for (const language of ["en", "de", "ru"] as const) {
+  test(`home hero and metadata describe only a shared edition year in ${language}`, () => {
+    const season = (editionYear: number | undefined, slug: string) => ({
+      ...festival,
+      editionYear,
+      slug,
+    });
+    const renderEyebrow = (festivals: (typeof festival)[]) => {
+      const html = renderToStaticMarkup(
+        <LanguageProvider initialLanguage={language}>
+          <LocalPlannerProvider>
+            <HomeContent festivals={festivals} years={[2028, 2026]} freshness={{}} />
+          </LocalPlannerProvider>
+        </LanguageProvider>,
+      );
+      return html.match(/<section class="hero"><div class="eyebrow">([^<]+)<\/div>/)?.[1];
+    };
+
+    for (const year of [2026, 2027, 2028]) {
+      const festivals = [season(year, "one"), season(year, "two")];
+      const expectedTitle = `Loud Weekend ${year}`;
+      assert.match(renderEyebrow(festivals) ?? "", new RegExp(`\\b${year}\\b`));
+      const metadata = homeMetadata(language, festivals);
+      assert.equal(metadata.title, expectedTitle);
+      assert.equal(metadata.openGraph?.title, expectedTitle);
+      assert.equal(metadata.twitter?.title, expectedTitle);
+      assert.match(metadata.description ?? "", /^2\b/);
+    }
+
+    for (const festivals of [
+      [],
+      [season(2026, "one"), season(2028, "two")],
+      [season(2028, "one"), season(undefined, "two")],
+    ]) {
+      const eyebrow = renderEyebrow(festivals);
+      assert.ok(eyebrow);
+      assert.doesNotMatch(eyebrow, /\d/);
+      const metadata = homeMetadata(language, festivals);
+      assert.equal(metadata.title, "Loud Weekend");
+      assert.equal(metadata.openGraph?.title, "Loud Weekend");
+      assert.equal(metadata.twitter?.title, "Loud Weekend");
+    }
+  });
+}

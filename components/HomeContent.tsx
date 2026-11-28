@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { sharedSeasonYear } from "@/lib/catalog/seasons";
 import type { SuggestionArtist } from "@/lib/discovery-suggestions";
 import type { DiscoveryArtist } from "@/lib/discovery-artists";
 import type { DiscoveryLineups } from "@/lib/discovery-sort";
@@ -10,6 +11,12 @@ import { SeasonNavigation } from "./SeasonNavigation";
 import { FestivalExplorer } from "./FestivalExplorer";
 import { useLanguage } from "./LanguageProvider";
 import { hasAnnouncedLineup } from "@/lib/festival-lineup";
+
+const seasonEyebrow = {
+  en: (year?: number) => (year ? `THE ${year} EUROPEAN SEASON` : "EUROPEAN FESTIVALS"),
+  de: (year?: number) => (year ? `DIE EUROPÄISCHE SAISON ${year}` : "EUROPÄISCHE FESTIVALS"),
+  ru: (year?: number) => (year ? `ЕВРОПЕЙСКИЙ СЕЗОН ${year}` : "ЕВРОПЕЙСКИЕ ФЕСТИВАЛИ"),
+};
 
 export function HomeContent({
   festivals,
@@ -32,7 +39,7 @@ export function HomeContent({
   return (
     <>
       <section className="hero">
-        <div className="eyebrow">{t("season")}</div>
+        <div className="eyebrow">{seasonEyebrow[language](sharedSeasonYear(festivals))}</div>
         <h1>
           {t("heroFirst")}
           <br />
