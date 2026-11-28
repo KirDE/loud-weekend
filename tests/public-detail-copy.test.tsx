@@ -64,6 +64,33 @@ for (const language of ["en", "de", "ru"] as const) {
   });
 }
 
+for (const language of ["en", "de", "ru"] as const) {
+  test(`the festival series links only to its recorded edition in ${language}`, () => {
+    const render = (editionYear?: number) => {
+      const item = { ...festival, editionYear, startDate: "2028-06-10", endDate: "2028-06-12" };
+      return renderToStaticMarkup(
+        <LanguageProvider initialLanguage={language}>
+          <LocalPlannerProvider>
+            <FestivalDetail item={item} festivals={[item]} artistSlugs={{}} />
+          </LocalPlannerProvider>
+        </LanguageProvider>,
+      );
+    };
+    const href = `href="/${language}/festivals/${festival.slug}/2028`;
+    const labels = {
+      en: "Open 2028 edition",
+      de: "Ausgabe 2028 öffnen",
+      ru: "Открыть выпуск 2028 года",
+    };
+    const link = new RegExp(`${href}/?">${labels[language]}</a>`);
+    assert.match(render(2028), link);
+    assert.doesNotMatch(
+      render(),
+      new RegExp(`href="/${language}/festivals/${festival.slug}/[0-9]{4}/?"`),
+    );
+  });
+}
+
 test("history resolves canonical series independently of display-name aliases", () => {
   assert.equal(
     festivalSetlistHistoryUrl("hellfest"),

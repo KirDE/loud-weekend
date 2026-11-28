@@ -37,6 +37,12 @@ import {
 } from "@/lib/festival-lineup";
 import { FavoriteButton, useLocalPlanner, type Attendance } from "./LocalPlanner";
 
+const editionLinkLabel = {
+  en: (year: number) => `Open ${year} edition`,
+  de: (year: number) => `Ausgabe ${year} öffnen`,
+  ru: (year: number) => `Открыть выпуск ${year} года`,
+};
+
 export function FestivalDetail({
   item,
   festivals,
@@ -114,6 +120,16 @@ export function FestivalDetail({
         </div>
       </section>
       <EditionLifecycleNotice item={item} />
+      {item.editionYear !== undefined && (
+        <p>
+          <Link
+            className="textLink"
+            href={`/${language}/festivals/${item.slug}/${item.editionYear}/`}
+          >
+            {editionLinkLabel[language](item.editionYear)}
+          </Link>
+        </p>
+      )}
       <section className="localActions">
         <FavoriteButton value={item.slug} />
         <select
