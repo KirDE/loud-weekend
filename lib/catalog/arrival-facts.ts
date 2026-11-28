@@ -1,4 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import type { FestivalEdition } from "../domain/edition.ts";
+import { editionOnHiatus } from "../edition-lifecycle.ts";
 import type { Festival, PublicArrivalFact } from "../domain/festival.ts";
 
 export function arrivalSourceHost(value: string): string | undefined {
@@ -28,8 +30,12 @@ type ArrivalEdition = Pick<Festival, "slug" | "editionYear" | "countryCode" | "o
 
 export async function readArrivalFacts(
   db: PrismaClient,
-  item: ArrivalEdition,
+  item: ArrivalEdition &
+    Pick<Festival, "editionLifecycle"> &
+    Partial<Pick<FestivalEdition, "recordState">>,
 ): Promise<PublicArrivalFact[]> {
+  if (item.recordState !== "archived" && editionOnHiatus(item)) return [];
+
   const organizerHost = arrivalSourceHost(item.officialUrl);
   if (!organizerHost || item.editionYear === undefined) return [];
 

@@ -10,6 +10,7 @@ import {
   decideEditionLifecycle as decide,
   readApprovedEditionLifecycle as publicRead,
 } from "../lib/ingestion/edition-lifecycle-proposal-store.ts";
+import { readArrivalFacts } from "../lib/catalog/arrival-facts.ts";
 import { DatabaseCatalogRepository } from "../lib/catalog/repository.ts";
 import { readSocialPreview } from "../lib/catalog/social-preview.ts";
 import { formatFestivalDateRange } from "../lib/festival-dates.ts";
@@ -350,6 +351,34 @@ test("concurrent exact-revision decisions replay once with immutable audit and N
   const dossierPaths = prefixes.map((prefix) => `${prefix}/festivals/${slug}/`);
   for (const path of dossierPaths) assert.equal(pendingDates[path], previousDay.toISOString());
 
+  const arrival = await db.editionArrivalFact.create({
+    data: {
+      editionId,
+      editionYear: 2027,
+      organizerHost: "rockenseine.com",
+      countryCode: "FR",
+      kind: "shuttle",
+      descriptionEn: "Fixture shuttle",
+      descriptionDe: "Test-Shuttle",
+      descriptionRu: "Тестовый шаттл",
+      sourceUrl: url + "test-arrival-guide/",
+      checkedOn: previousDay,
+    },
+  });
+  const readBothArrivalViews = async () => {
+    const { editions, festivals } = await new DatabaseCatalogRepository(db).read();
+    const series = festivals.find((item) => item.slug === slug);
+    const edition = editions.find((item) => item.slug === slug && item.editionYear === 2027);
+    assert.ok(series && edition);
+    return Promise.all([readArrivalFacts(db, series), readArrivalFacts(db, edition)]);
+  };
+  for (const guidance of await readBothArrivalViews()) {
+    assert.deepEqual(
+      guidance.map(({ sourceUrl }) => sourceUrl),
+      [arrival.sourceUrl],
+    );
+  }
+
   const before = await db.festivalEdition.findMany();
   const n = await db.adminAuditEntry.count();
   const rows = await Promise.all([decide(db, decisionInput()), decide(db, decisionInput())]);
@@ -357,6 +386,13 @@ test("concurrent exact-revision decisions replay once with immutable audit and N
   assert.equal(await db.adminAuditEntry.count(), n + 1);
   assert.equal(rows[0].audit.actorId, actorId);
   assert.equal(rows[0].audit.actorLabel, actorId);
+  assert.deepEqual(await readBothArrivalViews(), [[], []]);
+  assert.deepEqual(
+    await db.editionArrivalFact.findUnique({
+      where: { editionId_kind: { editionId, kind: arrival.kind } },
+    }),
+    arrival,
+  );
   const approvalDate = rows[0].audit.createdAt.toISOString();
   const approvedSitemapDates = await sitemapDates();
   // Earlier integration tests may have published newer facts for another festival.
