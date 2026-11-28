@@ -4,12 +4,13 @@ import { festivalDateInterval } from "./festival-dates.ts";
 
 export function personalCalendar(
   festivals: Festival[],
-  attendance: Readonly<Record<string, string>>,
+  attendanceFor: (slug: string, year?: number) => string | undefined,
 ) {
   const dated: { festival: Festival; start: Date; end: Date }[] = [];
   const undated: Festival[] = [];
   for (const festival of festivals) {
-    if (attendance[festival.slug] !== "going" && attendance[festival.slug] !== "maybe") continue;
+    const attendance = attendanceFor(festival.slug, festival.editionYear);
+    if (attendance !== "going" && attendance !== "maybe") continue;
     if (editionOnHiatus(festival)) continue;
     const interval = festivalDateInterval(festival);
     if (interval) dated.push({ festival, ...interval });

@@ -35,8 +35,8 @@ const copy = {
 export function PersonalCalendar({ festivals }: { festivals: Festival[] }) {
   const { language, locale } = useLanguage();
   const t = copy[language];
-  const { attendance } = useLocalPlanner();
-  const { dated, undated, conflicts } = personalCalendar(festivals, attendance);
+  const { editionAttendance } = useLocalPlanner();
+  const { dated, undated, conflicts } = personalCalendar(festivals, editionAttendance);
   const festivalLink = (item: Festival) => (
     <Link href={`/festivals/${item.slug}/`}>{item.name}</Link>
   );

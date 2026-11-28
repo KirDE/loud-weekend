@@ -1,3 +1,4 @@
+import { readEditionAttendance } from "../lib/planner-storage.ts";
 import { personalCalendar } from "../lib/personal-calendar.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -99,18 +100,23 @@ const { code } = await transform(
   await readFile(new URL("../components/PlannerPage.tsx", import.meta.url), "utf8"),
   { loader: "tsx", jsx: "automatic", format: "cjs", target: "es2022" },
 );
-function readyPlanner(items, locale) {
+function readyPlanner(items, locale, overrides = {}) {
   const preferences = {
     ready: true,
     favoriteFestivals: [paused.slug, active.slug],
     attendance: { [paused.slug]: "going" },
     playlistFestivals: items.map((f) => f.slug),
     favoriteArtists: [],
-    setAttendance() {
+    ...overrides,
+  };
+  const planner = {
+    ...preferences,
+    editionAttendance: (slug, year) => readEditionAttendance(preferences, slug, year),
+    setEditionAttendance() {
       throw new Error("Rendering must not rewrite attendance");
     },
   };
-  const before = structuredClone({ ...preferences, setAttendance: undefined });
+  const before = structuredClone(preferences);
   const deps = {
     react: require("react"),
     "react/jsx-runtime": require("react/jsx-runtime"),
@@ -124,7 +130,7 @@ function readyPlanner(items, locale) {
     "./TripBudget": { TripBudget: () => null },
     "@/lib/edition-lifecycle": lifecycle,
     "./LanguageProvider": language,
-    "./LocalPlanner": { useLocalPlanner: () => preferences },
+    "./LocalPlanner": { useLocalPlanner: () => planner },
     "./PlannerReset": { PlannerReset: () => null },
     "./AccountSyncPanel": { AccountSyncPanel: () => null },
     "./FestivalViews": { FestivalViews: () => null },
@@ -152,7 +158,7 @@ function readyPlanner(items, locale) {
       },
     }),
   );
-  assert.deepEqual({ ...preferences, setAttendance: undefined }, before);
+  assert.deepEqual(preferences, before);
   return html;
 }
 for (const locale of ["en", "de", "ru"]) {
@@ -253,7 +259,8 @@ for (const locale of ["en", "de", "ru"])
 
 test("an approved hiatus cannot create a personal-calendar conflict or erase attendance", () => {
   const current = { ...active, startDate: paused.startDate, endDate: paused.endDate };
-  const attendance = Object.freeze({ [paused.slug]: "going", [current.slug]: "maybe" });
+  const saved = Object.freeze({ [paused.slug]: "going", [current.slug]: "maybe" });
+  const attendance = (slug) => saved[slug];
   assert.equal(
     personalCalendar([{ ...paused, editionLifecycle: undefined }, current], attendance).conflicts
       .length,
@@ -264,5 +271,37 @@ test("an approved hiatus cannot create a personal-calendar conflict or erase att
     undated: [],
     conflicts: [],
   });
-  assert.equal(attendance[paused.slug], "going");
+  assert.equal(saved[paused.slug], "going");
 });
+
+for (const locale of ["en", "de", "ru"]) {
+  test(`ready planner does not use attendance from a different edition in ${locale}`, () => {
+    const upcoming = {
+      ...active,
+      editionYear: 2028,
+      startDate: "2028-08-27",
+      endDate: "2028-08-28",
+    };
+    const legacyOnly = {
+      favoriteFestivals: [],
+      attendance: { [active.slug]: "going" },
+    };
+    assert.doesNotMatch(
+      readyPlanner([upcoming], locale, legacyOnly),
+      /<strong>Other Event<\/strong>/,
+    );
+    assert.doesNotMatch(
+      readyPlanner([{ ...upcoming, editionYear: undefined }], locale, legacyOnly),
+      /<strong>Other Event<\/strong>/,
+    );
+    const current = readyPlanner([active], locale, legacyOnly);
+    assert.match(current, /<option value="going" selected=""/);
+    assert.match(payload(current), /UID:other-event-2027@festival-radar/);
+
+    const bothSeasons = { ...legacyOnly, seasonAttendance: { ["2028:" + active.slug]: "maybe" } };
+    const future = readyPlanner([upcoming], locale, bothSeasons);
+    assert.match(future, /<option value="maybe" selected=""/);
+    assert.match(payload(future), /UID:other-event-2028@festival-radar/);
+    assert.match(readyPlanner([active], locale, bothSeasons), /<option value="going" selected=""/);
+  });
+}
